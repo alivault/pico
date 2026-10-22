@@ -381,22 +381,84 @@ function getProjectFileDirectoryPaths(paths: Array<string>) {
   )
 }
 
+// The directories to expand so that the row of `path` shows, from the
+// top level down. Only directories that are in `paths` are returned.
+function getProjectFileAncestorDirectoryPaths(
+  paths: Array<string>,
+  path: string
+) {
+  if (!path) return []
+
+  const directoryPaths = new Set(getProjectFileDirectoryPaths(paths))
+  const parts = path.split("/").filter(Boolean)
+  const ancestors: Array<string> = []
+  for (let index = 1; index < parts.length; index += 1) {
+    const directoryPath = `${parts.slice(0, index).join("/")}/`
+    if (directoryPaths.has(directoryPath)) ancestors.push(directoryPath)
+  }
+  return ancestors
+}
+
+function getProjectFileExpandedDirectoryPaths(
+  model: ReturnType<typeof useFileTree>["model"],
+  previousPaths: Array<string>,
+  nextPaths: Array<string>
+) {
+  const nextDirectoryPaths = new Set(getProjectFileDirectoryPaths(nextPaths))
+  return getProjectFileDirectoryPaths(previousPaths).filter((directoryPath) => {
+    if (!nextDirectoryPaths.has(directoryPath)) return false
+    const item = model.getItem(directoryPath)
+    return isFileTreeDirectoryHandle(item) && item.isExpanded()
+  })
+}
+
+// Scroll the tree to `path` and give it keyboard focus. The tree only
+// scrolls to the focused row when it has DOM focus, so focus a row first,
+// then move the tree focus to `path` on the next frame.
+function revealProjectFileTreePath(
+  model: ReturnType<typeof useFileTree>["model"],
+  path: string
+) {
+  const shadowRoot = model.getFileTreeContainer()?.shadowRoot
+  const rowButton = shadowRoot?.querySelector<HTMLElement>(
+    'button[data-item-path]:not([data-file-tree-sticky-row="true"])'
+  )
+  if (!rowButton) return () => {}
+
+  rowButton.focus({ preventScroll: true })
+  const frame = window.requestAnimationFrame(() => {
+    model.focusPath(path)
+  })
+  return () => {
+    window.cancelAnimationFrame(frame)
+  }
+}
+
 function ProjectFileTree({
   collapseAllRevision,
   gitStatus,
   paths,
+  revealSelectedPathOnMount = false,
   selectedPath,
   onSelectFile,
 }: {
   collapseAllRevision: number
   gitStatus: Array<GitStatusEntry>
   paths: Array<string>
+  revealSelectedPathOnMount?: boolean
   selectedPath: string
   onSelectFile: (path: string) => void
 }) {
   const validPathsRef = React.useRef(new Set(paths))
   const onSelectFileRef = React.useRef(onSelectFile)
   const lastCollapseAllRevisionRef = React.useRef(0)
+  const pathsRef = React.useRef(paths)
+  const initialSelectedPathRef = React.useRef(
+    revealSelectedPathOnMount ? selectedPath : ""
+  )
+  const [initialExpandedPaths] = React.useState(() =>
+    getProjectFileAncestorDirectoryPaths(paths, selectedPath)
+  )
   validPathsRef.current = new Set(paths)
   onSelectFileRef.current = onSelectFile
 
@@ -404,7 +466,8 @@ function ProjectFileTree({
     paths,
     flattenEmptyDirectories: true,
     gitStatus,
-    initialExpansion: 1,
+    initialExpansion: "closed",
+    initialExpandedPaths,
     initialSelectedPaths: selectedPath ? [selectedPath] : [],
     onSelectionChange: (selectedPaths) => {
       const [path] = selectedPaths
@@ -416,8 +479,32 @@ function ProjectFileTree({
   })
 
   React.useEffect(() => {
-    model.resetPaths(paths)
+    const previousPaths = pathsRef.current
+    if (previousPaths === paths) return
+
+    pathsRef.current = paths
+    model.resetPaths(paths, {
+      initialExpandedPaths: getProjectFileExpandedDirectoryPaths(
+        model,
+        previousPaths,
+        paths
+      ),
+    })
   }, [model, paths])
+
+  React.useEffect(() => {
+    const path = initialSelectedPathRef.current
+    if (!path || !validPathsRef.current.has(path)) return
+
+    let cancelReveal = () => {}
+    const frame = window.requestAnimationFrame(() => {
+      cancelReveal = revealProjectFileTreePath(model, path)
+    })
+    return () => {
+      window.cancelAnimationFrame(frame)
+      cancelReveal()
+    }
+  }, [model])
 
   React.useEffect(() => {
     model.setGitStatus(gitStatus)
@@ -490,11 +577,13 @@ export function ProjectFilesWorkspace({
   onCloseFile,
   onOpenFile,
   previewMode = "external",
+  revealActiveFileOnMount = false,
 }: GitScopedProps & {
   activeFilePath: string
   onCloseFile?: () => void
   onOpenFile: (path: string, options?: OpenProjectFileOptions) => void
   previewMode?: ProjectFilesPreviewMode
+  revealActiveFileOnMount?: boolean
 }) {
   const machineId = useMachineId()
   const normalizedCwd = normalizeCwd(cwd)
@@ -591,6 +680,7 @@ export function ProjectFilesWorkspace({
               collapseAllRevision={collapseAllRevision}
               gitStatus={gitStatus}
               paths={paths}
+              revealSelectedPathOnMount={revealActiveFileOnMount}
               selectedPath={activeFilePath}
               onSelectFile={onOpenFile}
             />
@@ -1629,6 +1719,7 @@ export function ProjectFileTreePane({
           onCloseFile={() => {}}
           onOpenFile={onOpenFile}
           previewMode={previewMode}
+          revealActiveFileOnMount
         />
       </div>
       <FileTreeResizeHandle width={fileTreeWidth} onResize={setFileTreeWidth} />

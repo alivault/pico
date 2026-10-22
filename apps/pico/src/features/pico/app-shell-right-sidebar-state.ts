@@ -49,7 +49,7 @@ export function createInitialRightSidebarState(): AppShellRightSidebarState {
     fileActivePath: "",
     filePreviewPath: "",
     fileTabs: [],
-    fileTreeCollapsed: false,
+    fileTreeCollapsed: true,
   }
 }
 
@@ -76,7 +76,7 @@ export function resetRightSidebarFiles(
     fileActivePath: "",
     filePreviewPath: "",
     fileTabs: [],
-    fileTreeCollapsed: false,
+    fileTreeCollapsed: true,
   }))
 }
 
@@ -110,7 +110,11 @@ export function openRightSidebarFile(
       fileActivePath: path,
       filePreviewPath,
       fileTabs,
-      fileTreeCollapsed: false,
+      // The file tree starts collapsed when the first file opens. After
+      // that, keep the user's choice.
+      fileTreeCollapsed: selectRightSidebarHasVisibleFiles(state)
+        ? state.fileTreeCollapsed
+        : true,
     }
   })
 }
