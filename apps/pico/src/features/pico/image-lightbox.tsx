@@ -87,11 +87,13 @@ export function ImageLightbox({
   onIndexChange,
 }: ImageLightboxProps) {
   const canNavigate = Boolean(onIndexChange) && count > 1
+  const hasPrevious = index > 0
+  const hasNext = index < count - 1
   function showPrevious() {
-    onIndexChange?.((index - 1 + count) % count)
+    if (hasPrevious) onIndexChange?.(index - 1)
   }
   function showNext() {
-    onIndexChange?.((index + 1) % count)
+    if (hasNext) onIndexChange?.(index + 1)
   }
 
   // The dialog popup stops keydown propagation, so handle the arrow keys on
@@ -357,7 +359,8 @@ export function ImageLightbox({
             <Button
               variant="ghost"
               size="icon"
-              className="absolute top-1/2 left-4 z-10 -translate-y-1/2 border border-white/15 bg-black/55 text-white hover:bg-black/80 hover:text-white"
+              className="absolute top-1/2 left-4 z-10 -translate-y-1/2 border border-white/15 bg-black/55 text-white hover:bg-black/80 hover:text-white aria-disabled:cursor-default aria-disabled:opacity-40 aria-disabled:hover:bg-black/55"
+              aria-disabled={!hasPrevious}
               onClick={showPrevious}
             >
               <ChevronLeftIcon />
@@ -366,7 +369,8 @@ export function ImageLightbox({
             <Button
               variant="ghost"
               size="icon"
-              className="absolute top-1/2 right-4 z-10 -translate-y-1/2 border border-white/15 bg-black/55 text-white hover:bg-black/80 hover:text-white"
+              className="absolute top-1/2 right-4 z-10 -translate-y-1/2 border border-white/15 bg-black/55 text-white hover:bg-black/80 hover:text-white aria-disabled:cursor-default aria-disabled:opacity-40 aria-disabled:hover:bg-black/55"
+              aria-disabled={!hasNext}
               onClick={showNext}
             >
               <ChevronRightIcon />
