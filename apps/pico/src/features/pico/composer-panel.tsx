@@ -106,7 +106,7 @@ type ComposerPanelProps = {
     removedPendingIds: Array<string>,
     resume: boolean
   ) => void
-  onHoldPendingQueue: () => Promise<boolean>
+  onHoldPendingQueue: () => Promise<(() => void) | null>
   onStartPendingQueue: () => void
   onRunBuiltinSlashCommand: (name: string, args: string) => void
   onSelectModel: (value: string) => void
@@ -436,6 +436,8 @@ export function ComposerPanel({
         {topContent}
 
         <ComposerPendingMessages
+          // An edit belongs to one session. A switch ends it.
+          key={`${viewerContextId}:${activeSessionId ?? ""}`}
           ref={queueRef}
           currentPendingMessages={currentPendingMessages}
           canStartQueue={canStartPendingQueue}

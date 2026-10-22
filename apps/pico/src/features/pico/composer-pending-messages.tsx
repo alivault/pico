@@ -49,10 +49,10 @@ type ComposerPendingMessagesProps = {
     resume: boolean
   ) => void
   /**
-   * Hold the queue while the user edits it. Resolves true when the queue
-   * must resume after the edit.
+   * Hold the queue while the user edits it. Resolves a function that resumes
+   * the held session, or null when the queue must stay paused.
    */
-  onHoldPendingQueue: () => Promise<boolean>
+  onHoldPendingQueue: () => Promise<(() => void) | null>
   onStartPendingQueue: () => void
   onExitEditing: () => void
   ref?: React.Ref<ComposerPendingMessagesHandle>
@@ -125,8 +125,8 @@ export const ComposerPendingMessages = React.memo(
     ref,
   }: ComposerPendingMessagesProps) {
     const [session, setSession] = React.useState<QueueEditSession | null>(null)
-    // The hold of the open session: resolves true when the queue must resume.
-    const holdRef = React.useRef<Promise<boolean> | null>(null)
+    // The hold of the open session: resolves the resume of the held session.
+    const holdRef = React.useRef<Promise<(() => void) | null> | null>(null)
     const [heldForEdit, setHeldForEdit] = React.useState(false)
     const editing = session !== null
     const editorRef = React.useRef<HTMLTextAreaElement | null>(null)
@@ -168,18 +168,18 @@ export const ComposerPendingMessages = React.memo(
         /^(pending|held):/.test(message.pendingId)
       )
       const hold = hasServerPrompts
-        ? onHoldPendingQueue().catch(() => false)
-        : Promise.resolve(false)
+        ? onHoldPendingQueue().catch(() => null)
+        : Promise.resolve(null)
       holdRef.current = hold
       void hold.then((resume) => {
-        if (holdRef.current === hold) setHeldForEdit(resume)
+        if (holdRef.current === hold) setHeldForEdit(resume !== null)
       })
     }, [currentPendingMessages, editing, onHoldPendingQueue])
 
-    /** End the hold of the session; `finish` gets whether to resume. */
+    /** End the hold of the session; `finish` gets the resume, if any. */
     const releaseHold = React.useCallback(
-      (finish: (resume: boolean) => void) => {
-        const hold = holdRef.current ?? Promise.resolve(false)
+      (finish: (resume: (() => void) | null) => void) => {
+        const hold = holdRef.current ?? Promise.resolve(null)
         holdRef.current = null
         setHeldForEdit(false)
         void hold.then(finish)
@@ -190,10 +190,19 @@ export const ComposerPendingMessages = React.memo(
     // A session can close by itself, when all its prompts were sent.
     React.useEffect(() => {
       if (editing || !holdRef.current) return
-      releaseHold((resume) => {
-        if (resume) onStartPendingQueue()
-      })
-    }, [editing, onStartPendingQueue, releaseHold])
+      releaseHold((resume) => resume?.())
+    }, [editing, releaseHold])
+
+    // The panel unmounts on a switch to another session. Resume the held
+    // session; the resume does not depend on the shown session.
+    React.useEffect(
+      () => () => {
+        const hold = holdRef.current
+        holdRef.current = null
+        void hold?.then((resume) => resume?.())
+      },
+      []
+    )
 
     const selectedKey = session?.selectedKey
     const caret = session?.caret
@@ -226,10 +235,8 @@ export const ComposerPendingMessages = React.memo(
 
     const end = React.useCallback(() => {
       close()
-      releaseHold((resume) => {
-        if (resume) onStartPendingQueue()
-      })
-    }, [close, onStartPendingQueue, releaseHold])
+      releaseHold((resume) => resume?.())
+    }, [close, releaseHold])
 
     const save = React.useCallback(() => {
       const current = sessionRef.current
@@ -240,12 +247,12 @@ export const ComposerPendingMessages = React.memo(
       close()
       releaseHold((resume) => {
         if (plan) {
-          onSavePendingQueue(plan.rows, plan.removedPendingIds, resume)
-        } else if (resume) {
-          onStartPendingQueue()
+          onSavePendingQueue(plan.rows, plan.removedPendingIds, resume !== null)
+        } else {
+          resume?.()
         }
       })
-    }, [close, onSavePendingQueue, onStartPendingQueue, releaseHold])
+    }, [close, onSavePendingQueue, releaseHold])
 
     React.useImperativeHandle(
       ref,

@@ -601,7 +601,7 @@ export const AppShellComposerController = React.memo(
       }
     )
     const onHoldPendingQueue = useStableEvent(async () => {
-      if (snapshotRef.current.disabled) return false
+      if (snapshotRef.current.disabled) return null
       return await actionsRef.current.holdPendingQueue()
     })
     const onStartPendingQueue = useStableEvent(() => {

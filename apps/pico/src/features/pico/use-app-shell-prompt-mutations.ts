@@ -1585,9 +1585,23 @@ export function useAppShellPromptMutations({
     ]
   )
 
-  /** Hold the queue for an edit. Resolves true when it must resume after. */
-  const holdPendingQueue = React.useCallback(async () => {
-    if (!viewerContextId) return false
+  /**
+   * Hold the queue for an edit. Resolves a function that resumes the held
+   * session, also after a switch to another session, or null when the queue
+   * must stay paused.
+   */
+  const holdPendingQueue = React.useCallback(async (): Promise<
+    (() => void) | null
+  > => {
+    if (!viewerContextId) return null
+    const startUrl = () =>
+      buildCurrentSessionRequestUrl("/api/pending-messages/start", {
+        machineId,
+        contextId: viewerContextId,
+        sessionState: sessionStateRef.current,
+        fallbackSessionId: activeSessionId,
+      })
+    const heldStartUrl = startUrl()
     try {
       const response = await fetchJson<
         PendingMessagesResponse & { wasPaused?: boolean }
@@ -1609,9 +1623,25 @@ export function useAppShellPromptMutations({
         nextPendingMessages?.some((message) =>
           isHeldPendingId(message.pendingId)
         ) ?? false
-      return held && !wasPaused
+      if (!held || wasPaused) return null
+      return () => {
+        void fetchJson<PendingMessagesResponse>(heldStartUrl, {
+          method: "POST",
+        })
+          .then((startResponse) => {
+            // Show the result only while the held session is still shown.
+            if (startUrl() !== heldStartUrl) return
+            const startedMessages = pendingMessagesFromResponse(startResponse)
+            if (startedMessages) updatePendingMessages(() => startedMessages)
+          })
+          .catch((error: unknown) => {
+            toast.error(
+              error instanceof Error ? error.message : "Failed to start queue"
+            )
+          })
+      }
     } catch {
-      return false
+      return null
     }
   }, [
     activeSessionId,

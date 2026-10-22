@@ -179,8 +179,11 @@ export type AppShellComposerActions = {
     removedPendingIds: Array<string>,
     resume: boolean
   ) => void | Promise<unknown>
-  /** Hold the queue for an edit. Resolves true when it must resume after. */
-  holdPendingQueue: () => Promise<boolean>
+  /**
+   * Hold the queue for an edit. Resolves a function that resumes the held
+   * session, or null when the queue must stay paused.
+   */
+  holdPendingQueue: () => Promise<(() => void) | null>
   startPendingQueue: () => void | Promise<unknown>
   runBuiltinSlashCommand: (
     name: string,
