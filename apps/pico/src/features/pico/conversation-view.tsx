@@ -1182,6 +1182,9 @@ const ToolResultImages = React.memo(function ToolResultImages({
           }}
           imageSrc={toolImageSrc(selected)}
           imageAlt="Tool result"
+          index={selectedIndex ?? 0}
+          count={images.length}
+          onIndexChange={setSelectedIndex}
           title="Tool result image"
           description="Expanded preview of an image from a tool result."
         />
@@ -2542,6 +2545,9 @@ export const UserMessageCard = React.memo(function UserMessageCard({
           }}
           imageSrc={selectedImage.previewUrl}
           imageAlt="Prompt upload"
+          index={selectedImageIndex ?? 0}
+          count={item.images.length}
+          onIndexChange={setSelectedImageIndex}
           title="Prompt upload preview"
           description="Expanded preview of an image attached to a user message."
         />

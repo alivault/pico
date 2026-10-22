@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { XIcon } from "lucide-react"
+import { ChevronLeftIcon, ChevronRightIcon, XIcon } from "lucide-react"
 
 import {
   Dialog,
@@ -22,6 +22,11 @@ type ImageLightboxProps = {
   description?: string
   emptyState?: React.ReactNode
   className?: string
+  /** Position of this image in a set. With more than one image, the
+   * lightbox shows previous and next buttons and handles arrow keys. */
+  index?: number
+  count?: number
+  onIndexChange?: (index: number) => void
 }
 
 type Point = {
@@ -77,7 +82,38 @@ export function ImageLightbox({
   description,
   emptyState,
   className,
+  index = 0,
+  count = 1,
+  onIndexChange,
 }: ImageLightboxProps) {
+  const canNavigate = Boolean(onIndexChange) && count > 1
+  const showPrevious = React.useCallback(() => {
+    onIndexChange?.((index - 1 + count) % count)
+  }, [count, index, onIndexChange])
+  const showNext = React.useCallback(() => {
+    onIndexChange?.((index + 1) % count)
+  }, [count, index, onIndexChange])
+
+  React.useEffect(() => {
+    if (!open || !canNavigate) return
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+        return
+      }
+      if (event.key === "ArrowLeft") {
+        event.preventDefault()
+        showPrevious()
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault()
+        showNext()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [canNavigate, open, showNext, showPrevious])
+
   const containerRef = React.useRef<HTMLDivElement | null>(null)
   const imageRef = React.useRef<HTMLImageElement | null>(null)
   const activePointersRef = React.useRef(new Map<number, Point>())
@@ -314,6 +350,32 @@ export function ImageLightbox({
           <DialogDescription className="sr-only">
             {description}
           </DialogDescription>
+        ) : null}
+
+        {canNavigate ? (
+          <>
+            <div className="absolute top-[calc(1rem+env(safe-area-inset-top))] left-4 z-10 rounded-md border border-white/15 bg-black/55 px-2.5 py-1 text-sm text-white tabular-nums">
+              {index + 1} / {count}
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute top-1/2 left-4 z-10 -translate-y-1/2 border border-white/15 bg-black/55 text-white hover:bg-black/80 hover:text-white"
+              onClick={showPrevious}
+            >
+              <ChevronLeftIcon />
+              <span className="sr-only">Previous image</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute top-1/2 right-4 z-10 -translate-y-1/2 border border-white/15 bg-black/55 text-white hover:bg-black/80 hover:text-white"
+              onClick={showNext}
+            >
+              <ChevronRightIcon />
+              <span className="sr-only">Next image</span>
+            </Button>
+          </>
         ) : null}
 
         <div className="absolute top-[calc(1rem+env(safe-area-inset-top))] right-4 z-10 flex items-center gap-2">
