@@ -4,9 +4,9 @@ A web workspace for durable [Pi](https://www.npmjs.com/package/@earendil-works/p
 coding-agent sessions. One Node server hosts the agent runtime and serves the
 React web app.
 
-![Pico workspace showing the session browser, conversation shell, composer, and git tools](apps/pico/public/screenshots/pico-workspace.png)
+![Pico workspace where an agent runs two child sessions, each in its own worktree](apps/pico/public/screenshots/pico-workspace.png)
 
-![Pico workspace showing project-aware context and coding-agent workflow](apps/pico/public/screenshots/pico-workspace-alt.png)
+![Pico workspace in light mode with child sessions in the sidebar and the Agent tab](apps/pico/public/screenshots/pico-workspace-alt.png)
 
 | Dark mobile browser                                                               | Light mobile browser                                                                   |
 | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
