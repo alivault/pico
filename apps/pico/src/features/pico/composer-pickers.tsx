@@ -217,7 +217,7 @@ const ComposerModelPicker = React.memo(function ComposerModelPicker({
                           {entry.name || entry.id}
                         </span>
                         <span className="truncate text-xs text-muted-foreground">
-                          {entry.provider}/{entry.id}
+                          {entry.id}
                         </span>
                       </div>
                       {active ? <CheckIcon /> : null}
