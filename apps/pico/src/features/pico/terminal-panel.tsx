@@ -45,9 +45,13 @@ type TerminalStatus =
 
 type TerminalTab = {
   id: string
+  /** The job's name, for a tab that shows a background job. */
+  label?: string
   status: TerminalStatus
   terminalId: string | null
 }
+
+type TerminalInfo = { label?: string | undefined }
 
 type TerminalTabsState = {
   activeTabId: string | null
@@ -69,7 +73,11 @@ type TerminalTabPaneProps = {
   active: boolean
   cwd: string
   onStatusChange: (tabId: string, status: TerminalStatus) => void
-  onTerminalIdChange: (tabId: string, terminalId: string) => void
+  onTerminalIdChange: (
+    tabId: string,
+    terminalId: string,
+    info: TerminalInfo
+  ) => void
   selected: boolean
   sessionId?: string | undefined
   tabId: string
@@ -182,6 +190,30 @@ function rememberTerminalTabsState(
   })
 }
 
+function isJobTab(tab: TerminalTab) {
+  return tab.id.startsWith("job:")
+}
+
+function jobStatusText(status: TerminalStatus) {
+  switch (status.type) {
+    case "idle":
+    case "connecting":
+      return "Connecting…"
+    case "connected":
+      return "Running"
+    case "exited":
+      return status.exitCode === 0 ? "Done" : `Failed (exit ${status.exitCode})`
+    case "error":
+      return "Not available"
+  }
+}
+
+function tabStatusText(tab: TerminalTab) {
+  return isJobTab(tab)
+    ? jobStatusText(tab.status)
+    : terminalStatusText(tab.status)
+}
+
 function terminalStatusText(status: TerminalStatus) {
   switch (status.type) {
     case "idle":
@@ -217,7 +249,7 @@ function terminalStatusDetail(status: TerminalStatus) {
 }
 
 function terminalTabLabel(tab: TerminalTab, index: number) {
-  if (tab.id.startsWith("job:")) return `Job ${tab.id.slice(-4)}`
+  if (isJobTab(tab)) return tab.label ?? "Job"
   if (tab.status.type === "connected" && tab.status.shell) {
     return `${index + 1}: ${tab.status.shell}`
   }
@@ -230,8 +262,9 @@ function statusDotClassName(status: TerminalStatus) {
       return "bg-success"
     case "connecting":
       return "bg-warning"
-    case "error":
     case "exited":
+      return status.exitCode === 0 ? "bg-muted-foreground/50" : "bg-destructive"
+    case "error":
       return "bg-destructive"
     case "idle":
       return "bg-muted-foreground/50"
@@ -407,7 +440,7 @@ function TerminalStatusDialog({
             <dt className="text-xs font-medium text-muted-foreground">
               Status
             </dt>
-            <dd>{terminalStatusText(status)}</dd>
+            <dd>{tab ? tabStatusText(tab) : terminalStatusText(status)}</dd>
           </div>
           <div className="grid gap-1">
             <dt className="text-xs font-medium text-muted-foreground">
@@ -481,6 +514,9 @@ function TerminalTabPane({
     let terminalExited = false
     let terminalTransportReady = false
     const pendingInputs = new Map<number, string>()
+    // Input sequence numbers are per viewer on the server, so another tab
+    // or client on the same terminal never makes this one's input a duplicate.
+    const viewerId = createTerminalTabId()
 
     const requestOptions = sessionId
       ? { machineId, contextId: viewerContextId, sessionId }
@@ -678,7 +714,10 @@ function TerminalTabPane({
           `/api/terminal/${encodeURIComponent(id)}/ws`,
           {
             ...requestOptions,
-            searchParams: { lastSeq: lastOutputSeq || undefined },
+            searchParams: {
+              lastSeq: lastOutputSeq || undefined,
+              viewer: viewerId,
+            },
           }
         )
       )
@@ -755,7 +794,9 @@ function TerminalTabPane({
         if (disposed) return
 
         terminalIdRef.current = terminalResponse.id
-        onTerminalIdChangeRef.current(tabId, terminalResponse.id)
+        onTerminalIdChangeRef.current(tabId, terminalResponse.id, {
+          label: terminalResponse.label,
+        })
         connectTerminalWebSocket(terminalResponse.id)
 
         resizeObserver = new ResizeObserver(scheduleFitAndResize)
@@ -1003,14 +1044,24 @@ export function TerminalPanel({
     })
   }
 
-  const updateTabTerminalId = (tabId: string, terminalId: string) => {
+  const updateTabTerminalId = (
+    tabId: string,
+    terminalId: string,
+    info: TerminalInfo
+  ) => {
     setTabsState((current) => {
       if (current.scopeKey !== scopeKey) return current
 
       return {
         ...current,
         tabs: current.tabs.map((tab) =>
-          tab.id === tabId ? { ...tab, terminalId } : tab
+          tab.id === tabId
+            ? {
+                ...tab,
+                terminalId,
+                ...(info.label ? { label: info.label } : {}),
+              }
+            : tab
         ),
       }
     })
@@ -1047,7 +1098,8 @@ export function TerminalPanel({
           {tabs.map((tab, index) => {
             const selected = tab.id === selectedTabId
             const label = terminalTabLabel(tab, index)
-            const statusText = terminalStatusText(tab.status)
+            const statusText = tabStatusText(tab)
+            const jobEnded = isJobTab(tab) && tab.status.type === "exited"
             return (
               <div
                 key={tab.id}
@@ -1086,6 +1138,11 @@ export function TerminalPanel({
                     }}
                   >
                     <span className="truncate">{label}</span>
+                    {jobEnded ? (
+                      <span className="ml-1 shrink-0 text-muted-foreground">
+                        {statusText}
+                      </span>
+                    ) : null}
                   </button>
                 </TitleTooltip>
                 <TitleTooltip title={`Close ${label}`}>

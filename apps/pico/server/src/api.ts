@@ -1072,14 +1072,19 @@ export function createApi(api: ApiContext) {
   })
 
   router.post("/api/terminal/:id/input", async (request) => {
-    const body = await request.body<{ data?: unknown; inputSeq?: unknown }>()
+    const body = await request.body<{
+      data?: unknown
+      inputSeq?: unknown
+      viewer?: unknown
+    }>()
     if (typeof body.data !== "string")
       throw badRequest("Terminal input data is required.")
     api.terminals.write(
       terminalScope(request).scopeKey,
       request.params.id!,
       body.data,
-      looseNumber(body.inputSeq)
+      looseNumber(body.inputSeq),
+      typeof body.viewer === "string" ? body.viewer : undefined
     )
     return { ok: true }
   })
@@ -1114,7 +1119,8 @@ export function createApi(api: ApiContext) {
       lastSeq,
       (event) => {
         stream?.send(event, event.type === "output" ? event.seq : undefined)
-      }
+      },
+      request.query.get("viewer") ?? undefined
     )
     stream = new SseStream(request.raw, response)
     for (const event of subscription.initial)

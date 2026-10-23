@@ -3,6 +3,7 @@
  * terminal WebSocket, on one HTTP port.
  */
 import { createServer, type IncomingMessage, type Server } from "node:http"
+import { homedir } from "node:os"
 import type { Duplex } from "node:stream"
 
 import { WebSocketServer, type WebSocket } from "ws"
@@ -298,10 +299,15 @@ export async function startServer(options: {
     const cwd =
       current && sessions.has(current)
         ? sessions.meta(current).cwd
-        : ((key?.startsWith("draft:") ? key.slice(6) : undefined) ??
+        : // The same cwd as `baseCwd` in api.ts, so both scopes match.
+          ((key?.startsWith("draft:") &&
+          key.slice(6).trim() &&
+          key.slice(6).trim() !== "default"
+            ? key.slice(6).trim()
+            : undefined) ??
           viewer?.activeDraft?.cwd ??
           viewer?.sidebarDirectories[0] ??
-          process.cwd())
+          homedir())
     return `${contextId}:${scopeTarget}:${cwd}`
   }
 
@@ -311,6 +317,7 @@ export async function startServer(options: {
     query: URLSearchParams
   ) => {
     const scopeKey = terminalScope(query)
+    const viewer = query.get("viewer") ?? undefined
     const send = (event: TerminalEvent) => {
       if (websocket.readyState === websocket.OPEN)
         websocket.send(JSON.stringify(event))
@@ -321,7 +328,8 @@ export async function startServer(options: {
         scopeKey,
         id,
         query.get("lastSeq") ? looseNumber(query.get("lastSeq")) : undefined,
-        send
+        send,
+        viewer
       )
     } catch (error) {
       send({
@@ -364,7 +372,8 @@ export async function startServer(options: {
             scopeKey,
             id,
             message.data,
-            looseNumber(message.inputSeq)
+            looseNumber(message.inputSeq),
+            viewer
           )
           if (acknowledged !== undefined)
             send({ type: "input_ack", inputSeq: acknowledged })

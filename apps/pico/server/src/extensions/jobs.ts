@@ -10,9 +10,6 @@
  * running ones. At startup, jobs in the index without a process become
  * `lost`, and their session gets one message about it.
  */
-import { createWriteStream, mkdirSync, type WriteStream } from "node:fs"
-import { readFile } from "node:fs/promises"
-import { join } from "node:path"
 
 import type { Context } from "@earendil-works/chord"
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
@@ -28,6 +25,14 @@ import {
 
 import { childCommandRefusal } from "../core/coding-tools.ts"
 import {
+  deleteJobLog,
+  jobLogParts,
+  JobLogWriter,
+  readLogTailLines,
+  readLogTailRaw,
+  scanLogLines,
+} from "../services/job-log.ts"
+import {
   conversationOf,
   sessionIdOf,
   type HostBridge,
@@ -40,9 +45,10 @@ import {
   formatDuration,
   json,
   registerState,
-  tail,
   textResult,
 } from "./util.ts"
+
+export { jobLogPath, plainText } from "../services/job-log.ts"
 
 export type Job = {
   id: string
@@ -81,44 +87,17 @@ export const JobIndexDoc = defineDoc<{ running: Record<string, number> }>({
 
 const MAX_RUNNING_PER_SESSION = 8
 const KEEP_FINISHED = 30
-const ESC = String.fromCharCode(27)
-const BEL = String.fromCharCode(7)
-const ANSI = new RegExp(
-  [
-    `${ESC}\\[[0-?]*[ -/]*[@-~]`,
-    `${ESC}\\][^${BEL}${ESC}]*(?:${BEL}|${ESC}\\\\)`,
-    `${ESC}[@-Z\\\\-_]`,
-  ].join("|"),
-  "g"
-)
 
-/**
- * Terminal output as plain text: no escape codes, carriage returns applied,
- * and runs of blank lines (from screen clears) cut to one.
- */
-export function plainText(output: string) {
-  return output
-    .replace(ANSI, "")
-    .split("\n")
-    .map((line) => {
-      const parts = line.replace(/\r$/, "").split("\r")
-      return (parts[parts.length - 1] ?? "").trimEnd()
-    })
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-}
+/** Plain-text lines that `job_output` and `job_status` show at most. */
+const MAX_TAIL_LINES = 1000
 
-export function jobLogPath(dataDir: string, jobId: string) {
-  return join(dataDir, "jobs", `${jobId}.log`)
-}
-
-export async function readJobLog(dataDir: string, jobId: string) {
-  if (!/^[a-z0-9]+$/i.test(jobId)) throw new Error("Invalid job id")
-  try {
-    return plainText(await readFile(jobLogPath(dataDir, jobId), "utf8"))
-  } catch {
-    return ""
-  }
+/** The last plain-text lines of a job log (all of a short log). */
+export async function readJobLog(
+  dataDir: string,
+  jobId: string,
+  lines = MAX_TAIL_LINES
+) {
+  return readLogTailLines(jobLogParts(dataDir, jobId), lines).join("\n")
 }
 
 function describeJob(job: Job, now = Date.now()) {
@@ -137,9 +116,12 @@ async function changeJob(
   conversationId: ConversationId,
   jobId: string,
   change: Partial<Job>,
-  context: Context
+  context: Context,
+  dataDir?: string
 ) {
+  const pruned: string[] = []
   await harness.commit(async (tx) => {
+    pruned.length = 0
     const draft = (await tx.doc(
       JobsDoc,
       conversationId
@@ -155,10 +137,14 @@ async function changeJob(
       for (const old of finished.slice(
         0,
         Math.max(0, finished.length - KEEP_FINISHED)
-      ))
+      )) {
         delete draft.items[old.id]
+        pruned.push(old.id)
+      }
     }
   }, context)
+  // A job without a record has no use for its log.
+  if (dataDir) for (const id of pruned) deleteJobLog(dataDir, id)
 }
 
 /** Send a steer to the session of a conversation, or its replacement (see `notifyAgent`). */
@@ -185,7 +171,6 @@ async function notifySession(
 class JobRunner {
   readonly #host: HostBridge
   readonly #dataDir: string
-  readonly #logs = new Map<string, WriteStream>()
   readonly #exits = new Map<
     string,
     Promise<{ exitCode: number; signal?: number }>
@@ -201,11 +186,7 @@ class JobRunner {
     conversationId: ConversationId,
     job: Job
   ) {
-    mkdirSync(join(this.#dataDir, "jobs"), { recursive: true })
-    const log = createWriteStream(jobLogPath(this.#dataDir, job.id), {
-      flags: "a",
-    })
-    this.#logs.set(job.id, log)
+    const log = new JobLogWriter(this.#dataDir, job.id)
     let resolveExit!: (exit: { exitCode: number; signal?: number }) => void
     this.#exits.set(
       job.id,
@@ -214,10 +195,14 @@ class JobRunner {
       })
     )
     const spawned = services.terminals.spawnJob(job.id, job.command, job.cwd, {
+      label: job.name,
       onOutput: (data) => log.write(data),
       onExit: (exit) => {
         log.end()
-        this.#logs.delete(job.id)
+        // The log has all the output: viewers read it from there.
+        services.terminals.releaseJobOutput(job.id, (maxBytes) =>
+          readLogTailRaw(jobLogParts(this.#dataDir, job.id), maxBytes)
+        )
         resolveExit(exit)
         void this.#finished(services, conversationId, job, exit)
       },
@@ -260,13 +245,11 @@ class JobRunner {
           ...(exit.signal ? { signal: exit.signal } : {}),
           endedAt: Date.now(),
         },
-        BACKGROUND_CONTEXT
+        BACKGROUND_CONTEXT,
+        this.#dataDir
       )
       if (job.notifyOnExit && !stopped) {
-        const output = tail(
-          (await readJobLog(this.#dataDir, job.id)).trimEnd(),
-          40
-        )
+        const output = await readJobLog(this.#dataDir, job.id, 40)
         await notifySession(
           services,
           conversationId,
@@ -286,7 +269,7 @@ class JobRunner {
 
   readonly #stopping = new Set<string>()
 
-  /** The plain-text log of a job. */
+  /** The end of the plain-text log of a job. */
   log(jobId: string) {
     return readJobLog(this.#dataDir, jobId)
   }
@@ -320,7 +303,8 @@ class JobRunner {
         conversationId,
         jobId,
         { status: "lost", endedAt: Date.now() },
-        BACKGROUND_CONTEXT
+        BACKGROUND_CONTEXT,
+        this.#dataDir
       )
       if (job?.notifyOnExit) {
         await notifySession(
@@ -464,7 +448,8 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
           api.conversationId,
           id,
           { status: "failed", endedAt: Date.now() },
-          context
+          context,
+          dataDir
         )
         return errorResult(
           error instanceof Error ? error.message : String(error)
@@ -472,7 +457,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       }
       const waitMs = Math.min(30_000, Math.max(0, args.wait_ms ?? 2000))
       const exit = await runner.waitForExit(id, waitMs)
-      const output = tail((await readJobLog(dataDir, id)).trimEnd(), 30)
+      const output = await readJobLog(dataDir, id, 30)
       const header = exit
         ? `Job ${id} exited at once with code ${exit.exitCode}.`
         : `Job ${id} is running (pid ${pid}).`
@@ -495,7 +480,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       if (args.id) {
         const job = await jobFor(api, args.id, context)
         if (!job) return errorResult(`No job with id ${args.id}`)
-        const output = tail((await readJobLog(dataDir, job.id)).trimEnd(), 20)
+        const output = await readJobLog(dataDir, job.id, 20)
         return textResult(
           `${describeJob(job)}${output ? `\nLast output:\n${clip(output, 3000)}` : ""}`
         )
@@ -526,7 +511,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     async execute(args, api, context) {
       const job = await jobFor(api, args.id, context)
       if (!job) return errorResult(`No job with id ${args.id}`)
-      const lines = (await readJobLog(dataDir, job.id)).trimEnd().split("\n")
+      const parts = jobLogParts(dataDir, job.id)
       let selected: string[]
       let note: string
       if (args.grep) {
@@ -536,19 +521,30 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
         } catch {
           return errorResult(`Invalid grep pattern: ${args.grep}`)
         }
-        selected = lines
-          .map((line, index) => `${index + 1}: ${line}`)
-          .filter((line) => pattern.test(line))
-          .slice(-200)
-        note = `${selected.length} matching line(s)`
+        const matches: string[] = []
+        let count = 0
+        await scanLogLines(parts, (line, number) => {
+          if (!pattern.test(line)) return
+          count += 1
+          matches.push(`${number}: ${line}`)
+          if (matches.length > 200) matches.shift()
+        })
+        selected = matches
+        note =
+          count > matches.length
+            ? `${count} matching lines, the last ${matches.length} shown`
+            : `${count} matching line(s)`
       } else if (args.from_line !== undefined) {
         const start = Math.max(1, Math.floor(args.from_line))
-        selected = lines.slice(start - 1, start - 1 + 400)
-        note = `lines ${start}-${start + selected.length - 1} of ${lines.length}`
+        selected = []
+        const total = await scanLogLines(parts, (line, number) => {
+          if (number >= start && selected.length < 400) selected.push(line)
+        })
+        note = `lines ${start}-${start + selected.length - 1} of ${total}`
       } else {
-        const count = Math.min(1000, Math.max(1, args.tail ?? 80))
-        selected = lines.slice(-count)
-        note = `last ${selected.length} of ${lines.length} lines`
+        const count = Math.min(MAX_TAIL_LINES, Math.max(1, args.tail ?? 80))
+        selected = readLogTailLines(parts, count)
+        note = `last ${selected.length} lines`
       }
       return textResult(
         `${describeJob(job)}\n(${note})\n${clip(selected.join("\n"), 30_000)}`

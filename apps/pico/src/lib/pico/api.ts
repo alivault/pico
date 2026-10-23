@@ -464,6 +464,9 @@ export type TerminalCreateResponse =
       cwd: string
       shell: string
       reused: boolean
+      /** The job's name, for a tab that shows a background job. */
+      label?: string
+      jobId?: string
     }
   | ApiErrorResponse
 
@@ -475,6 +478,8 @@ export type TerminalEvent =
       cwd: string
       shell: string
       nextInputSeq?: number
+      label?: string
+      jobId?: string
     }
   | {
       type: "output"

@@ -125,10 +125,12 @@ export type HostTerminals = {
     command: string,
     cwd: string,
     handlers: {
+      label?: string
       onOutput: (data: string) => void
       onExit: (exit: { exitCode: number; signal?: number }) => void
     }
   ): { terminalId: string; pid: number }
+  releaseJobOutput(jobId: string, replay: (maxBytes: number) => string): void
   jobRunning(jobId: string): boolean
   stopJob(jobId: string, graceMs?: number): boolean
 }

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
-import { writeFile } from "node:fs/promises"
+import { existsSync } from "node:fs"
+import { mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { test } from "node:test"
 
@@ -387,6 +388,68 @@ void test("running jobs of an earlier process become lost at startup", async () 
       return entries.length > 0 ? entries : undefined
     })
     assert.match(users[0]!, /\[Job lost\] server/)
+  } finally {
+    terminals.shutdown()
+    await harness.close(ctx)
+  }
+})
+
+void test("a pruned job record takes its log file with it", async () => {
+  const dir = await tempDir()
+  const host = new HostBridge()
+  const jobs = createJobsExtension(host, dir)
+  const { JobIndexDoc } = await import("../src/extensions/jobs.ts")
+  const harness = await openHarness(
+    join(dir, "db.sqlite"),
+    [jobs.extension],
+    () => ({ text: "noted" }),
+    dir
+  )
+  const terminals = bindHost(host, harness, dir)
+  try {
+    const conversation = await harness.createConversation(
+      { ownership: { kind: "ownerless" }, agent: { model: TEST_MODEL } },
+      ctx
+    )
+    await mkdir(join(dir, "jobs"), { recursive: true })
+    await harness.commit(async (tx) => {
+      const draft = await tx.doc(JobsDoc, conversation.id)
+      for (let index = 0; index < 30; index += 1) {
+        const id = `jdone${index}`
+        draft.items[id] = {
+          id,
+          name: "old",
+          command: "true",
+          cwd: dir,
+          status: "exited",
+          exitCode: 0,
+          startedAt: index,
+          endedAt: index + 1,
+          notifyOnExit: false,
+        }
+      }
+      draft.items.jlive = {
+        id: "jlive",
+        name: "server",
+        command: "npm run dev",
+        cwd: dir,
+        status: "running",
+        startedAt: Date.now() - 1000,
+        notifyOnExit: false,
+      }
+      const index = await tx.doc(JobIndexDoc)
+      index.running.jlive = Number(conversation.id)
+    }, ctx)
+    for (const id of ["jdone0", "jdone1", "jlive"])
+      await writeFile(join(dir, "jobs", `${id}.log`), "output\n")
+    // The restart makes jlive lost: 31 finished jobs, so the oldest goes.
+    await host.started()
+    const state = await harness.snapshot(JobsDoc, conversation.id, ctx)
+    assert.equal(state?.items.jdone0, undefined)
+    assert.ok(state?.items.jdone1)
+    assert.equal(existsSync(join(dir, "jobs", "jdone0.log")), false)
+    assert.equal(existsSync(join(dir, "jobs", "jdone1.log")), true)
+    assert.equal(existsSync(join(dir, "jobs", "jlive.log")), true)
   } finally {
     terminals.shutdown()
     await harness.close(ctx)

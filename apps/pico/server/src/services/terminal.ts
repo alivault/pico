@@ -4,6 +4,11 @@
  * Output is numbered and kept in a bounded backlog, so a client that
  * reconnects gets what it missed, or a reset when the backlog no longer
  * covers it. Input carries sequence numbers, so a retried send is written once.
+ * Each viewer (a tab in one client) has its own sequence numbers, so two
+ * viewers of one terminal never drop each other's input.
+ *
+ * A background job that exited keeps no backlog in memory: viewers get the
+ * end of its log file instead.
  */
 import { userInfo } from "node:os"
 import { basename } from "node:path"
@@ -23,6 +28,10 @@ const MAX_ROWS = 200
 const DEFAULT_COLS = 100
 const DEFAULT_ROWS = 30
 const KEY_MAX_LENGTH = 256
+const VIEWER_MAX_LENGTH = 64
+const MAX_VIEWERS = 64
+/** How much of an exited job's log a new viewer gets. */
+const JOB_REPLAY_BYTES = BACKLOG_MAX_BYTES
 
 export type TerminalEvent =
   | {
@@ -32,6 +41,8 @@ export type TerminalEvent =
       cwd: string
       shell: string
       nextInputSeq: number
+      label?: string
+      jobId?: string
     }
   | { type: "output"; data: string; seq: number }
   | { type: "input_ack"; inputSeq: number }
@@ -52,7 +63,8 @@ type Terminal = {
   backlog: Array<Extract<TerminalEvent, { type: "output" }>>
   backlogBytes: number
   nextOutputSeq: number
-  lastInputSeq: number
+  /** The last input sequence of each viewer, the least recent first. */
+  lastInputSeq: Map<string, number>
   cols: number
   rows: number
   exited?: { exitCode: number; signal?: number }
@@ -60,6 +72,15 @@ type Terminal = {
   listeners: Set<Listener>
   /** A background job: every viewer may attach; closing a tab does not stop it. */
   shared?: boolean
+  jobId?: string
+  label?: string
+  /** The end of an exited job's output, read from its log file. */
+  replay?: () => string
+}
+
+/** A viewer ID from a client; an empty string for clients without one. */
+function viewerKey(viewer: string | undefined) {
+  return viewer?.trim().slice(0, VIEWER_MAX_LENGTH) ?? ""
 }
 
 /** The client key of the terminal tab that shows a background job. */
@@ -147,6 +168,8 @@ export class Terminals {
         cwd: jobTerminal.cwd,
         shell: basename(jobTerminal.shell),
         reused: true,
+        ...(jobTerminal.label ? { label: jobTerminal.label } : {}),
+        ...(jobTerminal.jobId ? { jobId: jobTerminal.jobId } : {}),
       }
     }
     const lookupKey = key ? `${scopeKey}\0${key}` : undefined
@@ -194,7 +217,7 @@ export class Terminals {
       backlog: [],
       backlogBytes: 0,
       nextOutputSeq: 1,
-      lastInputSeq: 0,
+      lastInputSeq: new Map(),
       cols: columns,
       rows: lines,
       lastUsed: Date.now(),
@@ -258,6 +281,7 @@ export class Terminals {
     command: string,
     cwd: string,
     handlers: {
+      label?: string
       onOutput: (data: string) => void
       onExit: (exit: { exitCode: number; signal?: number }) => void
     }
@@ -297,12 +321,14 @@ export class Terminals {
       backlog: [],
       backlogBytes: 0,
       nextOutputSeq: 1,
-      lastInputSeq: 0,
+      lastInputSeq: new Map(),
       cols: 120,
       rows: 30,
       lastUsed: Date.now(),
       listeners: new Set(),
       shared: true,
+      jobId,
+      ...(handlers.label ? { label: handlers.label } : {}),
     }
     this.#terminals.set(id, terminal)
     this.#lookup.set(lookupKey, id)
@@ -321,6 +347,20 @@ export class Terminals {
       handlers.onExit(terminal.exited)
     })
     return { terminalId: id, pid: child.pid }
+  }
+
+  /**
+   * Drop the in-memory backlog of a job that exited; viewers then get the
+   * end of its log. Call it when the log has all the output.
+   */
+  releaseJobOutput(jobId: string, replay: (maxBytes: number) => string) {
+    const terminal = this.#terminals.get(
+      this.#lookup.get(JOB_LOOKUP_PREFIX + jobId) ?? ""
+    )
+    if (!terminal?.exited) return
+    terminal.backlog = []
+    terminal.backlogBytes = 0
+    terminal.replay = () => replay(JOB_REPLAY_BYTES)
   }
 
   /** Whether a job still runs in this server. */
@@ -370,7 +410,8 @@ export class Terminals {
     scopeKey: string,
     id: string,
     lastSeq: number | undefined,
-    listener: Listener
+    listener: Listener,
+    viewer?: string
   ) {
     const terminal = this.#record(scopeKey, id)
     terminal.lastUsed = Date.now()
@@ -381,20 +422,38 @@ export class Terminals {
         id: terminal.id,
         cwd: terminal.cwd,
         shell: basename(terminal.shell),
-        nextInputSeq: terminal.lastInputSeq + 1,
+        nextInputSeq: (terminal.lastInputSeq.get(viewerKey(viewer)) ?? 0) + 1,
+        ...(terminal.label ? { label: terminal.label } : {}),
+        ...(terminal.jobId ? { jobId: terminal.jobId } : {}),
       },
     ]
-    const firstSeq = terminal.backlog[0]?.seq ?? terminal.nextOutputSeq
-    if (lastSeq !== undefined && lastSeq + 1 < firstSeq) {
-      initial.push({
-        type: "reset",
-        reason: "backlog_gap",
-        firstSeq,
-        nextSeq: terminal.nextOutputSeq,
-      })
-    }
-    for (const event of terminal.backlog) {
-      if (lastSeq === undefined || event.seq > lastSeq) initial.push(event)
+    const lastOutput = terminal.nextOutputSeq - 1
+    if (terminal.replay) {
+      // An exited job: the end of its log stands for all of its output.
+      if (lastSeq === undefined || lastSeq < lastOutput) {
+        if (lastSeq !== undefined && lastSeq > 0)
+          initial.push({
+            type: "reset",
+            reason: "backlog_gap",
+            firstSeq: lastOutput,
+            nextSeq: terminal.nextOutputSeq,
+          })
+        const data = terminal.replay()
+        if (data) initial.push({ type: "output", data, seq: lastOutput })
+      }
+    } else {
+      const firstSeq = terminal.backlog[0]?.seq ?? terminal.nextOutputSeq
+      if (lastSeq !== undefined && lastSeq + 1 < firstSeq) {
+        initial.push({
+          type: "reset",
+          reason: "backlog_gap",
+          firstSeq,
+          nextSeq: terminal.nextOutputSeq,
+        })
+      }
+      for (const event of terminal.backlog) {
+        if (lastSeq === undefined || event.seq > lastSeq) initial.push(event)
+      }
     }
     if (terminal.exited) initial.push({ type: "exit", ...terminal.exited })
     let latest = initial.reduce(
@@ -424,13 +483,22 @@ export class Terminals {
     scopeKey: string,
     id: string,
     data: string,
-    inputSeq: number | undefined
+    inputSeq: number | undefined,
+    viewer?: string
   ) {
     const terminal = this.#record(scopeKey, id)
     if (terminal.exited) throw badRequest("Terminal has exited.")
     if (inputSeq !== undefined && inputSeq > 0) {
-      if (inputSeq <= terminal.lastInputSeq) return inputSeq
-      terminal.lastInputSeq = inputSeq
+      const key = viewerKey(viewer)
+      const last = terminal.lastInputSeq.get(key) ?? 0
+      if (inputSeq <= last) return inputSeq
+      // Keep the most recent viewers first out of the map's order.
+      terminal.lastInputSeq.delete(key)
+      terminal.lastInputSeq.set(key, inputSeq)
+      if (terminal.lastInputSeq.size > MAX_VIEWERS) {
+        const oldest = terminal.lastInputSeq.keys().next().value
+        if (oldest !== undefined) terminal.lastInputSeq.delete(oldest)
+      }
     }
     terminal.lastUsed = Date.now()
     terminal.process.write(data)
