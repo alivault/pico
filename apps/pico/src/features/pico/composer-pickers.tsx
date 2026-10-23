@@ -56,6 +56,24 @@ function currentModelValue(model?: ModelOption) {
   return model ? `${model.provider}/${model.id}` : ""
 }
 
+/**
+ * The first word and its space (as "Claude ") when every name starts with it,
+ * or "". One name alone keeps its full text.
+ */
+function sharedFirstWord(names: Array<string>) {
+  if (names.length < 2) return ""
+  const prefix = `${names[0]!.split(" ")[0]} `
+  return names.every(
+    (name) => name.startsWith(prefix) && name.length > prefix.length
+  )
+    ? prefix
+    : ""
+}
+
+function withoutPrefix(name: string, prefix: string) {
+  return prefix && name.startsWith(prefix) ? name.slice(prefix.length) : name
+}
+
 type ComposerPickerSessionStore = PicoStore<SessionState>
 
 type ModelPickerState = {
@@ -170,7 +188,26 @@ const ComposerModelPicker = React.memo(function ComposerModelPicker({
     return [...groups.entries()]
   })()
 
-  const selectedModelLabel = modelLabel(model, availableModels)
+  // The family word that all models of a provider share, from all models so
+  // that the names do not change while the user types.
+  const familyPrefixes = (() => {
+    const names = new Map<string, Array<string>>()
+    for (const entry of availableModels) {
+      const provider = entry.provider || "Models"
+      names.set(provider, [
+        ...(names.get(provider) ?? []),
+        entry.name || entry.id,
+      ])
+    }
+    return new Map(
+      [...names].map(([provider, list]) => [provider, sharedFirstWord(list)])
+    )
+  })()
+
+  const selectedModelLabel = withoutPrefix(
+    modelLabel(model, availableModels),
+    familyPrefixes.get(model?.provider || "Models") ?? ""
+  )
 
   return (
     <Popover open={!disabled && open} onOpenChange={onOpenChange}>
@@ -214,10 +251,13 @@ const ComposerModelPicker = React.memo(function ComposerModelPicker({
                     >
                       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                         <span className="truncate font-medium">
-                          {entry.name || entry.id}
+                          {withoutPrefix(
+                            entry.name || entry.id,
+                            familyPrefixes.get(provider) ?? ""
+                          )}
                         </span>
                         <span className="truncate text-xs text-muted-foreground">
-                          {entry.id}
+                          {entry.provider}/{entry.id}
                         </span>
                       </div>
                       {active ? <CheckIcon /> : null}
