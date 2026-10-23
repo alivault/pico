@@ -18,6 +18,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Textarea } from "@/components/ui/textarea"
@@ -86,18 +89,18 @@ function useProfiles(viewerContextId: string, sessionId?: string) {
   })
 }
 
-/** A dropdown that sets the tool profile of a session or of the new-session draft. */
-function ProfilePickerView({
-  cwd,
-  sessionId,
-  variant = "ghost",
-  viewerContextId,
-}: {
+type ProfileTarget = {
   cwd?: string
   sessionId?: string
-  variant?: "ghost" | "outline"
   viewerContextId: string
-}) {
+}
+
+/** The profiles, and a mutation that sets the profile of a session or of the draft. */
+function useProfileSelection({
+  cwd,
+  sessionId,
+  viewerContextId,
+}: ProfileTarget) {
   const machineId = useMachineId()
   const queryClient = useQueryClient()
   const query = useProfiles(viewerContextId, sessionId)
@@ -128,7 +131,42 @@ function ProfilePickerView({
     },
     onError: (error) => toast.error(errorText(error)),
   })
-  const data = query.data
+  return { data: query.data, mutation }
+}
+
+/** The menu items of the profiles, with a check on the current one. */
+function ProfileMenuItems({
+  data,
+  onSelect,
+}: {
+  data: ProfilesResponse
+  onSelect: (name: string) => void
+}) {
+  return data.profiles.map((profile) => (
+    <DropdownMenuItem key={profile.name} onClick={() => onSelect(profile.name)}>
+      <ProfileIcon
+        name={profile.name}
+        className="mt-0.5 self-start text-muted-foreground"
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="font-medium">{profileLabel(profile.name)}</span>
+        <span className="text-xs text-muted-foreground">
+          {profile.description}
+        </span>
+      </div>
+      {profile.name === data.current ? (
+        <CheckIcon className="ml-2 size-4 shrink-0" />
+      ) : null}
+    </DropdownMenuItem>
+  ))
+}
+
+/** A dropdown that sets the tool profile of a session or of the new-session draft. */
+function ProfilePickerView({
+  variant = "ghost",
+  ...target
+}: ProfileTarget & { variant?: "ghost" | "outline" }) {
+  const { data, mutation } = useProfileSelection(target)
   if (!data) return null
   const current = data.current
   return (
@@ -151,28 +189,40 @@ function ProfilePickerView({
         </DropdownMenuTrigger>
       </TitleTooltip>
       <DropdownMenuContent align="start" className="w-80">
-        {data.profiles.map((profile) => (
-          <DropdownMenuItem
-            key={profile.name}
-            onClick={() => mutation.mutate(profile.name)}
-          >
-            <ProfileIcon
-              name={profile.name}
-              className="mt-0.5 self-start text-muted-foreground"
-            />
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="font-medium">{profileLabel(profile.name)}</span>
-              <span className="text-xs text-muted-foreground">
-                {profile.description}
-              </span>
-            </div>
-            {profile.name === current ? (
-              <CheckIcon className="ml-2 size-4 shrink-0" />
-            ) : null}
-          </DropdownMenuItem>
-        ))}
+        <ProfileMenuItems
+          data={data}
+          onSelect={(name) => mutation.mutate(name)}
+        />
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+/** A submenu that sets the tool profile, for a menu such as the session menu. */
+function ProfileMenuSubView({
+  className,
+  ...target
+}: ProfileTarget & { className?: string }) {
+  const { data, mutation } = useProfileSelection(target)
+  if (!data) return null
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger
+        className={className}
+        disabled={mutation.isPending}
+      >
+        <span className="flex-1">Tool profile</span>
+        <span className="text-muted-foreground">
+          {profileLabel(data.current)}
+        </span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="w-72">
+        <ProfileMenuItems
+          data={data}
+          onSelect={(name) => mutation.mutate(name)}
+        />
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   )
 }
 
@@ -282,4 +332,12 @@ export function ProfilePicker(
 ) {
   const available = useMachineFeature("tool-profiles")
   return available ? <ProfilePickerView {...props} /> : null
+}
+
+/** Hidden when the server of the page does not have the feature. */
+export function ProfileMenuSub(
+  props: React.ComponentProps<typeof ProfileMenuSubView>
+) {
+  const available = useMachineFeature("tool-profiles")
+  return available ? <ProfileMenuSubView {...props} /> : null
 }

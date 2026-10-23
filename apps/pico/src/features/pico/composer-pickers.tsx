@@ -394,10 +394,13 @@ export const ComposerPickers = React.memo(function ComposerPickers({
           sessionStore={sessionStore}
         />
 
-        <SessionProfilePicker
-          sessionStore={sessionStore}
-          viewerContextId={viewerContextId}
-        />
+        {/* On mobile, the session menu has the tool profile. */}
+        <div className="hidden md:contents">
+          <SessionProfilePicker
+            sessionStore={sessionStore}
+            viewerContextId={viewerContextId}
+          />
+        </div>
       </div>
 
       <ComposerContextUsageIndicatorHost

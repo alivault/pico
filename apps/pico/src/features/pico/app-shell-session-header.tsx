@@ -1,4 +1,5 @@
 import * as React from "react"
+import { ProfileMenuSub } from "@/features/pico/agent/profiles"
 import {
   SessionLineage,
   useSessionInfo,
@@ -351,6 +352,14 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
+              {sessionHeaderState.sessionId ? (
+                <ProfileMenuSub
+                  className="md:hidden"
+                  cwd={displaySessionCwd}
+                  sessionId={sessionHeaderState.sessionId}
+                  viewerContextId={viewerContextId}
+                />
+              ) : null}
               <DropdownMenuItem
                 className={cn("md:hidden", !terminalsAvailable && "hidden")}
                 onClick={onToggleTerminalPanel}
