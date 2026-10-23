@@ -300,11 +300,14 @@ function createReportTask(host: HostBridge) {
             childMessageKind(answer, needsInput, await waiting()) !== "waiting"
           )
             break
+          // Sleep at least one time in each pass. If the session is busy but
+          // the harness is idle, waitForIdle resolves at once, and without a
+          // sleep this loop never yields to the event loop.
+          do await sleep(WAITING_POLL_MS, runtime.signal)
           while (
             !services.sessions.isBusy(task.input.child) &&
             (await waiting())
           )
-            await sleep(WAITING_POLL_MS, runtime.signal)
         }
         await runtime.commit(
           () => ({
