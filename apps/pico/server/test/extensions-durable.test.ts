@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { existsSync } from "node:fs"
-import { mkdir, writeFile } from "node:fs/promises"
+import { mkdir, readdir, utimes, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { test } from "node:test"
 
@@ -11,6 +11,7 @@ import { DEFAULT_SETTINGS } from "../src/core/settings.ts"
 import { HostBridge, type HostServices } from "../src/extensions/host.ts"
 import {
   createJobsExtension,
+  deleteOldJobLogs,
   JobsDoc,
   plainText,
 } from "../src/extensions/jobs.ts"
@@ -454,6 +455,29 @@ void test("a pruned job record takes its log file with it", async () => {
     terminals.shutdown()
     await harness.close(ctx)
   }
+})
+
+void test("old job logs go, except the logs of running jobs", async () => {
+  const dir = await tempDir()
+  await mkdir(join(dir, "jobs"), { recursive: true })
+  const old = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
+  for (const name of [
+    "jold.log",
+    "jold.1.log",
+    "jrun.log",
+    "jnew.log",
+    "notes.txt",
+  ]) {
+    const path = join(dir, "jobs", name)
+    await writeFile(path, "x")
+    if (name !== "jnew.log") await utimes(path, old, old)
+  }
+  assert.equal(await deleteOldJobLogs(dir, new Set(["jrun"])), 2)
+  assert.deepEqual((await readdir(join(dir, "jobs"))).sort(), [
+    "jnew.log",
+    "jrun.log",
+    "notes.txt",
+  ])
 })
 
 void test("a job that the server stops at shutdown is reported as lost, not finished", async () => {

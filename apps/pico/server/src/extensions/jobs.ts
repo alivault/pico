@@ -11,6 +11,9 @@
  * `lost`, and their session gets one message about it.
  */
 
+import { readdir, stat, unlink } from "node:fs/promises"
+import { join } from "node:path"
+
 import type { Context } from "@earendil-works/chord"
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
 import { Type } from "@earendil-works/pi-ai"
@@ -87,6 +90,8 @@ export const JobIndexDoc = defineDoc<{ running: Record<string, number> }>({
 
 const MAX_RUNNING_PER_SESSION = 8
 const KEEP_FINISHED = 30
+/** Job logs older than this go at startup (see `deleteOldJobLogs`). */
+const OLD_LOG_MS = 7 * 24 * 60 * 60 * 1000
 
 /** Plain-text lines that `job_output` and `job_status` show at most. */
 const MAX_TAIL_LINES = 1000
@@ -165,6 +170,39 @@ async function notifySession(
     { type: "input", content: text, requestId, whenBusy: "steer" },
     BACKGROUND_CONTEXT
   )
+}
+
+/**
+ * Delete job logs that did not change for `OLD_LOG_MS`, except the logs of
+ * running jobs. This removes logs of pruned records from before Pico deleted
+ * them, and of deleted conversations. A finished job's record keeps its
+ * output only for that time.
+ */
+export async function deleteOldJobLogs(
+  dataDir: string,
+  running: ReadonlySet<string>,
+  now = Date.now()
+) {
+  let names: string[]
+  try {
+    names = await readdir(join(dataDir, "jobs"))
+  } catch {
+    return 0
+  }
+  let deleted = 0
+  for (const name of names) {
+    const match = /^([a-z0-9]+)(?:\.1)?\.log$/i.exec(name)
+    if (!match || running.has(match[1]!)) continue
+    const path = join(dataDir, "jobs", name)
+    try {
+      if (now - (await stat(path)).mtimeMs < OLD_LOG_MS) continue
+      await unlink(path)
+      deleted += 1
+    } catch {
+      // Gone already.
+    }
+  }
+  return deleted
 }
 
 /** The jobs that run in this process, with their open log files. */
@@ -286,6 +324,12 @@ class JobRunner {
     const index = await services.harness.snapshot(
       JobIndexDoc,
       BACKGROUND_CONTEXT
+    )
+    await deleteOldJobLogs(
+      this.#dataDir,
+      new Set(Object.keys(index?.running ?? {}))
+    ).catch((error: unknown) =>
+      console.warn("[pico] could not delete old job logs:", error)
     )
     for (const [jobId, conversationNumber] of Object.entries(
       index?.running ?? {}

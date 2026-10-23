@@ -11,7 +11,8 @@
  * with a number (`ref`) that actions use.
  *
  * A context that no tool used for `IDLE_MS` closes (its cookies are saved
- * first), and Chrome closes when no context remains. The next tool call
+ * first; a visible Chrome waits `HEADED_IDLE_MS`, as the user may use its
+ * window, for example to log in), and Chrome closes when no context remains. The next tool call
  * opens them again.
  */
 import { existsSync } from "node:fs"
@@ -41,6 +42,8 @@ export function findChrome() {
 
 /** Close a conversation's context after this long without use. */
 const IDLE_MS = 10 * 60 * 1000
+/** The idle time when Chrome is visible. */
+const HEADED_IDLE_MS = 60 * 60 * 1000
 
 export type BrowserTab = { id: string; url: string; title: string }
 
@@ -106,7 +109,9 @@ export class BrowserManager {
   #current: Browser | undefined
   readonly #sessions = new Map<number, Promise<Session>>()
   readonly #lastUsed = new Map<number, number>()
-  readonly #idleMs: number
+  readonly #idleMs: number | undefined
+  /** Whether the running Chrome is visible. */
+  #headed = false
   readonly #reaper: NodeJS.Timeout
 
   constructor(
@@ -116,10 +121,10 @@ export class BrowserManager {
   ) {
     this.#dataDir = dataDir
     this.#headless = headless
-    this.#idleMs = options.idleMs ?? IDLE_MS
+    this.#idleMs = options.idleMs
     this.#reaper = setInterval(
       () => void this.closeIdle(),
-      Math.min(60_000, this.#idleMs)
+      Math.min(60_000, this.#idleMs ?? IDLE_MS)
     )
     this.#reaper.unref()
   }
@@ -139,7 +144,8 @@ export class BrowserManager {
    */
   async closeIdle(now = Date.now()) {
     for (const id of [...this.#sessions.keys()]) {
-      if (now - (this.#lastUsed.get(id) ?? 0) < this.#idleMs) continue
+      const idleMs = this.#idleMs ?? (this.#headed ? HEADED_IDLE_MS : IDLE_MS)
+      if (now - (this.#lastUsed.get(id) ?? 0) < idleMs) continue
       await this.closeSession(id).catch(() => undefined)
     }
     if (this.#sessions.size > 0 || !this.#browser) return
@@ -162,12 +168,14 @@ export class BrowserManager {
         "No Chrome, Chromium, Brave, or Edge found. Install Chrome, or set PICO_BROWSER_PATH."
       )
     const { chromium } = await import("playwright-core")
+    const headless = this.#headless()
     const browser = await chromium.launch({
       executablePath,
-      headless: this.#headless(),
+      headless,
       args: ["--no-first-run", "--no-default-browser-check"],
     })
     this.#current = browser
+    this.#headed = !headless
     browser.on("disconnected", () => {
       // An old Chrome that closed while idle: a new one may run already.
       if (this.#current !== browser) return
