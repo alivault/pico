@@ -9,6 +9,10 @@
  *
  * Pages are read through a list of the visible interactive elements, each
  * with a number (`ref`) that actions use.
+ *
+ * A context that no tool used for `IDLE_MS` closes (its cookies are saved
+ * first), and Chrome closes when no context remains. The next tool call
+ * opens them again.
  */
 import { existsSync } from "node:fs"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
@@ -34,6 +38,9 @@ export function findChrome() {
   if (explicit) return explicit
   return CHROME_PATHS.find((path) => existsSync(path))
 }
+
+/** Close a conversation's context after this long without use. */
+const IDLE_MS = 10 * 60 * 1000
 
 export type BrowserTab = { id: string; url: string; title: string }
 
@@ -96,11 +103,52 @@ export class BrowserManager {
   readonly #dataDir: string
   readonly #headless: () => boolean
   #browser: Promise<Browser> | undefined
+  #current: Browser | undefined
   readonly #sessions = new Map<number, Promise<Session>>()
+  readonly #lastUsed = new Map<number, number>()
+  readonly #idleMs: number
+  readonly #reaper: NodeJS.Timeout
 
-  constructor(dataDir: string, headless: () => boolean) {
+  constructor(
+    dataDir: string,
+    headless: () => boolean,
+    options: { idleMs?: number } = {}
+  ) {
     this.#dataDir = dataDir
     this.#headless = headless
+    this.#idleMs = options.idleMs ?? IDLE_MS
+    this.#reaper = setInterval(
+      () => void this.closeIdle(),
+      Math.min(60_000, this.#idleMs)
+    )
+    this.#reaper.unref()
+  }
+
+  #touch(conversationId: number) {
+    this.#lastUsed.set(conversationId, Date.now())
+  }
+
+  /** The number of open contexts, and whether Chrome runs. */
+  get stats() {
+    return { contexts: this.#sessions.size, running: Boolean(this.#browser) }
+  }
+
+  /**
+   * Close the contexts that no tool used for the idle time, then Chrome when
+   * no context remains.
+   */
+  async closeIdle(now = Date.now()) {
+    for (const id of [...this.#sessions.keys()]) {
+      if (now - (this.#lastUsed.get(id) ?? 0) < this.#idleMs) continue
+      await this.closeSession(id).catch(() => undefined)
+    }
+    if (this.#sessions.size > 0 || !this.#browser) return
+    const browser = await this.#browser.catch(() => undefined)
+    // A tool can open a context while this waits.
+    if (this.#sessions.size > 0) return
+    this.#browser = undefined
+    if (this.#current === browser) this.#current = undefined
+    await browser?.close().catch(() => undefined)
   }
 
   #statePath(conversationId: number) {
@@ -119,9 +167,14 @@ export class BrowserManager {
       headless: this.#headless(),
       args: ["--no-first-run", "--no-default-browser-check"],
     })
+    this.#current = browser
     browser.on("disconnected", () => {
+      // An old Chrome that closed while idle: a new one may run already.
+      if (this.#current !== browser) return
+      this.#current = undefined
       this.#browser = undefined
       this.#sessions.clear()
+      this.#lastUsed.clear()
     })
     return browser
   }
@@ -136,6 +189,7 @@ export class BrowserManager {
 
   /** The context of a conversation; reopens saved tabs after a restart. */
   async session(conversationId: number, tabs: BrowserTab[] = []) {
+    this.#touch(conversationId)
     let session = this.#sessions.get(conversationId)
     if (!session) {
       session = (async () => {
@@ -231,6 +285,7 @@ export class BrowserManager {
   }
 
   async switchTab(conversationId: number, id: string) {
+    this.#touch(conversationId)
     const session = await this.#sessions.get(conversationId)
     const page = session?.pages.get(id)
     if (!session || !page || page.isClosed()) throw new Error(`No tab ${id}`)
@@ -240,6 +295,7 @@ export class BrowserManager {
   }
 
   async closeTab(conversationId: number, id: string) {
+    this.#touch(conversationId)
     const session = await this.#sessions.get(conversationId)
     const page = session?.pages.get(id)
     if (!session || !page) throw new Error(`No tab ${id}`)
@@ -251,21 +307,29 @@ export class BrowserManager {
   /** Save cookies and local storage of a conversation's context. */
   async persist(conversationId: number) {
     const session = await this.#sessions.get(conversationId)
-    if (!session) return
+    if (session) await this.#save(conversationId, session)
+  }
+
+  async #save(conversationId: number, session: Session) {
     await mkdir(join(this.#dataDir, "browser"), { recursive: true })
     const state = await session.context.storageState()
     await writeFile(this.#statePath(conversationId), JSON.stringify(state))
   }
 
   async closeSession(conversationId: number) {
-    const session = await this.#sessions.get(conversationId)
-    if (!session) return
-    await this.persist(conversationId).catch(() => undefined)
+    const pending = this.#sessions.get(conversationId)
+    if (!pending) return
+    // Out of the map first, so a tool that comes now opens a new context.
     this.#sessions.delete(conversationId)
+    this.#lastUsed.delete(conversationId)
+    const session = await pending.catch(() => undefined)
+    if (!session) return
+    await this.#save(conversationId, session).catch(() => undefined)
     await session.context.close().catch(() => undefined)
   }
 
   async shutdown() {
+    clearInterval(this.#reaper)
     for (const id of this.#sessions.keys())
       await this.persist(id).catch(() => undefined)
     this.#sessions.clear()

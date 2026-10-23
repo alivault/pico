@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { createServer, type Server } from "node:http"
+import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { test } from "node:test"
 
@@ -198,6 +199,38 @@ void test(
       await browser.shutdown()
       site.closeAllConnections()
       await new Promise((done) => site.close(done))
+    }
+  }
+)
+
+void test(
+  "an idle browser context closes, keeps its cookies, and Chrome closes after it",
+  { skip: findChrome() ? false : "No Chrome on this machine" },
+  async () => {
+    const dir = await tempDir()
+    const browser = new BrowserManager(dir, () => true, { idleMs: 60_000 })
+    try {
+      const session = await browser.session(8)
+      await session.context.addCookies([
+        { name: "kept", value: "yes", url: "http://127.0.0.1/" },
+      ])
+      await browser.session(9)
+      assert.deepEqual(browser.stats, { contexts: 2, running: true })
+      // Not idle yet: nothing closes.
+      await browser.closeIdle(Date.now() + 1000)
+      assert.equal(browser.stats.contexts, 2)
+      await browser.closeIdle(Date.now() + 61_000)
+      assert.deepEqual(browser.stats, { contexts: 0, running: false })
+      const saved = JSON.parse(
+        await readFile(join(dir, "browser", "8.json"), "utf8")
+      ) as { cookies: Array<{ name: string }> }
+      assert.ok(saved.cookies.some((cookie) => cookie.name === "kept"))
+      // The next call opens Chrome and the context again, with the cookie.
+      const reopened = await browser.session(8)
+      const cookies = await reopened.context.cookies()
+      assert.ok(cookies.some((cookie) => cookie.name === "kept"))
+    } finally {
+      await browser.shutdown()
     }
   }
 )
