@@ -18,6 +18,13 @@ const DEFAULT_HIGH = 0.6
 const DEFAULT_MAX = 0.85
 
 let available: Promise<boolean> | undefined
+/**
+ * systemd 254 and later expand "${VARIABLE}" in the command of a scope, so
+ * a job such as `echo ${#x}` would change before the shell sees it. Turn it
+ * off where the option exists; older versions do not expand.
+ */
+const NO_EXPAND = "--expand-environment=no"
+let noExpand = false
 
 function systemdRun() {
   for (const path of ["/usr/bin/systemd-run", "/bin/systemd-run"])
@@ -31,13 +38,18 @@ export function jobScopesAvailable() {
     return Promise.resolve(false)
   const run = systemdRun()
   if (!run) return Promise.resolve(false)
-  available ??= new Promise((resolve) => {
-    execFile(
-      run,
-      ["--user", "--scope", "--quiet", "--collect", "true"],
-      { timeout: 5000 },
-      (error) => resolve(!error)
-    )
+  const probe = (extra: string[]) =>
+    new Promise<boolean>((resolve) => {
+      execFile(
+        run,
+        ["--user", "--scope", "--quiet", "--collect", ...extra, "true"],
+        { timeout: 5000 },
+        (error) => resolve(!error)
+      )
+    })
+  available ??= probe([NO_EXPAND]).then(async (ok) => {
+    noExpand = ok
+    return ok || probe([])
   })
   return available
 }
@@ -89,6 +101,7 @@ export function wrapInScope(
       "--quiet",
       "--collect",
       `--unit=${jobUnit(jobId)}`,
+      ...(noExpand ? [NO_EXPAND] : []),
       ...(limits.memoryHigh ? ["-p", `MemoryHigh=${limits.memoryHigh}`] : []),
       ...(limits.memoryMax ? ["-p", `MemoryMax=${limits.memoryMax}`] : []),
       "--",

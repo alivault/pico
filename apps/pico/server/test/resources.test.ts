@@ -135,6 +135,39 @@ void test("a job in its own systemd scope is counted and stopped as a whole", as
   }
 })
 
+void test("a job in a systemd scope gets its command unchanged", async (t) => {
+  const previous = process.env.PICO_JOB_SCOPES
+  delete process.env.PICO_JOB_SCOPES
+  const terminals = new Terminals()
+  try {
+    if (!(await jobScopesAvailable())) {
+      t.skip("No systemd user manager here")
+      return
+    }
+    let output = ""
+    let exited = false
+    await terminals.spawnJob(
+      "jexpand",
+      'x=abc; echo "len=${#x} home=${HOME:+set}"',
+      tmpdir(),
+      {
+        onOutput: (data) => {
+          output += data
+        },
+        onExit: () => {
+          exited = true
+        },
+      },
+      { scope: {} }
+    )
+    await waitFor(() => exited)
+    assert.match(output, /len=3 home=set/)
+  } finally {
+    if (previous !== undefined) process.env.PICO_JOB_SCOPES = previous
+    terminals.shutdown()
+  }
+})
+
 void test("idle shells close only when they run nothing but the shell", async () => {
   const previous = process.env.PICO_TERMINAL_SHELL
   process.env.PICO_TERMINAL_SHELL = "/bin/sh"
