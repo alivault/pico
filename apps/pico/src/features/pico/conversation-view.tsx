@@ -2262,6 +2262,7 @@ const ToolBlockCard = React.memo(function ToolBlockCard({
       <CustomToolBlockCard
         blockKey={blockKey}
         Card={CustomCard}
+        header={header}
         store={store}
       />
     )
@@ -2276,15 +2277,28 @@ const ToolBlockCard = React.memo(function ToolBlockCard({
 function CustomToolBlockCard({
   blockKey,
   Card,
+  header,
   store,
 }: {
   blockKey: string
   Card: NonNullable<ReturnType<typeof toolRenderer>>["Card"] & {}
+  header: ToolBlockHeaderSnapshot
   store: AssistantBlockStore
 }) {
   const block = useAssistantToolBlockBody(store, blockKey, true)
   if (!block) return null
-  return <Card block={block} />
+  return (
+    <Card
+      block={block}
+      fallback={
+        <ToolBlockCardContent
+          blockKey={blockKey}
+          header={header}
+          store={store}
+        />
+      }
+    />
+  )
 }
 
 function ToolBlockCardContent({

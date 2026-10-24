@@ -15,7 +15,11 @@ import { TitleTooltip } from "@/components/ui/tooltip"
 import { FADE_UNDER_ACTIONS, REVEAL_ON_HOVER } from "@/features/pico/agent/todo"
 import { registerAgentSection } from "@/features/pico/agent/agent-panel"
 import { openJobTerminal } from "@/features/pico/agent/events"
-import { jobPrompt, type SessionJob } from "@/features/pico/agent/job-state"
+import {
+  jobPrompt,
+  useSessionJobs,
+  type SessionJob,
+} from "@/features/pico/agent/job-state"
 import { postSessionJson } from "@/features/pico/agent/session-extensions"
 import {
   errorText,
@@ -29,6 +33,8 @@ import {
   registerToolRenderer,
   toolArgs,
   toolDetails,
+  useToolRenderContext,
+  type ToolRendererProps,
 } from "@/features/pico/tool-renderers/registry"
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
@@ -199,7 +205,52 @@ registerAgentSection({
   Component: JobsSection,
 })
 
+const InlineJobTerminal = React.lazy(
+  () => import("@/features/pico/agent/inline-job-terminal")
+)
+
+/** An interactive job_start call: its job's live terminal, while it runs. */
+function JobStartCard({ block, fallback }: ToolRendererProps) {
+  const { viewerContextId, sessionId } = useToolRenderContext()
+  const interactive = toolArgs(block).interactive === true && block.running
+  const { jobs } = useSessionJobs(
+    viewerContextId,
+    interactive ? sessionId : undefined
+  )
+  if (!interactive) return <>{fallback}</>
+  const job = jobs.find((item) => item.callId === block.callId)
+  const args = toolArgs(block)
+  const prompt = job?.focus?.prompt ?? args.prompt
+  const name = job?.name ?? (typeof args.name === "string" ? args.name : "")
+  return (
+    <div className="space-y-2 rounded-xl border border-sky-500/30 bg-sky-500/5 p-3 text-sm">
+      <div className="flex min-w-0 items-center gap-2">
+        <SquareTerminalIcon className="size-4 shrink-0 text-sky-600 dark:text-sky-400" />
+        <span className="truncate font-medium">{name || "Terminal"}</span>
+        {typeof prompt === "string" && prompt ? (
+          <span className="truncate text-muted-foreground">· {prompt}</span>
+        ) : null}
+      </div>
+      {job && job.status === "running" ? (
+        <React.Suspense
+          fallback={<div className="h-56 rounded-md border bg-background" />}
+        >
+          <InlineJobTerminal jobId={job.id} />
+        </React.Suspense>
+      ) : (
+        <div className="text-xs text-muted-foreground">Starting…</div>
+      )}
+      {job?.waiting?.secret ? (
+        <div className="text-xs text-muted-foreground">
+          What you type is not shown.
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 registerToolRenderer("job_start", {
+  Card: JobStartCard,
   summary(block) {
     const args = toolArgs(block)
     const id = toolDetails<{ id: string }>(block).id
@@ -208,13 +259,16 @@ registerToolRenderer("job_start", {
   },
 })
 
-for (const name of [
-  "job_status",
-  "job_output",
-  "job_wait",
-  "job_focus",
-  "job_stop",
-]) {
+registerToolRenderer("terminal", {
+  summary(block) {
+    const args = toolArgs(block)
+    return [args.action, args.id ?? args.label ?? args.command]
+      .filter((part) => typeof part === "string" && part)
+      .join(" · ")
+  },
+})
+
+for (const name of ["job_status", "job_output", "job_stop"]) {
   registerToolRenderer(name, {
     summary(block) {
       const id = toolArgs(block).id

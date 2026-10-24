@@ -17,7 +17,9 @@ export type SessionJob = {
   /** The job waits for input. */
   waiting?: { since: number; prompt: string; secret: boolean }
   /** The agent asked the user to type into the job. */
-  focus?: { prompt: string; at: number }
+  focus?: { prompt: string; at: number; inline?: boolean }
+  /** The tool call that started the job. */
+  callId?: string
 }
 
 /** The background jobs of a session (the 20 newest), when they are loaded. */
@@ -63,7 +65,7 @@ export function jobPrompt(job: SessionJob | undefined) {
 
 /**
  * Open the terminal tab of a job when the agent asks for the user
- * (`job_focus`). Each device does this one time for each request, when it
+ * (the terminal tool's focus action). Each device does this one time for each request, when it
  * shows the session.
  */
 export function JobFocusWatcher({
@@ -77,7 +79,8 @@ export function JobFocusWatcher({
   const { jobs } = useSessionJobs(viewerContextId, sessionId)
   React.useEffect(() => {
     for (const job of jobs) {
-      if (job.status !== "running" || !job.focus) continue
+      // An inline job shows in its tool call in the chat.
+      if (job.status !== "running" || !job.focus || job.focus.inline) continue
       if (jobFocusSeen(machineId, job.id, job.focus.at)) continue
       rememberJobFocusSeen(machineId, job.id, job.focus.at)
       openJobTerminal(job.id)

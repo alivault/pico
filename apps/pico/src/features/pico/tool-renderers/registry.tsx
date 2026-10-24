@@ -18,6 +18,8 @@ export type ToolRenderer = {
 
 export type ToolRendererProps = {
   block: ToolBlock
+  /** The default tool card, for a `Card` that draws only some calls. */
+  fallback?: React.ReactNode
 }
 
 const renderers = new Map<string, ToolRenderer>()

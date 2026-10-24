@@ -41,7 +41,7 @@ import { useMachineId } from "@/lib/pico/machine-context"
 
 type TerminalCreateData = Extract<TerminalCreateResponse, { ok: true }>
 
-type TerminalStatus =
+export type TerminalStatus =
   | { type: "idle" }
   | { type: "connecting" }
   | { type: "connected"; shell?: string }
@@ -79,10 +79,13 @@ function jobTabSucceeded(tab: TerminalTab) {
   return tab.status.type === "exited" && tab.status.exitCode === 0
 }
 
-/** A job tab whose job is lost, could not start, or has no record and no terminal. */
+/**
+ * A job tab whose job is lost or could not start, or whose record is gone
+ * (pruned, or closed by the agent) and whose job ended.
+ */
 function jobTabGone(tab: TerminalTab) {
   if (tab.job) return tab.job.status === "lost" || tab.job.status === "failed"
-  return tab.status.type === "error"
+  return tab.status.type === "error" || tab.status.type === "exited"
 }
 
 type TerminalInfo = { label?: string | undefined }
@@ -501,7 +504,7 @@ function TerminalStatusDialog({
   )
 }
 
-function TerminalTabPane({
+export function TerminalTabPane({
   active,
   cwd,
   onStatusChange,
@@ -1058,11 +1061,11 @@ export function TerminalPanel({
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeKey])
 
-  // A focus request (`job_focus`) shows its job's tab while it is open, also
+  // A focus request (the terminal tool's focus action) shows its job's tab while it is open, also
   // when the panel mounts after the request.
   const shownFocus = React.useRef(new Set<string>())
   const focusKey = sessionJobs.jobs
-    .filter((job) => job.status === "running" && job.focus)
+    .filter((job) => job.status === "running" && job.focus && !job.focus.inline)
     .map((job) => `${job.id}@${job.focus?.at}`)
     .join(" ")
   const showFocusedJobs = React.useEffectEvent((keys: Array<string>) => {
