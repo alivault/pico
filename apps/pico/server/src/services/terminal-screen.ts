@@ -11,6 +11,7 @@ import { createRequire } from "node:module"
 import type { Terminal as HeadlessTerminal } from "@xterm/headless"
 
 export const SCROLLBACK = 1000
+const FLUSH_TIMEOUT_MS = 2000
 
 type HeadlessModule = typeof import("@xterm/headless")
 
@@ -39,10 +40,18 @@ export class TerminalScreen {
     })
   }
 
+  /** Resolves the pending writes when the screen goes away. */
+  readonly #waiting = new Set<() => void>()
+
   write(data: string) {
     if (this.#disposed || !data) return
     this.#pending = new Promise((resolve) => {
-      this.#terminal.write(data, resolve)
+      const done = () => {
+        this.#waiting.delete(done)
+        resolve()
+      }
+      this.#waiting.add(done)
+      this.#terminal.write(data, done)
     })
   }
 
@@ -51,9 +60,16 @@ export class TerminalScreen {
     this.#terminal.resize(cols, rows)
   }
 
-  /** Wait until all written output is on the screen. */
+  /** Wait until all written output is on the screen (at most 2 s). */
   async flush() {
-    await this.#pending
+    let timer: NodeJS.Timeout | undefined
+    await Promise.race([
+      this.#pending,
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, FLUSH_TIMEOUT_MS)
+      }),
+    ])
+    clearTimeout(timer)
   }
 
   get size() {
@@ -63,6 +79,8 @@ export class TerminalScreen {
   /** The rows on the screen now, as a person sees them. */
   async visible() {
     await this.flush()
+    if (this.#disposed)
+      return { rows: [], cursor: { row: 0, col: 0 }, alternate: false }
     const buffer = this.#terminal.buffer.active
     const rows: string[] = []
     for (let row = 0; row < this.#terminal.rows; row += 1)
@@ -79,6 +97,7 @@ export class TerminalScreen {
   /** The last `count` lines, scrollback included; wrapped lines joined. */
   async recent(count: number) {
     await this.flush()
+    if (this.#disposed) return []
     const buffer = this.#terminal.buffer.active
     const lines: string[] = []
     for (let index = 0; index < buffer.length; index += 1) {
@@ -96,6 +115,8 @@ export class TerminalScreen {
     if (this.#disposed) return
     this.#disposed = true
     this.#terminal.dispose()
+    // A write that will not finish now must not hold a read.
+    for (const done of [...this.#waiting]) done()
   }
 }
 

@@ -304,3 +304,12 @@ void test("a shared terminal takes the size of the viewer the user used last", a
     terminals.shutdown()
   }
 })
+
+void test("a read does not hang when its screen goes away", async () => {
+  const screen = new TerminalScreen(20, 4)
+  screen.write("x".repeat(200_000))
+  screen.dispose()
+  const started = Date.now()
+  await screen.flush()
+  assert.ok(Date.now() - started < 1000)
+})
