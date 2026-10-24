@@ -221,6 +221,12 @@ export function ArchivedSessionsDialog({
           onChange={(event) => setFilter(event.target.value)}
           placeholder="Filter archived sessions…"
           aria-label="Filter archived sessions"
+          type="search"
+          autoComplete="off"
+          data-1p-ignore="true"
+          data-bwignore="true"
+          data-form-type="other"
+          data-lpignore="true"
         />
       ) : null}
       <div className="max-h-[60svh] min-h-0 overflow-y-auto">{list}</div>
