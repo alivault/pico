@@ -83,6 +83,13 @@ export type AssistantItem = {
   streaming: boolean
   done: boolean
   model?: ModelOption
+  /** Wall-clock milliseconds when the response request started. */
+  startedAt?: number
+  /**
+   * Wall-clock milliseconds when the response ended, or when the last result
+   * of its tool calls arrived, if that is later.
+   */
+  endedAt?: number
 }
 
 export type ConversationItem = UserItem | AssistantItem
@@ -111,6 +118,7 @@ type MessageLike = {
   isError?: boolean
   usage?: UsageLike
   timestamp?: number
+  durationMs?: number
 }
 
 export type UsageLike = {
@@ -174,6 +182,22 @@ function assistantModel(message: MessageLike): ModelOption | undefined {
     ...(typeof message.provider === "string" && message.provider
       ? { provider: message.provider }
       : {}),
+  }
+}
+
+function validTime(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : undefined
+}
+
+function assistantTimes(message: MessageLike) {
+  const startedAt = validTime(message.timestamp)
+  if (startedAt === undefined) return {}
+  const duration = validTime(message.durationMs)
+  return {
+    startedAt,
+    ...(duration !== undefined ? { endedAt: startedAt + duration } : {}),
   }
 }
 
@@ -323,6 +347,7 @@ export function itemsFromEntries(
         streaming: false,
         done: true,
         ...(assistantModel(message) ? { model: assistantModel(message) } : {}),
+        ...assistantTimes(message),
       }
       for (const block of blocks) {
         if (block.type === "tool" && block.callId)
@@ -346,6 +371,13 @@ export function itemsFromEntries(
       if (images.length > 0) location.block.images = images
       location.block.isError = Boolean(message.isError)
       location.block.running = false
+      const resultAt = validTime(message.timestamp)
+      if (
+        resultAt !== undefined &&
+        resultAt > (location.item.endedAt ?? location.item.startedAt ?? 0)
+      ) {
+        location.item.endedAt = resultAt
+      }
       continue
     }
     if (entry.kind === "pi.compaction") {

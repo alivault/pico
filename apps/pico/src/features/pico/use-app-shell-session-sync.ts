@@ -426,10 +426,16 @@ function visibleConversationSignature(
       item.done === false ? "0" : "1",
       item.model?.provider || "",
       item.model?.id || "",
+      item.startedAt ?? "",
+      item.endedAt ?? "",
     ].join(":")
 
     if (blockKeys.length === 0) {
-      if (item.streaming || item.done === false || footerSignature !== "1::") {
+      if (
+        item.streaming ||
+        item.done === false ||
+        footerSignature !== "1::::"
+      ) {
         parts.push(
           `assistant:${itemKey}:${item.streaming ? "1" : "0"}:${footerSignature}`
         )

@@ -372,6 +372,8 @@ type AssistantMessagesShellSnapshot = {
   hasBlocks: boolean
   hasFooter: boolean
   hideThinking: boolean
+  /** The label of the collapsed work row; empty while the agent works. */
+  workLabel: string
   streaming: boolean
   working: boolean
   copyText: string
@@ -879,6 +881,7 @@ function sameAssistantMessagesShellSnapshot(
     left.hasBlocks === right.hasBlocks &&
     left.hasFooter === right.hasFooter &&
     left.hideThinking === right.hideThinking &&
+    left.workLabel === right.workLabel &&
     left.streaming === right.streaming &&
     left.working === right.working &&
     left.copyText === right.copyText &&
@@ -981,6 +984,38 @@ function assistantMessagesModelLabel(
   return ""
 }
 
+function formatWorkDuration(milliseconds: number) {
+  const totalSeconds = Math.max(1, Math.round(milliseconds / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (hours > 0) return `${hours}h ${minutes}m`
+  if (minutes > 0) return `${minutes}m ${seconds}s`
+  return `${seconds}s`
+}
+
+/** "Worked for 4m 3s", from the first response start to the last end. */
+function assistantWorkLabel(
+  items: Array<Extract<ConversationItem, { kind: "assistant" }>>
+) {
+  let startedAt: number | undefined
+  let endedAt: number | undefined
+  for (const item of items) {
+    if (item.startedAt === undefined) continue
+    startedAt = Math.min(startedAt ?? item.startedAt, item.startedAt)
+    const itemEnd = item.endedAt ?? item.startedAt
+    endedAt = Math.max(endedAt ?? itemEnd, itemEnd)
+  }
+  if (
+    startedAt === undefined ||
+    endedAt === undefined ||
+    endedAt <= startedAt
+  ) {
+    return "Worked"
+  }
+  return `Worked for ${formatWorkDuration(endedAt - startedAt)}`
+}
+
 function assistantItemIsWorking(
   item: Extract<ConversationItem, { kind: "assistant" }>
 ) {
@@ -1022,6 +1057,7 @@ function assistantMessagesShellSnapshotFromBlocks(
     hasBlocks: blocks.length > 0,
     hasFooter,
     hideThinking: snapshot.hideThinking,
+    workLabel: working ? "" : assistantWorkLabel(snapshot.items),
     streaming,
     working,
     copyText,
@@ -2797,7 +2833,10 @@ function CollapsedThinkingBlock({
       open={isOpen}
       onOpenChange={setIsOpen}
     >
-      <CollapsibleTrigger className="group/thinking-trigger -ml-0.5 flex max-w-full items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
+      <CollapsibleTrigger
+        data-conversation-tool-collapsible-trigger="true"
+        className="group/thinking-trigger -ml-0.5 flex max-w-full items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+      >
         <ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-aria-expanded/thinking-trigger:rotate-90" />
         <span className="truncate">{label || "Thinking"}</span>
       </CollapsibleTrigger>
@@ -2846,31 +2885,113 @@ function AssistantSubscribedBlockView({
   }
 }
 
+// Rows of collapsed tools and thinking sit closer together.
+const COMPACT_ROWS_CLASS =
+  "[&>*:has(>[data-conversation-row])+*:has(>[data-conversation-row])]:-mt-2"
+
+/**
+ * The index of the first group of the final answer: the text blocks at the
+ * end. -1 when there is no answer, or nothing before it.
+ */
+function finalAnswerStartIndex(groups: Array<AssistantBlockGroupDescriptor>) {
+  let index = groups.length
+  while (index > 0) {
+    const group = groups[index - 1]
+    if (group?.type !== "block" || group.blockType !== "text") break
+    index -= 1
+  }
+  return index > 0 && index < groups.length ? index : -1
+}
+
+/** The work before the final answer, in one collapsed row. */
+function AssistantWorkGroup({
+  anchor,
+  children,
+  label,
+  openStateKey,
+}: {
+  anchor: boolean
+  children: React.ReactNode
+  label: string
+  openStateKey: string
+}) {
+  const [isOpen, setIsOpen] = useRememberedToolCollapsibleOpen(openStateKey)
+
+  return (
+    <div
+      data-conversation-assistant-block="true"
+      data-conversation-assistant-block-type="work"
+      data-message-anchor={anchor ? "true" : undefined}
+    >
+      <Collapsible
+        data-conversation-row="true"
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        className="text-sm"
+      >
+        <CollapsibleTrigger
+          data-conversation-tool-collapsible-trigger="true"
+          className="group/work-trigger -ml-0.5 flex max-w-full items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          <ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-aria-expanded/work-trigger:rotate-90" />
+          <span className="truncate">{label}</span>
+        </CollapsibleTrigger>
+        {isOpen ? (
+          <CollapsibleContent className="pt-3">
+            <div className={cn("flex flex-col gap-4", COMPACT_ROWS_CLASS)}>
+              {children}
+            </div>
+          </CollapsibleContent>
+        ) : null}
+      </Collapsible>
+    </div>
+  )
+}
+
 function AssistantBlockGroupsView({
   anchorBlockKey,
   hideThinking,
   store,
   streaming,
+  workLabel,
 }: {
   anchorBlockKey?: string
   hideThinking: boolean
   store: AssistantBlockStore
   streaming: boolean
+  workLabel: string
 }) {
   const renderedBlocks = useAssistantBlockGroups(store)
+  const answerStart = workLabel ? finalAnswerStartIndex(renderedBlocks) : -1
+  const workGroups = answerStart > 0 ? renderedBlocks.slice(0, answerStart) : []
+  // The message anchor moves to the work row when it is in the work.
+  const anchorInWork = workGroups.some(
+    (group) => group.type === "block" && group.blockKey === anchorBlockKey
+  )
+
+  const renderGroup = (descriptor: AssistantBlockGroupDescriptor) => (
+    <AssistantBlockGroupView
+      key={descriptor.key}
+      anchorBlockKey={anchorInWork ? undefined : anchorBlockKey}
+      descriptor={descriptor}
+      hideThinking={hideThinking}
+      store={store}
+      streaming={streaming}
+    />
+  )
+
+  if (workGroups.length === 0) return <>{renderedBlocks.map(renderGroup)}</>
 
   return (
     <>
-      {renderedBlocks.map((descriptor) => (
-        <AssistantBlockGroupView
-          key={descriptor.key}
-          anchorBlockKey={anchorBlockKey}
-          descriptor={descriptor}
-          hideThinking={hideThinking}
-          store={store}
-          streaming={streaming}
-        />
-      ))}
+      <AssistantWorkGroup
+        anchor={anchorInWork}
+        label={workLabel}
+        openStateKey={`work:${workGroups[0]!.key}`}
+      >
+        {workGroups.map(renderGroup)}
+      </AssistantWorkGroup>
+      {renderedBlocks.slice(answerStart).map(renderGroup)}
     </>
   )
 }
@@ -3009,12 +3130,7 @@ export function AssistantMessagesStoreCard({
 
   return (
     <div
-      className={cn(
-        "flex flex-col gap-4",
-        // Rows of collapsed tools and thinking sit closer together.
-        "[&>*:has(>[data-conversation-row])+*:has(>[data-conversation-row])]:-mt-2",
-        className
-      )}
+      className={cn("flex flex-col gap-4", COMPACT_ROWS_CLASS, className)}
       data-conversation-assistant-group="true"
       data-conversation-streaming={shellSnapshot.streaming ? "true" : undefined}
     >
@@ -3024,6 +3140,7 @@ export function AssistantMessagesStoreCard({
           hideThinking={shellSnapshot.hideThinking}
           store={assistantBlockStore}
           streaming={shellSnapshot.streaming}
+          workLabel={shellSnapshot.workLabel}
         />
       ) : null}
       {showFooter ? (

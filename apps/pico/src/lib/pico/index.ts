@@ -235,6 +235,10 @@ export type AssistantItem = {
   streaming?: boolean
   done?: boolean
   model?: ModelOption
+  /** Wall-clock milliseconds when the response request started. */
+  startedAt?: number
+  /** Wall-clock milliseconds when the response and its tool calls ended. */
+  endedAt?: number
 }
 
 export type ConversationItem = UserItem | AssistantItem

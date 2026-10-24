@@ -242,7 +242,9 @@ function sameAssistantMessageMeta(left: AssistantItem, right: AssistantItem) {
   return (
     sameAssistantModel(left.model, right.model) &&
     (left.done === false) === (right.done === false) &&
-    (left.branchEntryId || "") === (right.branchEntryId || "")
+    (left.branchEntryId || "") === (right.branchEntryId || "") &&
+    left.startedAt === right.startedAt &&
+    left.endedAt === right.endedAt
   )
 }
 
