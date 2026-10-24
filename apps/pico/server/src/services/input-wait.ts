@@ -108,6 +108,7 @@ export class InputWaitWatcher {
   #inputTimer: NodeJS.Timeout | undefined
   #checking = false
   #stopped = false
+  readonly #promptLines: boolean
 
   constructor(
     device: string | undefined,
@@ -117,8 +118,11 @@ export class InputWaitWatcher {
       quietMs?: number
       promptQuietMs?: number
       inputCheckMs?: number
+      /** Count a prompt-like last line as a wait (default true). */
+      promptLines?: boolean
     } = {}
   ) {
+    this.#promptLines = options.promptLines ?? true
     this.#device = device
     this.#events = events
     this.#readMode = options.readMode ?? readTerminalMode
@@ -181,7 +185,7 @@ export class InputWaitWatcher {
     const secret = Boolean(mode && !mode.echo && mode.icanon)
     const quiet = Date.now() - this.#lastOutputAt
     if (secret) return { prompt, secret, waiting: true, retryIn: 0 }
-    if (promptLike(prompt)) {
+    if (this.#promptLines && promptLike(prompt)) {
       if (quiet >= this.#promptQuietMs)
         return { prompt, secret, waiting: true, retryIn: 0 }
       return {
@@ -216,7 +220,7 @@ export class InputWaitWatcher {
     const state = await this.#state()
     if (this.#stopped || this.#lastOutputAt > sentAt) return
     // A prompt-like line counts here at once: the job had the whole wait.
-    if (state.secret || promptLike(state.prompt))
+    if (state.secret || (this.#promptLines && promptLike(state.prompt)))
       this.#events.ignored(state.prompt, state.secret)
   }
 }

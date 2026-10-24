@@ -80,3 +80,39 @@ void test("a quiet job with echo off waits; Enter with no change is reported", a
     watcher.stop()
   }
 })
+
+void test("in a shell, only a secret prompt counts as a wait", async () => {
+  let mode: TerminalMode = { echo: true, icanon: true }
+  const events: string[] = []
+  const watcher = new InputWaitWatcher(
+    "/dev/pts/x",
+    {
+      waiting: (prompt, secret) => events.push(`waiting ${prompt} ${secret}`),
+      resumed: () => events.push("resumed"),
+      ignored: (prompt) => events.push(`ignored ${prompt}`),
+    },
+    {
+      readMode: async () => mode,
+      quietMs: 20,
+      promptQuietMs: 40,
+      inputCheckMs: 30,
+      promptLines: false,
+    }
+  )
+  try {
+    // The shell's own prompt is not a question.
+    watcher.output("pico main ❯ ")
+    await sleep(100)
+    assert.deepEqual(events, [])
+    watcher.input("ls\r")
+    await sleep(60)
+    assert.deepEqual(events, [])
+    // sudo turns echo off: that is a wait.
+    mode = { echo: false, icanon: true }
+    watcher.output("\r\n[sudo] password for ali: ")
+    await sleep(60)
+    assert.deepEqual(events, ["waiting [sudo] password for ali: true"])
+  } finally {
+    watcher.stop()
+  }
+})

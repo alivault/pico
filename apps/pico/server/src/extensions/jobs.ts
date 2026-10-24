@@ -89,6 +89,8 @@ export type Job = {
   }
   /** The tool call that started the job. */
   callId?: string
+  /** An interactive shell (`terminal` open without a command). */
+  shell?: boolean
 }
 
 /**
@@ -139,6 +141,8 @@ const OLD_LOG_MS = 7 * 24 * 60 * 60 * 1000
 
 /** How long a wait waits for an exit after a match. */
 const EXIT_SETTLE_MS = 1000
+/** How long a wait message waits for a `wait` call to report the wait first. */
+const WAITING_MESSAGE_DELAY_MS = 8000
 
 /** Plain-text lines that `job_output` and `job_status` show at most. */
 const MAX_TAIL_LINES = 1000
@@ -469,33 +473,40 @@ class JobRunner {
   #watch(services: HostServices, live: LiveJob, device: string | undefined) {
     const { job, conversationId } = live
     if (device) live.device = device
-    live.watcher = new InputWaitWatcher(device, {
-      waiting: (prompt, secret) =>
-        void this.#waiting(services, live, prompt, secret),
-      resumed: () => {
-        void editRunningJob(
-          services.harness,
-          conversationId,
-          job.id,
-          (draft) => {
-            delete draft.waiting
-          },
-          BACKGROUND_CONTEXT
-        ).catch(() => undefined)
+    // A shell's own prompt is not a question: in a shell, only a secret
+    // prompt (for example sudo) counts as a wait.
+    const options = job.shell ? { promptLines: false } : {}
+    live.watcher = new InputWaitWatcher(
+      device,
+      {
+        waiting: (prompt, secret) =>
+          void this.#waiting(services, live, prompt, secret),
+        resumed: () => {
+          void editRunningJob(
+            services.harness,
+            conversationId,
+            job.id,
+            (draft) => {
+              delete draft.waiting
+            },
+            BACKGROUND_CONTEXT
+          ).catch(() => undefined)
+        },
+        ignored: (prompt, secret) => {
+          if (!job.notifyOnExit) return
+          void notifySession(
+            services,
+            conversationId,
+            [
+              `[Job input not taken] The user pressed Enter in ${job.name} (job ${job.id}), but the job shows no new output after a few seconds and still waits for input${secret ? " (echo is off: a password or secret)" : ""}.`,
+              `Last line: ${clip(prompt, 300) || "(empty)"}`,
+            ].join("\n"),
+            `job:${job.id}:ignored:${Date.now()}`
+          ).catch(() => undefined)
+        },
       },
-      ignored: (prompt, secret) => {
-        if (!job.notifyOnExit) return
-        void notifySession(
-          services,
-          conversationId,
-          [
-            `[Job input not taken] The user pressed Enter in ${job.name} (job ${job.id}), but the job shows no new output after a few seconds and still waits for input${secret ? " (echo is off: a password or secret)" : ""}.`,
-            `Last line: ${clip(prompt, 300) || "(empty)"}`,
-          ].join("\n"),
-          `job:${job.id}:ignored:${Date.now()}`
-        ).catch(() => undefined)
-      },
-    })
+      options
+    )
   }
 
   /** The job started to wait for input: record it, and tell the agent once. */
@@ -507,10 +518,11 @@ class JobRunner {
   ) {
     const { job, conversationId } = live
     live.episode += 1
+    const episode = live.episode
     let reported = false
     for (const waiter of live.waiters)
       if (waiter({ type: "waiting", prompt, secret })) reported = true
-    if (reported || job.notifyOnExit) live.reported = live.episode
+    if (reported) live.reported = episode
     try {
       await editRunningJob(
         services.harness,
@@ -522,6 +534,20 @@ class JobRunner {
         BACKGROUND_CONTEXT
       )
       if (reported || !job.notifyOnExit) return
+      // The agent often asks with the terminal tool's wait right after it
+      // starts a job. Give that call a moment to report this wait, so the
+      // agent is not told twice.
+      await new Promise((resolve) =>
+        setTimeout(resolve, WAITING_MESSAGE_DELAY_MS).unref()
+      )
+      if (
+        live.reported === episode ||
+        live.episode !== episode ||
+        this.#live.get(job.id) !== live ||
+        !live.watcher?.waiting
+      )
+        return
+      live.reported = episode
       await notifySession(
         services,
         conversationId,
@@ -1016,6 +1042,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       notifyOnExit: boolean
       waitMs: number
       interactive?: { prompt: string } | undefined
+      shell?: boolean
     }
   ) => {
     const services = await host.ready(context.abortSignal)
@@ -1070,6 +1097,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       startedAt: Date.now(),
       notifyOnExit: input.notifyOnExit,
       callId: api.callId,
+      ...(input.shell ? { shell: true } : {}),
       ...(input.interactive
         ? {
             focus: {
@@ -1510,6 +1538,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
           name: label,
           notifyOnExit: !shell,
           waitMs: 1000,
+          shell,
         })
         if ("error" in started) return errorResult(started.error ?? "")
         let text = started.text
