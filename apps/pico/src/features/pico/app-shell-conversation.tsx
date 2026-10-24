@@ -104,7 +104,7 @@ function ConversationLatestMessageButton({
     >
       <Button
         variant="outline"
-        size="icon-lg"
+        size="icon"
         disabled={isDisabled}
         className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full bg-secondary text-secondary-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-0 md:bottom-[18px] dark:bg-secondary dark:hover:bg-accent"
         aria-label={label}
@@ -146,7 +146,7 @@ function ConversationPreviousMessageButton({
     >
       <Button
         variant="outline"
-        size="icon-lg"
+        size="icon"
         disabled={isDisabled}
         className={cn(
           "rounded-full bg-secondary text-secondary-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-0 dark:bg-secondary dark:hover:bg-accent",
