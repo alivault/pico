@@ -554,15 +554,112 @@ function getCodeBlockChild(children: React.ReactNode) {
   return child
 }
 
-export const MarkdownBlock = React.memo(function MarkdownBlock({
-  breaks = false,
-  className,
-  streaming = false,
+const LIST_ITEM_START = /^(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)/
+const HTML_BLOCK_OPEN = /^ {0,3}<([A-Za-z][\w-]*)(?=[\s>/]|$)/
+const HTML_BLOCK_CLOSE = /^ {0,3}<\/([A-Za-z][\w-]*)\s*>/
+const HTML_VOID_TAGS = new Set([
+  "area",
+  "base",
+  "br",
+  "col",
+  "embed",
+  "hr",
+  "img",
+  "input",
+  "link",
+  "meta",
+  "source",
+  "track",
+  "wbr",
+])
+
+/**
+ * Split streaming markdown into chunks that each parse alone. A chunk ends
+ * before a line that starts a new top-level block after a blank line, outside
+ * code fences and HTML blocks. Lines that can continue a block (indented
+ * lines and list items) do not start a chunk, so lists and code stay whole.
+ * Only complete lines start a chunk, so the start of a chunk does not move
+ * when more text arrives. The finished chunks keep the same text, so only the
+ * last chunk parses again on each update.
+ */
+export function splitStreamingMarkdown(markdown: string) {
+  const chunks: Array<string> = []
+  const lines = markdown.split("\n")
+  let chunkStart = 0
+  let lineStart = 0
+  let previousLineBlank = false
+  let fence: { char: string; length: number } | null = null
+  let htmlDepth = 0
+  let inHtmlComment = false
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = lines[index]
+    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine
+    const lineComplete = index < lines.length - 1
+    const blank = line.trim() === ""
+
+    if (
+      lineComplete &&
+      previousLineBlank &&
+      !blank &&
+      !fence &&
+      htmlDepth === 0 &&
+      !inHtmlComment &&
+      lineStart > chunkStart &&
+      !/^[ \t]/.test(line) &&
+      !LIST_ITEM_START.test(line)
+    ) {
+      chunks.push(markdown.slice(chunkStart, lineStart))
+      chunkStart = lineStart
+    }
+
+    if (fence) {
+      const closing = line.match(/^(?: {0,3})(`{3,}|~{3,})[ \t]*$/)
+      const marker = closing?.[1]
+      if (marker && marker[0] === fence.char && marker.length >= fence.length) {
+        fence = null
+      }
+    } else if (inHtmlComment) {
+      if (line.includes("-->")) inHtmlComment = false
+    } else {
+      const opening = line.match(/^(?: {0,3})(`{3,}|~{3,})(.*)$/)
+      if (
+        opening &&
+        (opening[1][0] !== "`" || !markdownTextContains(opening[2] || "", "`"))
+      ) {
+        fence = { char: opening[1][0], length: opening[1].length }
+      } else if (/^ {0,3}<!--/.test(line) && !line.includes("-->")) {
+        inHtmlComment = true
+      } else if (HTML_BLOCK_CLOSE.test(line)) {
+        htmlDepth = Math.max(0, htmlDepth - 1)
+      } else {
+        const tag = line.match(HTML_BLOCK_OPEN)?.[1]?.toLowerCase()
+        if (
+          tag &&
+          !HTML_VOID_TAGS.has(tag) &&
+          !line.trimEnd().endsWith("/>") &&
+          !line.toLowerCase().includes(`</${tag}`)
+        ) {
+          htmlDepth += 1
+        }
+      }
+    }
+
+    previousLineBlank = blank
+    lineStart += rawLine.length + 1
+  }
+
+  chunks.push(markdown.slice(chunkStart))
+  return chunks
+}
+
+const MarkdownChunk = React.memo(function MarkdownChunk({
+  breaks,
+  streaming,
   text,
 }: {
-  breaks?: boolean
-  className?: string
-  streaming?: boolean
+  breaks: boolean
+  streaming: boolean
   text: string
 }) {
   const renderingContext = {
@@ -574,24 +671,50 @@ export const MarkdownBlock = React.memo(function MarkdownBlock({
 
   return (
     <MarkdownRenderingContext value={renderingContext}>
-      <div
-        className={cn(
-          "prose prose-sm max-w-none wrap-break-word dark:prose-invert prose-headings:font-semibold prose-p:my-2 prose-pre:m-0 prose-ol:my-2 prose-ul:my-2",
-          className
-        )}
+      <MemoizedReactMarkdown
+        rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
+        remarkPlugins={
+          breaks ? MARKDOWN_REMARK_PLUGINS_WITH_BREAKS : MARKDOWN_REMARK_PLUGINS
+        }
+        components={MARKDOWN_COMPONENTS}
       >
-        <MemoizedReactMarkdown
-          rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
-          remarkPlugins={
-            breaks
-              ? MARKDOWN_REMARK_PLUGINS_WITH_BREAKS
-              : MARKDOWN_REMARK_PLUGINS
-          }
-          components={MARKDOWN_COMPONENTS}
-        >
-          {text}
-        </MemoizedReactMarkdown>
-      </div>
+        {text}
+      </MemoizedReactMarkdown>
     </MarkdownRenderingContext>
+  )
+})
+
+export const MarkdownBlock = React.memo(function MarkdownBlock({
+  breaks = false,
+  className,
+  streaming = false,
+  text,
+}: {
+  breaks?: boolean
+  className?: string
+  streaming?: boolean
+  text: string
+}) {
+  // While text streams, parse only the last chunk again. When the stream
+  // ends, parse the full text one time, so references and footnotes that
+  // cross chunks resolve.
+  const chunks = streaming ? splitStreamingMarkdown(text) : [text]
+
+  return (
+    <div
+      className={cn(
+        "prose prose-sm max-w-none wrap-break-word dark:prose-invert prose-headings:font-semibold prose-p:my-2 prose-pre:m-0 prose-ol:my-2 prose-ul:my-2",
+        className
+      )}
+    >
+      {chunks.map((chunk, index) => (
+        <MarkdownChunk
+          key={index}
+          breaks={breaks}
+          streaming={streaming && index === chunks.length - 1}
+          text={chunk}
+        />
+      ))}
+    </div>
   )
 })

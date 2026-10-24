@@ -133,10 +133,6 @@ import {
   rightSidebarPaneShortcut,
   type RightSidebarShortcutPane,
 } from "@/features/pico/keyboard-shortcuts"
-import {
-  createPicoLatestThrottler,
-  type PicoLatestThrottler,
-} from "@/features/pico/pacer-utils"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import type {
   GitCommitDialogControllerHandle,
@@ -1083,42 +1079,11 @@ function useAppShellSessionWorkspaceView({
     },
     [pendingMessagesStore, refreshComposerPendingMessages]
   )
-  const conversationItemsThrottlerRef = React.useRef<PicoLatestThrottler<
-    Array<ConversationItem>
-  > | null>(null)
-  if (!conversationItemsThrottlerRef.current) {
-    conversationItemsThrottlerRef.current = createPicoLatestThrottler({
-      key: "pico.conversation.streaming-items",
-      wait: 16,
-      onLatest: (items: Array<ConversationItem>) => {
-        conversationItemsStore.setItems(items)
-      },
-    })
-  }
-  const conversationItemsThrottler = conversationItemsThrottlerRef.current
   const setConversationItems = React.useCallback(
     (items: Array<ConversationItem>) => {
-      const hasStreamingAssistant = items.some(
-        (item) => item.kind === "assistant" && item.streaming
-      )
-
-      if (hasStreamingAssistant && typeof window !== "undefined") {
-        conversationItemsThrottler.add(items)
-        return
-      }
-
-      conversationItemsThrottler.cancel()
       conversationItemsStore.setItems(items)
     },
-    [conversationItemsThrottler, conversationItemsStore]
-  )
-
-  React.useEffect(
-    () => () => {
-      conversationItemsThrottler.flush()
-      conversationItemsThrottler.cancel()
-    },
-    [conversationItemsThrottler]
+    [conversationItemsStore]
   )
   const setWorkingState = React.useCallback(
     (state: AppShellWorkingState | null) => {

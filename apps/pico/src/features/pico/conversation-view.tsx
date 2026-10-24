@@ -1008,10 +1008,12 @@ function assistantMessagesShellSnapshotFromBlocks(
   const anchorBlock =
     anchorBlockIndex >= 0 ? blocks[anchorBlockIndex] : undefined
 
-  const copyText = assistantCopyTextFromItems(snapshot.items)
   const modelLabel = assistantMessagesModelLabel(snapshot.items)
   const streaming = snapshot.items.some(assistantItemIsStreaming)
   const working = snapshot.items.some(assistantItemIsWorking)
+  // The footer shows only when the message is not working. Do not join the
+  // text of a working message on each streamed update.
+  const copyText = working ? "" : assistantCopyTextFromItems(snapshot.items)
   const hasFooter = Boolean(copyText.trim() || modelLabel)
 
   return {
