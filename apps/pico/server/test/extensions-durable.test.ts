@@ -294,6 +294,59 @@ void test("a background job runs, logs, and reports its exit", async () => {
   }
 })
 
+void test("a job that exits during job_start's wait gets no exit message", async () => {
+  const dir = await tempDir()
+  const host = new HostBridge()
+  const jobs = createJobsExtension(host, dir)
+  let result = ""
+  const harness = await openHarness(
+    join(dir, "db.sqlite"),
+    [jobs.extension],
+    (messages) => {
+      const last = lastToolResult(messages)
+      if (last) {
+        result = last
+        return { text: "started" }
+      }
+      return {
+        tools: [
+          {
+            name: "job_start",
+            arguments: { command: "echo quick-exit", wait_ms: 5000 },
+          },
+        ],
+      }
+    },
+    dir
+  )
+  const terminals = bindHost(host, harness, dir)
+  try {
+    const conversation = await harness.createConversation(
+      {
+        ownership: { kind: "ownerless" },
+        agent: { model: TEST_MODEL, cwd: dir },
+      },
+      ctx
+    )
+    await conversation.submit({ type: "input", content: "run" }, ctx)
+    await eventually(async () => (result ? true : undefined))
+    assert.match(result, /exited at once with code 0/)
+    const state = await eventually(async () => {
+      const value = await harness.snapshot(JobsDoc, conversation.id, ctx)
+      const job = Object.values(value?.items ?? {})[0]
+      return job?.status === "exited" ? value : undefined
+    })
+    assert.ok(state)
+    // Give a wrong exit message time to come.
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    const users = await userEntries(conversation)
+    assert.ok(!users.some((entry) => entry.includes("[Job finished]")))
+  } finally {
+    terminals.shutdown()
+    await harness.close(ctx)
+  }
+})
+
 void test("a job that asks for a password waits, takes focus, and goes on after input", async () => {
   const dir = await tempDir()
   const host = new HostBridge()

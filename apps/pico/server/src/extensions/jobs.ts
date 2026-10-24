@@ -762,6 +762,11 @@ class JobRunner {
   async waitForExit(jobId: string, ms: number, signal?: AbortSignal) {
     const exit = this.#exits.get(jobId)
     if (!exit) return undefined
+    // The caller reports an exit that comes during this wait: take it, so
+    // no exit message follows.
+    const live = this.#live.get(jobId)
+    const claim: Waiter = (event) => event.type === "exit"
+    live?.waiters.add(claim)
     let timer: NodeJS.Timeout | undefined
     let onAbort: (() => void) | undefined
     try {
@@ -775,6 +780,7 @@ class JobRunner {
         }),
       ])
     } finally {
+      live?.waiters.delete(claim)
       clearTimeout(timer)
       if (onAbort) signal?.removeEventListener("abort", onAbort)
     }
