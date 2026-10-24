@@ -3034,7 +3034,6 @@ function useAppShellSessionWorkspaceView({
   const toggleHideToolBlocks = () => {
     const currentHidden = displaySettingsRef.current.hideToolBlocks
     setToolBlocksHidden(!currentHidden)
-    toast.info(currentHidden ? "Tools shown" : "Tools hidden")
   }
 
   const setMessagesCentered = (centered: boolean) => {

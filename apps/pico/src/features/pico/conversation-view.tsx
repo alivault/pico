@@ -376,6 +376,7 @@ type AssistantMessagesShellSnapshot = {
   anchorBlockKey?: string
   hasBlocks: boolean
   hasFooter: boolean
+  hideThinking: boolean
   streaming: boolean
   working: boolean
   copyText: string
@@ -882,6 +883,7 @@ function sameAssistantMessagesShellSnapshot(
     left.anchorBlockKey === right.anchorBlockKey &&
     left.hasBlocks === right.hasBlocks &&
     left.hasFooter === right.hasFooter &&
+    left.hideThinking === right.hideThinking &&
     left.streaming === right.streaming &&
     left.working === right.working &&
     left.copyText === right.copyText &&
@@ -1024,6 +1026,7 @@ function assistantMessagesShellSnapshotFromBlocks(
       : {}),
     hasBlocks: blocks.length > 0,
     hasFooter,
+    hideThinking: snapshot.hideThinking,
     streaming,
     working,
     copyText,
@@ -2582,7 +2585,6 @@ function UserMessageFooter({ copyText }: { copyText: string }) {
 
 function assistantBlockIsVisible({
   block,
-  hideThinking,
   hideToolBlocks,
 }: {
   block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
@@ -2595,7 +2597,8 @@ function assistantBlockIsVisible({
     case "compaction":
       return true
     case "thinking":
-      return !hideThinking
+      // Hidden thinking shows as a collapsed row.
+      return Boolean(block.text.trim())
     case "tool":
       return !hideToolBlocks && !isPendingUnclassifiedToolBlock(block)
     default:
@@ -2626,11 +2629,13 @@ export function assistantMessageHasFooterMeta(
 const AssistantBlockGroupView = React.memo(function AssistantBlockGroupView({
   anchorBlockKey,
   descriptor,
+  hideThinking,
   store,
   streaming,
 }: {
   anchorBlockKey?: string
   descriptor: AssistantBlockGroupDescriptor
+  hideThinking: boolean
   store: AssistantBlockStore
   streaming: boolean
 }) {
@@ -2647,6 +2652,7 @@ const AssistantBlockGroupView = React.memo(function AssistantBlockGroupView({
     <AssistantSingleBlockGroupView
       blockKey={descriptor.blockKey}
       blockType={descriptor.blockType}
+      hideThinking={hideThinking}
       store={store}
       streaming={streaming}
     />
@@ -2690,11 +2696,13 @@ function AssistantExploreBlockGroupView({
 function AssistantSingleBlockGroupView({
   blockKey,
   blockType,
+  hideThinking,
   store,
   streaming,
 }: {
   blockKey: string
   blockType: AssistantConversationBlock["type"]
+  hideThinking: boolean
   store: AssistantBlockStore
   streaming: boolean
 }) {
@@ -2706,20 +2714,72 @@ function AssistantSingleBlockGroupView({
     <AssistantSubscribedBlockView
       blockKey={blockKey}
       blockType={blockType}
+      hideThinking={hideThinking}
       store={store}
       streaming={streaming}
     />
   )
 }
 
+function ThinkingBlockBody({
+  streaming,
+  text,
+}: {
+  streaming: boolean
+  text: string
+}) {
+  return (
+    <section className="border-l-2 border-amber-500/45 pl-4 text-sm text-muted-foreground">
+      <MarkdownBlock text={text} streaming={streaming} />
+    </section>
+  )
+}
+
+/**
+ * Hidden thinking: one line of muted text that opens the thinking block.
+ * Each block opens alone, and the open state stays when the view renders
+ * again.
+ */
+function CollapsedThinkingBlock({
+  blockKey,
+  label,
+  streaming,
+  text,
+}: {
+  blockKey: string
+  label?: string
+  streaming: boolean
+  text: string
+}) {
+  const [isOpen, setIsOpen] = useRememberedToolCollapsibleOpen(
+    `thinking:${blockKey}`
+  )
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger className="group/thinking-trigger -ml-0.5 flex max-w-full items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
+        <ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-aria-expanded/thinking-trigger:rotate-90" />
+        <span className="truncate">{label?.trim() || "Thinking"}</span>
+      </CollapsibleTrigger>
+      {isOpen ? (
+        <CollapsibleContent className="pt-2">
+          <ThinkingBlockBody text={text} streaming={streaming} />
+        </CollapsibleContent>
+      ) : null}
+    </Collapsible>
+  )
+}
+
 function AssistantSubscribedBlockView({
   blockKey,
   blockType,
+  hideThinking,
   store,
   streaming,
 }: {
   blockKey: string
   blockType: AssistantConversationBlock["type"]
+  hideThinking: boolean
   store: AssistantBlockStore
   streaming: boolean
 }) {
@@ -2736,10 +2796,15 @@ function AssistantSubscribedBlockView({
         <MarkdownBlock text={block.text} streaming={streaming} />
       )
     case "thinking":
-      return (
-        <section className="border-l-2 border-amber-500/45 pl-4 text-sm text-muted-foreground">
-          <MarkdownBlock text={block.text} streaming={streaming} />
-        </section>
+      return hideThinking ? (
+        <CollapsedThinkingBlock
+          blockKey={blockKey}
+          label={block.summaryLabel}
+          streaming={streaming}
+          text={block.text}
+        />
+      ) : (
+        <ThinkingBlockBody text={block.text} streaming={streaming} />
       )
     case "compaction":
       return <CompactionBlockCard block={block} />
@@ -2750,10 +2815,12 @@ function AssistantSubscribedBlockView({
 
 function AssistantBlockGroupsView({
   anchorBlockKey,
+  hideThinking,
   store,
   streaming,
 }: {
   anchorBlockKey?: string
+  hideThinking: boolean
   store: AssistantBlockStore
   streaming: boolean
 }) {
@@ -2766,6 +2833,7 @@ function AssistantBlockGroupsView({
           key={descriptor.key}
           anchorBlockKey={anchorBlockKey}
           descriptor={descriptor}
+          hideThinking={hideThinking}
           store={store}
           streaming={streaming}
         />
@@ -2915,6 +2983,7 @@ export function AssistantMessagesStoreCard({
       {shellSnapshot.hasBlocks ? (
         <AssistantBlockGroupsView
           anchorBlockKey={shellSnapshot.anchorBlockKey}
+          hideThinking={shellSnapshot.hideThinking}
           store={assistantBlockStore}
           streaming={shellSnapshot.streaming}
         />

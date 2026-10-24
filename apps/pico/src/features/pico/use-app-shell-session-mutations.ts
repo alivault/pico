@@ -553,7 +553,6 @@ export function useAppShellSessionMutations({
             body: JSON.stringify({ hide: hidden }),
           }
         )
-        toast.info(hidden ? "Thinking hidden" : "Thinking shown")
       } catch (error) {
         toast.error(
           error instanceof Error

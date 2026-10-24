@@ -378,9 +378,9 @@ function visibleAssistantBlockKey(
     case "compaction":
       return `compaction:${block.tokensBefore}:${block.estimatedTokensAfter ?? ""}:${block.summary}`
     case "thinking":
-      return options.hideThinking
-        ? ""
-        : `thinking:${block.summaryLabel || ""}:${block.text}`
+      // Hidden thinking shows as a collapsed row that can open, so its text
+      // stays part of the visible conversation.
+      return `thinking:${block.summaryLabel || ""}:${block.text}`
     case "tool":
       return options.hideToolBlocks
         ? ""
