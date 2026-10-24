@@ -553,6 +553,12 @@ void test("the terminal tool opens, reads, types, refuses secrets, and closes", 
     assert.ok(list!.includes(ids.secret!))
     assert.match(unknown!, /Unknown keys: hyper\+q/)
     assert.equal(existsSync(join(dir, "jobs", `${ids.cat}.log`)), false)
+    // The ctrl+c result showed the exit: no exit message follows.
+    const users = await userEntries(conversation)
+    assert.ok(
+      !users.some((entry) => entry.includes("[Job finished] echo back"))
+    )
+    assert.ok(!users.some((entry) => entry.includes("[Job failed] echo back")))
   } finally {
     terminals.shutdown()
     await harness.close(ctx)

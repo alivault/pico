@@ -701,8 +701,17 @@ class JobRunner {
         clearTimeout(quiet)
         clearTimeout(limit)
         live.outputListeners.delete(onOutput)
+        live.waiters.delete(onExit)
         resolve()
       }
+      // An exit while the input settles shows in the caller's result (the
+      // screen says "exited"): take it, so no exit message follows.
+      const onExit: Waiter = (event) => {
+        if (event.type !== "exit") return false
+        done()
+        return true
+      }
+      live.waiters.add(onExit)
       // Give the program a moment to answer before the first quiet check.
       quiet = setTimeout(done, quietMs * 2)
       const limit = setTimeout(done, maxMs)
