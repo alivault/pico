@@ -557,6 +557,98 @@ void test("the terminal tool opens, reads, types, refuses secrets, and closes", 
   }
 })
 
+void test("an interactive job_start ends with its job, also across a restart and an abort", async () => {
+  const dir = await tempDir()
+  const database = join(dir, "db.sqlite")
+  const results: string[] = []
+  const script: Script = (messages) => {
+    const result = lastToolResult(messages)
+    if (result !== undefined) {
+      results.push(result)
+      return { text: "done" }
+    }
+    if (userTexts(messages).at(-1) !== "run") return { text: "ok" }
+    return {
+      tools: [
+        {
+          name: "job_start",
+          arguments: {
+            command: "sleep 30",
+            name: "login",
+            interactive: true,
+            prompt: "Log in",
+          },
+        },
+      ],
+    }
+  }
+  const open = async () => {
+    const host = new HostBridge()
+    const jobs = createJobsExtension(host, dir)
+    const harness = await openHarness(database, [jobs.extension], script, dir)
+    const terminals = bindHost(host, harness, dir)
+    return { host, harness, terminals }
+  }
+  const running = async (harness: Harness, id: Conversation["id"]) =>
+    eventually(async () => {
+      const state = await harness.snapshot(JobsDoc, id, ctx)
+      return Object.values(state?.items ?? {}).find(
+        (job) => job.status === "running"
+      )
+    })
+
+  // A restart while the call waits: the call ends, and the job is lost.
+  let server = await open()
+  const conversation = await server.harness.createConversation(
+    {
+      ownership: { kind: "ownerless" },
+      agent: { model: TEST_MODEL, cwd: dir },
+    },
+    ctx
+  )
+  const id = conversation.id
+  await conversation.submit({ type: "input", content: "run" }, ctx)
+  const first = await running(server.harness, id)
+  assert.equal(first.focus?.inline, true)
+  server.host.stopping = true
+  server.terminals.shutdown()
+  await server.harness.close(ctx)
+  server = await open()
+  try {
+    await server.host.started()
+    server.harness.resume()
+    await eventually(async () => (results.length > 0 ? true : undefined))
+    // The harness ends the call; it does not run it again.
+    assert.match(results[0]!, /interrupted|does not start the command again/)
+    const state = await server.harness.snapshot(JobsDoc, id, ctx)
+    assert.equal(Object.keys(state?.items ?? {}).length, 1)
+    assert.equal(state?.items[first.id]?.status, "lost")
+    assert.equal(state?.items[first.id]?.focus, undefined)
+
+    // An abort ends the wait; the job goes on as a normal job.
+    const again = (await server.harness.conversation(id, ctx))!
+    await again.waitForIdle(ctx)
+    await again.submit({ type: "input", content: "run" }, ctx)
+    const second = await eventually(async () => {
+      const value = await server.harness.snapshot(JobsDoc, id, ctx)
+      return Object.values(value?.items ?? {}).find(
+        (job) => job.status === "running" && job.focus
+      )
+    })
+    await again.abort(ctx)
+    const after = await eventually(async () => {
+      const value = await server.harness.snapshot(JobsDoc, id, ctx)
+      const job = value?.items[second.id]
+      return job && !job.focus ? job : undefined
+    })
+    assert.equal(after.status, "running")
+    assert.equal(after.notifyOnExit, true)
+  } finally {
+    server.terminals.shutdown()
+    await server.harness.close(ctx)
+  }
+})
+
 void test("a running job that waits or has a focus request needs the user", () => {
   const base = {
     name: "login",

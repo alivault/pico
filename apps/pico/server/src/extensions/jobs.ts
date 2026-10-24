@@ -662,6 +662,14 @@ class JobRunner {
     return this.#live.has(jobId)
   }
 
+  /** An interactive job whose call stopped: a normal job from now on. */
+  release(jobId: string) {
+    const live = this.#live.get(jobId)
+    if (!live) return
+    live.focused = false
+    live.job.notifyOnExit = true
+  }
+
   /** Mark that the agent asked the user to type into a job. */
   markFocused(jobId: string) {
     const live = this.#live.get(jobId)
@@ -884,6 +892,24 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     }
   ) => {
     const services = await host.ready(context.abortSignal)
+    // A rerun of this call (after a restart) reports the job it started; it
+    // never starts a second one.
+    const startedBefore = await api.memo<string>("job", context)
+    if (startedBefore) {
+      const jobs = await api.snapshot(JobsDoc, api.conversationId, context)
+      const earlier = jobs?.items[startedBefore]
+      const output = await readJobLog(dataDir, startedBefore, 30)
+      return {
+        error: [
+          earlier
+            ? `Job ${startedBefore} (${earlier.name}) ${earlier.status === "exited" ? `exited with code ${earlier.exitCode}` : earlier.status === "running" ? "still runs" : `is ${earlier.status}`}. The call stopped when the Pico server restarted; it does not start the command again.`
+            : `Job ${startedBefore} is gone. The call stopped when the Pico server restarted.`,
+          output ? `Last output:\n${clip(output, 3000)}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      }
+    }
     if (input.interactive) {
       const refusal = childRefusal(services, api.conversationId)
       if (refusal) return { error: refusal }
@@ -936,6 +962,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       const index = await tx.doc(JobIndexDoc)
       index.running[id] = Number(api.conversationId)
     }, context)
+    await api.memo("job", id, context)
     let pid: number
     try {
       pid = (await runner.start(services, api.conversationId, job)).pid
@@ -954,6 +981,21 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     const exit = input.interactive
       ? await runner.waitForExit(id, 2_147_483_647, context.abortSignal)
       : await runner.waitForExit(id, input.waitMs)
+    if (input.interactive && !exit && runner.running(id)) {
+      // The turn stopped: the job goes on as a normal job, and no longer
+      // calls the user from a tool call that is gone.
+      await editRunningJob(
+        services.harness,
+        api.conversationId,
+        id,
+        (draft) => {
+          delete draft.focus
+          draft.notifyOnExit = true
+        },
+        BACKGROUND_CONTEXT
+      ).catch(() => undefined)
+      runner.release(id)
+    }
     const output = await readJobLog(dataDir, id, input.interactive ? 40 : 30)
     const header = input.interactive
       ? exit

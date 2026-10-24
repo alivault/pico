@@ -265,3 +265,29 @@ void test("agents read a live terminal's screen and type into it", async () => {
     terminals.shutdown()
   }
 })
+
+void test("a shared terminal takes the size of the viewer the user used last", async () => {
+  const terminals = new Terminals()
+  try {
+    const { terminalId } = terminals.spawnJob("jsize", "cat", tmpdir(), {
+      onOutput: () => undefined,
+      onExit: () => undefined,
+    })
+    terminals.resize("a", terminalId, 100, 20, "panel")
+    assert.deepEqual(terminals.size(terminalId), { cols: 100, rows: 20 })
+    // A second viewer's size counts only when the user works in it.
+    terminals.resize("b", terminalId, 60, 10, "inline")
+    assert.deepEqual(terminals.size(terminalId), { cols: 100, rows: 20 })
+    terminals.focus("b", terminalId, "inline")
+    assert.deepEqual(terminals.size(terminalId), { cols: 60, rows: 10 })
+    // A resize of the panel now waits; input in the panel brings it back.
+    terminals.resize("a", terminalId, 120, 30, "panel")
+    assert.deepEqual(terminals.size(terminalId), { cols: 60, rows: 10 })
+    terminals.write("a", terminalId, "x", 1, "panel")
+    assert.deepEqual(terminals.size(terminalId), { cols: 120, rows: 30 })
+    // Let the write finish before the terminal closes.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  } finally {
+    terminals.shutdown()
+  }
+})

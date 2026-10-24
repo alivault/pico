@@ -1124,12 +1124,17 @@ export function createApi(api: ApiContext) {
   })
 
   router.post("/api/terminal/:id/resize", async (request) => {
-    const body = await request.body<{ cols?: unknown; rows?: unknown }>()
+    const body = await request.body<{
+      cols?: unknown
+      rows?: unknown
+      viewer?: unknown
+    }>()
     api.terminals.resize(
       terminalScope(request).scopeKey,
       request.params.id!,
       looseNumber(body.cols),
-      looseNumber(body.rows)
+      looseNumber(body.rows),
+      typeof body.viewer === "string" ? body.viewer : undefined
     )
     return { ok: true }
   })

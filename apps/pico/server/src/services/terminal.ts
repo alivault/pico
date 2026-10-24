@@ -78,6 +78,10 @@ type Terminal = {
   label?: string
   /** The end of an exited job's output, read from its log file. */
   replay?: () => string
+  /** The size each viewer asks for, the least recent first. */
+  viewerSizes: Map<string, { cols: number; rows: number }>
+  /** The viewer that the user used last. */
+  activeViewer?: string
   /** The headless screen, while an agent reads this terminal. */
   screen?: TerminalScreen
   onInput?: (data: string) => void
@@ -223,6 +227,7 @@ export class Terminals {
       backlogBytes: 0,
       nextOutputSeq: 1,
       lastInputSeq: new Map(),
+      viewerSizes: new Map(),
       cols: columns,
       rows: lines,
       lastUsed: Date.now(),
@@ -423,6 +428,7 @@ export class Terminals {
       backlogBytes: 0,
       nextOutputSeq: 1,
       lastInputSeq: new Map(),
+      viewerSizes: new Map(),
       cols: 120,
       rows: 30,
       lastUsed: Date.now(),
@@ -505,6 +511,7 @@ export class Terminals {
       backlogBytes: 0,
       nextOutputSeq: 2,
       lastInputSeq: new Map(),
+      viewerSizes: new Map(),
       cols: 120,
       rows: 30,
       exited: info.exit,
@@ -645,6 +652,7 @@ export class Terminals {
   ) {
     const terminal = this.#record(scopeKey, id)
     if (terminal.exited) throw badRequest("Terminal has exited.")
+    this.#activate(terminal, viewerKey(viewer))
     if (inputSeq !== undefined && inputSeq > 0) {
       const key = viewerKey(viewer)
       const last = terminal.lastInputSeq.get(key) ?? 0
@@ -663,17 +671,57 @@ export class Terminals {
     return inputSeq !== undefined && inputSeq > 0 ? inputSeq : undefined
   }
 
+  /**
+   * Record a viewer's size. The terminal takes the size of the viewer that
+   * the user used last (see `focus`), not of the last resize.
+   */
   resize(
     scopeKey: string,
     id: string,
     cols: number | undefined,
-    rows: number | undefined
+    rows: number | undefined,
+    viewer?: string
   ) {
     const terminal = this.#record(scopeKey, id)
     if (terminal.exited) return
-    terminal.cols = clamp(cols, MIN_COLS, MAX_COLS, terminal.cols)
-    terminal.rows = clamp(rows, MIN_ROWS, MAX_ROWS, terminal.rows)
+    const key = viewerKey(viewer)
+    const size = {
+      cols: clamp(cols, MIN_COLS, MAX_COLS, terminal.cols),
+      rows: clamp(rows, MIN_ROWS, MAX_ROWS, terminal.rows),
+    }
+    terminal.viewerSizes.delete(key)
+    terminal.viewerSizes.set(key, size)
+    if (terminal.viewerSizes.size > MAX_VIEWERS) {
+      const oldest = terminal.viewerSizes.keys().next().value
+      if (oldest !== undefined) terminal.viewerSizes.delete(oldest)
+    }
     terminal.lastUsed = Date.now()
+    if (terminal.activeViewer === undefined) terminal.activeViewer = key
+    if (terminal.activeViewer === key) this.#applySize(terminal, size)
+  }
+
+  /** The size of a terminal now. */
+  size(id: string) {
+    const terminal = this.#byId(id)
+    return { cols: terminal.cols, rows: terminal.rows }
+  }
+
+  /** The user works in a viewer (focus or input): its size counts now. */
+  focus(scopeKey: string, id: string, viewer?: string) {
+    this.#activate(this.#record(scopeKey, id), viewerKey(viewer))
+  }
+
+  #activate(terminal: Terminal, key: string) {
+    if (terminal.exited || terminal.activeViewer === key) return
+    terminal.activeViewer = key
+    const size = terminal.viewerSizes.get(key)
+    if (size) this.#applySize(terminal, size)
+  }
+
+  #applySize(terminal: Terminal, size: { cols: number; rows: number }) {
+    if (size.cols === terminal.cols && size.rows === terminal.rows) return
+    terminal.cols = size.cols
+    terminal.rows = size.rows
     terminal.process.resize(terminal.cols, terminal.rows)
     terminal.screen?.resize(terminal.cols, terminal.rows)
   }

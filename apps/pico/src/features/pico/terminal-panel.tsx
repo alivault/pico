@@ -821,6 +821,10 @@ export function TerminalTabPane({
         terminal.loadAddon(fitAddon)
         terminal.open(terminalElement)
         terminalRef.current = terminal
+        // The terminal takes the size of the viewer that the user works in.
+        terminal.textarea?.addEventListener("focus", () => {
+          sendTerminalMessage({ type: "focus" })
+        })
         inputDisposable = terminal.onData((data) => {
           if (!activeRef.current) return
           // An offline machine is read-only: drop typing until it is back.

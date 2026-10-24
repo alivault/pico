@@ -396,8 +396,11 @@ export async function startServer(options: {
             scopeKey,
             id,
             looseNumber(message.cols),
-            looseNumber(message.rows)
+            looseNumber(message.rows),
+            viewer
           )
+        } else if (message.type === "focus") {
+          terminals.focus(scopeKey, id, viewer)
         } else if (message.type === "ping") {
           send({ type: "pong" })
         } else {
