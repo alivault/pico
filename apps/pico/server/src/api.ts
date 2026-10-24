@@ -48,6 +48,8 @@ import { createWorktree, repoRoot } from "./services/worktree.ts"
 import type { HighlightService } from "./services/highlight.ts"
 import { looseNumber, type Terminals } from "./services/terminal.ts"
 import { jobLogParts, readLogTailRaw } from "./services/job-log.ts"
+import { validSize } from "./services/containment.ts"
+import { collectResources } from "./services/resources.ts"
 
 export type ApiContext = {
   runtime: Runtime
@@ -1419,6 +1421,17 @@ export function createApi(api: ApiContext) {
   // ---------------------------------------------------------------------------
   // Agent settings
 
+  // What uses memory on this machine (see services/resources.ts).
+  router.get("/api/resources", async () => ({
+    ok: true,
+    ...(await collectResources({
+      terminals: api.terminals,
+      jobs: () => runtime.extensions.jobs.liveJobs(),
+      browser: api.host.current?.browser,
+      previews: api.host.current?.previews,
+    })),
+  }))
+
   router.get("/api/settings/agent", () => ({
     ok: true,
     ...agentSettings(runtime),
@@ -1453,6 +1466,8 @@ export function createApi(api: ApiContext) {
     text("ntfyUrl", (value) => /^https?:\/\//.test(value))
     text("publicUrl", (value) => /^https?:\/\//.test(value))
     text("previewPorts", (value) => /^\d+\s*-\s*\d+$/.test(value))
+    text("jobMemoryHigh", validSize)
+    text("jobMemoryMax", validSize)
     if (Array.isArray(body.worktreeCopy))
       change.worktreeCopy = body.worktreeCopy
         .filter((item): item is string => typeof item === "string")
@@ -1821,6 +1836,8 @@ function agentSettings(runtime: Runtime) {
     maxSpawnDepth: data.maxSpawnDepth,
     previewPorts: data.previewPorts,
     worktreeCopy: data.worktreeCopy,
+    jobMemoryHigh: data.jobMemoryHigh,
+    jobMemoryMax: data.jobMemoryMax,
   }
 }
 

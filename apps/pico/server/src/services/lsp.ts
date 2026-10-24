@@ -170,6 +170,10 @@ export class LspClient {
   readonly ready: Promise<void>
   stderr = ""
 
+  get pid() {
+    return this.#process.pid
+  }
+
   constructor(kind: ServerKind, root: string) {
     this.kind = kind
     this.root = root
@@ -446,6 +450,21 @@ export class LspClient {
 }
 
 /** Language server clients, by project root and language. */
+/** Every pool of this process, for the resource view and memory pressure. */
+const pools = new Set<LspPool>()
+
+/** The language servers that run now. */
+export function lspServers() {
+  return [...pools].flatMap((pool) => pool.servers())
+}
+
+/** Stop language servers not used for `idleMs` (all pools). */
+export function closeIdleLspServers(idleMs: number) {
+  let closed = 0
+  for (const pool of pools) closed += pool.closeIdle(idleMs)
+  return closed
+}
+
 export class LspPool {
   readonly #clients = new Map<string, LspClient>()
   readonly #timer: NodeJS.Timeout
@@ -453,6 +472,29 @@ export class LspPool {
   constructor() {
     this.#timer = setInterval(() => this.#reap(), 60_000)
     this.#timer.unref()
+    pools.add(this)
+  }
+
+  servers() {
+    return [...this.#clients.values()]
+      .filter((client) => !client.closed)
+      .map((client) => ({
+        kind: client.kind,
+        root: client.root,
+        pid: client.pid,
+        lastUsed: client.lastUsed,
+      }))
+  }
+
+  closeIdle(idleMs: number) {
+    let closed = 0
+    for (const [key, client] of this.#clients) {
+      if (Date.now() - client.lastUsed < idleMs && !client.closed) continue
+      this.#clients.delete(key)
+      void client.close()
+      closed += 1
+    }
+    return closed
   }
 
   async client(file: string, cwd: string) {
@@ -482,14 +524,11 @@ export class LspPool {
   }
 
   #reap() {
-    for (const [key, client] of this.#clients) {
-      if (Date.now() - client.lastUsed < IDLE_MS && !client.closed) continue
-      this.#clients.delete(key)
-      void client.close()
-    }
+    this.closeIdle(IDLE_MS)
   }
 
   async shutdown() {
+    pools.delete(this)
     clearInterval(this.#timer)
     await Promise.all(
       [...this.#clients.values()].map((client) => client.close())

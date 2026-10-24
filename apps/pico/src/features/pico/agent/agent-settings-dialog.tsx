@@ -48,6 +48,8 @@ export type AgentSettings = {
   maxSpawnDepth: number
   previewPorts: string
   worktreeCopy: Array<string>
+  jobMemoryHigh: string
+  jobMemoryMax: string
 }
 
 /** Extra sections, such as tool profiles and MCP, that other modules add. */
@@ -435,6 +437,28 @@ export function AgentSettingsDialog({
                       save({ browserHeadless: value })
                     }
                   />
+                )}
+              />
+              <Row
+                label="Job memory limits"
+                description='Each background job runs in its own systemd scope on Linux. Soft limit (MemoryHigh) and hard limit (MemoryMax): empty for 60% and 85% of the memory, "off", or a size such as 8G or 50%.'
+                control={(id) => (
+                  <div className="flex gap-1">
+                    <TextSetting
+                      id={id}
+                      width="w-20"
+                      placeholder="soft"
+                      initial={settings.jobMemoryHigh}
+                      onSave={(value) => save({ jobMemoryHigh: value })}
+                    />
+                    <TextSetting
+                      id={`${id}-max`}
+                      width="w-20"
+                      placeholder="hard"
+                      initial={settings.jobMemoryMax}
+                      onSave={(value) => save({ jobMemoryMax: value })}
+                    />
+                  </div>
                 )}
               />
               <Row

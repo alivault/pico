@@ -142,9 +142,12 @@ export class BrowserManager {
    * Close the contexts that no tool used for the idle time, then Chrome when
    * no context remains.
    */
-  async closeIdle(now = Date.now()) {
+  async closeIdle(now = Date.now(), idleOverrideMs?: number) {
     for (const id of this.#sessions.keys()) {
-      const idleMs = this.#idleMs ?? (this.#headed ? HEADED_IDLE_MS : IDLE_MS)
+      const idleMs =
+        idleOverrideMs ??
+        this.#idleMs ??
+        (this.#headed ? HEADED_IDLE_MS : IDLE_MS)
       if (now - (this.#lastUsed.get(id) ?? 0) < idleMs) continue
       await this.closeSession(id).catch(() => undefined)
     }

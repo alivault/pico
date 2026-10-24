@@ -36,6 +36,13 @@ export type PicoSettingsData = {
   previewPorts: string
   /** Run the durable browser without a window. */
   browserHeadless: boolean
+  /**
+   * Memory limits of each background job on Linux with systemd (MemoryHigh
+   * and MemoryMax of its scope): "" for the default (60% and 85% of the
+   * machine's memory), "off", or a size such as "8G" or "50%".
+   */
+  jobMemoryHigh: string
+  jobMemoryMax: string
   /** The user's tool profiles, added to the built-in ones by name. */
   profiles: Record<string, Omit<Profile, "name">>
 }
@@ -55,6 +62,8 @@ export const DEFAULT_SETTINGS: PicoSettingsData = {
   publicUrl: "",
   previewPorts: "4100-4199",
   browserHeadless: true,
+  jobMemoryHigh: "",
+  jobMemoryMax: "",
   profiles: {},
 }
 

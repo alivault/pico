@@ -631,6 +631,15 @@ function getSettingsCommandGroups({
           ],
           onSelect: () => emitPicoEvent("pico:open-machines", {}),
         },
+        {
+          id: "resources",
+          title: "Resources",
+          description:
+            "What uses memory on this machine: the server, terminals, jobs, the agent browser, and language servers.",
+          valueLabel: "Open",
+          keywords: ["resources", "memory", "ram", "jobs", "processes"],
+          onSelect: () => emitPicoEvent("pico:open-resources", {}),
+        },
       ],
     },
     {

@@ -1,6 +1,7 @@
 import * as React from "react"
 import "@/features/pico/agent/register"
 import { AgentSettingsDialogController } from "@/features/pico/agent/agent-settings-dialog"
+import { ResourcesDialogController } from "@/features/pico/resources-dialog"
 import { usePicoEvent } from "@/features/pico/agent/events"
 import { toast } from "sonner"
 
@@ -591,6 +592,7 @@ const AppShellSettingsDialogHost = React.memo(
     return (
       <>
         <AgentSettingsDialogController viewerContextId={viewerContextId} />
+        <ResourcesDialogController viewerContextId={viewerContextId} />
         <AppShellSettingsDialogController
           ref={settingsDialogRef}
           openStateRef={settingsOpenRef}

@@ -592,6 +592,17 @@ export class Sessions implements HostSessions {
     }
   }
 
+  /** Free memory under pressure: drop transcripts that no client watches. */
+  dropUnwatchedTranscripts() {
+    let dropped = 0
+    for (const id of this.#transcripts.keys()) {
+      if (this.#watched(id) || this.isBusy(id)) continue
+      this.#transcripts.delete(id)
+      dropped += 1
+    }
+    return dropped
+  }
+
   #evictTranscripts() {
     if (this.#transcripts.size <= 24) return
     for (const id of this.#transcripts.keys()) {

@@ -1,5 +1,5 @@
 import * as React from "react"
-import { usePicoEvent } from "@/features/pico/agent/events"
+import { emitPicoEvent, usePicoEvent } from "@/features/pico/agent/events"
 import { useMachineFeature } from "@/features/pico/machine-store"
 import { startSidebarSync } from "@/features/pico/sidebar-sync"
 import { focusShellSide, getShellLayout } from "@/hooks/use-shell-layout"
@@ -3361,6 +3361,14 @@ function useAppShellSessionWorkspaceView({
         shortcut: formatShortcutLabel("Control+`"),
         keywords: ["terminal", "shell", "console", "bottom", "panel"],
         onSelect: toggleTerminalPanel,
+      },
+      {
+        id: "show-resources",
+        group: "Workspace",
+        title: "Show resources",
+        description: "Memory of the server, terminals, jobs, and the browser",
+        keywords: ["resources", "memory", "ram", "jobs", "processes"],
+        onSelect: () => emitPicoEvent("pico:open-resources", {}),
       },
       {
         id: "commit-changes",

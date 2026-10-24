@@ -22,6 +22,8 @@ export type PicoEventMap = {
   "pico:open-agent-settings": Record<string, never>
   /** Open the machines dialog. */
   "pico:open-machines": Record<string, never>
+  /** Open the resources dialog of the shown machine. */
+  "pico:open-resources": Record<string, never>
 }
 
 export function emitPicoEvent<K extends keyof PicoEventMap>(

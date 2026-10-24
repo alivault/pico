@@ -36,6 +36,10 @@ import {
   useToolRenderContext,
   type ToolRendererProps,
 } from "@/features/pico/tool-renderers/registry"
+import {
+  formatBytes,
+  useMachineResources,
+} from "@/features/pico/resources-dialog"
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
 
@@ -81,6 +85,13 @@ function JobsSection({
   const machineId = useMachineId()
   const jobs = (state.jobs as Array<Job> | undefined) ?? []
   const now = useNow()
+  // The memory of each running job, with every process it started.
+  const resources = useMachineResources(
+    viewerContextId,
+    jobs.some((job) => job.status === "running")
+  )
+  const memoryOf = (jobId: string) =>
+    resources.data?.jobs.find((item) => item.id === jobId)?.memory
   const [logJob, setLogJob] = React.useState<Job | null>(null)
   const stop = (jobId: string) => {
     void postSessionJson(
@@ -119,7 +130,12 @@ function JobsSection({
           <TitleTooltip title={job.command}>
             <ItemTitle className="block truncate">{job.name}</ItemTitle>
           </TitleTooltip>
-          <ItemDescription>{statusText(job, now)}</ItemDescription>
+          <ItemDescription>
+            {statusText(job, now)}
+            {running && memoryOf(job.id) !== undefined
+              ? ` · ${formatBytes(memoryOf(job.id))}`
+              : ""}
+          </ItemDescription>
         </ItemContent>
         <ItemActions
           className={cn(

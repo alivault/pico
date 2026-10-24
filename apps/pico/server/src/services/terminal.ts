@@ -18,7 +18,9 @@ import { basename } from "node:path"
 
 import type { PtyMeta } from "../pty-host/protocol.ts"
 import { posixShell } from "../extensions/util.ts"
+import { killScope, wrapInScope, type ScopeLimits } from "./containment.ts"
 import { plainText } from "./job-log.ts"
+import { foregroundGroup } from "./process-tree.ts"
 import {
   LocalPtyBackend,
   type PtyBackend,
@@ -32,6 +34,7 @@ import { badRequest } from "../http.ts"
 const BACKLOG_MAX_CHUNKS = 500
 const BACKLOG_MAX_BYTES = 512 * 1024
 const EXITED_TTL_MS = 30 * 60 * 1000
+const IDLE_SHELL_MS = 12 * 60 * 60 * 1000
 const MIN_COLS = 20
 const MAX_COLS = 500
 const MIN_ROWS = 5
@@ -97,6 +100,8 @@ type Terminal = {
   onInput?: (data: string) => void
   /** The job's handlers (see `spawnJob` and `adoptJob`). */
   jobHandlers?: JobHandlers
+  /** The job runs in its own systemd scope. */
+  scoped?: boolean
 }
 
 export type JobHandlers = {
@@ -170,10 +175,22 @@ export class Terminals {
   readonly #lookup = new Map<string, string>()
   readonly #cleanup: NodeJS.Timeout
   readonly #backend: PtyBackend
+  readonly #idleShellMs: number
 
-  constructor(options: { backend?: PtyBackend; dataDir?: string } = {}) {
+  constructor(
+    options: {
+      backend?: PtyBackend
+      dataDir?: string
+      /** Close a shell that nobody used for this long (default 12 h). */
+      idleShellMs?: number
+    } = {}
+  ) {
     this.#backend = options.backend ?? new LocalPtyBackend(options.dataDir)
-    this.#cleanup = setInterval(() => this.#removeExpired(), 60_000)
+    this.#idleShellMs = options.idleShellMs ?? IDLE_SHELL_MS
+    this.#cleanup = setInterval(() => {
+      this.#removeExpired()
+      void this.closeIdleShells().catch(() => undefined)
+    }, 60_000)
     this.#cleanup.unref()
   }
 
@@ -387,6 +404,54 @@ export class Terminals {
     terminal?.process?.forget()
   }
 
+  /** The pid of a running job's process. */
+  jobPid(jobId: string) {
+    const terminal = this.#terminals.get(
+      this.#lookup.get(JOB_LOOKUP_PREFIX + jobId) ?? ""
+    )
+    return terminal && !terminal.exited ? terminal.process?.pid : undefined
+  }
+
+  /**
+   * Free memory under pressure: drop exited terminals that nobody views,
+   * and the agents' screens (they come back at the next read).
+   */
+  trimMemory() {
+    let freed = 0
+    for (const [id, terminal] of this.#terminals) {
+      if (terminal.screen) {
+        terminal.screen.dispose()
+        terminal.screen = undefined
+        freed += 1
+      }
+      if (!terminal.exited || terminal.listeners.size > 0 || terminal.shared)
+        continue
+      terminal.process?.forget()
+      this.#terminals.delete(id)
+      if (terminal.lookupKey) this.#lookup.delete(terminal.lookupKey)
+      freed += 1
+    }
+    return freed
+  }
+
+  /**
+   * Close shells that nobody viewed or used for `idleShellMs`, and that run
+   * nothing but the shell (the shell is the terminal's foreground group).
+   */
+  async closeIdleShells(now = Date.now()) {
+    let closed = 0
+    for (const terminal of this.#terminals.values()) {
+      if (terminal.shared || terminal.exited || !terminal.process) continue
+      if (terminal.listeners.size > 0) continue
+      if (now - terminal.lastUsed < this.#idleShellMs) continue
+      const foreground = await foregroundGroup(terminal.process.pid)
+      if (foreground !== terminal.process.pid) continue
+      this.close(terminal.scopeKey, terminal.id)
+      closed += 1
+    }
+    return closed
+  }
+
   /** Numbers for the resource view. */
   async stats() {
     const all = [...this.#terminals.values()]
@@ -535,7 +600,8 @@ export class Terminals {
     jobId: string,
     command: string,
     cwd: string,
-    handlers: JobHandlers
+    handlers: JobHandlers,
+    options: { scope?: ScopeLimits | undefined } = {}
   ) {
     // Jobs run commands that models write, so they need a POSIX shell. A POSIX
     // login shell keeps the user's PATH; other shells get bash, with the
@@ -555,11 +621,17 @@ export class Terminals {
     if (handlers.label) terminal.label = handlers.label
     if (handlers.onInput) terminal.onInput = handlers.onInput
     terminal.jobHandlers = handlers
+    const args = shell === login ? ["-l", "-c", command] : ["-c", command]
+    // In its own systemd scope, when the machine has one (see containment.ts).
+    const line = options.scope
+      ? wrapInScope(jobId, shell, args, options.scope)
+      : { file: shell, args }
+    if (options.scope) terminal.scoped = true
     try {
       terminal.process = await this.#backend.spawn(
         {
-          file: shell,
-          args: shell === login ? ["-l", "-c", command] : ["-c", command],
+          file: line.file,
+          args: line.args,
           cwd,
           env: shellEnvironment(),
           cols: terminal.cols,
@@ -667,15 +739,23 @@ export class Terminals {
     )
     if (!terminal?.process || terminal.exited) return false
     const process = terminal.process
+    // The whole process group, and the whole scope when the job has one:
+    // a stop leaves no orphans.
     try {
-      process.kill("SIGTERM")
+      process.kill("SIGTERM", true)
     } catch {
-      return false
+      try {
+        process.kill("SIGTERM")
+      } catch {
+        return false
+      }
     }
+    if (terminal.scoped) void killScope(jobId, "SIGTERM")
     setTimeout(() => {
+      if (terminal.scoped) void killScope(jobId, "SIGKILL")
       if (terminal.exited) return
       try {
-        process.kill("SIGKILL")
+        process.kill("SIGKILL", true)
       } catch {
         // Already gone.
       }

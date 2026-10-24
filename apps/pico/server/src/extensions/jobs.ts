@@ -41,6 +41,8 @@ import { InputWaitWatcher, readTerminalMode } from "../services/input-wait.ts"
 import type { PtyEnd } from "../services/pty-backend.ts"
 import type { JobHandlers } from "../services/terminal.ts"
 import { KEY_NAMES, keyBytes } from "../services/terminal-keys.ts"
+import { jobScopesAvailable, scopeLimits } from "../services/containment.ts"
+import { formatBytes, jobResources } from "../services/resources.ts"
 import { loginShell } from "../services/terminal.ts"
 import {
   conversationOf,
@@ -383,7 +385,10 @@ class JobRunner {
         job.id,
         job.command,
         job.cwd,
-        handlers
+        handlers,
+        (await jobScopesAvailable())
+          ? { scope: scopeLimits(services.settings()) }
+          : {}
       )
     } catch (error) {
       this.#live.delete(job.id)
@@ -682,6 +687,17 @@ class JobRunner {
   /** The device of a running job's terminal, to read its mode. */
   device(jobId: string) {
     return this.#live.get(jobId)?.device
+  }
+
+  /** The jobs that run now, with their session. */
+  liveJobs() {
+    return [...this.#live.values()].map((live) => ({
+      id: live.job.id,
+      name: live.job.name,
+      command: live.job.command,
+      startedAt: live.job.startedAt,
+      sessionId: sessionIdOf(live.conversationId),
+    }))
   }
 
   /** Whether a job runs in this process. */
@@ -1167,12 +1183,28 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     parameters: Type.Object({ id: Type.Optional(Type.String()) }),
     replay: "safe",
     async execute(args, api, context) {
+      const services = await host.ready(context.abortSignal)
+      // The memory of each running job, with every process it started.
+      const usage = new Map(
+        (
+          await jobResources({
+            terminals: services.terminals,
+            jobs: () => runner.liveJobs(),
+          }).catch(() => ({ jobs: [] }))
+        ).jobs.map((item) => [item.id, item])
+      )
+      const describe = (job: Job) => {
+        const item = usage.get(job.id)
+        return item?.memory !== undefined
+          ? `${describeJob(job)}\n  memory ${formatBytes(item.memory)} in ${item.processes} process(es)${item.scoped ? " (its own scope)" : ""}`
+          : describeJob(job)
+      }
       if (args.id) {
         const job = await jobFor(api, args.id, context)
         if (!job) return errorResult(`No job with id ${args.id}`)
         const output = await readJobLog(dataDir, job.id, 20)
         return textResult(
-          `${describeJob(job)}${output ? `\nLast output:\n${clip(output, 3000)}` : ""}`
+          `${describe(job)}${output ? `\nLast output:\n${clip(output, 3000)}` : ""}`
         )
       }
       const jobs = await api.snapshot(JobsDoc, api.conversationId, context)
@@ -1180,9 +1212,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
         (left, right) => left.startedAt - right.startedAt
       )
       return textResult(
-        items.length > 0
-          ? items.map((job) => describeJob(job)).join("\n")
-          : "No jobs."
+        items.length > 0 ? items.map(describe).join("\n") : "No jobs."
       )
     },
   })

@@ -23,6 +23,7 @@ import { ApiError, sendError, sendJson, serveStatic } from "./http.ts"
 import { GitWatcher } from "./services/git.ts"
 import { HighlightService } from "./services/highlight.ts"
 import { HostPtyBackend } from "./services/pty-backend.ts"
+import { MemoryPressure } from "./services/resources.ts"
 import {
   looseNumber,
   Terminals,
@@ -458,6 +459,17 @@ export async function startServer(options: {
     throw error
   }
   machines.start()
+  // Free idle memory when the machine is short of it (Linux).
+  const pressure = new MemoryPressure({
+    terminals,
+    jobs: () => runtime.extensions.jobs.liveJobs(),
+    browser,
+    previews,
+    dropTranscripts: () => sessions.dropUnwatchedTranscripts(),
+    notifier,
+    sessionLink: (sessionId) => sessionLink(sessionId),
+  })
+  pressure.start()
 
   let closing: Promise<void> | undefined
   return {
@@ -477,6 +489,7 @@ export async function startServer(options: {
           }
         }
         host.stopping = true
+        pressure.stop()
         ui.cancelAll()
         auth.cancelLogins()
         gitWatcher.stop()
