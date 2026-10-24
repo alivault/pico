@@ -24,6 +24,10 @@ import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { postSessionJson } from "@/features/pico/agent/session-extensions"
+import {
+  useTrackWaitingCard,
+  waitingCardKey,
+} from "@/features/pico/agent/waiting-cards"
 import { MarkdownBlock } from "@/features/pico/markdown-renderer"
 import {
   registerToolRenderer,
@@ -377,107 +381,6 @@ function useAnswer(viewerContextId: string, sessionId: string | undefined) {
   return { sending, answer }
 }
 
-/**
- * The question cards that wait for an answer, with whether each one is in
- * view. The chip above the composer uses this to lead the user back to a card
- * that scrolled out of view.
- */
-type WaitingCard = { element: HTMLElement; inView: boolean }
-const waitingCards = new Map<string, WaitingCard>()
-const waitingCardListeners = new Set<() => void>()
-
-function notifyWaitingCards() {
-  for (const listener of waitingCardListeners) listener()
-}
-
-function subscribeWaitingCards(listener: () => void) {
-  waitingCardListeners.add(listener)
-  return () => {
-    waitingCardListeners.delete(listener)
-  }
-}
-
-function waitingCardPrefix(viewerContextId: string, sessionId?: string) {
-  return `${viewerContextId}\n${sessionId ?? ""}\n`
-}
-
-function useTrackWaitingCard(key: string | undefined) {
-  const [element, setElement] = React.useState<HTMLElement | null>(null)
-  React.useEffect(() => {
-    if (!key || !element) return
-    const entry: WaitingCard = { element, inView: true }
-    waitingCards.set(key, entry)
-    notifyWaitingCards()
-    const observer = new IntersectionObserver(([record]) => {
-      if (!record) return
-      entry.inView = record.isIntersecting
-      notifyWaitingCards()
-    })
-    observer.observe(element)
-    return () => {
-      observer.disconnect()
-      if (waitingCards.get(key) === entry) waitingCards.delete(key)
-      notifyWaitingCards()
-    }
-  }, [key, element])
-  return setElement
-}
-
-function offscreenWaitingCard(prefix: string) {
-  for (const [key, card] of waitingCards) {
-    if (key.startsWith(prefix) && !card.inView) return card.element
-  }
-  return null
-}
-
-/**
- * Shows above the composer when the agent waits for an answer and its
- * question card is out of view. A click scrolls to the card.
- */
-export function WaitingQuestionChip({
-  sessionId,
-  viewerContextId,
-}: {
-  sessionId?: string
-  viewerContextId: string
-}) {
-  const prefix = waitingCardPrefix(viewerContextId, sessionId)
-  const element = React.useSyncExternalStore(subscribeWaitingCards, () =>
-    offscreenWaitingCard(prefix)
-  )
-  if (!element) return null
-  const show = () => {
-    const reduceMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches
-    // The message scroller follows the output or stays anchored to the last
-    // message, and scrolls back on the next resize. A wheel event is its
-    // signal that the reader scrolls, so it stops before we scroll.
-    element
-      .closest("[data-slot='message-scroller-viewport']")
-      ?.dispatchEvent(new WheelEvent("wheel", { bubbles: true }))
-    element.scrollIntoView({
-      block: "center",
-      behavior: reduceMotion ? "auto" : "smooth",
-    })
-    element
-      .querySelector<HTMLElement>("input, textarea, button:not([disabled])")
-      ?.focus({ preventScroll: true })
-  }
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      className="mb-1.5 h-7 max-w-full rounded-full border-primary/40 bg-background/90 px-3 text-xs font-normal text-primary shadow-sm backdrop-blur hover:text-primary"
-      onClick={show}
-    >
-      <MessageCircleQuestionIcon className="shrink-0" />
-      <span className="truncate">The agent waits for your answer</span>
-    </Button>
-  )
-}
-
 function QuestionCard({ block }: ToolRendererProps) {
   const { viewerContextId, sessionId } = useToolRenderContext()
   const details = toolDetails<AskDetails>(block)
@@ -489,8 +392,9 @@ function QuestionCard({ block }: ToolRendererProps) {
     details.status === "answered" || (!block.running && !block.isError)
   const trackRef = useTrackWaitingCard(
     waiting && questionId
-      ? `${waitingCardPrefix(viewerContextId, sessionId)}${questionId}`
-      : undefined
+      ? waitingCardKey(viewerContextId, sessionId, questionId)
+      : undefined,
+    "question"
   )
 
   return (

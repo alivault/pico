@@ -22,6 +22,10 @@ import {
 } from "@/features/pico/agent/job-state"
 import { postSessionJson } from "@/features/pico/agent/session-extensions"
 import {
+  useTrackWaitingCard,
+  waitingCardKey,
+} from "@/features/pico/agent/waiting-cards"
+import {
   errorText,
   FinishedGroup,
   IconAction,
@@ -233,13 +237,24 @@ function JobStartCard({ block, fallback }: ToolRendererProps) {
     viewerContextId,
     interactive ? sessionId : undefined
   )
+  const job = interactive
+    ? jobs.find((item) => item.callId === block.callId)
+    : undefined
+  const trackRef = useTrackWaitingCard(
+    job?.status === "running"
+      ? waitingCardKey(viewerContextId, sessionId, `job:${job.id}`)
+      : undefined,
+    "terminal"
+  )
   if (!interactive) return <>{fallback}</>
-  const job = jobs.find((item) => item.callId === block.callId)
   const args = toolArgs(block)
   const prompt = job?.focus?.prompt ?? args.prompt
   const name = job?.name ?? (typeof args.name === "string" ? args.name : "")
   return (
-    <div className="space-y-2 rounded-xl border border-sky-500/30 bg-sky-500/5 p-3 text-sm">
+    <div
+      ref={trackRef}
+      className="space-y-2 rounded-xl border border-sky-500/30 bg-sky-500/5 p-3 text-sm"
+    >
       <div className="flex min-w-0 items-center gap-2">
         <SquareTerminalIcon className="size-4 shrink-0 text-sky-600 dark:text-sky-400" />
         <span className="truncate font-medium">{name || "Terminal"}</span>
