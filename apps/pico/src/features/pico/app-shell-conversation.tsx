@@ -1,6 +1,7 @@
 import * as React from "react"
 import {
   ArrowDownIcon,
+  ArrowDownToLineIcon,
   ArrowUpToLineIcon,
   CheckIcon,
   OctagonXIcon,
@@ -125,49 +126,83 @@ function ConversationLatestMessageButton({
   )
 }
 
-function ConversationPreviousMessageButton({
-  centerMessages,
+function ConversationMessageJumpButton({
+  direction,
   jumpStateStore,
   onClick,
 }: {
-  centerMessages: boolean
+  direction: "next" | "previous"
   jumpStateStore: MessageJumpStateStore
   onClick: () => void
 }) {
-  const isDisabled = useMessageJumpValue(
-    jumpStateStore,
-    (snapshot) => !snapshot.hasPreviousMessageJumpTarget
+  const isDisabled = useMessageJumpValue(jumpStateStore, (snapshot) =>
+    direction === "next"
+      ? !snapshot.hasNextMessageJumpTarget
+      : !snapshot.hasPreviousMessageJumpTarget
   )
+  const label =
+    direction === "next" ? "Jump to next message" : "Jump to previous message"
+  const Icon = direction === "next" ? ArrowDownToLineIcon : ArrowUpToLineIcon
 
-  const button = (
+  return (
     <TitleTooltip
-      title="Jump to previous message"
-      kbd={formatShortcutLabel(appShortcut("ArrowLeft"))}
+      title={label}
+      kbd={formatShortcutLabel(
+        appShortcut(direction === "next" ? "ArrowRight" : "ArrowLeft")
+      )}
     >
       <Button
         variant="outline"
         size="icon"
         disabled={isDisabled}
-        className={cn(
-          "rounded-full bg-secondary text-secondary-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-0 dark:bg-secondary dark:hover:bg-accent",
-          centerMessages
-            ? "pointer-events-auto"
-            : "absolute right-4 bottom-4 z-10 md:right-[18px] md:bottom-[18px]"
-        )}
-        aria-label="Jump to previous message"
+        className="pointer-events-auto rounded-full bg-secondary text-secondary-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-0 dark:bg-secondary dark:hover:bg-accent"
+        aria-label={label}
         onClick={onClick}
       >
-        <ArrowUpToLineIcon className="size-4" />
+        <Icon className="size-4" />
       </Button>
     </TitleTooltip>
   )
+}
 
-  if (!centerMessages) return button
+function ConversationMessageJumpButtons({
+  centerMessages,
+  jumpStateStore,
+  onNext,
+  onPrevious,
+}: {
+  centerMessages: boolean
+  jumpStateStore: MessageJumpStateStore
+  onNext: () => void
+  onPrevious: () => void
+}) {
+  const buttons = (
+    <div
+      className={cn(
+        "flex gap-2",
+        !centerMessages &&
+          "pointer-events-none absolute right-4 bottom-4 z-10 md:right-[18px] md:bottom-[18px]"
+      )}
+    >
+      <ConversationMessageJumpButton
+        direction="next"
+        jumpStateStore={jumpStateStore}
+        onClick={onNext}
+      />
+      <ConversationMessageJumpButton
+        direction="previous"
+        jumpStateStore={jumpStateStore}
+        onClick={onPrevious}
+      />
+    </div>
+  )
+
+  if (!centerMessages) return buttons
 
   return (
     <div className="pointer-events-none absolute inset-x-4 bottom-4 z-10 md:bottom-[18px]">
       <div className="mx-auto flex w-full max-w-[80ch] justify-end">
-        {button}
+        {buttons}
       </div>
     </div>
   )
@@ -404,10 +439,11 @@ function AppShellConversationScroller({
             onClick={scrollConversationToBottom}
             streaming={sessionState.streaming}
           />
-          <ConversationPreviousMessageButton
+          <ConversationMessageJumpButtons
             centerMessages={centerMessages}
             jumpStateStore={jumpStateStore}
-            onClick={jumpToPreviousMessage}
+            onNext={jumpToNextMessage}
+            onPrevious={jumpToPreviousMessage}
           />
         </>
       ) : null}
