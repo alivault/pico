@@ -119,13 +119,19 @@ function machineOfflineMessage(label: string) {
   return `${label} is offline. Pico sends nothing until it is back.`
 }
 
+/** The messages of each MachineOfflineError that the page made. */
+const offlineMessages = new Set<string>()
+
 /**
- * The offline message in text, when text tells of a change that an offline
+ * The offline message in text, when text tells of a request that an offline
  * machine did not get. Toasts use it to show one toast for each machine.
  */
 export function findMachineOfflineMessage(text: string) {
   for (const label of offlineLabels.values()) {
     const message = machineOfflineMessage(label)
+    if (text.includes(message)) return message
+  }
+  for (const message of offlineMessages) {
     if (text.includes(message)) return message
   }
   return undefined
@@ -135,6 +141,7 @@ export function findMachineOfflineMessage(text: string) {
 export class MachineOfflineError extends Error {
   constructor(label: string) {
     super(machineOfflineMessage(label))
+    offlineMessages.add(this.message)
     this.name = "MachineOfflineError"
   }
 }

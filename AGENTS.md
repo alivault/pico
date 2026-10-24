@@ -13,6 +13,7 @@
 
 - Web client and machines: every request and machine storage key names its machine explicitly. Get the machine with `useMachineId()` (`lib/pico/machine-context.tsx`) or a `machineId` argument. Build URLs with `buildRequestUrl({ machineId, ... })`, or with `hubUrl` or `buildHubRequestUrl` for hub data. `scripts/check-api-urls.mjs` guards this.
 - The route keeps one `PicoAppShell` per opened machine in a React `Activity` (`routes/index.tsx`). Floating UI renders into a per-shell portal container (`components/ui/portal-container.tsx`).
+- Import `toast` from `@/lib/pico/toast`, not from `sonner`. The wrapper merges the toasts about an offline machine into one.
 - Window state stays out of the shells: one copy for the page. The left sidebar is `WindowSidebar` (`features/pico/window-sidebar.tsx`), drawn one time in the route with a heading for each machine. The shown shell fills its slots with portals (`features/pico/sidebar-slots.ts`). The theme store (`use-pico-theme.ts`) and the machines dialog are also window level. Machine actions take a machine ID; do not show them only for the shown machine.
 
 ## Tooling

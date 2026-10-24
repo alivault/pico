@@ -13,8 +13,18 @@ import {
   assertMachineWritable,
   hubUrl,
   isUnaddressedServerPath,
+  MachineOfflineError,
   machineApiUrl,
 } from "@/lib/pico/machine"
+
+/** The hub's answer when a machine is not online and has no offline copy. */
+function offlineMachineLabel(status: number, data: unknown) {
+  if (status !== 503 || !data || typeof data !== "object") return undefined
+  const { state, machine } = data as { state?: unknown; machine?: unknown }
+  return state === "offline" && typeof machine === "string"
+    ? machine
+    : undefined
+}
 
 function sameStringArray(left: Array<string>, right: Array<string>) {
   if (left.length !== right.length) return false
@@ -211,6 +221,8 @@ export async function fetchJson<T>(
   const data = text ? (JSON.parse(text) as T) : ({} as T)
 
   if (!response.ok) {
+    const offlineLabel = offlineMachineLabel(response.status, data)
+    if (offlineLabel !== undefined) throw new MachineOfflineError(offlineLabel)
     const message = isApiErrorResponse(data)
       ? data.error
       : `${response.status} ${response.statusText}`
