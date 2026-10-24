@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { toast } from "sonner"
+import { toast } from "@/lib/pico/toast"
 
 import type { SessionState } from "@/lib/pico"
 import type {

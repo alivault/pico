@@ -1,5 +1,5 @@
 import { AlarmClockIcon, EyeIcon, XIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/lib/pico/toast"
 
 import {
   Item,

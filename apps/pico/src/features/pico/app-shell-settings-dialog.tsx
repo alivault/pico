@@ -2,7 +2,7 @@ import * as React from "react"
 import { emitPicoEvent } from "@/features/pico/agent/events"
 import { ArrowLeftIcon } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { toast } from "sonner"
+import { toast } from "@/lib/pico/toast"
 
 import type { AppCommand } from "@/features/pico/app-shell-command-palette"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"

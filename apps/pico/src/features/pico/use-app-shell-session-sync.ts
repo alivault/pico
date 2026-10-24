@@ -6,7 +6,7 @@ import {
 } from "@/features/pico/sidebar-sync"
 import { Batcher } from "@tanstack/pacer"
 import { useQueryClient } from "@tanstack/react-query"
-import { toast } from "sonner"
+import { toast } from "@/lib/pico/toast"
 
 import type { SelectSessionNavigationOptions } from "@/features/pico/app-shell-types"
 import type { PromptImage, SessionState, StateSyncPayload } from "@/lib/pico"

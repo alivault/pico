@@ -1,7 +1,7 @@
 import * as React from "react"
 import { ArchiveIcon, ArchiveRestoreIcon } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { toast } from "sonner"
+import { toast } from "@/lib/pico/toast"
 
 import type {
   ArchivedSessionEntry,

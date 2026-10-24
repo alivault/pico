@@ -11,7 +11,7 @@ import {
 } from "@/lib/pico/machine"
 import { Throttler } from "@tanstack/pacer"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { toast } from "sonner"
+import { toast } from "@/lib/pico/toast"
 
 import { SidebarInset, useSidebar } from "@/components/ui/sidebar"
 import { AppShellFloatingControllers } from "@/features/pico/app-shell-floating-controllers"

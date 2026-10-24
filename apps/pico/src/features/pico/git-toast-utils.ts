@@ -1,4 +1,4 @@
-import { toast } from "sonner"
+import { toast } from "@/lib/pico/toast"
 
 import type { GitActionResponse } from "@/lib/pico/api"
 

@@ -1,6 +1,6 @@
 import * as React from "react"
 import { FileTextIcon, SquareIcon, SquareTerminalIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/lib/pico/toast"
 
 import {
   Item,

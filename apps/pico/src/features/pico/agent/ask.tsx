@@ -1,6 +1,6 @@
 import * as React from "react"
 import { CheckIcon, MessageCircleQuestionIcon, XIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/lib/pico/toast"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"

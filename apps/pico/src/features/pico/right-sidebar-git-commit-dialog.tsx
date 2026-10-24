@@ -7,7 +7,7 @@ import {
   WandSparklesIcon,
 } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { toast } from "sonner"
+import { toast } from "@/lib/pico/toast"
 
 import { Button } from "@/components/ui/button"
 import {

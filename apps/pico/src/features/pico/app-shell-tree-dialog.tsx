@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeftIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/lib/pico/toast"
 
 import type { TreeNavigateOptions } from "@/features/pico/app-shell-dialog-types"
 import type { FlatTreeNode, TreeNode } from "@/lib/pico"

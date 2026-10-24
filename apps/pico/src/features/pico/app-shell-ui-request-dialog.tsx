@@ -1,6 +1,6 @@
 import * as React from "react"
 import { ArrowLeftIcon } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/lib/pico/toast"
 
 import type { ExtensionUiEvent, UiRequestResponse } from "@/lib/pico/api"
 

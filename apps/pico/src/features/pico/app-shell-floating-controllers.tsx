@@ -3,7 +3,7 @@ import "@/features/pico/agent/register"
 import { AgentSettingsDialogController } from "@/features/pico/agent/agent-settings-dialog"
 import { ResourcesDialogController } from "@/features/pico/resources-dialog"
 import { usePicoEvent } from "@/features/pico/agent/events"
-import { toast } from "sonner"
+import { toast } from "@/lib/pico/toast"
 
 import {
   AppShellAddDirectoryDialogController,

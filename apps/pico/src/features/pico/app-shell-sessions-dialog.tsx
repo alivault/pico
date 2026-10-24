@@ -4,7 +4,7 @@ import {
   MessageCircleQuestionIcon,
   WandSparklesIcon,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/lib/pico/toast"
 
 import type {
   DirectorySessionsIndexesResponse,
