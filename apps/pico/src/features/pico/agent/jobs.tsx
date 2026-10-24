@@ -36,8 +36,8 @@ import { useMachineId } from "@/lib/pico/machine-context"
 type Job = SessionJob
 
 function statusClass(job: Job) {
-  if (job.status === "running" && (job.waiting || job.focus))
-    return "bg-sky-500"
+  const prompt = jobPrompt(job)
+  if (prompt && !prompt.quiet) return "bg-sky-500"
   if (job.status === "running") return "bg-amber-500 animate-pulse"
   if (job.status === "exited" && job.exitCode === 0) return "bg-emerald-500"
   if (job.status === "stopped") return "bg-muted-foreground"
@@ -188,7 +188,10 @@ registerAgentSection({
     ),
   summary(state) {
     const jobs = (state.jobs as Array<Job> | undefined) ?? []
-    const waiting = jobs.filter((job) => jobPrompt(job)).length
+    const waiting = jobs.filter((job) => {
+      const prompt = jobPrompt(job)
+      return prompt && !prompt.quiet
+    }).length
     if (waiting) return `${waiting} waiting for input`
     const running = jobs.filter((job) => job.status === "running").length
     return running ? `${running} running` : undefined

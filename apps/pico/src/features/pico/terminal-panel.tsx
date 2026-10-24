@@ -244,7 +244,8 @@ function jobStatusText(status: TerminalStatus) {
 
 function tabStatusText(tab: TerminalTab) {
   if (!isJobTab(tab)) return terminalStatusText(tab.status)
-  if (jobPrompt(tab.job)) return "Waits for input"
+  const prompt = jobPrompt(tab.job)
+  if (prompt) return prompt.quiet ? "May wait for input" : "Waits for input"
   if (tab.job?.status === "stopped") return "Stopped"
   if (tab.job?.status === "lost") return "Lost"
   return jobStatusText(tab.status)
@@ -993,7 +994,9 @@ export function TerminalPanel({
   }, [active, normalizedCwd, scopeKey, tabs.length, tabsState.scopeKey])
 
   const activeTab = tabs.find((tab) => tab.id === selectedTabId)
-  const activePrompt = activeTab ? jobPrompt(activeTab.job) : undefined
+  const activeJobPrompt = activeTab ? jobPrompt(activeTab.job) : undefined
+  // A guessed wait shows only in the tab's status, not in a prompt bar.
+  const activePrompt = activeJobPrompt?.quiet ? undefined : activeJobPrompt
   const activeStatus = activeTab?.status ?? { type: "idle" }
   const activeError =
     activeStatus.type === "error" ? activeStatus.message : undefined
@@ -1129,9 +1132,11 @@ export function TerminalPanel({
         : new Set([...current, selectedTabId])
     )
   }, [active, activeJobTabFinished, selectedTabId])
-  const closeJobTab = React.useEffectEvent((tabId: string) =>
+  const closeJobTab = React.useEffectEvent((tabId: string) => {
+    // The last tab goes with the panel: no new shell opens in its place.
+    if (tabs.length === 1 && tabs[0]?.id === tabId) onClose?.()
     closeTerminalTab(tabId)
-  )
+  })
   const goneJobTabs = sessionJobs.loaded
     ? tabs
         .filter((tab) => isJobTab(tab) && jobTabGone(tab))
@@ -1247,7 +1252,7 @@ export function TerminalPanel({
                   >
                     <TerminalStatusDot
                       status={tab.status}
-                      waiting={jobPrompt(tab.job) !== undefined}
+                      waiting={jobPrompt(tab.job)?.quiet === false}
                     />
                   </button>
                 </TitleTooltip>

@@ -33,16 +33,30 @@ export function useSessionJobs(
   }
 }
 
-/** The one line that tells the user what a job needs, if anything. */
+/**
+ * The one line that tells the user what a job needs, if anything. A wait
+ * that Pico only guesses from a prompt-like line is `quiet`: the client shows
+ * it, but does not call the user.
+ */
 export function jobPrompt(job: SessionJob | undefined) {
   if (!job || job.status !== "running") return undefined
-  if (job.focus) return { text: job.focus.prompt, secret: job.waiting?.secret }
-  if (job.waiting)
+  if (job.focus)
+    return { text: job.focus.prompt, secret: job.waiting?.secret, quiet: false }
+  if (job.waiting?.secret)
     return {
       text: job.waiting.prompt
         ? `Waits for input: ${job.waiting.prompt}`
         : "Waits for input",
-      secret: job.waiting.secret,
+      secret: true,
+      quiet: false,
+    }
+  if (job.waiting)
+    return {
+      text: job.waiting.prompt
+        ? `May wait for input: ${job.waiting.prompt}`
+        : "May wait for input",
+      secret: false,
+      quiet: true,
     }
   return undefined
 }

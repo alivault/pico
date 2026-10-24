@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { existsSync } from "node:fs"
-import { mkdir, readdir, utimes, writeFile } from "node:fs/promises"
+import { mkdir, readdir, stat, utimes, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { test } from "node:test"
 
@@ -454,6 +454,20 @@ void test("a running job that waits or has a focus request needs the user", () =
     })?.prompt,
     "Type your password"
   )
+  // A prompt-like line with echo on is only a guess: the user is not called.
+  assert.equal(
+    jobNeedingUser({
+      items: {
+        d: {
+          ...base,
+          id: "d",
+          status: "running",
+          waiting: { since: 1, prompt: "Continue? [y/N]", secret: false },
+        },
+      },
+    }),
+    undefined
+  )
 })
 
 void test("the scratchpad stores entries and spills large output", async () => {
@@ -606,6 +620,8 @@ void test("a pruned job record takes its log file with it", async () => {
     }, ctx)
     for (const id of ["jdone0", "jdone1", "jlive"])
       await writeFile(join(dir, "jobs", `${id}.log`), "output\n")
+    const old = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
+    await utimes(join(dir, "jobs", "jlive.log"), old, old)
     // The restart makes jlive lost: 31 finished jobs, so the oldest goes.
     await host.started()
     const state = await harness.snapshot(JobsDoc, conversation.id, ctx)
@@ -614,6 +630,10 @@ void test("a pruned job record takes its log file with it", async () => {
     assert.equal(existsSync(join(dir, "jobs", "jdone0.log")), false)
     assert.equal(existsSync(join(dir, "jobs", "jdone1.log")), true)
     assert.equal(existsSync(join(dir, "jobs", "jlive.log")), true)
+    // The end of the job set the time of its log: the age rule keeps it.
+    assert.ok(
+      (await stat(join(dir, "jobs", "jlive.log"))).mtimeMs > Date.now() - 60_000
+    )
   } finally {
     terminals.shutdown()
     await harness.close(ctx)

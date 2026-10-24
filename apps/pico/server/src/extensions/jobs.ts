@@ -11,6 +11,7 @@
  * `lost`, and their session gets one message about it.
  */
 
+import { utimesSync } from "node:fs"
 import { readdir, stat, unlink } from "node:fs/promises"
 import { join } from "node:path"
 
@@ -73,13 +74,17 @@ export type Job = {
   focus?: { prompt: string; at: number }
 }
 
-/** A running job that needs the user now: it waits for input, or the agent asked for the user. */
+/**
+ * A running job that needs the user now: it waits for a secret (echo off),
+ * or the agent asked for the user.
+ */
 export function jobNeedingUser(state: JobsState | null | undefined) {
   for (const job of Object.values(state?.items ?? {})) {
     if (job.status !== "running") continue
     if (job.focus)
       return { jobId: job.id, name: job.name, prompt: job.focus.prompt }
-    if (job.waiting)
+    // A prompt-like line is a guess: only the agent hears of it.
+    if (job.waiting?.secret)
       return {
         jobId: job.id,
         name: job.name,
@@ -207,7 +212,12 @@ async function changeJob(
     }
   }, context)
   // A job without a record has no use for its log.
-  if (dataDir) for (const id of pruned) deleteJobLog(dataDir, id)
+  if (dataDir) {
+    for (const id of pruned) deleteJobLog(dataDir, id)
+    // The age rule of `deleteOldJobLogs` counts from the end of the job.
+    if (change.status && change.status !== "running")
+      touchJobLog(dataDir, jobId)
+  }
 }
 
 /** Change a job record in place; nothing when it is gone or finished. */
@@ -248,11 +258,23 @@ async function notifySession(
   )
 }
 
+/** Set the time of a job's log to now. */
+function touchJobLog(dataDir: string, jobId: string) {
+  const now = new Date()
+  for (const path of jobLogParts(dataDir, jobId)) {
+    try {
+      utimesSync(path, now, now)
+    } catch {
+      // Gone.
+    }
+  }
+}
+
 /**
  * Delete job logs that did not change for `OLD_LOG_MS`, except the logs of
  * running jobs. This removes logs of pruned records from before Pico deleted
- * them, and of deleted conversations. A finished job's record keeps its
- * output only for that time.
+ * them, and of deleted conversations. The end of a job sets its log's time,
+ * so a job that ended in that time keeps its log.
  */
 export async function deleteOldJobLogs(
   dataDir: string,
