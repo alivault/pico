@@ -846,6 +846,21 @@ class JobRunner {
         const adopted = services.terminals.adoptJob(jobId, handlers)
         if (adopted && !adopted.exited) {
           this.#watch(services, live, adopted.device)
+          if (job.focus?.inline) {
+            // Its interactive call ended with the old server: the job goes
+            // on as a normal job, and tells the agent when it ends.
+            job.notifyOnExit = true
+            await editRunningJob(
+              services.harness,
+              conversationId,
+              jobId,
+              (draft) => {
+                delete draft.focus
+                draft.notifyOnExit = true
+              },
+              BACKGROUND_CONTEXT
+            ).catch(() => undefined)
+          }
           continue
         }
         this.#live.delete(jobId)

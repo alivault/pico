@@ -4,10 +4,18 @@ import { dirname, join } from "node:path"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
 
+import { DEFAULT_SETTINGS } from "../src/core/settings.ts"
+import { HostBridge, type HostServices } from "../src/extensions/host.ts"
+import {
+  createJobsExtension,
+  JobIndexDoc,
+  JobsDoc,
+  type Job,
+} from "../src/extensions/jobs.ts"
 import { ptyHostPaths } from "../src/pty-host/protocol.ts"
 import { HostPtyBackend, type PtyEnd } from "../src/services/pty-backend.ts"
 import { Terminals } from "../src/services/terminal.ts"
-import { tempDir } from "./support.ts"
+import { ctx, openHarness, tempDir, TEST_MODEL } from "./support.ts"
 
 // Tests start real pty-host processes, one for each temp data directory.
 process.env.PICO_PTY_HOST_SYSTEMD = "0"
@@ -201,6 +209,90 @@ void test("a host that crashes makes its jobs lost; a stale lock and socket do n
     assert.equal(shell.reused, false)
   } finally {
     terminals.shutdown()
+    await stopHost(dataDir)
+  }
+})
+
+void test("after a restart, the server takes over running jobs and records jobs that ended", async () => {
+  const dataDir = await tempDir()
+  const database = join(dataDir, "db.sqlite")
+  const open = async () => {
+    const host = new HostBridge()
+    const jobs = createJobsExtension(host, dataDir)
+    const harness = await openHarness(
+      database,
+      [jobs.extension],
+      () => ({ text: "noted" }),
+      dataDir
+    )
+    const terminals = server(dataDir)
+    await terminals.start()
+    host.bind({
+      sessions: {
+        current: (id: string | undefined) => id,
+        has: () => false,
+        extensionStateChanged: () => undefined,
+      } as unknown as HostServices["sessions"],
+      events: { push: () => undefined },
+      terminals,
+      harness,
+      settings: () => DEFAULT_SETTINGS,
+      dataDir,
+    })
+    return { host, harness, terminals }
+  }
+  let first = await open()
+  const conversation = await first.harness.createConversation(
+    { ownership: { kind: "ownerless" }, agent: { model: TEST_MODEL } },
+    ctx
+  )
+  const id = conversation.id
+  const record = (jobId: string, command: string, inline: boolean): Job => ({
+    id: jobId,
+    name: jobId,
+    command,
+    cwd: dataDir,
+    status: "running",
+    startedAt: Date.now(),
+    notifyOnExit: !inline,
+    ...(inline ? { focus: { prompt: "Log in", at: 1, inline: true } } : {}),
+  })
+  try {
+    // Two jobs of the old server: one runs on, one ends while it is down.
+    await first.harness.commit(async (tx) => {
+      const draft = await tx.doc(JobsDoc, id)
+      draft.items.jlong = record("jlong", "sleep 30", true)
+      draft.items.jshort = record("jshort", "sleep 0.2; exit 4", false)
+      const index = await tx.doc(JobIndexDoc)
+      index.running.jlong = Number(id)
+      index.running.jshort = Number(id)
+    }, ctx)
+    for (const jobId of ["jlong", "jshort"])
+      await first.terminals.spawnJob(
+        jobId,
+        jobId === "jlong" ? "sleep 30" : "sleep 0.2; exit 4",
+        dataDir,
+        noHandlers
+      )
+    first.host.stopping = true
+    first.terminals.shutdown()
+    await first.harness.close(ctx)
+    await new Promise((resolve) => setTimeout(resolve, 600))
+
+    first = await open()
+    await first.host.started()
+    const state = await first.harness.snapshot(JobsDoc, id, ctx)
+    assert.equal(state?.items.jlong?.status, "running")
+    // Its interactive call is gone: no focus request stays behind.
+    assert.equal(state?.items.jlong?.focus, undefined)
+    assert.equal(state?.items.jshort?.status, "exited")
+    assert.equal(state?.items.jshort?.exitCode, 4)
+    assert.ok(first.terminals.jobPid("jlong"))
+  } finally {
+    first.terminals.stopJob("jlong", 100)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    first.terminals.shutdown()
+    await first.harness.close(ctx)
     await stopHost(dataDir)
   }
 })
