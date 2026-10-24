@@ -7,7 +7,9 @@
  * one JSON object for each line. Requests carry an `id`, and their replies
  * carry the same `id`. Events (`output`, `exit`) have no `id`.
  */
+import { execFileSync } from "node:child_process"
 import { createHash } from "node:crypto"
+import { readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -89,10 +91,16 @@ export type HostReply =
 export function ptyHostPaths(dataDir: string) {
   const dir = join(dataDir, "pty-host")
   let socket = join(dir, `socket-v${PTY_HOST_PROTOCOL}`)
-  // macOS allows 104 bytes for a socket path, Linux 108.
+  // macOS allows 104 bytes for a socket path, Linux 108. The short path is
+  // in a directory of this user (the host checks that it owns it).
   if (process.platform !== "win32" && Buffer.byteLength(socket) > 100) {
     const hash = createHash("sha256").update(dataDir).digest("hex").slice(0, 12)
-    socket = join(tmpdir(), `pico-pty-${hash}`, `socket-v${PTY_HOST_PROTOCOL}`)
+    const uid = process.getuid?.() ?? 0
+    socket = join(
+      tmpdir(),
+      `pico-pty-${uid}-${hash}`,
+      `socket-v${PTY_HOST_PROTOCOL}`
+    )
   }
   if (process.platform === "win32") {
     const hash = createHash("sha256").update(dataDir).digest("hex").slice(0, 12)
@@ -107,11 +115,38 @@ export function ptyHostPaths(dataDir: string) {
   }
 }
 
+/**
+ * Whether a pid is a running pty-host. After a crash or a reboot, the pid of
+ * an old pid file often belongs to another process.
+ */
+export function isPtyHost(pid: number) {
+  if (!pid || pid === process.pid) return false
+  try {
+    process.kill(pid, 0)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EPERM") return false
+  }
+  try {
+    const command =
+      process.platform === "linux"
+        ? readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(/\0/g, " ")
+        : execFileSync("ps", ["-o", "command=", "-p", String(pid)], {
+            encoding: "utf8",
+            timeout: 3000,
+          })
+    return command.includes("pty-host")
+  } catch {
+    return false
+  }
+}
+
 /** Split a stream of text into lines, and parse each line as JSON. */
 export function lineReader(onMessage: (message: unknown) => void) {
   let buffer = ""
-  return (chunk: Buffer | string) => {
-    buffer += typeof chunk === "string" ? chunk : chunk.toString("utf8")
+  // Sockets use setEncoding("utf8"), so a character split over two chunks
+  // arrives whole.
+  return (chunk: string) => {
+    buffer += chunk
     let newline = buffer.indexOf("\n")
     while (newline >= 0) {
       const line = buffer.slice(0, newline)

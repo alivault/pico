@@ -398,6 +398,30 @@ export class Terminals {
     }
   }
 
+  /**
+   * After the jobs are taken over: end and drop the job ptys that no job
+   * record took (their records are gone, or lost).
+   */
+  dropUnadoptedJobs() {
+    let dropped = 0
+    for (const [id, terminal] of this.#terminals) {
+      if (!terminal.shared || !terminal.jobId || terminal.jobHandlers) continue
+      if (!terminal.exited && terminal.process) {
+        try {
+          terminal.process.kill("SIGKILL", true)
+        } catch {
+          // Gone.
+        }
+        void killScope(terminal.jobId, "SIGKILL")
+      }
+      terminal.process?.forget()
+      this.#terminals.delete(id)
+      if (terminal.lookupKey) this.#lookup.delete(terminal.lookupKey)
+      dropped += 1
+    }
+    return dropped
+  }
+
   /** The server recorded a job's end: the pty-host may drop it. */
   forgetJob(jobId: string) {
     const terminal = this.#terminals.get(

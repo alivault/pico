@@ -41,7 +41,11 @@ import { InputWaitWatcher, readTerminalMode } from "../services/input-wait.ts"
 import type { PtyEnd } from "../services/pty-backend.ts"
 import type { JobHandlers } from "../services/terminal.ts"
 import { KEY_NAMES, keyBytes } from "../services/terminal-keys.ts"
-import { jobScopesAvailable, scopeLimits } from "../services/containment.ts"
+import {
+  jobScopesAvailable,
+  scopeLimits,
+  stopScope,
+} from "../services/containment.ts"
 import { formatBytes, jobResources } from "../services/resources.ts"
 import { loginShell } from "../services/terminal.ts"
 import {
@@ -888,6 +892,10 @@ class JobRunner {
         "the Pico server restarted"
       )
     }
+    // Job ptys that the pty-host kept but no record took: nobody owns them.
+    const dropped = services.terminals.dropUnadoptedJobs()
+    if (dropped)
+      console.log(`[pico] stopped ${dropped} job(s) without a record`)
   }
 
   async #lost(
@@ -908,6 +916,8 @@ class JobRunner {
       console.warn(`[pico] could not record that job ${jobId} is lost:`, error)
     )
     services.terminals.forgetJob(jobId)
+    // Children that ignore SIGHUP live on in the job's scope: stop it.
+    void stopScope(jobId)
     if (job?.notifyOnExit) {
       await notifySession(
         services,

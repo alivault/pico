@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { spawn } from "node:child_process"
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { createServer } from "node:net"
 import { dirname, join } from "node:path"
@@ -198,14 +199,24 @@ void test("a host that crashes makes its jobs lost; a stale lock and socket do n
     assert.equal(end?.lost, true)
     terminals.shutdown()
 
-    // The crash left the pid file and the socket. Make the pid a dead one.
+    // The lost connection started a new host for new terminals. Stop it,
+    // and leave a stale lock and socket: the pid of the lock is a live
+    // process that is not a host (as after a reboot), and the socket is a
+    // file that nothing listens on.
+    await stopHost(dataDir)
     const paths = ptyHostPaths(dataDir)
-    writeFileSync(paths.pidFile, "999999")
+    const other = spawn("sleep", ["30"], { stdio: "ignore" })
+    writeFileSync(paths.pidFile, String(other.pid))
     mkdirSync(dirname(paths.socket), { recursive: true })
-    terminals = server(dataDir)
-    assert.equal(await terminals.start(), 0)
-    const fresh = hostPid(dataDir)
-    assert.ok(fresh !== pid && alive(fresh))
+    writeFileSync(paths.socket, "")
+    try {
+      terminals = server(dataDir)
+      assert.equal(await terminals.start(), 0)
+      const fresh = hostPid(dataDir)
+      assert.ok(fresh !== pid && fresh !== other.pid && alive(fresh))
+    } finally {
+      other.kill()
+    }
     const shell = await terminals.create("scope", dataDir, "tab", 80, 24)
     assert.equal(shell.reused, false)
   } finally {
@@ -275,6 +286,13 @@ void test("after a restart, the server takes over running jobs and records jobs 
         dataDir,
         noHandlers
       )
+    // A job pty that no record knows (its record was deleted).
+    const orphan = await first.terminals.spawnJob(
+      "jorphan",
+      "sleep 30",
+      dataDir,
+      noHandlers
+    )
     first.host.stopping = true
     first.terminals.shutdown()
     await first.harness.close(ctx)
@@ -289,6 +307,9 @@ void test("after a restart, the server takes over running jobs and records jobs 
     assert.equal(state?.items.jshort?.status, "exited")
     assert.equal(state?.items.jshort?.exitCode, 4)
     assert.ok(first.terminals.jobPid("jlong"))
+    // The server stopped the pty that no record took.
+    assert.equal(first.terminals.jobPid("jorphan"), undefined)
+    await eventually(() => !alive(orphan.pid))
   } finally {
     first.terminals.stopJob("jlong", 100)
     await new Promise((resolve) => setTimeout(resolve, 300))
@@ -409,5 +430,26 @@ void test("events that come with the spawn reply or before the attach backlog ar
   } finally {
     backend.close()
     await new Promise((resolve) => server.close(resolve))
+  }
+})
+
+void test("with no server for long, the host ends idle shells, and then itself", async () => {
+  const dataDir = await tempDir()
+  process.env.PICO_PTY_HOST_IDLE_MS = "1500"
+  process.env.PICO_PTY_HOST_IDLE_SHELL_MS = "1000"
+  const terminals = server(dataDir)
+  try {
+    await terminals.start()
+    await terminals.create("scope", dataDir, "tab", 80, 24)
+    const pid = hostPid(dataDir)
+    assert.ok(alive(pid))
+    terminals.shutdown()
+    // No server: the shell ran nothing, so it ends, and the host goes.
+    await eventually(() => !alive(pid), 15_000)
+  } finally {
+    delete process.env.PICO_PTY_HOST_IDLE_MS
+    delete process.env.PICO_PTY_HOST_IDLE_SHELL_MS
+    terminals.shutdown()
+    await stopHost(dataDir)
   }
 })

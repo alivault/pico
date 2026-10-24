@@ -98,6 +98,19 @@ export function wrapInScope(
   }
 }
 
+/** Stop a job's scope: every process in it ends (used for lost jobs). */
+export async function stopScope(jobId: string) {
+  if (!(await jobScopesAvailable())) return
+  await new Promise<void>((resolve) => {
+    execFile(
+      "systemctl",
+      ["--user", "stop", `${jobUnit(jobId)}.scope`],
+      { timeout: 10_000 },
+      () => resolve()
+    )
+  })
+}
+
 /** Send a signal to every process of a job's scope. */
 export function killScope(jobId: string, signal: string) {
   return new Promise<void>((resolve) => {

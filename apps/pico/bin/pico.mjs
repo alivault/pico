@@ -12,13 +12,15 @@ if (args.includes("--help")) {
   console.log(`Pico — durable Pi sessions in your browser
 Usage: pico-app [serve|status|stop|import-pi] [--port N] [--host H] [--data-dir D]
                  [--web-dir D] [--open|--no-open] [--wait] [--source-dir D]
-                 [--detach] [--json]
+                 [--detach] [--json] [--no-pty-host] [--pty-host]
        pico-app machine add|list|status|reconnect|rename|enable|disable|remove
 The default address is 127.0.0.1:3141. Data is stored in ~/.pico.
 Use a separate --data-dir for development.
 serve --detach starts Pico in the background (output in <data>/server.log).
 status --json prints the server state as JSON; the exit code is 1 when Pico is
 not running.
+Terminals and jobs run in a pty-host process and survive a restart;
+serve --no-pty-host keeps them in the server, and stop --pty-host ends them.
 Import old Pi sessions with import-pi while Pico is stopped.
 Show sessions of other machines over SSH with pico-app machine add <target>.
 Run pico-app machine help for details.`)

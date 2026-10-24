@@ -16,6 +16,7 @@ import {
   chmodSync,
   closeSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -23,6 +24,7 @@ import {
   writeFileSync,
   writeSync,
 } from "node:fs"
+import { execFileSync } from "node:child_process"
 import { createServer, type Socket } from "node:net"
 import { dirname } from "node:path"
 
@@ -30,6 +32,7 @@ import * as pty from "@lydell/node-pty"
 
 import { JobLogWriter } from "../services/job-log.ts"
 import {
+  isPtyHost,
   lineReader,
   PTY_HOST_PROTOCOL,
   ptyHostPaths,
@@ -47,6 +50,9 @@ const MAX_VIEWERS = 64
 /** Exited ptys stay this long for a server to read them. */
 const EXITED_TTL_MS = 30 * 60 * 1000
 const IDLE_MS = Number(process.env.PICO_PTY_HOST_IDLE_MS) || 10 * 60 * 1000
+/** End idle shells after this long without a server. */
+const IDLE_SHELL_MS =
+  Number(process.env.PICO_PTY_HOST_IDLE_SHELL_MS) || 12 * 60 * 60 * 1000
 
 type Pty = {
   ptyId: string
@@ -85,15 +91,6 @@ if (!dataDir) {
 const paths = ptyHostPaths(dataDir)
 process.title = `pico-pty-host ${dataDir}`
 
-function alive(pid: number) {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM"
-  }
-}
-
 /** Take the pid file; false when another host runs. */
 function lock() {
   mkdirSync(paths.dir, { recursive: true, mode: 0o700 })
@@ -107,7 +104,8 @@ function lock() {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
       const pid = Number(readFileSync(paths.pidFile, "utf8").trim())
-      if (pid && pid !== process.pid && alive(pid)) return false
+      // A live pid that is not a pty-host is an old pid file.
+      if (isPtyHost(pid)) return false
       // A stale lock: its host is gone.
       unlinkSync(paths.pidFile)
     }
@@ -123,6 +121,22 @@ if (!lock()) {
 const ptys = new Map<string, Pty>()
 const clients = new Set<Socket>()
 let lastActivity = Date.now()
+/** When a server was last connected. */
+let lastServerAt = Date.now()
+
+/** The foreground process group of a pty's terminal. */
+function foregroundGroup(pid: number) {
+  try {
+    return Number(
+      execFileSync("ps", ["-o", "tpgid=", "-p", String(pid)], {
+        encoding: "utf8",
+        timeout: 3000,
+      }).trim()
+    )
+  } catch {
+    return undefined
+  }
+}
 
 function readJournal() {
   const entries = new Map<string, JournalEntry>()
@@ -152,6 +166,15 @@ function writeJournal() {
   )
 }
 
+/** Add a line to the exit journal; a full disk must not stop the host. */
+function appendJournal(entry: object) {
+  try {
+    appendFileSync(paths.journal, `${JSON.stringify(entry)}\n`, { mode: 0o600 })
+  } catch (error) {
+    console.error("[pty-host] could not write the exit journal:", error)
+  }
+}
+
 function send(socket: Socket, message: object) {
   if (!socket.destroyed) socket.write(`${JSON.stringify(message)}\n`)
 }
@@ -179,13 +202,23 @@ function spawn(
   request: Extract<HostRequest, { type: "spawn" }>
 ) {
   const options = request.spawn
-  const child = pty.spawn(options.file, options.args, {
-    name: "xterm-256color",
-    cols: options.cols,
-    rows: options.rows,
-    cwd: options.cwd,
-    env: options.env,
-  })
+  // The log first: when it cannot open, no process starts.
+  const log = options.logJobId
+    ? new JobLogWriter(dataDir!, options.logJobId)
+    : undefined
+  let child: pty.IPty
+  try {
+    child = pty.spawn(options.file, options.args, {
+      name: "xterm-256color",
+      cols: options.cols,
+      rows: options.rows,
+      cwd: options.cwd,
+      env: options.env,
+    })
+  } catch (error) {
+    log?.end()
+    throw error
+  }
   const device = (child as { ptsName?: unknown }).ptsName
   const record: Pty = {
     ptyId: crypto.randomUUID(),
@@ -199,9 +232,7 @@ function spawn(
     cols: options.cols,
     rows: options.rows,
     sockets: new Set([socket]),
-    ...(options.logJobId
-      ? { log: new JobLogWriter(dataDir!, options.logJobId) }
-      : {}),
+    ...(log ? { log } : {}),
   }
   ptys.set(record.ptyId, record)
   child.onData((data) => {
@@ -233,7 +264,7 @@ function spawn(
       at: Date.now(),
     }
     journal.set(record.ptyId, entry)
-    appendFileSync(paths.journal, `${JSON.stringify(entry)}\n`, { mode: 0o600 })
+    appendJournal(entry)
     emit(record, { type: "exit", ptyId: record.ptyId, exit: record.exited })
   })
   return info(record)
@@ -288,10 +319,7 @@ function handle(socket: Socket, request: HostRequest & { id: number }) {
         ptys.delete(request.ptyId)
       }
       if (journal.delete(request.ptyId))
-        appendFileSync(
-          paths.journal,
-          `${JSON.stringify({ ptyId: request.ptyId, forget: true })}\n`
-        )
+        appendJournal({ ptyId: request.ptyId, forget: true })
       return {}
     }
   }
@@ -346,7 +374,9 @@ function handle(socket: Socket, request: HostRequest & { id: number }) {
 const server = createServer((socket) => {
   clients.add(socket)
   lastActivity = Date.now()
+  lastServerAt = Date.now()
   socket.setNoDelay(true)
+  socket.setEncoding("utf8")
   socket.on(
     "data",
     lineReader((message) => {
@@ -366,6 +396,7 @@ const server = createServer((socket) => {
   const drop = () => {
     clients.delete(socket)
     lastActivity = Date.now()
+    lastServerAt = Date.now()
     for (const record of ptys.values()) record.sockets.delete(socket)
   }
   socket.on("close", drop)
@@ -398,11 +429,23 @@ function stop(code: number) {
 
 // The host outlives the terminal or SSH session that started Pico.
 process.on("SIGHUP", () => undefined)
+// An error in one request or one pty must not end every terminal.
+process.on("uncaughtException", (error) => {
+  console.error("[pty-host] an error:", error)
+})
+process.on("unhandledRejection", (error) => {
+  console.error("[pty-host] an error:", error)
+})
 process.on("SIGTERM", () => stop(0))
 process.on("SIGINT", () => stop(0))
 
 if (process.platform !== "win32") {
   mkdirSync(dirname(paths.socket), { recursive: true, mode: 0o700 })
+  // A socket directory in /tmp could belong to another user.
+  if (lstatSync(dirname(paths.socket)).uid !== process.getuid?.()) {
+    console.error(`[pty-host] ${dirname(paths.socket)} is not ours`)
+    process.exit(1)
+  }
   chmodSync(dirname(paths.socket), 0o700)
   // We hold the lock, so a socket file here is stale.
   try {
@@ -426,6 +469,20 @@ setInterval(
         now - (record.exitedAt ?? now) > EXITED_TTL_MS
       )
         ptys.delete(id)
+    // With no server for a long time, end shells that run nothing but the
+    // shell; a running command keeps its shell.
+    if (clients.size === 0 && now - lastServerAt > IDLE_SHELL_MS)
+      for (const record of ptys.values())
+        if (
+          record.meta.kind === "shell" &&
+          !record.exited &&
+          foregroundGroup(record.process.pid) === record.process.pid
+        )
+          try {
+            record.process.kill()
+          } catch {
+            // Gone.
+          }
     const running = [...ptys.values()].some((record) => !record.exited)
     if (!running && clients.size === 0 && now - lastActivity > IDLE_MS) {
       console.log("[pty-host] idle: stopping")

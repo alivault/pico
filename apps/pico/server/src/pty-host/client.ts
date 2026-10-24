@@ -14,6 +14,7 @@ import {
 import { connect, type Socket } from "node:net"
 
 import {
+  isPtyHost,
   lineReader,
   PTY_HOST_PROTOCOL,
   ptyHostPaths,
@@ -24,15 +25,6 @@ import {
 
 const CONNECT_TIMEOUT_MS = 8000
 
-function alive(pid: number) {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM"
-  }
-}
-
 /**
  * Whether this process runs in a systemd service's cgroup. A stop of that
  * service kills every process in its cgroup, also detached ones.
@@ -40,7 +32,9 @@ function alive(pid: number) {
 export function inServiceCgroup() {
   if (process.platform !== "linux") return false
   try {
-    const line = readFileSync("/proc/self/cgroup", "utf8").trim().split("\n")[0]
+    // The cgroup v2 line ("0::/path"); the first line with cgroup v1.
+    const lines = readFileSync("/proc/self/cgroup", "utf8").trim().split("\n")
+    const line = lines.find((item) => item.startsWith("0::")) ?? lines[0]
     const path = line?.split(":").at(-1) ?? ""
     return (path.split("/").at(-1) ?? "").endsWith(".service")
   } catch {
@@ -88,11 +82,13 @@ export function startPtyHost(dataDir: string, script: string) {
     env: process.env,
   })
   child.unref()
-  if (useScope)
-    // systemd-run fails at once when there is no user manager: start the
-    // host without a scope then.
+  if (useScope) {
+    // systemd-run fails at once when it cannot make the scope (no user
+    // manager): start the host without a scope then. With a scope, its exit
+    // is the host's exit, so a later exit is not that.
+    const started = Date.now()
     child.once("exit", (code) => {
-      if (code !== 0 && code !== null) {
+      if (code !== 0 && code !== null && Date.now() - started < 2000) {
         const plain = spawnProcess(node[0]!, node.slice(1), {
           detached: true,
           stdio: ["ignore", log, log],
@@ -101,7 +97,27 @@ export function startPtyHost(dataDir: string, script: string) {
         plain.unref()
       }
     })
+  }
   return child
+}
+
+/**
+ * Stop the pty-host of a data directory (its terminals and jobs end with
+ * it). Returns its pid, or undefined when none runs.
+ */
+export async function stopPtyHost(dataDir: string) {
+  let pid = 0
+  try {
+    pid = Number(readFileSync(ptyHostPaths(dataDir).pidFile, "utf8").trim())
+  } catch {
+    return undefined
+  }
+  if (!isPtyHost(pid)) return undefined
+  process.kill(pid, "SIGTERM")
+  const deadline = Date.now() + 5000
+  while (isPtyHost(pid) && Date.now() < deadline)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  return pid
 }
 
 /** Remove the socket and the pid file of a host that is gone. */
@@ -109,7 +125,7 @@ function removeStale(dataDir: string) {
   const paths = ptyHostPaths(dataDir)
   try {
     const pid = Number(readFileSync(paths.pidFile, "utf8").trim())
-    if (pid && alive(pid)) return false
+    if (isPtyHost(pid)) return false
     unlinkSync(paths.pidFile)
   } catch {
     // No pid file.
@@ -212,6 +228,7 @@ export class PtyHostClient {
   #attach(socket: Socket) {
     this.#socket = socket
     socket.setNoDelay(true)
+    socket.setEncoding("utf8")
     socket.on(
       "data",
       lineReader((message) => {

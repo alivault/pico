@@ -135,6 +135,7 @@ export type HostTerminals = Pick<
   | "forgetJob"
   | "stats"
   | "jobPid"
+  | "dropUnadoptedJobs"
 >
 
 export type HostServices = {

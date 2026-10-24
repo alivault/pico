@@ -5,7 +5,8 @@
  *     Terminals and jobs run in a pty-host process, so they survive a restart;
  *     `--no-pty-host` (or PICO_NO_PTY_HOST=1) keeps them in the server.
  *   pico-server status [--json]
- *   pico-server stop [--wait]
+ *   pico-server stop [--wait] [--pty-host]
+ *     `--pty-host` also stops the pty-host, so terminals and jobs end too.
  *   pico-server machine add|list|status|reconnect|rename|enable|disable|remove …
  *
  * Only one server may own a data directory: the durable database has no
@@ -43,6 +44,7 @@ import {
 } from "./config.ts"
 import { machineCommand } from "./machines/cli.ts"
 import { startServer, type PicoServer } from "./server.ts"
+import { stopPtyHost } from "./pty-host/client.ts"
 
 type ServerState = {
   pid: number
@@ -360,8 +362,17 @@ async function status(options: Map<string, string | boolean>) {
 async function stopCommand(options: Map<string, string | boolean>) {
   const paths = serverPaths(dataDirOption(options))
   const state = readState(paths)
+  // `--pty-host`: also stop the terminals and jobs (see stopPtyHost).
+  const stopHost = async () => {
+    if (!options.get("pty-host")) return
+    const pid = await stopPtyHost(paths.dataDir)
+    console.log(
+      pid ? `The pty-host (pid ${pid}) stopped.` : "No pty-host runs."
+    )
+  }
   if (!state || !alive(state.pid)) {
     console.log("Pico is not running.")
+    await stopHost()
     return
   }
   const host =
@@ -375,13 +386,14 @@ async function stopCommand(options: Map<string, string | boolean>) {
     .catch(() => {
       process.kill(state.pid, "SIGTERM")
     })
-  if (!options.get("wait")) {
+  if (!options.get("wait") && !options.get("pty-host")) {
     console.log("Pico is stopping.")
     return
   }
   while (alive(state.pid))
     await new Promise((resolveWait) => setTimeout(resolveWait, 250))
   console.log("Pico stopped.")
+  await stopHost()
 }
 
 async function importCommand(options: Map<string, string | boolean>) {

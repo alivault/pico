@@ -131,8 +131,14 @@ export class JobLogWriter {
     } catch (error) {
       console.warn("[pico] could not rotate a job log:", error)
     }
-    this.#fd = openSync(this.#path, "a")
     this.#bytes = 0
+    try {
+      this.#fd = openSync(this.#path, "a")
+    } catch (error) {
+      // No log from here on; the job goes on.
+      this.#fd = undefined
+      console.warn("[pico] could not open a job log:", error)
+    }
   }
 
   /** Close the log. */
