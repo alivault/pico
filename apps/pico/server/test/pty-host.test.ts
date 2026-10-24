@@ -99,6 +99,8 @@ void test("jobs and shells keep running over a server restart", async () => {
     // The shell comes back for its tab, with its history and input state.
     const again = await terminals.create("scope", dataDir, "tab-1")
     assert.equal(again.reused, true)
+    // The same ID, so an open tab's socket reconnects to it.
+    assert.equal(again.id, shell.id)
     const view = terminals.subscribe(
       "scope",
       again.id,

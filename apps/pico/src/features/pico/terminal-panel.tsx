@@ -414,6 +414,13 @@ function buildTerminalWebSocketUrl(
   return url.toString()
 }
 
+/** An error from a server that restarts or a network that drops. */
+function isTransientError(error: unknown) {
+  return /^5\d\d\b|failed to fetch|networkerror|load failed|restarting|JSON/i.test(
+    errorMessage(error)
+  )
+}
+
 function exitedStatus(event: Extract<TerminalEvent, { type: "exit" }>) {
   return typeof event.signal === "number" && event.signal > 0
     ? {
@@ -836,14 +843,29 @@ export function TerminalTabPane({
 
         scheduleFitAndResize()
 
-        const terminalResponse = await postJson<TerminalCreateData>(
-          "/api/terminal",
-          {
-            clientKey: tabId,
-            cols: terminal.cols,
-            rows: terminal.rows,
+        // While the server restarts, the request fails for a moment: try
+        // again (the pty-host keeps the terminal).
+        let terminalResponse: TerminalCreateData | undefined
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            terminalResponse = await postJson<TerminalCreateData>(
+              "/api/terminal",
+              {
+                clientKey: tabId,
+                cols: terminal.cols,
+                rows: terminal.rows,
+              }
+            )
+            break
+          } catch (error) {
+            if (disposed) return
+            if (attempt >= 6 || !isTransientError(error)) throw error
+            await new Promise((resolve) =>
+              window.setTimeout(resolve, Math.min(5000, 500 * 2 ** attempt))
+            )
+            if (disposed) return
           }
-        )
+        }
         if (disposed) return
 
         terminalIdRef.current = terminalResponse.id

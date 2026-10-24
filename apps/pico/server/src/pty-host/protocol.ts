@@ -24,6 +24,8 @@ export type PtyMeta = {
   shell: string
   label?: string
   jobId?: string
+  /** The server's ID of the terminal, kept so clients reconnect to it. */
+  terminalId?: string
 }
 
 export type PtyExit = { exitCode: number; signal?: number }

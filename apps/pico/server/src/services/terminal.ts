@@ -302,6 +302,7 @@ export class Terminals {
       scopeKey,
       cwd,
       shell,
+      terminalId: terminal.id,
     }
     try {
       terminal.process = await this.#backend.spawn(
@@ -355,6 +356,9 @@ export class Terminals {
         cols: info.cols || 120,
         rows: info.rows || 30,
       })
+      // The same ID as before the restart: open tabs reconnect to it.
+      if (info.meta.terminalId && !this.#terminals.has(info.meta.terminalId))
+        terminal.id = info.meta.terminalId
       if (info.meta.kind === "job") {
         terminal.shared = true
         if (info.meta.jobId) terminal.jobId = info.meta.jobId
@@ -643,6 +647,7 @@ export class Terminals {
             scopeKey: "job",
             cwd,
             shell,
+            terminalId: terminal.id,
             ...(handlers.label ? { label: handlers.label } : {}),
           },
           logJobId: jobId,
