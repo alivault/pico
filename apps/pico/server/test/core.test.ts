@@ -1,6 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtemp, writeFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
+import { writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { test } from "node:test"
 
@@ -19,6 +18,7 @@ import {
 } from "../src/core/items.ts"
 import { Security } from "../src/security.ts"
 import type { IncomingMessage } from "node:http"
+import { tempDir } from "./support.ts"
 
 void test("automatic names remove filler and stay short", () => {
   assert.equal(
@@ -166,7 +166,7 @@ void test("tool results keep their images", () => {
 })
 
 void test("read state is global and an open tab keeps its session read", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pico-viewers-"))
+  const dir = await tempDir("pico-viewers-")
   const file = join(dir, "viewers.json")
   const viewers = new Viewers(file)
   const changes: string[] = []
@@ -203,7 +203,7 @@ void test("read state is global and an open tab keeps its session read", async (
 })
 
 void test("viewer contexts from before global read state keep the newest unread list", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pico-viewers-"))
+  const dir = await tempDir("pico-viewers-")
   const file = join(dir, "viewers.json")
   await writeFile(
     file,

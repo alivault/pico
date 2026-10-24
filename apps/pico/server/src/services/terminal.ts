@@ -84,6 +84,8 @@ type Terminal = {
   rows: number
   exited?: { exitCode: number; signal?: number }
   lastUsed: number
+  /** The last input or viewer change, for idle shells. */
+  lastInput: number
   listeners: Set<Listener>
   /** A background job: every viewer may attach; closing a tab does not stop it. */
   shared?: boolean
@@ -271,6 +273,7 @@ export class Terminals {
       cols: fields.cols,
       rows: fields.rows,
       lastUsed: Date.now(),
+      lastInput: Date.now(),
       listeners: new Set(),
     }
   }
@@ -500,7 +503,8 @@ export class Terminals {
     for (const terminal of this.#terminals.values()) {
       if (terminal.shared || terminal.exited || !terminal.process) continue
       if (terminal.listeners.size > 0) continue
-      if (now - terminal.lastUsed < this.#idleShellMs) continue
+      // Output (a clock in the prompt) does not count as use.
+      if (now - terminal.lastInput < this.#idleShellMs) continue
       const foreground = await foregroundGroup(terminal.process.pid)
       if (foreground !== terminal.process.pid) continue
       this.close(terminal.scopeKey, terminal.id)
@@ -772,6 +776,7 @@ export class Terminals {
       rows: 30,
       exited: info.exit,
       lastUsed: Date.now(),
+      lastInput: Date.now(),
       listeners: new Set(),
       shared: true,
       jobId,
@@ -844,6 +849,7 @@ export class Terminals {
   ) {
     const terminal = this.#record(scopeKey, id)
     terminal.lastUsed = Date.now()
+    terminal.lastInput = Date.now()
     const initial: TerminalEvent[] = [
       {
         type: "ready",
@@ -903,6 +909,7 @@ export class Terminals {
       unsubscribe: () => {
         terminal.listeners.delete(filtered)
         terminal.lastUsed = Date.now()
+        terminal.lastInput = Date.now()
       },
     }
   }
@@ -932,6 +939,7 @@ export class Terminals {
       }
     }
     terminal.lastUsed = Date.now()
+    terminal.lastInput = Date.now()
     terminal.process.write(
       data,
       viewerKey(viewer),

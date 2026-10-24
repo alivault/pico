@@ -1,12 +1,12 @@
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
-import { mkdtemp, readFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
+import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { test } from "node:test"
+import { tempDir } from "./support.ts"
 
 void test("server needs no token, refuses a second owner, and stops cleanly", async () => {
-  const data = await mkdtemp(join(tmpdir(), "pico-test-"))
+  const data = await tempDir("pico-test-")
   const env = {
     ...process.env,
     PI_CODING_AGENT_DIR: join(data, "agent"),

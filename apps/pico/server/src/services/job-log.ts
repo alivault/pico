@@ -22,6 +22,7 @@ import {
   writeSync,
 } from "node:fs"
 import { join } from "node:path"
+import { open, stat } from "node:fs/promises"
 import { createInterface } from "node:readline"
 
 export const LOG_PART_BYTES = 10 * 1024 * 1024
@@ -187,11 +188,41 @@ export function readLogTailRaw(parts: string[], maxBytes: number) {
   return text
 }
 
+/** `readLogTailRaw`, without blocking the event loop. */
+export async function readLogTailRawAsync(parts: string[], maxBytes: number) {
+  const chunks: Buffer[] = []
+  let remaining = maxBytes
+  let cut = false
+  for (let index = parts.length - 1; index >= 0 && remaining > 0; index -= 1) {
+    let file: Awaited<ReturnType<typeof open>> | undefined
+    try {
+      file = await open(parts[index]!, "r")
+      const size = (await file.stat()).size
+      const length = Math.min(size, remaining)
+      const buffer = Buffer.alloc(length)
+      await file.read(buffer, 0, length, size - length)
+      chunks.unshift(buffer)
+      remaining -= length
+      if (length < size || (remaining <= 0 && index > 0)) cut = true
+    } catch {
+      // A part that is gone reads as empty.
+    } finally {
+      await file?.close()
+    }
+  }
+  let text = Buffer.concat(chunks).toString("utf8")
+  if (cut) {
+    const newline = text.indexOf("\n")
+    text = newline >= 0 ? text.slice(newline + 1) : ""
+  }
+  return text
+}
+
 /**
  * The last `count` plain-text lines of a log. It reads from the end in
  * growing steps, and stops at `maxBytes`.
  */
-export function readLogTailLines(
+export async function readLogTailLines(
   parts: string[],
   count: number,
   maxBytes = 8 * 1024 * 1024
@@ -199,14 +230,16 @@ export function readLogTailLines(
   let total = 0
   for (const path of parts) {
     try {
-      total += statSync(path).size
+      total += (await stat(path)).size
     } catch {
       // Gone.
     }
   }
   let bytes = 64 * 1024
   for (;;) {
-    const lines = plainText(readLogTailRaw(parts, bytes)).trimEnd().split("\n")
+    const lines = plainText(await readLogTailRawAsync(parts, bytes))
+      .trimEnd()
+      .split("\n")
     if (lines.length > count || bytes >= total || bytes >= maxBytes) {
       const selected = lines.slice(-count)
       return selected.length === 1 && selected[0] === "" ? [] : selected

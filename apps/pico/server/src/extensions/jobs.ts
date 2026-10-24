@@ -149,7 +149,7 @@ export async function readJobLog(
   jobId: string,
   lines = MAX_TAIL_LINES
 ) {
-  return readLogTailLines(jobLogParts(dataDir, jobId), lines).join("\n")
+  return (await readLogTailLines(jobLogParts(dataDir, jobId), lines)).join("\n")
 }
 
 function describeJob(job: Job, now = Date.now()) {
@@ -1288,7 +1288,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
         note = `lines ${start}-${start + selected.length - 1} of ${total}`
       } else {
         const count = Math.min(MAX_TAIL_LINES, Math.max(1, args.tail ?? 80))
-        selected = readLogTailLines(parts, count)
+        selected = await readLogTailLines(parts, count)
         note = `last ${selected.length} lines`
       }
       return textResult(
@@ -1478,8 +1478,9 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       const services = await host.ready(context.abortSignal)
       const sessionId = sessionIdOf(api.conversationId)
       const shells = () => services.terminals.sessionShells(sessionId)
+      // A user's terminal: "u-" and at least the 8 characters that list shows.
       const userShell = (id: string) =>
-        id.startsWith("u-")
+        id.startsWith("u-") && id.length >= 10
           ? shells().find((shell) => shell.id.startsWith(id.slice(2)))
           : undefined
 

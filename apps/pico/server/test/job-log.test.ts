@@ -30,7 +30,7 @@ void test("a job log keeps its newest output in two parts", async () => {
   assert.equal(total, lines.length)
   assert.ok(total < 200)
   assert.equal(lines.at(-1), "line 300")
-  assert.deepEqual(readLogTailLines(parts, 3), [
+  assert.deepEqual(await readLogTailLines(parts, 3), [
     "line 298",
     "line 299",
     "line 300",
@@ -42,7 +42,7 @@ void test("a job log keeps its newest output in two parts", async () => {
   deleteJobLog(dir, "jlog")
   assert.equal(existsSync(join(dir, "jobs", "jlog.log")), false)
   assert.deepEqual(jobLogParts(dir, "jlog"), [])
-  assert.deepEqual(readLogTailLines([], 5), [])
+  assert.deepEqual(await readLogTailLines([], 5), [])
 })
 
 void test("a log scan counts a run of blank lines as one", async () => {

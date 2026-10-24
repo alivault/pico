@@ -1,7 +1,6 @@
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
-import { mkdtemp, readFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
+import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { test } from "node:test"
 
@@ -10,9 +9,10 @@ import { createModels } from "@earendil-works/pi-ai"
 import { Harness, createRegistry } from "@earendil-works/pi-durable"
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
 import { SessionDoc, publicId } from "../src/core/sessions.ts"
+import { tempDir } from "./support.ts"
 
 void test("an archived session is listed and can be restored", async () => {
-  const data = await mkdtemp(join(tmpdir(), "pico-archive-test-"))
+  const data = await tempDir("pico-archive-test-")
   const harness = await Harness.open(
     await openNodeSqliteStorage(join(data, "pico.sqlite")),
     { models: createModels(), registry: createRegistry() },

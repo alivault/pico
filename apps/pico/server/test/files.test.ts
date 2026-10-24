@@ -1,13 +1,13 @@
 import assert from "node:assert/strict"
-import { mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
+import { mkdir, symlink, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { test } from "node:test"
 
 import { projectTree, readProjectFile } from "../src/services/files.ts"
+import { tempDir } from "./support.ts"
 
 void test("workspace files reject traversal, escaped symlinks, and binary data", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pico-files-test-"))
+  const root = await tempDir("pico-files-test-")
   const workspace = join(root, "workspace")
   await mkdir(workspace)
   await writeFile(join(workspace, "readme.md"), "hello")

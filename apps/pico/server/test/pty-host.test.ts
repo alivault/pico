@@ -87,15 +87,18 @@ void test("jobs and shells keep running over a server restart", async () => {
       { ...noHandlers, label: "keep" }
     )
     const shell = await terminals.create("scope", dataDir, "tab-1", 80, 24)
+    let shellOutput = ""
     const shellView = terminals.subscribe(
       "scope",
       shell.id,
       undefined,
-      () => {}
+      (event) => {
+        if (event.type === "output") shellOutput += event.data
+      }
     )
     terminals.write("scope", shell.id, "echo shell-$((40+2))\r", 1, "v1")
+    await eventually(() => shellOutput.includes("shell-42"))
     shellView.unsubscribe()
-    await new Promise((resolve) => setTimeout(resolve, 500))
     const pid = hostPid(dataDir)
     assert.ok(pid > 0 && pid !== process.pid)
 

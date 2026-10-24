@@ -244,7 +244,7 @@ export class HostPtyBackend implements PtyBackend {
     for (const ptyId of this.#pendingForgets)
       this.#client.send({ type: "forget", ptyId })
     this.#pendingForgets.clear()
-    for (const [ptyId, entry] of [...this.#entries]) {
+    for (const [ptyId, entry] of this.#entries) {
       try {
         const attached = await this.#attach(ptyId, entry)
         if (attached.info.exited && this.#entries.get(ptyId) === entry) {

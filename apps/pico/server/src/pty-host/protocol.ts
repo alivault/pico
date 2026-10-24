@@ -129,7 +129,7 @@ export function isPtyHost(pid: number) {
   try {
     const command =
       process.platform === "linux"
-        ? readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(/\0/g, " ")
+        ? readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0").join(" ")
         : execFileSync("ps", ["-o", "command=", "-p", String(pid)], {
             encoding: "utf8",
             timeout: 3000,

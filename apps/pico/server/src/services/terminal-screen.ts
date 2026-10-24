@@ -116,7 +116,7 @@ export class TerminalScreen {
     this.#disposed = true
     this.#terminal.dispose()
     // A write that will not finish now must not hold a read.
-    for (const done of [...this.#waiting]) done()
+    for (const done of this.#waiting) done()
   }
 }
 

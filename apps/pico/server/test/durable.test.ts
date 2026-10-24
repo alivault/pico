@@ -1,6 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtemp } from "node:fs/promises"
-import { tmpdir } from "node:os"
+
 import { join } from "node:path"
 import { test } from "node:test"
 
@@ -14,9 +13,10 @@ import {
 } from "@earendil-works/pi-ai"
 import { Harness, createRegistry } from "@earendil-works/pi-durable"
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
+import { tempDir } from "./support.ts"
 
 void test("durable sessions run concurrently, deduplicate, queue, and persist", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pico-durable-test-"))
+  const directory = await tempDir("pico-durable-test-")
   const database = join(directory, "test.sqlite")
   let active = 0
   let maxActive = 0

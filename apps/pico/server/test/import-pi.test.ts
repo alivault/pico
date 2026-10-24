@@ -1,6 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtemp, readFile, writeFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
+import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { test } from "node:test"
 
@@ -11,9 +10,10 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 
 import { importPiFile, readPiFile } from "../src/core/import-pi.ts"
 import { conversationIdOf, SessionDoc } from "../src/core/sessions.ts"
+import { tempDir } from "./support.ts"
 
 void test("Pi import preserves branches, edits, settings, and history without running work", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pico-import-test-"))
+  const directory = await tempDir("pico-import-test-")
   const source = join(directory, "session.jsonl")
   const timestamp = "2026-01-02T03:04:05.000Z"
   const header = {
@@ -148,7 +148,7 @@ void test("Pi import preserves branches, edits, settings, and history without ru
 })
 
 void test("Pi import rejects broken parents instead of silently discarding entries", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pico-import-bad-"))
+  const directory = await tempDir("pico-import-bad-")
   const source = join(directory, "bad.jsonl")
   await writeFile(
     source,

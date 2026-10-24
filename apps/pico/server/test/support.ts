@@ -4,6 +4,7 @@
  * The script receives the request's messages and returns the next answer:
  * text, or tool calls. Extension tests use it to run real durable turns.
  */
+import { rmSync } from "node:fs"
 import { mkdtemp } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -112,8 +113,16 @@ export function lastToolResult(messages: readonly Message[]) {
     .join("")
 }
 
+const tempDirs: string[] = []
+// The tests remove their temp directories when they end.
+process.on("exit", () => {
+  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true })
+})
+
 export async function tempDir(prefix = "pico-ext-test-") {
-  return mkdtemp(join(tmpdir(), prefix))
+  const dir = await mkdtemp(join(tmpdir(), prefix))
+  tempDirs.push(dir)
+  return dir
 }
 
 /** Open a Harness with `extensions` on `database`; reopen it with the same arguments. */
