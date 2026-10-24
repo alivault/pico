@@ -2,12 +2,7 @@
 
 import * as React from "react"
 import { PatchDiff } from "@pierre/diffs/react"
-import {
-  CheckIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  CopyIcon,
-} from "lucide-react"
+import { CheckIcon, ChevronRightIcon, CopyIcon } from "lucide-react"
 
 import type { ConversationItem, PromptImage, ToolImage } from "@/lib/pico"
 import { sameToolImages } from "@/lib/pico/sync"
@@ -1163,7 +1158,7 @@ const ToolResultImages = React.memo(function ToolResultImages({
   if (images.length === 0) return null
 
   return (
-    <div className="flex flex-wrap gap-3 px-3 pb-3">
+    <div className="flex flex-wrap gap-3 pt-2">
       {images.map((image, index) => (
         <button
           key={`${image.data.slice(0, 24)}:${index}`}
@@ -2134,11 +2129,7 @@ function EditToolOutput({
 function ToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
   const CustomBody = toolRenderer(block.name)?.Body
   if (CustomBody) {
-    return (
-      <div className="border-t pt-3">
-        <CustomBody block={block} />
-      </div>
-    )
+    return <CustomBody block={block} />
   }
   return <DefaultToolBlockCardBody block={block} />
 }
@@ -2166,7 +2157,7 @@ function DefaultToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
     isSuccessfulEditTool || isSelfContainedWriteTool
 
   return (
-    <div className={cn("border-t", !isSuccessfulEditTool && "pt-3")}>
+    <div>
       <div
         ref={block.name === "bash" ? autoScroll.ref : undefined}
         onScroll={block.name === "bash" ? autoScroll.onScroll : undefined}
@@ -2175,7 +2166,7 @@ function DefaultToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
             ? "overflow-hidden rounded-lg"
             : "max-h-96 overflow-auto",
           isSuccessfulEditTool
-            ? "rounded-t-none rounded-b-xl"
+            ? "rounded-lg border"
             : hasSelfContainedToolOutput
               ? "rounded-lg"
               : "rounded-lg border bg-background/80 p-3"
@@ -2319,52 +2310,29 @@ function ToolBlockCardContent({
     header.openStateKey
   )
   const bodyBlock = useAssistantToolBlockBody(store, blockKey, isOpen)
-  const isSuccessfulEditTool =
-    header.name === "edit" && !header.running && !header.isError
 
   return (
     <Collapsible
+      data-conversation-row="true"
       open={isOpen}
       onOpenChange={setIsOpen}
-      className={cn(
-        "rounded-xl border text-sm",
-        header.running && "border-amber-500/30 bg-amber-500/5",
-        header.isError && "border-destructive/30 bg-destructive/5",
-        !header.running && !header.isError && "bg-muted/20"
-      )}
+      className="text-sm"
     >
-      <CollapsibleTrigger
-        data-conversation-tool-collapsible-trigger="true"
-        className="group/tool-collapsible-trigger relative flex w-full min-w-0 items-center justify-between gap-3 overflow-hidden rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-medium transition-all outline-none hover:no-underline focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-disabled:pointer-events-none aria-disabled:opacity-50"
+      <ToolRowTrigger
+        isError={header.isError}
+        label={toolDisplayName(header.name)}
+        running={header.running}
+        summary={header.summary}
+        summaryClassName={header.name === "write" ? "tabular-nums" : undefined}
       >
-        <span className="grid max-w-full min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 overflow-hidden">
-          <span className="truncate font-medium whitespace-nowrap text-foreground">
-            {toolDisplayName(header.name)}
-          </span>
-          <span
-            className={cn(
-              "truncate text-muted-foreground",
-              header.name === "write" && "tabular-nums"
-            )}
-          >
-            {header.summary}
-          </span>
-        </span>
         {header.editStats ? (
           <EditDiffStatCountsView stats={header.editStats} />
         ) : null}
-        <ChevronRightIcon className="pointer-events-none ml-auto size-4 shrink-0 text-muted-foreground group-aria-expanded/tool-collapsible-trigger:hidden" />
-        <ChevronDownIcon className="pointer-events-none ml-auto hidden size-4 shrink-0 text-muted-foreground group-aria-expanded/tool-collapsible-trigger:inline" />
-      </CollapsibleTrigger>
+      </ToolRowTrigger>
 
       {isOpen && bodyBlock ? (
         <CollapsibleContent className="overflow-hidden text-sm data-open:animate-accordion-down data-closed:animate-accordion-up">
-          <div
-            className={cn(
-              "h-(--collapsible-panel-height) data-ending-style:h-0 data-starting-style:h-0",
-              !isSuccessfulEditTool && "px-3 pt-0 pb-3"
-            )}
-          >
+          <div className="h-(--collapsible-panel-height) pt-2 data-ending-style:h-0 data-starting-style:h-0">
             <ToolBlockCardBody block={bodyBlock} />
           </div>
         </CollapsibleContent>
@@ -2374,13 +2342,55 @@ function ToolBlockCardContent({
   )
 }
 
+/**
+ * The header of a tool card: one line of text, like a hidden thinking row.
+ * The color of the label shows a running or failed tool.
+ */
+function ToolRowTrigger({
+  children,
+  isError,
+  label,
+  running,
+  summary,
+  summaryClassName,
+}: {
+  children?: React.ReactNode
+  isError: boolean
+  label: React.ReactNode
+  running: boolean
+  summary: React.ReactNode
+  summaryClassName?: string
+}) {
+  return (
+    <CollapsibleTrigger
+      data-conversation-tool-collapsible-trigger="true"
+      className="group/tool-collapsible-trigger -ml-0.5 flex max-w-full min-w-0 items-center gap-1 rounded-sm text-left text-sm text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+    >
+      <ChevronRightIcon className="pointer-events-none size-3.5 shrink-0 transition-transform group-aria-expanded/tool-collapsible-trigger:rotate-90" />
+      <span
+        className={cn(
+          "shrink-0 font-medium whitespace-nowrap",
+          running && "text-amber-600 dark:text-amber-400",
+          isError && "text-destructive"
+        )}
+      >
+        {label}
+      </span>
+      <span className={cn("ml-0.5 min-w-0 truncate", summaryClassName)}>
+        {summary}
+      </span>
+      {children ? <span className="ml-1 shrink-0">{children}</span> : null}
+    </CollapsibleTrigger>
+  )
+}
+
 function ExploreToolGroupCardBody({
   blocks,
 }: {
   blocks: Array<AssistantToolBlock>
 }) {
   return (
-    <div className="border-t pt-3">
+    <div>
       <div className="max-h-96 overflow-auto rounded-lg border bg-background/80 p-3">
         <div className="space-y-3">
           {blocks.map((block, index) => {
@@ -2436,36 +2446,21 @@ const ExploreToolGroupCard = React.memo(function ExploreToolGroupCard({
 
   return (
     <Collapsible
+      data-conversation-row="true"
       open={isOpen}
       onOpenChange={setIsOpen}
-      className={cn(
-        "rounded-xl border text-sm",
-        header.hasRunning && "border-amber-500/30 bg-amber-500/5",
-        !header.hasRunning &&
-          header.hasError &&
-          "border-destructive/30 bg-destructive/5",
-        !header.hasRunning && !header.hasError && "bg-muted/20"
-      )}
+      className="text-sm"
     >
-      <CollapsibleTrigger
-        data-conversation-tool-collapsible-trigger="true"
-        className="group/tool-collapsible-trigger relative flex w-full min-w-0 items-center justify-between gap-3 overflow-hidden rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-medium transition-all outline-none hover:no-underline focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-disabled:pointer-events-none aria-disabled:opacity-50"
-      >
-        <span className="grid max-w-full min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 overflow-hidden">
-          <span className="truncate font-medium whitespace-nowrap text-foreground">
-            {statusLabel}
-          </span>
-          <span className="truncate text-muted-foreground">
-            {header.summary}
-          </span>
-        </span>
-        <ChevronRightIcon className="pointer-events-none ml-auto size-4 shrink-0 text-muted-foreground group-aria-expanded/tool-collapsible-trigger:hidden" />
-        <ChevronDownIcon className="pointer-events-none ml-auto hidden size-4 shrink-0 text-muted-foreground group-aria-expanded/tool-collapsible-trigger:inline" />
-      </CollapsibleTrigger>
+      <ToolRowTrigger
+        isError={!header.hasRunning && header.hasError}
+        label={statusLabel}
+        running={header.hasRunning}
+        summary={header.summary}
+      />
 
       {isOpen ? (
         <CollapsibleContent className="overflow-hidden text-sm data-open:animate-accordion-down data-closed:animate-accordion-up">
-          <div className="h-(--collapsible-panel-height) px-3 pt-0 pb-3 data-ending-style:h-0 data-starting-style:h-0">
+          <div className="h-(--collapsible-panel-height) pt-2 data-ending-style:h-0 data-starting-style:h-0">
             <ExploreToolGroupCardBody blocks={blocks} />
           </div>
         </CollapsibleContent>
@@ -2797,7 +2792,11 @@ function CollapsedThinkingBlock({
   )
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+    <Collapsible
+      data-conversation-row="true"
+      open={isOpen}
+      onOpenChange={setIsOpen}
+    >
       <CollapsibleTrigger className="group/thinking-trigger -ml-0.5 flex max-w-full items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
         <ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-aria-expanded/thinking-trigger:rotate-90" />
         <span className="truncate">{label || "Thinking"}</span>
@@ -3010,7 +3009,12 @@ export function AssistantMessagesStoreCard({
 
   return (
     <div
-      className={cn("flex flex-col gap-4", className)}
+      className={cn(
+        "flex flex-col gap-4",
+        // Rows of collapsed tools and thinking sit closer together.
+        "[&>*:has(>[data-conversation-row])+*:has(>[data-conversation-row])]:-mt-2",
+        className
+      )}
       data-conversation-assistant-group="true"
       data-conversation-streaming={shellSnapshot.streaming ? "true" : undefined}
     >
