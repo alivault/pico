@@ -367,9 +367,7 @@ export class Terminals {
       terminal.process = item.handle
       for (const [viewer, seq] of Object.entries(info.viewerSeqs))
         terminal.lastInputSeq.set(viewer, seq)
-      const attached = await item.attach(this.#sink(terminal))
-      for (const chunk of attached.chunks)
-        this.#publishOutput(terminal, chunk.data, chunk.seq)
+      await item.attach(this.#sink(terminal))
       terminal.nextOutputSeq = Math.max(terminal.nextOutputSeq, info.nextSeq)
       if (info.exited) {
         terminal.exited = info.exited

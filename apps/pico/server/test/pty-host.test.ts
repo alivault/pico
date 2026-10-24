@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { createServer } from "node:net"
 import { dirname, join } from "node:path"
 import { test } from "node:test"
 import { fileURLToPath } from "node:url"
@@ -12,7 +13,7 @@ import {
   JobsDoc,
   type Job,
 } from "../src/extensions/jobs.ts"
-import { ptyHostPaths } from "../src/pty-host/protocol.ts"
+import { lineReader, ptyHostPaths } from "../src/pty-host/protocol.ts"
 import { HostPtyBackend, type PtyEnd } from "../src/services/pty-backend.ts"
 import { Terminals } from "../src/services/terminal.ts"
 import { ctx, openHarness, tempDir, TEST_MODEL } from "./support.ts"
@@ -294,5 +295,119 @@ void test("after a restart, the server takes over running jobs and records jobs 
     first.terminals.shutdown()
     await first.harness.close(ctx)
     await stopHost(dataDir)
+  }
+})
+
+/** A fake host on the socket of a data directory, for exact message order. */
+async function fakeHost(
+  dataDir: string,
+  answer: (
+    request: { id: number; type: string },
+    write: (text: string) => void
+  ) => void
+) {
+  const paths = ptyHostPaths(dataDir)
+  mkdirSync(dirname(paths.socket), { recursive: true })
+  const server = createServer((socket) => {
+    socket.setEncoding("utf8")
+    socket.on(
+      "data",
+      lineReader((message) =>
+        answer(message as { id: number; type: string }, (text) =>
+          socket.write(text)
+        )
+      )
+    )
+  })
+  await new Promise<void>((resolve) => server.listen(paths.socket, resolve))
+  return server
+}
+
+const line = (value: object) => `${JSON.stringify(value)}\n`
+
+void test("events that come with the spawn reply or before the attach backlog are not lost", async () => {
+  const dataDir = await tempDir()
+  const info = (ptyId: string) => ({
+    ptyId,
+    pid: 4242,
+    cols: 80,
+    rows: 24,
+    meta: { kind: "job", key: "jfake", scopeKey: "job", cwd: "/", shell: "sh" },
+    nextSeq: 4,
+    viewerSeqs: {},
+  })
+  const server = await fakeHost(dataDir, (request, write) => {
+    if (request.type === "hello")
+      write(line({ id: request.id, ok: true, result: { protocol: 1, pid: 1 } }))
+    if (request.type === "spawn")
+      // The reply, the output, and the exit in one chunk.
+      write(
+        line({ id: request.id, ok: true, result: info("new") }) +
+          line({ type: "output", ptyId: "new", seq: 1, data: "hello" }) +
+          line({ type: "exit", ptyId: "new", exit: { exitCode: 5 } })
+      )
+    if (request.type === "list")
+      write(line({ id: request.id, ok: true, result: [info("old")] }))
+    if (request.type === "attach")
+      // A live event comes before the reply with the backlog, and one after.
+      write(
+        line({ type: "output", ptyId: "old", seq: 3, data: "c" }) +
+          line({
+            id: request.id,
+            ok: true,
+            result: {
+              info: info("old"),
+              gap: false,
+              chunks: [
+                { seq: 1, data: "a" },
+                { seq: 2, data: "b" },
+                { seq: 3, data: "c" },
+              ],
+            },
+          }) +
+          line({ type: "output", ptyId: "old", seq: 4, data: "d" })
+      )
+  })
+  const backend = new HostPtyBackend({ dataDir, script, version: "test" })
+  try {
+    const seen: string[] = []
+    let end: PtyEnd | undefined
+    await backend.spawn(
+      {
+        file: "sh",
+        args: [],
+        cwd: "/",
+        env: {},
+        cols: 80,
+        rows: 24,
+        meta: info("new").meta as never,
+      },
+      {
+        output: (data) => seen.push(data),
+        exit: (exit) => {
+          end = exit
+        },
+      }
+    )
+    await eventually(() => end)
+    assert.deepEqual(seen, ["hello"])
+    assert.equal(end?.exitCode, 5)
+
+    const [old] = await backend.recover()
+    const order: Array<[string, number | undefined]> = []
+    await old!.attach({
+      output: (data, seq) => order.push([data, seq]),
+      exit: () => undefined,
+    })
+    await eventually(() => order.length >= 4)
+    assert.deepEqual(order, [
+      ["a", 1],
+      ["b", 2],
+      ["c", 3],
+      ["d", 4],
+    ])
+  } finally {
+    backend.close()
+    await new Promise((resolve) => server.close(resolve))
   }
 })
