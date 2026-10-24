@@ -136,7 +136,8 @@ export async function startServer(options: {
       machine.summary?.sessions.find((session) => session.id === id)?.title ??
       "Session"
     if (payload.type === "session_done" && payload.reason === "agent") {
-      if (!settings.notifyRunDone) return
+      // The agent goes on when its timer, watch, or job fires.
+      if (!settings.notifyRunDone || payload.waiting) return
       void notifier.send(
         {
           title:
@@ -177,7 +178,8 @@ export async function startServer(options: {
   }) => {
     const settings = runtime.settings.data
     if (payload.type === "session_done" && payload.reason === "agent") {
-      if (!settings.notifyRunDone) return
+      // The agent goes on when its timer, watch, or job fires.
+      if (!settings.notifyRunDone || payload.waiting) return
       void notifier.send({
         title:
           payload.outcome === "error"

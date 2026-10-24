@@ -120,10 +120,14 @@ function sessionCounts(machine: MachineInfo) {
     directories.has(session.directory || session.cwd)
   )
   return {
-    working: sessions.filter((session) => session.busy && !session.needsInput)
-      .length,
+    // A session that waits on a timer, a watch, or a job is not done yet.
+    working: sessions.filter(
+      (session) => (session.busy || session.waiting) && !session.needsInput
+    ).length,
     waiting: sessions.filter((session) => session.needsInput).length,
-    done: sessions.filter(isMachineSessionUnread).length,
+    done: sessions.filter(
+      (session) => !session.waiting && isMachineSessionUnread(session)
+    ).length,
   }
 }
 

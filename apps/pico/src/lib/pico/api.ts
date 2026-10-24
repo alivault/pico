@@ -324,6 +324,8 @@ export type SessionListEntry = {
   optimistic?: boolean
   /** The agent waits for an answer from the user. */
   needsInput?: boolean
+  /** What an idle session waits on: timers, watches, or jobs. */
+  waiting?: string
   /** The session that spawned this one. */
   parent?: string
   /** The git branch of the session's own worktree. */
@@ -347,6 +349,8 @@ export type SessionStatusEvent = {
   streaming?: boolean
   unread?: boolean
   needsInput?: boolean
+  /** What the session waits on; an empty string when it waits on nothing. */
+  waiting?: string
 }
 
 export type SessionReadStateResponse =
@@ -368,6 +372,8 @@ export type SessionDoneEvent = {
   reason: "agent" | "manual_compaction"
   outcome?: "success" | "error"
   completedAt: string
+  /** The turn ended, but the session waits on a timer, a watch, or a job. */
+  waiting?: string
 }
 
 export type PromptResponse =

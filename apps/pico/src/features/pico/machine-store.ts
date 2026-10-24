@@ -28,6 +28,8 @@ export type MachineSessionSummary = {
   directory: string
   busy: boolean
   needsInput: boolean
+  /** What an idle session waits on: timers, watches, or jobs. */
+  waiting?: string
   /** Nobody has read the last run yet. The same for all clients. */
   unread?: boolean
   /** Servers before global read state: the viewer contexts that did not see it. */

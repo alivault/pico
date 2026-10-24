@@ -597,7 +597,8 @@ function sameSidebarSessionStatus(
     left?.sessionPath === right.sessionPath &&
     left?.streaming === right.streaming &&
     left?.unread === right.unread &&
-    left?.needsInput === right.needsInput
+    left?.needsInput === right.needsInput &&
+    left?.waiting === right.waiting
   )
 }
 
@@ -627,6 +628,8 @@ export function mergeSidebarSessionStatusMap(
         typeof event.needsInput === "boolean"
           ? event.needsInput
           : previous?.needsInput,
+      waiting:
+        typeof event.waiting === "string" ? event.waiting : previous?.waiting,
     }
 
     if (sameSidebarSessionStatus(previous, status)) continue
@@ -663,20 +666,27 @@ function applySidebarSessionStatus(
     typeof status.needsInput === "boolean"
       ? status.needsInput
       : entry.needsInput
+  // An empty string: the session waits on nothing.
+  const nextWaiting =
+    (typeof status.waiting === "string" ? status.waiting : entry.waiting) ||
+    undefined
 
   if (
     Boolean(entry.streaming) === Boolean(nextStreaming) &&
     Boolean(entry.unread) === Boolean(nextUnread) &&
-    Boolean(entry.needsInput) === Boolean(nextNeedsInput)
+    Boolean(entry.needsInput) === Boolean(nextNeedsInput) &&
+    entry.waiting === nextWaiting
   ) {
     return entry
   }
 
+  const { waiting: _waiting, ...rest } = entry
   return {
-    ...entry,
+    ...rest,
     streaming: nextStreaming,
     unread: nextUnread,
     needsInput: nextNeedsInput,
+    ...(nextWaiting ? { waiting: nextWaiting } : {}),
   }
 }
 

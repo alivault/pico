@@ -56,6 +56,8 @@ export type SessionStatusSummary = {
   directory: string
   busy: boolean
   needsInput: boolean
+  /** What an idle session waits on: timers, watches, or jobs. */
+  waiting?: string
   /** Nobody has read the last run yet. Read state is the same for all clients. */
   unread?: boolean
   /**
@@ -176,6 +178,9 @@ export function parseSummary(value: unknown): MachineSummary | undefined {
                 : "",
           busy: entry.busy === true,
           needsInput: entry.needsInput === true,
+          ...(typeof entry.waiting === "string" && entry.waiting
+            ? { waiting: entry.waiting }
+            : {}),
           ...(entry.unread === true ? { unread: true } : {}),
           ...(Array.isArray(entry.unreadBy)
             ? {

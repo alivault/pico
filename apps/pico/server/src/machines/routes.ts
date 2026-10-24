@@ -56,7 +56,9 @@ const SUMMARY_EVENTS = new Set([
 /** The events that a hub sends a push notification for. */
 function isNotifyEvent(payload: { type: string; [key: string]: unknown }) {
   return (
-    (payload.type === "session_done" && payload.reason === "agent") ||
+    (payload.type === "session_done" &&
+      payload.reason === "agent" &&
+      !payload.waiting) ||
     (payload.type === "session_status" && payload.needsInput === true)
   )
 }
@@ -82,6 +84,7 @@ export function localSummary(
           directory: meta.group ?? session.cwd,
           busy: session.busy,
           needsInput: session.needsInput,
+          ...(session.waiting ? { waiting: session.waiting } : {}),
           ...(viewers.isUnread(session.id) ? { unread: true } : {}),
           ...(session.parent ? { parent: session.parent } : {}),
           ...(session.lastMessageAt

@@ -57,7 +57,9 @@ import type {
   HostSessionSummary,
 } from "../extensions/host.ts"
 import { updateTodo, type TodoChange } from "../extensions/todo.ts"
-import { jobNeedingUser, type JobsState } from "../extensions/jobs.ts"
+import { JobsDoc, jobNeedingUser, type JobsState } from "../extensions/jobs.ts"
+import { TimersDoc, type TimersState } from "../extensions/schedule.ts"
+import { waitingLabel } from "../extensions/waiting.ts"
 import {
   allProfiles,
   applyProfile,
@@ -170,6 +172,8 @@ export type SessionListEntry = {
   worktreeBranch?: string
   /** The agent waits for an answer from the user. */
   needsInput?: boolean
+  /** What an idle session waits on: timers, watches, or jobs. */
+  waiting?: string
 }
 
 export type PendingMessage = {
@@ -410,6 +414,13 @@ export class Sessions implements HostSessions {
     string,
     { jobId: string; name: string; prompt: string }
   >()
+  /** The timers and jobs of each session, for `#waiting`. */
+  readonly #waitSources = new Map<
+    string,
+    { timers?: TimersState; jobs?: JobsState }
+  >()
+  /** What each session waits on (see `waitingLabel`). */
+  readonly #waiting = new Map<string, string>()
   readonly #held = new Map<string, HeldItem[]>()
   #stateKinds: Set<string> | undefined
   #flushScheduled = false
@@ -473,6 +484,16 @@ export class Sessions implements HostSessions {
           this.#questionWaits.add(id)
           this.#needsInput.add(id)
         }
+        const [timers, jobs] = await Promise.all([
+          this.#harness.snapshot(TimersDoc, conversationId, ctx),
+          this.#harness.snapshot(JobsDoc, conversationId, ctx),
+        ])
+        this.#waitSources.set(id, {
+          ...(timers ? { timers } : {}),
+          ...(jobs ? { jobs } : {}),
+        })
+        const waiting = waitingLabel(timers, jobs)
+        if (waiting) this.#waiting.set(id, waiting)
       })
     )
     this.#harness.subscribeCommits((publication) => this.#observe(publication))
@@ -690,6 +711,11 @@ export class Sessions implements HostSessions {
             if (job) this.#jobWaits.set(id, job)
             else this.#jobWaits.delete(id)
             this.#updateNeedsInput(id)
+            this.#updateWaiting(id, { jobs: value as JobsState | undefined })
+          } else if (kind === "pico.timers") {
+            this.#updateWaiting(id, {
+              timers: value as TimersState | undefined,
+            })
           }
           this.#markDirty(id, { extensions: true })
         }
@@ -831,6 +857,37 @@ export class Sessions implements HostSessions {
     return this.#needsInput.has(id)
   }
 
+  /** What a session waits on: timers, watches, or jobs. */
+  waiting(id: string) {
+    return this.#waiting.get(id)
+  }
+
+  /** Keep `#waiting` current when the timers or jobs of a session change. */
+  #updateWaiting(
+    id: string,
+    change: { timers?: TimersState; jobs?: JobsState }
+  ) {
+    const sources = { ...this.#waitSources.get(id), ...change }
+    this.#waitSources.set(id, sources)
+    const waiting = waitingLabel(sources.timers, sources.jobs)
+    if (waiting === this.#waiting.get(id)) return
+    if (waiting) this.#waiting.set(id, waiting)
+    else this.#waiting.delete(id)
+    this.#scheduleSessionsBroadcast()
+    this.#hub.push(
+      {
+        type: "session_status",
+        sessionId: id,
+        sessionKey: sessionKey(id),
+        sessionPath: sessionPath(id),
+        streaming: this.isBusy(id),
+        // An empty string tells clients that it waits on nothing.
+        waiting: waiting ?? "",
+      },
+      { sessionId: id }
+    )
+  }
+
   list(filter: { parent?: string; directory?: string }): HostSessionSummary[] {
     return [...this.#metas.entries()]
       .filter(
@@ -848,6 +905,7 @@ export class Sessions implements HostSessions {
         cwd: meta.cwd,
         busy: this.isBusy(id),
         needsInput: this.#needsInput.has(id),
+        ...(this.#waiting.has(id) ? { waiting: this.#waiting.get(id) } : {}),
         unread: this.#viewers.isUnread(id),
         ...(meta.parent ? { parent: meta.parent } : {}),
         ...(meta.worktree ? { worktreeBranch: meta.worktree.branch } : {}),
@@ -994,6 +1052,8 @@ export class Sessions implements HostSessions {
         reason,
         outcome: stopReason === "error" ? "error" : "success",
         completedAt: new Date().toISOString(),
+        // The agent goes on when its timer, watch, or job fires.
+        ...(this.#waiting.has(id) ? { waiting: this.#waiting.get(id) } : {}),
       },
       { sessionId: id }
     )
@@ -1101,6 +1161,7 @@ export class Sessions implements HostSessions {
       ...(meta.parent ? { parent: meta.parent } : {}),
       ...(meta.worktree ? { worktreeBranch: meta.worktree.branch } : {}),
       ...(this.#needsInput.has(id) ? { needsInput: true } : {}),
+      ...(this.#waiting.has(id) ? { waiting: this.#waiting.get(id) } : {}),
     }
   }
 
@@ -1141,6 +1202,7 @@ export class Sessions implements HostSessions {
           this.isBusy(id) ? "1" : "0",
           unread.has(id) ? "1" : "0",
           this.#needsInput.has(id) ? "1" : "0",
+          this.#waiting.get(id) ?? "",
         ]
       }),
     ])

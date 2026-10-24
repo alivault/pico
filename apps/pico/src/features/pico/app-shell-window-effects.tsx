@@ -242,6 +242,8 @@ function AppShellWindowEffects({
       consumedIds.push(event.id)
       if (processedSessionDoneEventIdsRef.current.has(event.id)) continue
       processedSessionDoneEventIdsRef.current.add(event.id)
+      // The agent goes on when its timer, watch, or job fires.
+      if (event.waiting) continue
 
       const key = sessionNotificationKey({
         sessionId: event.sessionId,

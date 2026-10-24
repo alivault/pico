@@ -90,6 +90,8 @@ export type HostSessionSummary = {
   cwd: string
   busy: boolean
   needsInput: boolean
+  /** What the session waits on: timers, watches, or jobs. */
+  waiting?: string
   /** Nobody has read the last run yet. */
   unread: boolean
   parent?: string

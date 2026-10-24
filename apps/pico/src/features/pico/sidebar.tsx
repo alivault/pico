@@ -28,6 +28,7 @@ import {
   FolderIcon,
   FolderPlusIcon,
   GitForkIcon,
+  HourglassIcon,
   MessageCircleQuestionIcon,
   PinIcon,
   SearchIcon,
@@ -832,6 +833,15 @@ function SidebarSessionItem({
         <span className={SESSION_STATUS_ICON_CLASS}>
           <Spinner size="sm" aria-label="Session streaming" />
         </span>
+      ) : entry.waiting ? (
+        <TitleTooltip title={`Waiting on ${entry.waiting}`} side="right">
+          <span className={SESSION_STATUS_ICON_CLASS}>
+            <HourglassIcon
+              className="size-3.5 text-muted-foreground"
+              aria-label={`Waiting on ${entry.waiting}`}
+            />
+          </span>
+        </TitleTooltip>
       ) : showUnread ? (
         <span className={SESSION_STATUS_ICON_CLASS}>
           <span
@@ -1039,6 +1049,7 @@ function sameDirectorySessionEntry(
     Boolean(left.streaming) === Boolean(right.streaming) &&
     Boolean(left.unread) === Boolean(right.unread) &&
     Boolean(left.needsInput) === Boolean(right.needsInput) &&
+    left.waiting === right.waiting &&
     left.parent === right.parent &&
     left.worktreeBranch === right.worktreeBranch &&
     Boolean(left.optimistic) === Boolean(right.optimistic)
@@ -1936,6 +1947,7 @@ function machineSummaryEntry(session: MachineSessionSummary): SessionListEntry {
       : {}),
     streaming: session.busy,
     needsInput: session.needsInput,
+    ...(session.waiting ? { waiting: session.waiting } : {}),
     unread: isMachineSessionUnread(session),
     ...(session.parent ? { parent: session.parent } : {}),
   }
