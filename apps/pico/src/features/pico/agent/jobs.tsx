@@ -15,6 +15,7 @@ import { TitleTooltip } from "@/components/ui/tooltip"
 import { FADE_UNDER_ACTIONS, REVEAL_ON_HOVER } from "@/features/pico/agent/todo"
 import { registerAgentSection } from "@/features/pico/agent/agent-panel"
 import { openJobTerminal } from "@/features/pico/agent/events"
+import { jobPrompt, type SessionJob } from "@/features/pico/agent/job-state"
 import { postSessionJson } from "@/features/pico/agent/session-extensions"
 import {
   errorText,
@@ -32,17 +33,11 @@ import {
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
 
-type Job = {
-  id: string
-  name: string
-  command: string
-  status: "running" | "exited" | "stopped" | "lost" | "failed"
-  exitCode?: number
-  startedAt: number
-  endedAt?: number
-}
+type Job = SessionJob
 
 function statusClass(job: Job) {
+  if (job.status === "running" && (job.waiting || job.focus))
+    return "bg-sky-500"
   if (job.status === "running") return "bg-amber-500 animate-pulse"
   if (job.status === "exited" && job.exitCode === 0) return "bg-emerald-500"
   if (job.status === "stopped") return "bg-muted-foreground"
@@ -51,8 +46,12 @@ function statusClass(job: Job) {
 
 function statusText(job: Job, now: number) {
   switch (job.status) {
-    case "running":
-      return `Running, started ${relativeTime(job.startedAt, now)}`
+    case "running": {
+      const prompt = jobPrompt(job)
+      return prompt
+        ? prompt.text
+        : `Running, started ${relativeTime(job.startedAt, now)}`
+    }
     case "exited":
       return `${job.exitCode === 0 ? "Finished" : `Failed with code ${job.exitCode}`} ${relativeTime(job.endedAt, now)}`
     case "stopped":
@@ -189,6 +188,8 @@ registerAgentSection({
     ),
   summary(state) {
     const jobs = (state.jobs as Array<Job> | undefined) ?? []
+    const waiting = jobs.filter((job) => jobPrompt(job)).length
+    if (waiting) return `${waiting} waiting for input`
     const running = jobs.filter((job) => job.status === "running").length
     return running ? `${running} running` : undefined
   },
@@ -204,7 +205,13 @@ registerToolRenderer("job_start", {
   },
 })
 
-for (const name of ["job_status", "job_output", "job_stop"]) {
+for (const name of [
+  "job_status",
+  "job_output",
+  "job_wait",
+  "job_focus",
+  "job_stop",
+]) {
   registerToolRenderer(name, {
     summary(block) {
       const id = toolArgs(block).id

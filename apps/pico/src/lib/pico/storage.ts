@@ -37,6 +37,7 @@ export const AGENT_SECTIONS_OPEN_STORAGE_KEY = "pico-agent-sections-open"
 export const TERMINAL_PANEL_OPEN_STORAGE_KEY = "pico-terminal-panel-open"
 export const TERMINAL_PANEL_HEIGHT_STORAGE_KEY = "pico-terminal-panel-height"
 export const TERMINAL_TABS_STORAGE_KEY = "pico-terminal-tabs"
+export const JOB_FOCUS_SEEN_STORAGE_KEY = "pico-job-focus-seen"
 const PROMPT_DRAFTS_STORAGE_KEY = "pico-prompt-drafts"
 export const VIEWER_CONTEXT_STORAGE_KEY = "pico-context-id"
 
@@ -229,6 +230,43 @@ function loadStoredTerminalTabs(machineId: string) {
   } catch {
     return {}
   }
+}
+
+/** The time of the last focus request of each job that this device showed. */
+function loadSeenJobFocus(machineId: string): Record<string, number> {
+  try {
+    const value = JSON.parse(
+      machineLocalStorageGetItem(machineId, JOB_FOCUS_SEEN_STORAGE_KEY) ?? "{}"
+    ) as unknown
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, number>)
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+/** Whether this device showed a job's focus request of time `at`. */
+export function jobFocusSeen(machineId: string, jobId: string, at: number) {
+  return (loadSeenJobFocus(machineId)[jobId] ?? 0) >= at
+}
+
+export function rememberJobFocusSeen(
+  machineId: string,
+  jobId: string,
+  at: number
+) {
+  const seen = loadSeenJobFocus(machineId)
+  seen[jobId] = at
+  // Keep the newest entries only.
+  const kept = Object.entries(seen)
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 50)
+  return machineLocalStorageSetItem(
+    machineId,
+    JOB_FOCUS_SEEN_STORAGE_KEY,
+    JSON.stringify(Object.fromEntries(kept))
+  )
 }
 
 export function readStoredTerminalTabs(machineId: string, scopeKey: string) {

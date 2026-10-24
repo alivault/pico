@@ -19,6 +19,7 @@ import {
   type OpenFileViewTabOptions,
 } from "@/features/pico/app-shell-right-sidebar-state"
 import { MachineConnectionBanner } from "@/features/pico/machines"
+import { JobFocusWatcher } from "@/features/pico/agent/job-state"
 import {
   applyStoreAction,
   setStoreField,
@@ -1077,6 +1078,10 @@ function useAppShellTabsControllerView({
       onValueChange={onValueChange}
       className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
     >
+      <JobFocusWatcher
+        sessionId={agentSessionId}
+        viewerContextId={viewerContextId}
+      />
       {isMobile ? header : null}
       {showTabsList ? (
         <AppShellTabsList

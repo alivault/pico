@@ -9,9 +9,14 @@ import type {
   ITheme,
   Terminal as XtermTerminal,
 } from "@xterm/xterm"
-import { PlusIcon, XIcon } from "lucide-react"
+import { KeyboardIcon, KeyRoundIcon, PlusIcon, XIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import {
+  jobPrompt,
+  useSessionJobs,
+  type SessionJob,
+} from "@/features/pico/agent/job-state"
 import {
   Dialog,
   DialogContent,
@@ -49,6 +54,35 @@ type TerminalTab = {
   label?: string
   status: TerminalStatus
   terminalId: string | null
+  /** The job of a job tab, from the session's state (not stored). */
+  job?: SessionJob | undefined
+}
+
+/** A successful job tab closes this long after the user saw it finish. */
+const SEEN_JOB_TAB_CLOSE_MS = 5000
+
+/** The ID of the job that a tab shows, if it is a job tab. */
+function tabJobId(tab: TerminalTab) {
+  return tab.id.startsWith("job:") ? tab.id.slice(4) : undefined
+}
+
+function jobTabFinished(tab: TerminalTab) {
+  return tab.job ? tab.job.status !== "running" : tab.status.type === "exited"
+}
+
+function jobTabSucceeded(tab: TerminalTab) {
+  if (tab.job)
+    return (
+      (tab.job.status === "exited" && tab.job.exitCode === 0) ||
+      tab.job.status === "stopped"
+    )
+  return tab.status.type === "exited" && tab.status.exitCode === 0
+}
+
+/** A job tab whose job is lost, could not start, or has no record and no terminal. */
+function jobTabGone(tab: TerminalTab) {
+  if (tab.job) return tab.job.status === "lost" || tab.job.status === "failed"
+  return tab.status.type === "error"
 }
 
 type TerminalInfo = { label?: string | undefined }
@@ -209,9 +243,11 @@ function jobStatusText(status: TerminalStatus) {
 }
 
 function tabStatusText(tab: TerminalTab) {
-  return isJobTab(tab)
-    ? jobStatusText(tab.status)
-    : terminalStatusText(tab.status)
+  if (!isJobTab(tab)) return terminalStatusText(tab.status)
+  if (jobPrompt(tab.job)) return "Waits for input"
+  if (tab.job?.status === "stopped") return "Stopped"
+  if (tab.job?.status === "lost") return "Lost"
+  return jobStatusText(tab.status)
 }
 
 function terminalStatusText(status: TerminalStatus) {
@@ -249,7 +285,7 @@ function terminalStatusDetail(status: TerminalStatus) {
 }
 
 function terminalTabLabel(tab: TerminalTab, index: number) {
-  if (isJobTab(tab)) return tab.label ?? "Job"
+  if (isJobTab(tab)) return tab.label ?? tab.job?.name ?? "Job"
   if (tab.status.type === "connected" && tab.status.shell) {
     return `${index + 1}: ${tab.status.shell}`
   }
@@ -397,7 +433,13 @@ function isTerminalToggleEvent(event: React.KeyboardEvent) {
   )
 }
 
-function TerminalStatusDot({ status }: { status: TerminalStatus }) {
+function TerminalStatusDot({
+  status,
+  waiting = false,
+}: {
+  status: TerminalStatus
+  waiting?: boolean
+}) {
   if (status.type === "connecting") {
     return <Spinner size="xs" className="shrink-0" />
   }
@@ -405,7 +447,10 @@ function TerminalStatusDot({ status }: { status: TerminalStatus }) {
   return (
     <span
       aria-hidden="true"
-      className={cn("size-2 shrink-0 rounded-full", statusDotClassName(status))}
+      className={cn(
+        "size-2 shrink-0 rounded-full",
+        waiting ? "animate-pulse bg-sky-500" : statusDotClassName(status)
+      )}
     />
   )
 }
@@ -903,7 +948,14 @@ export function TerminalPanel({
   const [statusDialogTabId, setStatusDialogTabId] = React.useState<
     string | null
   >(null)
-  const tabs = tabsState.scopeKey === scopeKey ? tabsState.tabs : []
+  const sessionJobs = useSessionJobs(viewerContextId, sessionId)
+  const jobsById = new Map(sessionJobs.jobs.map((job) => [job.id, job]))
+  const tabs = (tabsState.scopeKey === scopeKey ? tabsState.tabs : []).map(
+    (tab) => {
+      const jobId = tabJobId(tab)
+      return jobId ? { ...tab, job: jobsById.get(jobId) } : tab
+    }
+  )
   const selectedTabId =
     tabsState.scopeKey === scopeKey
       ? (tabsState.activeTabId ?? tabs[0]?.id ?? null)
@@ -912,7 +964,11 @@ export function TerminalPanel({
   React.useEffect(() => {
     if (tabsState.scopeKey === scopeKey) return
 
-    setTabsState(createTerminalTabsState(machineId, scopeKey))
+    setTabsState((current) =>
+      current.scopeKey === scopeKey
+        ? current
+        : createTerminalTabsState(machineId, scopeKey)
+    )
   }, [scopeKey, tabsState.scopeKey])
 
   React.useEffect(() => {
@@ -925,13 +981,19 @@ export function TerminalPanel({
       return
     }
 
-    const tab = createTerminalTab()
-    const nextState = { activeTabId: tab.id, scopeKey, tabs: [tab] }
-    rememberTerminalTabsState(machineId, nextState)
-    setTabsState(nextState)
+    // An update in the same batch (for example a job tab) may add a tab first.
+    setTabsState((current) => {
+      if (current.scopeKey === scopeKey && current.tabs.length > 0)
+        return current
+      const tab = createTerminalTab()
+      const nextState = { activeTabId: tab.id, scopeKey, tabs: [tab] }
+      rememberTerminalTabsState(machineId, nextState)
+      return nextState
+    })
   }, [active, normalizedCwd, scopeKey, tabs.length, tabsState.scopeKey])
 
   const activeTab = tabs.find((tab) => tab.id === selectedTabId)
+  const activePrompt = activeTab ? jobPrompt(activeTab.job) : undefined
   const activeStatus = activeTab?.status ?? { type: "idle" }
   const activeError =
     activeStatus.type === "error" ? activeStatus.message : undefined
@@ -949,14 +1011,15 @@ export function TerminalPanel({
 
     const tab = createTerminalTab()
     setTabsState((current) => {
-      const nextState =
-        current.scopeKey !== scopeKey
-          ? { activeTabId: tab.id, scopeKey, tabs: [tab] }
-          : {
-              ...current,
-              activeTabId: tab.id,
-              tabs: [...current.tabs, tab],
-            }
+      const base =
+        current.scopeKey === scopeKey
+          ? current
+          : createTerminalTabsState(machineId, scopeKey)
+      const nextState = {
+        ...base,
+        activeTabId: tab.id,
+        tabs: [...base.tabs, tab],
+      }
       rememberTerminalTabsState(machineId, nextState)
       return nextState
     })
@@ -965,10 +1028,12 @@ export function TerminalPanel({
   const showJobTab = (jobId: string) => {
     const tabId = `job:${jobId}`
     setTabsState((current) => {
+      // A state of another scope is not loaded yet: start from the stored
+      // tabs of this scope, not from none.
       const base =
         current.scopeKey === scopeKey
           ? current
-          : { activeTabId: null, scopeKey, tabs: [] }
+          : createTerminalTabsState(machineId, scopeKey)
       const nextState = base.tabs.some((tab) => tab.id === tabId)
         ? { ...base, activeTabId: tabId }
         : {
@@ -989,6 +1054,24 @@ export function TerminalPanel({
     // Read the queue once the panel shows a scope.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeKey])
+
+  // A focus request (`job_focus`) shows its job's tab while it is open, also
+  // when the panel mounts after the request.
+  const shownFocus = React.useRef(new Set<string>())
+  const focusKey = sessionJobs.jobs
+    .filter((job) => job.status === "running" && job.focus)
+    .map((job) => `${job.id}@${job.focus?.at}`)
+    .join(" ")
+  const showFocusedJobs = React.useEffectEvent((keys: Array<string>) => {
+    for (const key of keys) {
+      if (shownFocus.current.has(`${scopeKey}:${key}`)) continue
+      shownFocus.current.add(`${scopeKey}:${key}`)
+      showJobTab(key.slice(0, key.indexOf("@")))
+    }
+  })
+  React.useEffect(() => {
+    showFocusedJobs(focusKey.split(" ").filter(Boolean))
+  }, [focusKey, scopeKey])
 
   const closeServerTerminal = (terminalId: string | null) => {
     if (!terminalId) return
@@ -1030,6 +1113,48 @@ export function TerminalPanel({
       return nextState
     })
   }
+
+  // Job tabs close themselves: a gone job at once, a successful job some
+  // seconds after the user saw it finish. Failed and unseen jobs stay.
+  const [seenJobTabs, setSeenJobTabs] = React.useState<ReadonlySet<string>>(
+    () => new Set()
+  )
+  const activeJobTabFinished =
+    activeTab !== undefined && isJobTab(activeTab) && jobTabFinished(activeTab)
+  React.useEffect(() => {
+    if (!active || !activeJobTabFinished || !selectedTabId) return
+    setSeenJobTabs((current) =>
+      current.has(selectedTabId)
+        ? current
+        : new Set([...current, selectedTabId])
+    )
+  }, [active, activeJobTabFinished, selectedTabId])
+  const closeJobTab = React.useEffectEvent((tabId: string) =>
+    closeTerminalTab(tabId)
+  )
+  const goneJobTabs = sessionJobs.loaded
+    ? tabs
+        .filter((tab) => isJobTab(tab) && jobTabGone(tab))
+        .map((tab) => tab.id)
+    : []
+  const doneJobTabs = tabs
+    .filter(
+      (tab) => isJobTab(tab) && seenJobTabs.has(tab.id) && jobTabSucceeded(tab)
+    )
+    .map((tab) => tab.id)
+  const goneKey = goneJobTabs.join(" ")
+  const doneKey = doneJobTabs.join(" ")
+  React.useEffect(() => {
+    for (const tabId of goneKey.split(" ").filter(Boolean)) closeJobTab(tabId)
+  }, [goneKey])
+  React.useEffect(() => {
+    const ids = doneKey.split(" ").filter(Boolean)
+    if (ids.length === 0) return
+    const timer = window.setTimeout(() => {
+      for (const tabId of ids) closeJobTab(tabId)
+    }, SEEN_JOB_TAB_CLOSE_MS)
+    return () => window.clearTimeout(timer)
+  }, [doneKey])
 
   const updateTabStatus = (tabId: string, status: TerminalStatus) => {
     setTabsState((current) => {
@@ -1120,7 +1245,10 @@ export function TerminalPanel({
                       setStatusDialogTabId(tab.id)
                     }}
                   >
-                    <TerminalStatusDot status={tab.status} />
+                    <TerminalStatusDot
+                      status={tab.status}
+                      waiting={jobPrompt(tab.job) !== undefined}
+                    />
                   </button>
                 </TitleTooltip>
                 <TitleTooltip title={`${label} · ${statusText}`}>
@@ -1207,6 +1335,24 @@ export function TerminalPanel({
           if (!open) setStatusDialogTabId(null)
         }}
       />
+      {normalizedCwd && activePrompt ? (
+        <div
+          role="status"
+          className="flex shrink-0 items-center gap-2 border-b border-border/70 bg-sky-500/10 px-3 py-1.5 text-xs"
+        >
+          {activePrompt.secret ? (
+            <KeyRoundIcon className="size-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
+          ) : (
+            <KeyboardIcon className="size-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
+          )}
+          <span className="min-w-0 truncate">{activePrompt.text}</span>
+          {activePrompt.secret ? (
+            <span className="ml-auto shrink-0 text-muted-foreground">
+              What you type is not shown
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       {normalizedCwd ? (
         tabs.length > 0 ? (
           <div className="relative min-h-0 flex-1 overflow-hidden bg-background">
