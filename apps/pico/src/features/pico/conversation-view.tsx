@@ -368,7 +368,6 @@ export type AssistantMessagesStore = {
 }
 
 type AssistantMessagesShellSnapshot = {
-  anchorBlockKey?: string
   hasBlocks: boolean
   hasFooter: boolean
   hideThinking: boolean
@@ -877,7 +876,6 @@ function sameAssistantMessagesShellSnapshot(
   right: AssistantMessagesShellSnapshot
 ) {
   return (
-    left.anchorBlockKey === right.anchorBlockKey &&
     left.hasBlocks === right.hasBlocks &&
     left.hasFooter === right.hasFooter &&
     left.hideThinking === right.hideThinking &&
@@ -935,10 +933,6 @@ function visibleAssistantBlocksFromSnapshot(
       return [{ ...block, renderKey: `${itemKey}/${blockKey}` }]
     })
   })
-}
-
-function assistantBlockIsMessageJumpAnchor(block: AssistantConversationBlock) {
-  return block.type === "text" || block.type === "compaction"
 }
 
 function assistantCopyTextFromItems(
@@ -1036,10 +1030,6 @@ function assistantMessagesShellSnapshotFromBlocks(
   snapshot: AssistantMessagesSnapshot,
   blocks: Array<AssistantConversationBlock>
 ): AssistantMessagesShellSnapshot {
-  const anchorBlockIndex = blocks.findIndex(assistantBlockIsMessageJumpAnchor)
-  const anchorBlock =
-    anchorBlockIndex >= 0 ? blocks[anchorBlockIndex] : undefined
-
   const modelLabel = assistantMessagesModelLabel(snapshot.items)
   const streaming = snapshot.items.some(assistantItemIsStreaming)
   const working = snapshot.items.some(assistantItemIsWorking)
@@ -1049,11 +1039,6 @@ function assistantMessagesShellSnapshotFromBlocks(
   const hasFooter = Boolean(copyText.trim() || modelLabel)
 
   return {
-    ...(anchorBlock
-      ? {
-          anchorBlockKey: assistantBlockRenderKeys(blocks)[anchorBlockIndex],
-        }
-      : {}),
     hasBlocks: blocks.length > 0,
     hasFooter,
     hideThinking: snapshot.hideThinking,
@@ -2658,13 +2643,11 @@ export function assistantMessageHasFooterMeta(
 }
 
 const AssistantBlockGroupView = React.memo(function AssistantBlockGroupView({
-  anchorBlockKey,
   descriptor,
   hideThinking,
   store,
   streaming,
 }: {
-  anchorBlockKey?: string
   descriptor: AssistantBlockGroupDescriptor
   hideThinking: boolean
   store: AssistantBlockStore
@@ -2695,15 +2678,7 @@ const AssistantBlockGroupView = React.memo(function AssistantBlockGroupView({
     "data-conversation-assistant-block-type": descriptor.blockType,
   }
 
-  if (descriptor.blockKey !== anchorBlockKey) {
-    return <div {...blockProps}>{blockView}</div>
-  }
-
-  return (
-    <div data-message-anchor="true" {...blockProps}>
-      {blockView}
-    </div>
-  )
+  return <div {...blockProps}>{blockView}</div>
 })
 
 function AssistantExploreBlockGroupView({
@@ -2905,12 +2880,10 @@ function finalAnswerStartIndex(groups: Array<AssistantBlockGroupDescriptor>) {
 
 /** The work before the final answer, in one collapsed row. */
 function AssistantWorkGroup({
-  anchor,
   children,
   label,
   openStateKey,
 }: {
-  anchor: boolean
   children: React.ReactNode
   label: string
   openStateKey: string
@@ -2921,7 +2894,6 @@ function AssistantWorkGroup({
     <div
       data-conversation-assistant-block="true"
       data-conversation-assistant-block-type="work"
-      data-message-anchor={anchor ? "true" : undefined}
     >
       <Collapsible
         data-conversation-row="true"
@@ -2949,13 +2921,11 @@ function AssistantWorkGroup({
 }
 
 function AssistantBlockGroupsView({
-  anchorBlockKey,
   hideThinking,
   store,
   streaming,
   workLabel,
 }: {
-  anchorBlockKey?: string
   hideThinking: boolean
   store: AssistantBlockStore
   streaming: boolean
@@ -2964,15 +2934,10 @@ function AssistantBlockGroupsView({
   const renderedBlocks = useAssistantBlockGroups(store)
   const answerStart = workLabel ? finalAnswerStartIndex(renderedBlocks) : -1
   const workGroups = answerStart > 0 ? renderedBlocks.slice(0, answerStart) : []
-  // The message anchor moves to the work row when it is in the work.
-  const anchorInWork = workGroups.some(
-    (group) => group.type === "block" && group.blockKey === anchorBlockKey
-  )
 
   const renderGroup = (descriptor: AssistantBlockGroupDescriptor) => (
     <AssistantBlockGroupView
       key={descriptor.key}
-      anchorBlockKey={anchorInWork ? undefined : anchorBlockKey}
       descriptor={descriptor}
       hideThinking={hideThinking}
       store={store}
@@ -2985,7 +2950,6 @@ function AssistantBlockGroupsView({
   return (
     <>
       <AssistantWorkGroup
-        anchor={anchorInWork}
         label={workLabel}
         openStateKey={`work:${workGroups[0]!.key}`}
       >
@@ -3136,7 +3100,6 @@ export function AssistantMessagesStoreCard({
     >
       {shellSnapshot.hasBlocks ? (
         <AssistantBlockGroupsView
-          anchorBlockKey={shellSnapshot.anchorBlockKey}
           hideThinking={shellSnapshot.hideThinking}
           store={assistantBlockStore}
           streaming={shellSnapshot.streaming}

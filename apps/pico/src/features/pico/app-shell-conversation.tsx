@@ -141,7 +141,9 @@ function ConversationMessageJumpButton({
       : !snapshot.hasPreviousMessageJumpTarget
   )
   const label =
-    direction === "next" ? "Jump to next message" : "Jump to previous message"
+    direction === "next"
+      ? "Jump to your next message"
+      : "Jump to your previous message"
   const Icon = direction === "next" ? ArrowDownToLineIcon : ArrowUpToLineIcon
 
   return (
@@ -614,7 +616,7 @@ function ConversationUserGroupView({
   if (!item || item.kind !== "user") return null
 
   return (
-    <div data-message-anchor="true" className={className}>
+    <div data-user-message-anchor="true" className={className}>
       <UserMessageCard item={item} />
     </div>
   )
