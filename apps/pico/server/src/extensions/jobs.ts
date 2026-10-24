@@ -5,10 +5,13 @@
  * (see `Terminals.spawnJob`), so the user can open it live in the terminal
  * panel. Output also goes to `<data>/jobs/<id>.log` for `job_output`.
  *
- * A process cannot survive a server restart, but its record can: the
- * `pico.jobs` document keeps each job, and a session-wide index lists the
- * running ones. At startup, jobs in the index without a process become
- * `lost`, and their session gets one message about it.
+ * A job's process runs in the pty-host process (see `pty-backend.ts`), so it
+ * survives a server restart. The `pico.jobs` document keeps each job, and a
+ * session-wide index lists the running ones. At startup, `recover` takes over
+ * the jobs that the pty-host kept and records the jobs that ended while the
+ * server was down. Jobs without a process become `lost` (for example after
+ * the pty-host stopped, or with `--no-pty-host`), and their session gets one
+ * message about it.
  */
 
 import { utimesSync } from "node:fs"
