@@ -335,7 +335,10 @@ void test("a job that asks for a password waits, takes focus, and goes on after 
         jobId = /^Job (\S+)/.exec(result)![1]!
         return {
           tools: [
-            { name: "job_wait", arguments: { id: jobId, timeout_ms: 10_000 } },
+            {
+              name: "terminal",
+              arguments: { action: "wait", id: jobId, timeout_ms: 10_000 },
+            },
           ],
         }
       }
@@ -343,8 +346,12 @@ void test("a job that asks for a password waits, takes focus, and goes on after 
         return {
           tools: [
             {
-              name: "job_focus",
-              arguments: { id: jobId, prompt: "Type the password" },
+              name: "terminal",
+              arguments: {
+                action: "focus",
+                id: jobId,
+                prompt: "Type the password",
+              },
             },
           ],
         }
@@ -361,8 +368,13 @@ void test("a job that asks for a password waits, takes focus, and goes on after 
         return {
           tools: [
             {
-              name: "job_wait",
-              arguments: { id: jobId, pattern: "got-", timeout_ms: 10_000 },
+              name: "terminal",
+              arguments: {
+                action: "wait",
+                id: jobId,
+                pattern: "got-",
+                timeout_ms: 10_000,
+              },
             },
           ],
         }
@@ -407,6 +419,138 @@ void test("a job that asks for a password waits, takes focus, and goes on after 
     // job_wait saw the exit right after the match: no exit message either.
     assert.ok(results.some((result) => /exited with code 0/.test(result)))
     assert.ok(!users.some((entry) => entry.includes("[Job finished]")))
+  } finally {
+    terminals.shutdown()
+    await harness.close(ctx)
+  }
+})
+
+void test("the terminal tool opens, reads, types, refuses secrets, and closes", async () => {
+  const dir = await tempDir()
+  const host = new HostBridge()
+  const jobs = createJobsExtension(host, dir)
+  const results: string[] = []
+  const ids: Record<string, string> = {}
+  const idOf = (text: string) => /^Job (\S+)/.exec(text)?.[1] ?? ""
+  type Call = { name: string; arguments: Record<string, unknown> }
+  const steps: Array<(last: string) => Call> = [
+    () => ({
+      name: "terminal",
+      arguments: { action: "open", label: "echo back", command: "cat" },
+    }),
+    (last) => {
+      ids.cat = idOf(last)
+      return {
+        name: "terminal",
+        arguments: {
+          action: "send_text",
+          id: ids.cat,
+          text: "hello",
+          enter: true,
+        },
+      }
+    },
+    () => ({
+      name: "terminal",
+      arguments: { action: "read", id: ids.cat, source: "recent" },
+    }),
+    () => ({
+      name: "terminal",
+      arguments: {
+        action: "open",
+        label: "secret",
+        command: "read -s -p 'Secret: ' x; echo; echo done-$x",
+      },
+    }),
+    (last) => {
+      ids.secret = idOf(last)
+      return {
+        name: "terminal",
+        arguments: { action: "wait", id: ids.secret, timeout_ms: 10_000 },
+      }
+    },
+    () => ({
+      name: "terminal",
+      arguments: {
+        action: "send_text",
+        id: ids.secret,
+        text: "x",
+        enter: true,
+      },
+    }),
+    () => ({
+      name: "terminal",
+      arguments: { action: "send_keys", id: ids.cat, keys: ["ctrl+c"] },
+    }),
+    () => ({
+      name: "terminal",
+      arguments: { action: "wait", id: ids.cat, timeout_ms: 10_000 },
+    }),
+    () => ({
+      name: "terminal",
+      arguments: { action: "close", id: ids.secret },
+    }),
+    () => ({ name: "terminal", arguments: { action: "close", id: ids.cat } }),
+    () => ({ name: "terminal", arguments: { action: "list" } }),
+    () => ({
+      name: "terminal",
+      arguments: { action: "send_keys", id: ids.secret, keys: ["hyper+q"] },
+    }),
+  ]
+  const harness = await openHarness(
+    join(dir, "db.sqlite"),
+    [jobs.extension],
+    (messages) => {
+      const toolResults = messages.filter(
+        (message) => message.role === "toolResult"
+      )
+      if (toolResults.length > results.length)
+        results.push(lastToolResult([toolResults.at(-1)!])!)
+      const step = steps[toolResults.length]
+      return step ? { tools: [step(results.at(-1) ?? "")] } : { text: "done" }
+    },
+    dir
+  )
+  const terminals = bindHost(host, harness, dir)
+  try {
+    const conversation = await harness.createConversation(
+      {
+        ownership: { kind: "ownerless" },
+        agent: { model: TEST_MODEL, cwd: dir },
+      },
+      ctx
+    )
+    await conversation.submit({ type: "input", content: "go" }, ctx)
+    await eventually(
+      async () => (results.length >= steps.length ? true : undefined),
+      20_000
+    )
+    const [
+      ,
+      sent,
+      recent,
+      ,
+      waited,
+      refused,
+      keys,
+      exited,
+      busy,
+      closed,
+      list,
+      unknown,
+    ] = results
+    assert.match(sent!, /Sent\./)
+    assert.match(recent!, /hello\nhello/)
+    assert.match(waited!, /waits for input with echo off/)
+    assert.match(refused!, /echo is off/)
+    assert.match(keys!, /Sent\./)
+    assert.match(exited!, /exited with code/)
+    assert.match(busy!, /still runs/)
+    assert.match(closed!, /Closed echo back/)
+    assert.ok(!list!.includes(ids.cat!))
+    assert.ok(list!.includes(ids.secret!))
+    assert.match(unknown!, /Unknown keys: hyper\+q/)
+    assert.equal(existsSync(join(dir, "jobs", `${ids.cat}.log`)), false)
   } finally {
     terminals.shutdown()
     await harness.close(ctx)

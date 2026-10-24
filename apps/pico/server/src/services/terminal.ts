@@ -16,6 +16,8 @@ import { basename } from "node:path"
 import * as pty from "@lydell/node-pty"
 
 import { posixShell } from "../extensions/util.ts"
+import { plainText } from "./job-log.ts"
+import { TerminalScreen, trimRows } from "./terminal-screen.ts"
 import { badRequest } from "../http.ts"
 
 const BACKLOG_MAX_CHUNKS = 500
@@ -76,6 +78,8 @@ type Terminal = {
   label?: string
   /** The end of an exited job's output, read from its log file. */
   replay?: () => string
+  /** The headless screen, while an agent reads this terminal. */
+  screen?: TerminalScreen
   onInput?: (data: string) => void
 }
 
@@ -101,7 +105,7 @@ function clamp(
   return Math.min(max, Math.max(min, Math.round(value)))
 }
 
-function defaultShell() {
+export function loginShell() {
   const explicit = process.env.PICO_TERMINAL_SHELL?.trim()
   if (explicit) return explicit
   try {
@@ -190,7 +194,7 @@ export class Terminals {
       this.close(scopeKey, existing.id)
     }
 
-    const shell = defaultShell()
+    const shell = loginShell()
     const columns = clamp(cols, MIN_COLS, MAX_COLS, DEFAULT_COLS)
     const lines = clamp(rows, MIN_ROWS, MAX_ROWS, DEFAULT_ROWS)
     let child: pty.IPty
@@ -230,6 +234,7 @@ export class Terminals {
     child.onExit(({ exitCode, signal }) => {
       terminal.exited = { exitCode, ...(signal ? { signal } : {}) }
       terminal.lastUsed = Date.now()
+      this.#dropScreen(terminal)
       this.#emit(terminal, {
         type: "exit",
         exitCode,
@@ -260,7 +265,100 @@ export class Terminals {
       terminal.backlogBytes -= removed.data.length
     }
     terminal.lastUsed = Date.now()
+    terminal.screen?.write(data)
     this.#emit(terminal, event)
+  }
+
+  /** The screen of a running terminal; made at the first read. */
+  #screen(terminal: Terminal) {
+    if (!terminal.screen) {
+      terminal.screen = new TerminalScreen(terminal.cols, terminal.rows)
+      // The backlog is what the terminal shows now, as far as it goes back.
+      terminal.screen.write(
+        terminal.backlog.map((event) => event.data).join("")
+      )
+    }
+    return terminal.screen
+  }
+
+  #dropScreen(terminal: Terminal) {
+    const screen = terminal.screen
+    if (!screen) return
+    terminal.screen = undefined
+    void screen.flush().finally(() => screen.dispose())
+  }
+
+  /** A terminal by ID, for the agent tools (no scope check). */
+  #byId(id: string) {
+    const terminal = this.#terminals.get(id)
+    if (!terminal) throw new Error("No such terminal.")
+    return terminal
+  }
+
+  /** The terminal ID of a job in this server, if any. */
+  jobTerminalId(jobId: string) {
+    return this.#lookup.get(JOB_LOOKUP_PREFIX + jobId)
+  }
+
+  /**
+   * Read a terminal as text: `visible` is the screen a person sees now,
+   * `recent` the last lines with scrollback. An exited terminal reads the
+   * end of its output.
+   */
+  async readText(id: string, source: "visible" | "recent", lines: number) {
+    const terminal = this.#byId(id)
+    terminal.lastUsed = Date.now()
+    if (terminal.exited) {
+      const output = terminal.replay
+        ? terminal.replay()
+        : terminal.backlog.map((event) => event.data).join("")
+      const text = plainText(output).trimEnd().split("\n")
+      return {
+        lines: text.slice(-(source === "visible" ? terminal.rows : lines)),
+        exited: terminal.exited,
+      }
+    }
+    const screen = this.#screen(terminal)
+    if (source === "visible") {
+      const view = await screen.visible()
+      return {
+        lines: trimRows(view.rows),
+        cursor: view.cursor,
+        alternate: view.alternate,
+      }
+    }
+    return { lines: await screen.recent(lines) }
+  }
+
+  /** Write input for an agent: no input hooks, and no sequence numbers. */
+  writeForAgent(id: string, data: string) {
+    const terminal = this.#byId(id)
+    if (terminal.exited) throw new Error("The terminal has exited.")
+    terminal.lastUsed = Date.now()
+    terminal.process.write(data)
+  }
+
+  /** The device of a terminal (Unix only), to read its mode. */
+  device(id: string) {
+    const device = (this.#terminals.get(id)?.process as { ptsName?: unknown })
+      ?.ptsName
+    return typeof device === "string" && device ? device : undefined
+  }
+
+  /** The user's shell terminals of a session (its terminal panel tabs). */
+  sessionShells(sessionId: string) {
+    return [...this.#terminals.values()]
+      .filter(
+        (terminal) =>
+          !terminal.shared && terminal.scopeKey.split(":")[1] === sessionId
+      )
+      .map((terminal) => ({
+        id: terminal.id,
+        cwd: terminal.cwd,
+        shell: basename(terminal.shell),
+        exited: terminal.exited,
+        lastUsed: terminal.lastUsed,
+      }))
   }
 
   #emit(terminal: Terminal, event: TerminalEvent) {
@@ -292,7 +390,7 @@ export class Terminals {
     // Jobs run commands that models write, so they need a POSIX shell. A POSIX
     // login shell keeps the user's PATH; other shells get bash, with the
     // server's environment.
-    const login = defaultShell()
+    const login = loginShell()
     const shell = posixShell(login)
     let child: pty.IPty
     try {
@@ -343,6 +441,7 @@ export class Terminals {
     child.onExit(({ exitCode, signal }) => {
       terminal.exited = { exitCode, ...(signal ? { signal } : {}) }
       terminal.lastUsed = Date.now()
+      this.#dropScreen(terminal)
       this.#emit(terminal, {
         type: "exit",
         exitCode,
@@ -576,12 +675,14 @@ export class Terminals {
     terminal.rows = clamp(rows, MIN_ROWS, MAX_ROWS, terminal.rows)
     terminal.lastUsed = Date.now()
     terminal.process.resize(terminal.cols, terminal.rows)
+    terminal.screen?.resize(terminal.cols, terminal.rows)
   }
 
   close(scopeKey: string, id: string) {
     const terminal = this.#record(scopeKey, id)
     // A tab that shows a job only detaches; job_stop stops the job.
     if (terminal.shared) return
+    terminal.screen?.dispose()
     this.#terminals.delete(id)
     if (terminal.lookupKey) this.#lookup.delete(terminal.lookupKey)
     if (!terminal.exited) {
@@ -596,6 +697,7 @@ export class Terminals {
   shutdown() {
     clearInterval(this.#cleanup)
     for (const terminal of this.#terminals.values()) {
+      terminal.screen?.dispose()
       if (terminal.exited) continue
       try {
         terminal.process.kill()

@@ -43,7 +43,6 @@ export const CHILD_DENIED_TOOLS = [
   "ask_user",
   "notify",
   "spawn_session",
-  "job_focus",
 ]
 
 const WRITE_TOOLS = [
@@ -57,6 +56,7 @@ const WRITE_TOOLS = [
   "lsp_rename",
   "job_start",
   "job_stop",
+  "terminal",
   "browser_act",
   "browser_eval",
   "spawn_session",

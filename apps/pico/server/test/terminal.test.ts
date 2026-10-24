@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { tmpdir } from "node:os"
 import { test } from "node:test"
 
+import { keyBytes } from "../src/services/terminal-keys.ts"
+import { TerminalScreen, trimRows } from "../src/services/terminal-screen.ts"
 import { Terminals } from "../src/services/terminal.ts"
 
 void test("PTY runs a shell, scopes access, and replays output", async () => {
@@ -197,6 +199,68 @@ void test("a finished job without a terminal shows its log", () => {
     if (exit?.type === "exit") assert.equal(exit.exitCode, 2)
     assert.throws(() => terminals.write("any", created.id, "x", 1), /exited/)
     view.unsubscribe()
+  } finally {
+    terminals.shutdown()
+  }
+})
+
+void test("a screen shows what a person sees, and recent lines with scrollback", async () => {
+  const screen = new TerminalScreen(20, 4)
+  try {
+    screen.write("one\r\ntwo\r\nthree\r\nfour\r\nfive\r\n")
+    screen.write("\x1b[31mred\x1b[0m and a line longer than twenty")
+    const view = await screen.visible()
+    assert.deepEqual(view.rows, [
+      "four",
+      "five",
+      "red and a line longe",
+      "r than twenty",
+    ])
+    assert.equal(view.alternate, false)
+    assert.deepEqual(await screen.recent(3), [
+      "four",
+      "five",
+      "red and a line longer than twenty",
+    ])
+    // A full-screen program draws on the alternate screen.
+    screen.write("\x1b[?1049h\x1b[H\x1b[2Jmenu")
+    const full = await screen.visible()
+    assert.equal(full.alternate, true)
+    assert.deepEqual(trimRows(full.rows), ["menu"])
+  } finally {
+    screen.dispose()
+  }
+})
+
+void test("key names become terminal bytes", () => {
+  assert.equal(keyBytes("enter"), "\r")
+  assert.equal(keyBytes("Ctrl+C"), "\x03")
+  assert.equal(keyBytes("up"), "\x1b[A")
+  assert.equal(keyBytes("alt+b"), "\x1bb")
+  assert.equal(keyBytes("hyper+q"), undefined)
+})
+
+void test("agents read a live terminal's screen and type into it", async () => {
+  const terminals = new Terminals()
+  try {
+    let exited = false
+    const { terminalId } = terminals.spawnJob("jscreen", "cat", tmpdir(), {
+      onOutput: () => undefined,
+      onExit: () => {
+        exited = true
+      },
+    })
+    terminals.writeForAgent(terminalId, "ping\r")
+    await waitFor(() => false, 300).catch(() => undefined)
+    const recent = await terminals.readText(terminalId, "recent", 10)
+    assert.deepEqual(recent.lines, ["ping", "ping"])
+    const visible = await terminals.readText(terminalId, "visible", 0)
+    assert.equal(visible.lines[0], "ping")
+    terminals.writeForAgent(terminalId, "\x03")
+    await waitFor(() => exited)
+    const after = await terminals.readText(terminalId, "recent", 10)
+    assert.ok(after.exited)
+    assert.throws(() => terminals.writeForAgent(terminalId, "x"), /exited/)
   } finally {
     terminals.shutdown()
   }

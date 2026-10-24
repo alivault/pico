@@ -14,6 +14,7 @@ import type { MachineManager } from "../machines/manager.ts"
 import type { BrowserManager } from "../services/browser.ts"
 import type { Notifier } from "../services/notify.ts"
 import type { PreviewProxies } from "../services/preview.ts"
+import type { Terminals } from "../services/terminal.ts"
 
 /** Session operations that extensions use. `Sessions` implements it. */
 export type HostSessions = {
@@ -119,22 +120,18 @@ export type HostEvents = {
   ): unknown
 }
 
-export type HostTerminals = {
-  spawnJob(
-    jobId: string,
-    command: string,
-    cwd: string,
-    handlers: {
-      label?: string
-      onOutput: (data: string) => void
-      onExit: (exit: { exitCode: number; signal?: number }) => void
-      onInput?: (data: string) => void
-    }
-  ): { terminalId: string; pid: number; device?: string }
-  releaseJobOutput(jobId: string, replay: (maxBytes: number) => string): void
-  jobRunning(jobId: string): boolean
-  stopJob(jobId: string, graceMs?: number): boolean
-}
+export type HostTerminals = Pick<
+  Terminals,
+  | "spawnJob"
+  | "releaseJobOutput"
+  | "jobRunning"
+  | "stopJob"
+  | "jobTerminalId"
+  | "readText"
+  | "writeForAgent"
+  | "device"
+  | "sessionShells"
+>
 
 export type HostServices = {
   sessions: HostSessions
