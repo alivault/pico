@@ -1,4 +1,5 @@
-// Bundles the Pico server into dist/pico-server.mjs.
+// Bundles the Pico server into dist/pico-server.mjs, and its pty-host into
+// dist/pty-host.mjs.
 //
 // Direct dependencies stay external and load from node_modules at run time.
 // pi-web-access ships TypeScript sources only for its host-neutral core, so it
@@ -19,8 +20,14 @@ const external = Object.keys(pkg.dependencies).filter(
 
 const options = {
   absWorkingDir: root,
-  entryPoints: ["src/main.ts"],
-  outfile: "dist/pico-server.mjs",
+  // The pty-host is a second program: it owns the terminals, so they
+  // survive a server restart (see src/pty-host/main.ts).
+  entryPoints: {
+    "pico-server": "src/main.ts",
+    "pty-host": "src/pty-host/main.ts",
+  },
+  outdir: "dist",
+  outExtension: { ".js": ".mjs" },
   bundle: true,
   platform: "node",
   format: "esm",

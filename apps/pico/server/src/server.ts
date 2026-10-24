@@ -9,7 +9,7 @@ import type { Duplex } from "node:stream"
 import { WebSocketServer, type WebSocket } from "ws"
 
 import { createApi } from "./api.ts"
-import type { ServerPaths } from "./config.ts"
+import { VERSION, type ServerPaths } from "./config.ts"
 import { Auth, UiRequests } from "./core/auth.ts"
 import { openRuntime, type Runtime } from "./core/runtime.ts"
 import { parseSessionId, Sessions } from "./core/sessions.ts"
@@ -22,6 +22,7 @@ import { parsePortRange, PreviewProxies } from "./services/preview.ts"
 import { ApiError, sendError, sendJson, serveStatic } from "./http.ts"
 import { GitWatcher } from "./services/git.ts"
 import { HighlightService } from "./services/highlight.ts"
+import { HostPtyBackend } from "./services/pty-backend.ts"
 import {
   looseNumber,
   Terminals,
@@ -54,6 +55,11 @@ export async function startServer(options: {
   onShutdownRequest?: () => void
   /** The transport to remote machines; tests use a fake. */
   machineTransport?: TransportFactory
+  /**
+   * Run terminals and jobs in the pty-host (at this script), so they
+   * survive a restart. Without it, they run in this process.
+   */
+  ptyHost?: { script: string }
 }): Promise<PicoServer> {
   const security = new Security(options.host)
   const host = new HostBridge()
@@ -61,7 +67,26 @@ export async function startServer(options: {
   const hub = new EventHub()
   const viewers = new Viewers(options.paths.viewersFile)
   const sessions = new Sessions(runtime, hub, viewers)
-  const terminals = new Terminals()
+  const terminals = new Terminals({
+    dataDir: options.paths.dataDir,
+    ...(options.ptyHost
+      ? {
+          backend: new HostPtyBackend({
+            dataDir: options.paths.dataDir,
+            script: options.ptyHost.script,
+            version: VERSION,
+          }),
+        }
+      : {}),
+  })
+  if (options.ptyHost) {
+    // Find the terminals and jobs that ran on while the server was down.
+    const kept = await terminals.start().catch((error: unknown) => {
+      console.warn("[pico] could not reach the pty-host:", error)
+      return 0
+    })
+    if (kept) console.log(`[pico] the pty-host kept ${kept} terminal(s)`)
+  }
   const previews = new PreviewProxies(options.host, () =>
     parsePortRange(runtime.settings.data.previewPorts)
   )

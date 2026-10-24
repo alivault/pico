@@ -9,14 +9,23 @@
  *
  * A background job that exited keeps no backlog in memory: viewers get the
  * end of its log file instead.
+ *
+ * The processes run in a `PtyBackend`: the pty-host (so they survive a
+ * server restart; see `start`), or this process.
  */
 import { userInfo } from "node:os"
 import { basename } from "node:path"
 
-import * as pty from "@lydell/node-pty"
-
+import type { PtyMeta } from "../pty-host/protocol.ts"
 import { posixShell } from "../extensions/util.ts"
 import { plainText } from "./job-log.ts"
+import {
+  LocalPtyBackend,
+  type PtyBackend,
+  type PtyEnd,
+  type PtyHandle,
+  type PtySink,
+} from "./pty-backend.ts"
 import { TerminalScreen, trimRows } from "./terminal-screen.ts"
 import { badRequest } from "../http.ts"
 
@@ -61,7 +70,8 @@ type Terminal = {
   lookupKey?: string
   cwd: string
   shell: string
-  process: pty.IPty
+  /** Undefined for a finished job from before a restart. */
+  process?: PtyHandle
   backlog: Array<Extract<TerminalEvent, { type: "output" }>>
   backlogBytes: number
   nextOutputSeq: number
@@ -84,6 +94,16 @@ type Terminal = {
   activeViewer?: string
   /** The headless screen, while an agent reads this terminal. */
   screen?: TerminalScreen
+  onInput?: (data: string) => void
+  /** The job's handlers (see `spawnJob` and `adoptJob`). */
+  jobHandlers?: JobHandlers
+}
+
+export type JobHandlers = {
+  label?: string
+  onOutput: (data: string) => void
+  onExit: (exit: PtyEnd) => void
+  /** Input from a viewer, after it is written. */
   onInput?: (data: string) => void
 }
 
@@ -149,13 +169,65 @@ export class Terminals {
   readonly #terminals = new Map<string, Terminal>()
   readonly #lookup = new Map<string, string>()
   readonly #cleanup: NodeJS.Timeout
+  readonly #backend: PtyBackend
 
-  constructor() {
+  constructor(options: { backend?: PtyBackend; dataDir?: string } = {}) {
+    this.#backend = options.backend ?? new LocalPtyBackend(options.dataDir)
     this.#cleanup = setInterval(() => this.#removeExpired(), 60_000)
     this.#cleanup.unref()
   }
 
-  create(
+  /** Where the ptys run: "host" (they survive a restart) or "local". */
+  get backendKind() {
+    return this.#backend.kind
+  }
+
+  #sink(terminal: Terminal): PtySink {
+    return {
+      output: (data, seq) => this.#publishOutput(terminal, data, seq),
+      exit: (exit) => this.#exited(terminal, exit),
+    }
+  }
+
+  #exited(terminal: Terminal, exit: PtyEnd) {
+    if (terminal.exited) return
+    terminal.exited = {
+      exitCode: exit.exitCode,
+      ...(exit.signal ? { signal: exit.signal } : {}),
+    }
+    terminal.lastUsed = Date.now()
+    this.#dropScreen(terminal)
+    this.#emit(terminal, { type: "exit", ...terminal.exited })
+    terminal.jobHandlers?.onExit(exit)
+  }
+
+  #newTerminal(fields: {
+    scopeKey: string
+    lookupKey?: string | undefined
+    cwd: string
+    shell: string
+    cols: number
+    rows: number
+  }): Terminal {
+    return {
+      id: crypto.randomUUID(),
+      scopeKey: fields.scopeKey,
+      ...(fields.lookupKey ? { lookupKey: fields.lookupKey } : {}),
+      cwd: fields.cwd,
+      shell: fields.shell,
+      backlog: [],
+      backlogBytes: 0,
+      nextOutputSeq: 1,
+      lastInputSeq: new Map(),
+      viewerSizes: new Map(),
+      cols: fields.cols,
+      rows: fields.rows,
+      lastUsed: Date.now(),
+      listeners: new Set(),
+    }
+  }
+
+  async create(
     scopeKey: string,
     cwd: string,
     clientKey: string | undefined,
@@ -199,55 +271,43 @@ export class Terminals {
     }
 
     const shell = loginShell()
-    const columns = clamp(cols, MIN_COLS, MAX_COLS, DEFAULT_COLS)
-    const lines = clamp(rows, MIN_ROWS, MAX_ROWS, DEFAULT_ROWS)
-    let child: pty.IPty
+    const terminal = this.#newTerminal({
+      scopeKey,
+      lookupKey,
+      cwd,
+      shell,
+      cols: clamp(cols, MIN_COLS, MAX_COLS, DEFAULT_COLS),
+      rows: clamp(rows, MIN_ROWS, MAX_ROWS, DEFAULT_ROWS),
+    })
+    const meta: PtyMeta = {
+      kind: "shell",
+      key: lookupKey ?? "",
+      scopeKey,
+      cwd,
+      shell,
+    }
     try {
-      child = pty.spawn(shell, ["-l"], {
-        name: "xterm-256color",
-        cols: columns,
-        rows: lines,
-        cwd,
-        env: shellEnvironment(),
-      })
+      terminal.process = await this.#backend.spawn(
+        {
+          file: shell,
+          args: ["-l"],
+          cwd,
+          env: shellEnvironment(),
+          cols: terminal.cols,
+          rows: terminal.rows,
+          meta,
+        },
+        this.#sink(terminal)
+      )
     } catch (error) {
       throw badRequest(
         `Could not start a terminal: ${error instanceof Error ? error.message : String(error)}`
       )
     }
-    const id = crypto.randomUUID()
-    const terminal: Terminal = {
-      id,
-      scopeKey,
-      ...(lookupKey ? { lookupKey } : {}),
-      cwd,
-      shell,
-      process: child,
-      backlog: [],
-      backlogBytes: 0,
-      nextOutputSeq: 1,
-      lastInputSeq: new Map(),
-      viewerSizes: new Map(),
-      cols: columns,
-      rows: lines,
-      lastUsed: Date.now(),
-      listeners: new Set(),
-    }
-    this.#terminals.set(id, terminal)
-    if (lookupKey) this.#lookup.set(lookupKey, id)
-    child.onData((data) => this.#publishOutput(terminal, data))
-    child.onExit(({ exitCode, signal }) => {
-      terminal.exited = { exitCode, ...(signal ? { signal } : {}) }
-      terminal.lastUsed = Date.now()
-      this.#dropScreen(terminal)
-      this.#emit(terminal, {
-        type: "exit",
-        exitCode,
-        ...(signal ? { signal } : {}),
-      })
-    })
+    this.#terminals.set(terminal.id, terminal)
+    if (lookupKey) this.#lookup.set(lookupKey, terminal.id)
     return {
-      id,
+      id: terminal.id,
       backend: "shell" as const,
       cwd,
       shell: basename(shell),
@@ -255,10 +315,101 @@ export class Terminals {
     }
   }
 
-  #publishOutput(terminal: Terminal, data: string) {
+  /**
+   * Find the ptys that the pty-host kept while the server was down. Shells
+   * come back as they were; jobs wait for `adoptJob`.
+   */
+  async start() {
+    const recovered = await this.#backend.recover()
+    for (const item of recovered) {
+      const { info } = item
+      if (info.meta.kind === "shell" && (info.exited || !info.meta.key)) {
+        item.handle.forget()
+        continue
+      }
+      const terminal = this.#newTerminal({
+        scopeKey: info.meta.scopeKey,
+        lookupKey:
+          info.meta.kind === "job"
+            ? JOB_LOOKUP_PREFIX + info.meta.key
+            : info.meta.key,
+        cwd: info.meta.cwd,
+        shell: info.meta.shell,
+        cols: info.cols || 120,
+        rows: info.rows || 30,
+      })
+      if (info.meta.kind === "job") {
+        terminal.shared = true
+        if (info.meta.jobId) terminal.jobId = info.meta.jobId
+        if (info.meta.label) terminal.label = info.meta.label
+      }
+      terminal.process = item.handle
+      for (const [viewer, seq] of Object.entries(info.viewerSeqs))
+        terminal.lastInputSeq.set(viewer, seq)
+      const attached = await item.attach(this.#sink(terminal))
+      for (const chunk of attached.chunks)
+        this.#publishOutput(terminal, chunk.data, chunk.seq)
+      terminal.nextOutputSeq = Math.max(terminal.nextOutputSeq, info.nextSeq)
+      if (info.exited) {
+        terminal.exited = info.exited
+        terminal.lastUsed = Date.now()
+      }
+      this.#terminals.set(terminal.id, terminal)
+      if (terminal.lookupKey) this.#lookup.set(terminal.lookupKey, terminal.id)
+    }
+    return recovered.length
+  }
+
+  /**
+   * Take over a job that the pty-host kept: its handlers get its output and
+   * exit from now on. Undefined when this server has no such job.
+   */
+  adoptJob(jobId: string, handlers: JobHandlers) {
+    const terminal = this.#terminals.get(
+      this.#lookup.get(JOB_LOOKUP_PREFIX + jobId) ?? ""
+    )
+    if (!terminal?.process) return undefined
+    terminal.jobHandlers = handlers
+    if (handlers.onInput) terminal.onInput = handlers.onInput
+    return {
+      terminalId: terminal.id,
+      pid: terminal.process.pid,
+      ...(terminal.process.device ? { device: terminal.process.device } : {}),
+      ...(terminal.exited ? { exited: terminal.exited } : {}),
+    }
+  }
+
+  /** The server recorded a job's end: the pty-host may drop it. */
+  forgetJob(jobId: string) {
+    const terminal = this.#terminals.get(
+      this.#lookup.get(JOB_LOOKUP_PREFIX + jobId) ?? ""
+    )
+    terminal?.process?.forget()
+  }
+
+  /** Numbers for the resource view. */
+  async stats() {
+    const all = [...this.#terminals.values()]
+    return {
+      backend: this.#backend.kind,
+      host: await this.#backend.stats(),
+      shells: all.filter((item) => !item.shared && !item.exited).length,
+      jobs: all.filter((item) => item.shared && !item.exited).length,
+      exited: all.filter((item) => item.exited).length,
+      screens: all.filter((item) => item.screen).length,
+      backlogBytes: all.reduce((sum, item) => sum + item.backlogBytes, 0),
+    }
+  }
+
+  #publishOutput(terminal: Terminal, data: string, seq?: number) {
     if (!data) return
-    const event = { type: "output" as const, data, seq: terminal.nextOutputSeq }
-    terminal.nextOutputSeq += 1
+    // The pty-host numbers output; a local pty does not.
+    const event = {
+      type: "output" as const,
+      data,
+      seq: seq ?? terminal.nextOutputSeq,
+    }
+    terminal.nextOutputSeq = event.seq + 1
     terminal.backlog.push(event)
     terminal.backlogBytes += data.length
     while (
@@ -272,6 +423,7 @@ export class Terminals {
     terminal.lastUsed = Date.now()
     terminal.screen?.write(data)
     this.#emit(terminal, event)
+    terminal.jobHandlers?.onOutput(data)
   }
 
   /** The screen of a running terminal; made at the first read. */
@@ -338,16 +490,15 @@ export class Terminals {
   /** Write input for an agent: no input hooks, and no sequence numbers. */
   writeForAgent(id: string, data: string) {
     const terminal = this.#byId(id)
-    if (terminal.exited) throw new Error("The terminal has exited.")
+    if (terminal.exited || !terminal.process)
+      throw new Error("The terminal has exited.")
     terminal.lastUsed = Date.now()
     terminal.process.write(data)
   }
 
   /** The device of a terminal (Unix only), to read its mode. */
   device(id: string) {
-    const device = (this.#terminals.get(id)?.process as { ptsName?: unknown })
-      ?.ptsName
-    return typeof device === "string" && device ? device : undefined
+    return this.#terminals.get(id)?.process?.device
   }
 
   /** The user's shell terminals of a session (its terminal panel tabs). */
@@ -380,87 +531,63 @@ export class Terminals {
    * Run a command in a shared pseudo-terminal, for a background job. The
    * user's login shell runs it, so PATH matches an interactive terminal.
    */
-  spawnJob(
+  async spawnJob(
     jobId: string,
     command: string,
     cwd: string,
-    handlers: {
-      label?: string
-      onOutput: (data: string) => void
-      onExit: (exit: { exitCode: number; signal?: number }) => void
-      /** Input from a viewer, after it is written. */
-      onInput?: (data: string) => void
-    }
+    handlers: JobHandlers
   ) {
     // Jobs run commands that models write, so they need a POSIX shell. A POSIX
     // login shell keeps the user's PATH; other shells get bash, with the
     // server's environment.
     const login = loginShell()
     const shell = posixShell(login)
-    let child: pty.IPty
+    const terminal = this.#newTerminal({
+      scopeKey: "job",
+      lookupKey: JOB_LOOKUP_PREFIX + jobId,
+      cwd,
+      shell,
+      cols: 120,
+      rows: 30,
+    })
+    terminal.shared = true
+    terminal.jobId = jobId
+    if (handlers.label) terminal.label = handlers.label
+    if (handlers.onInput) terminal.onInput = handlers.onInput
+    terminal.jobHandlers = handlers
     try {
-      child = pty.spawn(
-        shell,
-        shell === login ? ["-l", "-c", command] : ["-c", command],
+      terminal.process = await this.#backend.spawn(
         {
-          name: "xterm-256color",
-          cols: 120,
-          rows: 30,
+          file: shell,
+          args: shell === login ? ["-l", "-c", command] : ["-c", command],
           cwd,
           env: shellEnvironment(),
-        }
+          cols: terminal.cols,
+          rows: terminal.rows,
+          meta: {
+            kind: "job",
+            key: jobId,
+            jobId,
+            scopeKey: "job",
+            cwd,
+            shell,
+            ...(handlers.label ? { label: handlers.label } : {}),
+          },
+          logJobId: jobId,
+        },
+        this.#sink(terminal)
       )
     } catch (error) {
       throw new Error(
         `Could not start the job: ${error instanceof Error ? error.message : String(error)}`
       )
     }
-    const id = crypto.randomUUID()
-    const lookupKey = JOB_LOOKUP_PREFIX + jobId
-    const terminal: Terminal = {
-      id,
-      scopeKey: "job",
-      lookupKey,
-      cwd,
-      shell,
-      process: child,
-      backlog: [],
-      backlogBytes: 0,
-      nextOutputSeq: 1,
-      lastInputSeq: new Map(),
-      viewerSizes: new Map(),
-      cols: 120,
-      rows: 30,
-      lastUsed: Date.now(),
-      listeners: new Set(),
-      shared: true,
-      jobId,
-      ...(handlers.label ? { label: handlers.label } : {}),
-      ...(handlers.onInput ? { onInput: handlers.onInput } : {}),
-    }
-    this.#terminals.set(id, terminal)
-    this.#lookup.set(lookupKey, id)
-    child.onData((data) => {
-      this.#publishOutput(terminal, data)
-      handlers.onOutput(data)
-    })
-    child.onExit(({ exitCode, signal }) => {
-      terminal.exited = { exitCode, ...(signal ? { signal } : {}) }
-      terminal.lastUsed = Date.now()
-      this.#dropScreen(terminal)
-      this.#emit(terminal, {
-        type: "exit",
-        exitCode,
-        ...(signal ? { signal } : {}),
-      })
-      handlers.onExit(terminal.exited)
-    })
-    // The terminal device of the job (Unix only), to read its mode.
-    const device = (child as { ptsName?: unknown }).ptsName
+    this.#terminals.set(terminal.id, terminal)
+    this.#lookup.set(terminal.lookupKey!, terminal.id)
     return {
-      terminalId: id,
-      pid: child.pid,
-      ...(typeof device === "string" && device ? { device } : {}),
+      terminalId: terminal.id,
+      pid: terminal.process.pid,
+      ...(terminal.process.device ? { device: terminal.process.device } : {}),
     }
   }
 
@@ -505,8 +632,6 @@ export class Terminals {
       lookupKey: JOB_LOOKUP_PREFIX + jobId,
       cwd: info.cwd,
       shell: "job",
-      // No process: an exited terminal never uses it.
-      process: undefined as unknown as pty.IPty,
       backlog: [],
       backlogBytes: 0,
       nextOutputSeq: 2,
@@ -540,16 +665,17 @@ export class Terminals {
     const terminal = this.#terminals.get(
       this.#lookup.get(JOB_LOOKUP_PREFIX + jobId) ?? ""
     )
-    if (!terminal || terminal.exited) return false
+    if (!terminal?.process || terminal.exited) return false
+    const process = terminal.process
     try {
-      terminal.process.kill("SIGTERM")
+      process.kill("SIGTERM")
     } catch {
       return false
     }
     setTimeout(() => {
       if (terminal.exited) return
       try {
-        terminal.process.kill("SIGKILL")
+        process.kill("SIGKILL")
       } catch {
         // Already gone.
       }
@@ -651,7 +777,8 @@ export class Terminals {
     viewer?: string
   ) {
     const terminal = this.#record(scopeKey, id)
-    if (terminal.exited) throw badRequest("Terminal has exited.")
+    if (terminal.exited || !terminal.process)
+      throw badRequest("Terminal has exited.")
     this.#activate(terminal, viewerKey(viewer))
     if (inputSeq !== undefined && inputSeq > 0) {
       const key = viewerKey(viewer)
@@ -666,7 +793,11 @@ export class Terminals {
       }
     }
     terminal.lastUsed = Date.now()
-    terminal.process.write(data)
+    terminal.process.write(
+      data,
+      viewerKey(viewer),
+      inputSeq !== undefined && inputSeq > 0 ? inputSeq : undefined
+    )
     terminal.onInput?.(data)
     return inputSeq !== undefined && inputSeq > 0 ? inputSeq : undefined
   }
@@ -722,7 +853,7 @@ export class Terminals {
     if (size.cols === terminal.cols && size.rows === terminal.rows) return
     terminal.cols = size.cols
     terminal.rows = size.rows
-    terminal.process.resize(terminal.cols, terminal.rows)
+    terminal.process?.resize(terminal.cols, terminal.rows)
     terminal.screen?.resize(terminal.cols, terminal.rows)
   }
 
@@ -735,24 +866,22 @@ export class Terminals {
     if (terminal.lookupKey) this.#lookup.delete(terminal.lookupKey)
     if (!terminal.exited) {
       try {
-        terminal.process.kill()
+        terminal.process?.kill()
       } catch {
         // Already gone.
       }
     }
+    terminal.process?.forget()
   }
 
+  /**
+   * Stop using the terminals. Local ptys end; ptys in the pty-host keep
+   * running for the next server.
+   */
   shutdown() {
     clearInterval(this.#cleanup)
-    for (const terminal of this.#terminals.values()) {
-      terminal.screen?.dispose()
-      if (terminal.exited) continue
-      try {
-        terminal.process.kill()
-      } catch {
-        // Already gone.
-      }
-    }
+    for (const terminal of this.#terminals.values()) terminal.screen?.dispose()
+    this.#backend.close()
     this.#terminals.clear()
     this.#lookup.clear()
   }
@@ -761,6 +890,7 @@ export class Terminals {
     for (const [id, terminal] of this.#terminals) {
       if (!terminal.exited || terminal.listeners.size > 0) continue
       if (Date.now() - terminal.lastUsed < EXITED_TTL_MS) continue
+      if (!terminal.shared) terminal.process?.forget()
       this.#terminals.delete(id)
       if (terminal.lookupKey) this.#lookup.delete(terminal.lookupKey)
     }

@@ -68,7 +68,7 @@ async function userEntries(conversation: Conversation) {
 
 /** Bind a host with stub sessions and real terminals. */
 function bindHost(host: HostBridge, harness: Harness, dataDir: string) {
-  const terminals = new Terminals()
+  const terminals = new Terminals({ dataDir })
   host.bind({
     sessions: {
       current: (id: string | undefined) => id,
@@ -358,12 +358,14 @@ void test("a job that asks for a password waits, takes focus, and goes on after 
       if (result.startsWith("Asked the user")) {
         // The user types the password into the job's tab.
         setTimeout(() => {
-          void harness.snapshot(JobsDoc, conversationId!, ctx).then((state) => {
-            const job = state?.items[jobId]
-            sawFocus = Boolean(job?.focus && job.waiting?.secret)
-            const tab = terminals!.create("user", dir, `job:${jobId}`)
-            terminals!.write("user", tab.id, "hunter2\r", 1, "viewer")
-          })
+          void harness
+            .snapshot(JobsDoc, conversationId!, ctx)
+            .then(async (state) => {
+              const job = state?.items[jobId]
+              sawFocus = Boolean(job?.focus && job.waiting?.secret)
+              const tab = await terminals!.create("user", dir, `job:${jobId}`)
+              terminals!.write("user", tab.id, "hunter2\r", 1, "viewer")
+            })
         }, 200)
         return {
           tools: [

@@ -52,6 +52,13 @@ pnpm start import-pi         # import old Pi sessions (stop Pico first)
   after a crash or restart. Tools with side effects do not run twice.
 - **Workspace.** Git changes and diffs, file browser, syntax highlighting, and
   terminals.
+- **Terminals that survive restarts.** Terminals and background jobs run in a
+  small `pico-pty-host` process (one for each data directory). When the Pico
+  server restarts, it finds them again with their output. The host stops by
+  itself when no terminal runs and no server is connected for 10 minutes. To
+  stop it by hand: `kill $(cat ~/.pico/pty-host/host-v1.pid)` (its terminals
+  and jobs end with it). `pico-app serve --no-pty-host` keeps terminals in the
+  server process.
 - **Agent tools.** Todo lists, questions to the user, rich output (charts,
   diagrams, tables), timers and watches, background jobs, child sessions in
   git worktrees, Git and GitHub, LSP, browser automation, app previews, web

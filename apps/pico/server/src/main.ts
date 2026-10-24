@@ -2,6 +2,8 @@
  * `pico-server`: run, inspect, and stop the Pico server.
  *
  *   pico-server serve [--port 3141] [--host 127.0.0.1] [--data-dir ~/.pico] [--web-dir dir] [--detach]
+ *     Terminals and jobs run in a pty-host process, so they survive a restart;
+ *     `--no-pty-host` (or PICO_NO_PTY_HOST=1) keeps them in the server.
  *   pico-server status [--json]
  *   pico-server stop [--wait]
  *   pico-server machine add|list|status|reconnect|rename|enable|disable|remove …
@@ -173,12 +175,31 @@ function defaultWebDir() {
   return resolve(here, "..", "..", ".output", "public")
 }
 
+/**
+ * The pty-host program next to this one, so terminals and jobs survive a
+ * restart; undefined with `--no-pty-host`, `PICO_NO_PTY_HOST=1`, or when
+ * the program is missing (then they run in the server).
+ */
+function ptyHostOption(options: Map<string, string | boolean>) {
+  if (options.get("no-pty-host") || process.env.PICO_NO_PTY_HOST === "1")
+    return undefined
+  const script = fileURLToPath(new URL("./pty-host.mjs", import.meta.url))
+  if (!existsSync(script)) {
+    console.warn(
+      `[pico] ${script} is missing: terminals run in the server and stop with it`
+    )
+    return undefined
+  }
+  return { script }
+}
+
 async function listen(
   paths: ServerPaths,
   host: string,
   port: number,
   searchPorts: boolean,
-  onShutdownRequest: () => void
+  onShutdownRequest: () => void,
+  ptyHost?: { script: string }
 ) {
   let lastError: unknown
   for (let offset = 0; offset < (searchPorts ? 20 : 1); offset += 1) {
@@ -188,6 +209,7 @@ async function listen(
         host,
         port: port + offset,
         onShutdownRequest,
+        ...(ptyHost ? { ptyHost } : {}),
       })
     } catch (error) {
       lastError = error
@@ -260,8 +282,13 @@ async function serve(options: Map<string, string | boolean>) {
   let server: PicoServer
   let requestStop: (drain: boolean) => void = () => undefined
   try {
-    server = await listen(paths, host, port, !requestedPort, () =>
-      requestStop(true)
+    server = await listen(
+      paths,
+      host,
+      port,
+      !requestedPort,
+      () => requestStop(true),
+      ptyHostOption(options)
     )
   } catch (error) {
     release()

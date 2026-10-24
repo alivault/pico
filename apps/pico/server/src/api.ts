@@ -1095,7 +1095,7 @@ export function createApi(api: ApiContext) {
     }>()
     const { scopeKey, cwd } = terminalScope(request)
     await addFinishedJobTerminal(request, body.clientKey)
-    const created = api.terminals.create(
+    const created = await api.terminals.create(
       scopeKey,
       cwd,
       body.clientKey,

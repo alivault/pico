@@ -131,6 +131,9 @@ export type HostTerminals = Pick<
   | "writeForAgent"
   | "device"
   | "sessionShells"
+  | "adoptJob"
+  | "forgetJob"
+  | "stats"
 >
 
 export type HostServices = {

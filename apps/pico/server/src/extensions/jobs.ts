@@ -32,13 +32,14 @@ import { childCommandRefusal } from "../core/coding-tools.ts"
 import {
   deleteJobLog,
   jobLogParts,
-  JobLogWriter,
   plainLine,
   readLogTailLines,
   readLogTailRaw,
   scanLogLines,
 } from "../services/job-log.ts"
 import { InputWaitWatcher, readTerminalMode } from "../services/input-wait.ts"
+import type { PtyEnd } from "../services/pty-backend.ts"
+import type { JobHandlers } from "../services/terminal.ts"
 import { KEY_NAMES, keyBytes } from "../services/terminal-keys.ts"
 import { loginShell } from "../services/terminal.ts"
 import {
@@ -375,7 +376,29 @@ class JobRunner {
     conversationId: ConversationId,
     job: Job
   ) {
-    const log = new JobLogWriter(this.#dataDir, job.id)
+    const { live, handlers } = this.#prepare(services, conversationId, job)
+    let spawned: Awaited<ReturnType<HostServices["terminals"]["spawnJob"]>>
+    try {
+      spawned = await services.terminals.spawnJob(
+        job.id,
+        job.command,
+        job.cwd,
+        handlers
+      )
+    } catch (error) {
+      this.#live.delete(job.id)
+      this.#exits.delete(job.id)
+      throw error
+    }
+    this.#watch(services, live, spawned.device)
+    return spawned
+  }
+
+  /**
+   * The live state of a job and the handlers of its terminal: shared by a
+   * new job and a job that the pty-host kept over a server restart.
+   */
+  #prepare(services: HostServices, conversationId: ConversationId, job: Job) {
     let resolveExit!: (exit: { exitCode: number; signal?: number }) => void
     this.#exits.set(
       job.id,
@@ -392,10 +415,9 @@ class JobRunner {
       outputListeners: new Set(),
     }
     this.#live.set(job.id, live)
-    const spawned = services.terminals.spawnJob(job.id, job.command, job.cwd, {
+    const handlers: JobHandlers = {
       label: job.name,
       onOutput: (data) => {
-        log.write(data)
         live.watcher?.output(data)
         this.#matchOutput(live, data)
         for (const listener of live.outputListeners) listener()
@@ -417,22 +439,28 @@ class JobRunner {
         }
       },
       onExit: (exit) => {
-        log.end()
         live.watcher?.stop()
         this.#live.delete(job.id)
-        // The log has all the output: viewers read it from there.
+        // The log has all the output (the backend closed it before the
+        // exit): viewers read it from there.
         services.terminals.releaseJobOutput(job.id, (maxBytes) =>
           readLogTailRaw(jobLogParts(this.#dataDir, job.id), maxBytes)
         )
         let reported = false
-        for (const waiter of live.waiters)
-          if (waiter({ type: "exit", ...exit })) reported = true
+        if (!exit.lost)
+          for (const waiter of live.waiters)
+            if (waiter({ type: "exit", ...exit })) reported = true
         resolveExit(exit)
         void this.#finished(services, conversationId, job, exit, reported)
       },
-    })
-    if (spawned.device) live.device = spawned.device
-    live.watcher = new InputWaitWatcher(spawned.device, {
+    }
+    return { live, handlers }
+  }
+
+  #watch(services: HostServices, live: LiveJob, device: string | undefined) {
+    const { job, conversationId } = live
+    if (device) live.device = device
+    live.watcher = new InputWaitWatcher(device, {
       waiting: (prompt, secret) =>
         void this.#waiting(services, live, prompt, secret),
       resumed: () => {
@@ -459,7 +487,6 @@ class JobRunner {
         ).catch(() => undefined)
       },
     })
-    return spawned
   }
 
   /** The job started to wait for input: record it, and tell the agent once. */
@@ -702,13 +729,24 @@ class JobRunner {
     services: HostServices,
     conversationId: ConversationId,
     job: Job,
-    exit: { exitCode: number; signal?: number },
-    reported = false
+    exit: PtyEnd,
+    reported = false,
+    whileDown = false
   ) {
     this.#exits.delete(job.id)
     // The server stops this job as it shuts down: leave the record running,
-    // so the next start reports it as lost.
+    // so the next start finds it again (pty-host) or reports it as lost.
     if (this.#host.stopping) return
+    if (exit.lost) {
+      await this.#lost(
+        services,
+        conversationId,
+        job.id,
+        job,
+        "the pty-host stopped"
+      )
+      return
+    }
     const stopped = this.#stopping.has(job.id)
     this.#stopping.delete(job.id)
     try {
@@ -725,6 +763,8 @@ class JobRunner {
         BACKGROUND_CONTEXT,
         this.#dataDir
       )
+      // The record has the end: the pty-host may drop the job.
+      services.terminals.forgetJob(job.id)
       // A wait that saw the exit told the agent already.
       if (job.notifyOnExit && !stopped && !reported) {
         const output = await readJobLog(this.#dataDir, job.id, 40)
@@ -732,7 +772,7 @@ class JobRunner {
           services,
           conversationId,
           [
-            `[Job ${exit.exitCode === 0 ? "finished" : "failed"}] ${job.name} exited with code ${exit.exitCode} after ${formatDuration(Date.now() - job.startedAt)}.`,
+            `[Job ${exit.exitCode === 0 ? "finished" : "failed"}] ${job.name} exited with code ${exit.exitCode} after ${formatDuration(Date.now() - job.startedAt)}${whileDown ? ", while the Pico server restarted" : ""}.`,
             `(job ${job.id}: ${job.command})`,
             "Last output:",
             clip(output, 4000) || "(no output)",
@@ -759,7 +799,10 @@ class JobRunner {
     return stopped
   }
 
-  /** At startup: running jobs of an earlier process are lost. */
+  /**
+   * At startup: take over the running jobs that the pty-host kept, record the
+   * jobs that ended while the server was down, and mark the others lost.
+   */
   async recover(services: HostServices) {
     const index = await services.harness.snapshot(
       JobIndexDoc,
@@ -774,7 +817,7 @@ class JobRunner {
     for (const [jobId, conversationNumber] of Object.entries(
       index?.running ?? {}
     )) {
-      if (services.terminals.jobRunning(jobId)) continue
+      if (this.#live.has(jobId)) continue
       const conversationId = conversationNumber as unknown as ConversationId
       const jobs = await services.harness.snapshot(
         JobsDoc,
@@ -782,25 +825,68 @@ class JobRunner {
         BACKGROUND_CONTEXT
       )
       const job = jobs?.items[jobId]
-      await changeJob(
-        services.harness,
+      if (job) {
+        const { live, handlers } = this.#prepare(services, conversationId, job)
+        const adopted = services.terminals.adoptJob(jobId, handlers)
+        if (adopted && !adopted.exited) {
+          this.#watch(services, live, adopted.device)
+          continue
+        }
+        this.#live.delete(jobId)
+        this.#exits.delete(jobId)
+        if (adopted?.exited) {
+          services.terminals.releaseJobOutput(jobId, (maxBytes) =>
+            readLogTailRaw(jobLogParts(this.#dataDir, jobId), maxBytes)
+          )
+          await this.#finished(
+            services,
+            conversationId,
+            job,
+            adopted.exited,
+            false,
+            true
+          )
+          continue
+        }
+      }
+      await this.#lost(
+        services,
         conversationId,
         jobId,
-        { status: "lost", endedAt: Date.now() },
-        BACKGROUND_CONTEXT,
-        this.#dataDir
+        job,
+        "the Pico server restarted"
       )
-      if (job?.notifyOnExit) {
-        await notifySession(
-          services,
-          conversationId,
-          [
-            `[Job lost] ${job.name} stopped because the Pico server restarted. Its output is in job_output ${jobId}.`,
-            `(job ${jobId}: ${job.command})`,
-          ].join("\n"),
-          `job:${jobId}:lost`
-        ).catch(() => undefined)
-      }
+    }
+  }
+
+  async #lost(
+    services: HostServices,
+    conversationId: ConversationId,
+    jobId: string,
+    job: Job | undefined,
+    reason: string
+  ) {
+    await changeJob(
+      services.harness,
+      conversationId,
+      jobId,
+      { status: "lost", endedAt: Date.now() },
+      BACKGROUND_CONTEXT,
+      this.#dataDir
+    ).catch((error: unknown) =>
+      console.warn(`[pico] could not record that job ${jobId} is lost:`, error)
+    )
+    services.terminals.forgetJob(jobId)
+    if (job?.notifyOnExit) {
+      await notifySession(
+        services,
+        conversationId,
+        [
+          `[Job lost] ${job.name} stopped because ${reason}. Its output is in job_output ${jobId}.`,
+          `(job ${jobId}: ${job.command})`,
+        ].join("\n"),
+        `job:${jobId}:lost`
+      ).catch(() => undefined)
     }
   }
 }

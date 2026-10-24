@@ -11,10 +11,13 @@ void test("PTY runs a shell, scopes access, and replays output", async () => {
   try {
     const previousShell = process.env.PICO_TERMINAL_SHELL
     process.env.PICO_TERMINAL_SHELL = "/bin/sh"
-    const terminal = terminals.create("scope", tmpdir(), "test", 80, 24)
+    const terminal = await terminals.create("scope", tmpdir(), "test", 80, 24)
     if (previousShell === undefined) delete process.env.PICO_TERMINAL_SHELL
     else process.env.PICO_TERMINAL_SHELL = previousShell
-    assert.equal(terminals.create("scope", tmpdir(), "test").id, terminal.id)
+    assert.equal(
+      (await terminals.create("scope", tmpdir(), "test")).id,
+      terminal.id
+    )
     assert.throws(
       () => terminals.write("other", terminal.id, "echo bad\r", undefined),
       /session/
@@ -80,16 +83,21 @@ void test("two viewers of a job do not drop each other's input", async () => {
   try {
     let output = ""
     let exited = false
-    terminals.spawnJob("jviewers", "read a; read b; echo got-$a-$b", tmpdir(), {
-      label: "read two lines",
-      onOutput: (data) => {
-        output += data
-      },
-      onExit: () => {
-        exited = true
-      },
-    })
-    const created = terminals.create("a", tmpdir(), "job:jviewers")
+    await terminals.spawnJob(
+      "jviewers",
+      "read a; read b; echo got-$a-$b",
+      tmpdir(),
+      {
+        label: "read two lines",
+        onOutput: (data) => {
+          output += data
+        },
+        onExit: () => {
+          exited = true
+        },
+      }
+    )
+    const created = await terminals.create("a", tmpdir(), "job:jviewers")
     assert.equal(created.label, "read two lines")
     assert.equal(created.jobId, "jviewers")
     const first = terminals.subscribe(
@@ -139,14 +147,14 @@ void test("an exited job drops its backlog and replays its log", async () => {
   const terminals = new Terminals()
   try {
     let exited = false
-    terminals.spawnJob("jreplay", "echo in-memory", tmpdir(), {
+    await terminals.spawnJob("jreplay", "echo in-memory", tmpdir(), {
       onOutput: () => undefined,
       onExit: () => {
         exited = true
       },
     })
     await waitFor(() => exited)
-    const { id } = terminals.create("scope", tmpdir(), "job:jreplay")
+    const { id } = await terminals.create("scope", tmpdir(), "job:jreplay")
     const before = terminals.subscribe("scope", id, undefined, () => undefined)
     assert.ok(
       before.initial.some(
@@ -178,7 +186,7 @@ void test("an exited job drops its backlog and replays its log", async () => {
   }
 })
 
-void test("a finished job without a terminal shows its log", () => {
+void test("a finished job without a terminal shows its log", async () => {
   const terminals = new Terminals()
   try {
     assert.equal(terminals.hasJob("jgone"), false)
@@ -188,7 +196,7 @@ void test("a finished job without a terminal shows its log", () => {
       exit: { exitCode: 2 },
       replay: () => "old output\r\n",
     })
-    const created = terminals.create("any", tmpdir(), "job:jgone")
+    const created = await terminals.create("any", tmpdir(), "job:jgone")
     assert.equal(created.label, "build")
     const view = terminals.subscribe("other", created.id, undefined, () => {})
     assert.deepEqual(
@@ -244,12 +252,17 @@ void test("agents read a live terminal's screen and type into it", async () => {
   const terminals = new Terminals()
   try {
     let exited = false
-    const { terminalId } = terminals.spawnJob("jscreen", "cat", tmpdir(), {
-      onOutput: () => undefined,
-      onExit: () => {
-        exited = true
-      },
-    })
+    const { terminalId } = await terminals.spawnJob(
+      "jscreen",
+      "cat",
+      tmpdir(),
+      {
+        onOutput: () => undefined,
+        onExit: () => {
+          exited = true
+        },
+      }
+    )
     terminals.writeForAgent(terminalId, "ping\r")
     await waitFor(() => false, 300).catch(() => undefined)
     const recent = await terminals.readText(terminalId, "recent", 10)
@@ -269,7 +282,7 @@ void test("agents read a live terminal's screen and type into it", async () => {
 void test("a shared terminal takes the size of the viewer the user used last", async () => {
   const terminals = new Terminals()
   try {
-    const { terminalId } = terminals.spawnJob("jsize", "cat", tmpdir(), {
+    const { terminalId } = await terminals.spawnJob("jsize", "cat", tmpdir(), {
       onOutput: () => undefined,
       onExit: () => undefined,
     })
