@@ -1233,6 +1233,8 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
 
   const terminalTool = defineTool({
     name: "terminal",
+    // Actions on one terminal depend on each other: run calls in order.
+    executionMode: "sequential",
     description: [
       "Use terminals: your jobs (from job_start or open) and the user's terminal tabs of this session.",
       'Actions: list; open (a shell, or `command`, in a new terminal; it is a job); read (source visible: the screen now, for full-screen programs; recent: the last `lines` with scrollback); wait (until a line matches `pattern`, the job waits for input, or exits); send_text (type `text`, with `enter` to press Enter); send_keys (`keys`, for example ["up", "enter"] or ["ctrl+c"]); focus (bring the user to the terminal with `prompt`, only when the user is needed: a password, a login, a choice that is the user\'s); close (remove a finished job and its log).',

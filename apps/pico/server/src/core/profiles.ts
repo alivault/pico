@@ -39,11 +39,7 @@ export type ToolLimits = {
 }
 
 /** Tools that a child session does not get unless its parent grants them. */
-export const CHILD_DENIED_TOOLS = [
-  "ask_user",
-  "notify",
-  "spawn_session",
-]
+export const CHILD_DENIED_TOOLS = ["ask_user", "notify", "spawn_session"]
 
 const WRITE_TOOLS = [
   "write",
