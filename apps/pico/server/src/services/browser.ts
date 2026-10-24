@@ -143,7 +143,7 @@ export class BrowserManager {
    * no context remains.
    */
   async closeIdle(now = Date.now()) {
-    for (const id of [...this.#sessions.keys()]) {
+    for (const id of this.#sessions.keys()) {
       const idleMs = this.#idleMs ?? (this.#headed ? HEADED_IDLE_MS : IDLE_MS)
       if (now - (this.#lastUsed.get(id) ?? 0) < idleMs) continue
       await this.closeSession(id).catch(() => undefined)

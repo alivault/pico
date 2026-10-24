@@ -115,6 +115,9 @@ const KEEP_FINISHED = 30
 /** Job logs older than this go at startup (see `deleteOldJobLogs`). */
 const OLD_LOG_MS = 7 * 24 * 60 * 60 * 1000
 
+/** How long `job_wait` waits for an exit after a match. */
+const EXIT_SETTLE_MS = 1000
+
 /** Plain-text lines that `job_output` and `job_status` show at most. */
 const MAX_TAIL_LINES = 1000
 
@@ -144,10 +147,14 @@ function describeJob(job: Job, now = Date.now()) {
 
 function describeWait(job: Job, result: WaitResult) {
   switch (result.type) {
-    case "match":
-      return result.earlier
+    case "match": {
+      const found = result.earlier
         ? `Found in earlier output${result.number ? ` (line ${result.number})` : ""}: ${result.line}`
         : `Matched new output: ${result.line}`
+      return result.exit
+        ? `${found}\nThen the job exited with code ${result.exit.exitCode}.`
+        : found
+    }
     case "waiting":
       return `The job waits for input${result.secret ? " with echo off (a password or secret: only the user can type it)" : ""}. Last line: ${result.prompt || "(empty)"}\nUse job_focus to bring the user to its terminal.`
     case "exit":
@@ -283,7 +290,14 @@ type WaitEvent =
 type Waiter = (event: WaitEvent) => boolean
 
 export type WaitResult =
-  | { type: "match"; line: string; number?: number; earlier?: boolean }
+  | {
+      type: "match"
+      line: string
+      number?: number
+      earlier?: boolean
+      /** The job exited right after the match. */
+      exit?: { exitCode: number }
+    }
   | { type: "waiting"; prompt: string; secret: boolean }
   | { type: "exit"; exitCode: number; signal?: number }
   | { type: "ended" }
@@ -372,7 +386,7 @@ class JobRunner {
           readLogTailRaw(jobLogParts(this.#dataDir, job.id), maxBytes)
         )
         let reported = false
-        for (const waiter of [...live.waiters])
+        for (const waiter of live.waiters)
           if (waiter({ type: "exit", ...exit })) reported = true
         resolveExit(exit)
         void this.#finished(services, conversationId, job, exit, reported)
@@ -418,7 +432,7 @@ class JobRunner {
     const { job, conversationId } = live
     live.episode += 1
     let reported = false
-    for (const waiter of [...live.waiters])
+    for (const waiter of live.waiters)
       if (waiter({ type: "waiting", prompt, secret })) reported = true
     if (reported || job.notifyOnExit) live.reported = live.episode
     try {
@@ -460,7 +474,7 @@ class JobRunner {
     const open = plainLine(live.partial)
     if (open.trim()) lines.push(open)
     for (const line of lines)
-      for (const waiter of [...live.waiters]) waiter({ type: "line", line })
+      for (const waiter of live.waiters) waiter({ type: "line", line })
   }
 
   /**
@@ -522,10 +536,13 @@ class JobRunner {
         if (found) finish({ type: "match", ...found, earlier: true })
       }
       if (!live) return done ? await result : { type: "ended" }
-      // A wait that the agent knows of already does not end this call: the
-      // call waits for what the input brings.
+      // A wait ends this call at once, unless the agent knows of it and
+      // waits for what the user's input brings: a pattern, or a focus
+      // request that is open.
       const waiting = live.watcher?.waiting
-      if (waiting && live.reported !== live.episode) {
+      const known =
+        live.reported === live.episode && (options.match || live.focused)
+      if (waiting && !known) {
         live.reported = live.episode
         finish({ type: "waiting", ...waiting })
       }
@@ -537,7 +554,27 @@ class JobRunner {
       const onAbort = () => finish({ type: "aborted" })
       options.signal?.addEventListener("abort", onAbort, { once: true })
       try {
-        return await result
+        const value = await result
+        if (value.type !== "match" || !this.#live.has(jobId)) return value
+        // A job often exits right after the line the agent waits for: take
+        // the exit into this result, so no exit message follows.
+        const exit = await new Promise<WaitResult | undefined>((resolve) => {
+          const settle = setTimeout(() => {
+            live.waiters.delete(onExit)
+            resolve(undefined)
+          }, EXIT_SETTLE_MS)
+          const onExit: Waiter = (event) => {
+            if (event.type !== "exit") return false
+            clearTimeout(settle)
+            live.waiters.delete(onExit)
+            resolve(event)
+            return true
+          }
+          live.waiters.add(onExit)
+        })
+        return exit?.type === "exit"
+          ? { ...value, exit: { exitCode: exit.exitCode } }
+          : value
       } finally {
         clearTimeout(timer)
         options.signal?.removeEventListener("abort", onAbort)

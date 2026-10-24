@@ -404,6 +404,9 @@ void test("a job that asks for a password waits, takes focus, and goes on after 
     // The steer about the wait did not come: job_wait reported it.
     const users = await userEntries(conversation)
     assert.ok(!users.some((entry) => entry.includes("[Job waits for input]")))
+    // job_wait saw the exit right after the match: no exit message either.
+    assert.ok(results.some((result) => /exited with code 0/.test(result)))
+    assert.ok(!users.some((entry) => entry.includes("[Job finished]")))
   } finally {
     terminals.shutdown()
     await harness.close(ctx)
