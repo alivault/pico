@@ -175,3 +175,29 @@ void test("an exited job drops its backlog and replays its log", async () => {
     terminals.shutdown()
   }
 })
+
+void test("a finished job without a terminal shows its log", () => {
+  const terminals = new Terminals()
+  try {
+    assert.equal(terminals.hasJob("jgone"), false)
+    terminals.addFinishedJob("jgone", {
+      label: "build",
+      cwd: tmpdir(),
+      exit: { exitCode: 2 },
+      replay: () => "old output\r\n",
+    })
+    const created = terminals.create("any", tmpdir(), "job:jgone")
+    assert.equal(created.label, "build")
+    const view = terminals.subscribe("other", created.id, undefined, () => {})
+    assert.deepEqual(
+      view.initial.slice(1).map((event) => event.type),
+      ["output", "exit"]
+    )
+    const exit = view.initial.at(-1)
+    if (exit?.type === "exit") assert.equal(exit.exitCode, 2)
+    assert.throws(() => terminals.write("any", created.id, "x", 1), /exited/)
+    view.unsubscribe()
+  } finally {
+    terminals.shutdown()
+  }
+})

@@ -31,10 +31,12 @@ import {
   deleteJobLog,
   jobLogParts,
   JobLogWriter,
+  plainLine,
   readLogTailLines,
   readLogTailRaw,
   scanLogLines,
 } from "../services/job-log.ts"
+import { InputWaitWatcher } from "../services/input-wait.ts"
 import {
   conversationOf,
   sessionIdOf,
@@ -65,6 +67,26 @@ export type Job = {
   endedAt?: number
   notifyOnExit: boolean
   pid?: number
+  /** The job waits for input (see `services/input-wait.ts`). */
+  waiting?: { since: number; prompt: string; secret: boolean }
+  /** The agent asked the user to type into the job (`job_focus`). */
+  focus?: { prompt: string; at: number }
+}
+
+/** A running job that needs the user now: it waits for input, or the agent asked for the user. */
+export function jobNeedingUser(state: JobsState | null | undefined) {
+  for (const job of Object.values(state?.items ?? {})) {
+    if (job.status !== "running") continue
+    if (job.focus)
+      return { jobId: job.id, name: job.name, prompt: job.focus.prompt }
+    if (job.waiting)
+      return {
+        jobId: job.id,
+        name: job.name,
+        prompt: job.waiting.prompt || "The job waits for input.",
+      }
+  }
+  return undefined
 }
 
 export type JobsState = { items: Record<string, Job> }
@@ -113,7 +135,32 @@ function describeJob(job: Job, now = Date.now()) {
       : job.status === "exited"
         ? `exited with code ${job.exitCode} after ${runtime}`
         : `${job.status} after ${runtime}`
-  return `${job.id} (${job.name}) ${state}: ${job.command}`
+  const waiting =
+    job.status === "running" && job.waiting
+      ? `, waits for input${job.waiting.secret ? " (echo off)" : ""}: ${clip(job.waiting.prompt, 200)}`
+      : ""
+  return `${job.id} (${job.name}) ${state}${waiting}: ${job.command}`
+}
+
+function describeWait(job: Job, result: WaitResult) {
+  switch (result.type) {
+    case "match":
+      return result.earlier
+        ? `Found in earlier output${result.number ? ` (line ${result.number})` : ""}: ${result.line}`
+        : `Matched new output: ${result.line}`
+    case "waiting":
+      return `The job waits for input${result.secret ? " with echo off (a password or secret: only the user can type it)" : ""}. Last line: ${result.prompt || "(empty)"}\nUse job_focus to bring the user to its terminal.`
+    case "exit":
+      return `The job exited with code ${result.exitCode}${result.signal ? ` (signal ${result.signal})` : ""}.`
+    case "ended":
+      return `The job does not run (${job.status}).`
+    case "timeout":
+      return job.waiting
+        ? `Timed out. The job still waits for input: ${job.waiting.prompt || "(empty)"}`
+        : "Timed out. The job still runs."
+    case "aborted":
+      return "The wait was stopped."
+  }
 }
 
 async function changeJob(
@@ -133,6 +180,10 @@ async function changeJob(
     )) as unknown as JobsState
     const job = draft.items[jobId]
     if (job) Object.assign(job, json(change))
+    if (job && change.status && change.status !== "running") {
+      delete job.waiting
+      delete job.focus
+    }
     if (change.status && change.status !== "running") {
       const index = await tx.doc(JobIndexDoc)
       delete index.running[jobId]
@@ -150,6 +201,24 @@ async function changeJob(
   }, context)
   // A job without a record has no use for its log.
   if (dataDir) for (const id of pruned) deleteJobLog(dataDir, id)
+}
+
+/** Change a job record in place; nothing when it is gone or finished. */
+async function editRunningJob(
+  harness: Pick<Harness, "commit">,
+  conversationId: ConversationId,
+  jobId: string,
+  edit: (job: Job) => void,
+  context: Context
+) {
+  await harness.commit(async (tx) => {
+    const draft = (await tx.doc(
+      JobsDoc,
+      conversationId
+    )) as unknown as JobsState
+    const job = draft.items[jobId]
+    if (job?.status === "running") edit(job)
+  }, context)
 }
 
 /** Send a steer to the session of a conversation, or its replacement (see `notifyAgent`). */
@@ -205,6 +274,36 @@ export async function deleteOldJobLogs(
   return deleted
 }
 
+type WaitEvent =
+  | { type: "line"; line: string }
+  | { type: "waiting"; prompt: string; secret: boolean }
+  | { type: "exit"; exitCode: number; signal?: number }
+
+/** Takes an event; true when it reported a waiting or exit event to the agent. */
+type Waiter = (event: WaitEvent) => boolean
+
+export type WaitResult =
+  | { type: "match"; line: string; number?: number; earlier?: boolean }
+  | { type: "waiting"; prompt: string; secret: boolean }
+  | { type: "exit"; exitCode: number; signal?: number }
+  | { type: "ended" }
+  | { type: "timeout" }
+  | { type: "aborted" }
+
+type LiveJob = {
+  job: Job
+  conversationId: ConversationId
+  watcher?: InputWaitWatcher
+  waiters: Set<Waiter>
+  /** The open line of output, for waiters. */
+  partial: string
+  /** Counts the times the job started to wait, for request IDs. */
+  episode: number
+  /** The last wait that the agent was told of. */
+  reported?: number
+  focused?: boolean
+}
+
 /** The jobs that run in this process, with their open log files. */
 class JobRunner {
   readonly #host: HostBridge
@@ -213,6 +312,7 @@ class JobRunner {
     string,
     Promise<{ exitCode: number; signal?: number }>
   >()
+  readonly #live = new Map<string, LiveJob>()
 
   constructor(host: HostBridge, dataDir: string) {
     this.#host = host
@@ -232,20 +332,230 @@ class JobRunner {
         resolveExit = resolve
       })
     )
+    const live: LiveJob = {
+      job,
+      conversationId,
+      waiters: new Set(),
+      partial: "",
+      episode: 0,
+    }
+    this.#live.set(job.id, live)
     const spawned = services.terminals.spawnJob(job.id, job.command, job.cwd, {
       label: job.name,
-      onOutput: (data) => log.write(data),
+      onOutput: (data) => {
+        log.write(data)
+        live.watcher?.output(data)
+        this.#matchOutput(live, data)
+      },
+      onInput: (data) => {
+        live.watcher?.input(data)
+        // Enter in the terminal answers a focus request.
+        if (/[\r\n]/.test(data) && live.focused) {
+          live.focused = false
+          void editRunningJob(
+            services.harness,
+            conversationId,
+            job.id,
+            (draft) => {
+              delete draft.focus
+            },
+            BACKGROUND_CONTEXT
+          ).catch(() => undefined)
+        }
+      },
       onExit: (exit) => {
         log.end()
+        live.watcher?.stop()
+        this.#live.delete(job.id)
         // The log has all the output: viewers read it from there.
         services.terminals.releaseJobOutput(job.id, (maxBytes) =>
           readLogTailRaw(jobLogParts(this.#dataDir, job.id), maxBytes)
         )
+        let reported = false
+        for (const waiter of [...live.waiters])
+          if (waiter({ type: "exit", ...exit })) reported = true
         resolveExit(exit)
-        void this.#finished(services, conversationId, job, exit)
+        void this.#finished(services, conversationId, job, exit, reported)
+      },
+    })
+    live.watcher = new InputWaitWatcher(spawned.device, {
+      waiting: (prompt, secret) =>
+        void this.#waiting(services, live, prompt, secret),
+      resumed: () => {
+        void editRunningJob(
+          services.harness,
+          conversationId,
+          job.id,
+          (draft) => {
+            delete draft.waiting
+          },
+          BACKGROUND_CONTEXT
+        ).catch(() => undefined)
+      },
+      ignored: (prompt, secret) => {
+        if (!job.notifyOnExit) return
+        void notifySession(
+          services,
+          conversationId,
+          [
+            `[Job input not taken] The user pressed Enter in ${job.name} (job ${job.id}), but the job shows no new output after a few seconds and still waits for input${secret ? " (echo is off: a password or secret)" : ""}.`,
+            `Last line: ${clip(prompt, 300) || "(empty)"}`,
+          ].join("\n"),
+          `job:${job.id}:ignored:${Date.now()}`
+        ).catch(() => undefined)
       },
     })
     return spawned
+  }
+
+  /** The job started to wait for input: record it, and tell the agent once. */
+  async #waiting(
+    services: HostServices,
+    live: LiveJob,
+    prompt: string,
+    secret: boolean
+  ) {
+    const { job, conversationId } = live
+    live.episode += 1
+    let reported = false
+    for (const waiter of [...live.waiters])
+      if (waiter({ type: "waiting", prompt, secret })) reported = true
+    if (reported || job.notifyOnExit) live.reported = live.episode
+    try {
+      await editRunningJob(
+        services.harness,
+        conversationId,
+        job.id,
+        (draft) => {
+          draft.waiting = { since: Date.now(), prompt, secret }
+        },
+        BACKGROUND_CONTEXT
+      )
+      if (reported || !job.notifyOnExit) return
+      await notifySession(
+        services,
+        conversationId,
+        [
+          `[Job waits for input] ${job.name} (job ${job.id}) waits for input${secret ? " with echo off: a password or secret, so only the user can type it" : ""}.`,
+          `Last line: ${clip(prompt, 300) || "(empty)"}`,
+          "Use job_focus to bring the user to its terminal, then job_wait for the result. Or stop it with job_stop.",
+        ].join("\n"),
+        `job:${job.id}:waiting:${live.episode}`
+      )
+    } catch (error) {
+      console.warn(`[pico] could not record that job ${job.id} waits:`, error)
+    }
+  }
+
+  /** Give new output lines to the waiters of a job. */
+  #matchOutput(live: LiveJob, data: string) {
+    if (live.waiters.size === 0) {
+      live.partial = ""
+      return
+    }
+    const parts = (live.partial + data).split("\n")
+    live.partial = (parts.pop() ?? "").slice(-4096)
+    const lines = parts.map((line) => plainLine(line))
+    // A prompt has no line break yet: test the open line too.
+    const open = plainLine(live.partial)
+    if (open.trim()) lines.push(open)
+    for (const line of lines)
+      for (const waiter of [...live.waiters]) waiter({ type: "line", line })
+  }
+
+  /**
+   * Wait until a line of output matches, the job waits for input, or it
+   * exits. Existing output is searched first.
+   */
+  async waitFor(
+    jobId: string,
+    options: {
+      match?: (line: string) => boolean
+      timeoutMs: number
+      signal?: AbortSignal
+      newOnly?: boolean
+    }
+  ): Promise<WaitResult> {
+    const live = this.#live.get(jobId)
+    let resolveResult!: (result: WaitResult) => void
+    const result = new Promise<WaitResult>((resolve) => {
+      resolveResult = resolve
+    })
+    let done = false
+    const finish = (value: WaitResult) => {
+      if (done) return false
+      done = true
+      resolveResult(value)
+      return true
+    }
+    const waiter: Waiter = (event) => {
+      if (event.type === "line") {
+        if (options.match?.(event.line))
+          finish({ type: "match", line: event.line })
+        return false
+      }
+      if (event.type === "waiting")
+        return finish({
+          type: "waiting",
+          prompt: event.prompt,
+          secret: event.secret,
+        })
+      return finish({
+        type: "exit",
+        exitCode: event.exitCode,
+        ...(event.signal ? { signal: event.signal } : {}),
+      })
+    }
+    // Listen first, so no output falls between the search and the wait.
+    live?.waiters.add(waiter)
+    try {
+      if (options.match && !options.newOnly) {
+        let found: { line: string; number: number } | undefined
+        await scanLogLines(
+          jobLogParts(this.#dataDir, jobId),
+          (line, number) => {
+            if (!options.match!(line)) return
+            found = { line, number }
+            return false
+          }
+        )
+        if (found) finish({ type: "match", ...found, earlier: true })
+      }
+      if (!live) return done ? await result : { type: "ended" }
+      // A wait that the agent knows of already does not end this call: the
+      // call waits for what the input brings.
+      const waiting = live.watcher?.waiting
+      if (waiting && live.reported !== live.episode) {
+        live.reported = live.episode
+        finish({ type: "waiting", ...waiting })
+      }
+      const timer = setTimeout(
+        () => finish({ type: "timeout" }),
+        options.timeoutMs
+      )
+      timer.unref()
+      const onAbort = () => finish({ type: "aborted" })
+      options.signal?.addEventListener("abort", onAbort, { once: true })
+      try {
+        return await result
+      } finally {
+        clearTimeout(timer)
+        options.signal?.removeEventListener("abort", onAbort)
+      }
+    } finally {
+      live?.waiters.delete(waiter)
+    }
+  }
+
+  /** Whether a job runs in this process. */
+  running(jobId: string) {
+    return this.#live.has(jobId)
+  }
+
+  /** Mark that the agent asked the user to type into a job. */
+  markFocused(jobId: string) {
+    const live = this.#live.get(jobId)
+    if (live) live.focused = true
   }
 
   /** Wait up to `ms` for a job to exit; undefined when it still runs. */
@@ -264,7 +574,8 @@ class JobRunner {
     services: HostServices,
     conversationId: ConversationId,
     job: Job,
-    exit: { exitCode: number; signal?: number }
+    exit: { exitCode: number; signal?: number },
+    reported = false
   ) {
     this.#exits.delete(job.id)
     // The server stops this job as it shuts down: leave the record running,
@@ -286,7 +597,8 @@ class JobRunner {
         BACKGROUND_CONTEXT,
         this.#dataDir
       )
-      if (job.notifyOnExit && !stopped) {
+      // A job_wait call that saw the exit told the agent already.
+      if (job.notifyOnExit && !stopped && !reported) {
         const output = await readJobLog(this.#dataDir, job.id, 40)
         await notifySession(
           services,
@@ -308,8 +620,8 @@ class JobRunner {
   readonly #stopping = new Set<string>()
 
   /** The end of the plain-text log of a job. */
-  log(jobId: string) {
-    return readJobLog(this.#dataDir, jobId)
+  log(jobId: string, lines?: number) {
+    return readJobLog(this.#dataDir, jobId, lines)
   }
 
   stop(services: Pick<HostServices, "terminals">, jobId: string) {
@@ -616,11 +928,110 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     },
   })
 
+  const waitTool = defineTool({
+    name: "job_wait",
+    description: [
+      "Wait until a background job prints a line that matches `pattern`, waits for input, or exits, up to `timeout_ms`.",
+      "Output that the job printed before is searched first (set new_only to skip it).",
+      "Without a pattern, wait for input or the exit. Use it after job_start for a command that may prompt, and after job_focus to see the result.",
+    ].join(" "),
+    parameters: Type.Object({
+      id: Type.String(),
+      pattern: Type.Optional(
+        Type.String({ description: "Text to find in one line of output" })
+      ),
+      regex: Type.Optional(
+        Type.Boolean({
+          description:
+            "Read pattern as a regular expression (case-insensitive)",
+        })
+      ),
+      new_only: Type.Optional(Type.Boolean()),
+      timeout_ms: Type.Optional(
+        Type.Number({ description: "Default 60000, max 1800000" })
+      ),
+    }),
+    async execute(args, api, context) {
+      const job = await jobFor(api, args.id, context)
+      if (!job) return errorResult(`No job with id ${args.id}`)
+      let match: ((line: string) => boolean) | undefined
+      if (args.pattern) {
+        const pattern = args.pattern
+        if (args.regex) {
+          let expression: RegExp
+          try {
+            expression = new RegExp(pattern, "i")
+          } catch {
+            return errorResult(`Invalid pattern: ${pattern}`)
+          }
+          match = (line) => expression.test(line)
+        } else match = (line) => line.includes(pattern)
+      }
+      const timeoutMs = Math.min(
+        1_800_000,
+        Math.max(0, args.timeout_ms ?? 60_000)
+      )
+      const result = await runner.waitFor(job.id, {
+        ...(match ? { match } : {}),
+        timeoutMs,
+        ...(context.abortSignal ? { signal: context.abortSignal } : {}),
+        ...(args.new_only ? { newOnly: true } : {}),
+      })
+      const output = await readJobLog(dataDir, job.id, 15)
+      return textResult(
+        [
+          describeWait(job, result),
+          output ? `Last output:\n${clip(output, 3000)}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        { details: { id: job.id, result: result.type } }
+      )
+    },
+  })
+
+  const focusTool = defineTool({
+    name: "job_focus",
+    executionMode: "sequential",
+    description: [
+      "Bring the user to a running job's terminal, when only the user can go on: a password, a passphrase, a login, or a choice that is the user's to make.",
+      "The user's client opens the job's tab with your prompt, and the user gets a notification. Then call job_wait to see the result.",
+      "Do not use it for jobs that do not need the user.",
+    ].join(" "),
+    parameters: Type.Object({
+      id: Type.String(),
+      prompt: Type.String({
+        description:
+          'One short line for the user, for example "Type your password for asahi"',
+      }),
+    }),
+    async execute(args, api, context) {
+      const job = await jobFor(api, args.id, context)
+      if (!job) return errorResult(`No job with id ${args.id}`)
+      if (job.status !== "running" || !runner.running(job.id))
+        return errorResult(`Job ${job.id} does not run (${job.status}).`)
+      const prompt = args.prompt.trim().slice(0, 200) || "Type in the terminal"
+      await editRunningJob(
+        api,
+        api.conversationId,
+        job.id,
+        (draft) => {
+          draft.focus = { prompt, at: Date.now() }
+        },
+        context
+      )
+      runner.markFocused(job.id)
+      return textResult(
+        `Asked the user to type in the terminal of ${job.name}: "${prompt}". Pico shows the tab when the user opens this session, and sends a notification. Call job_wait to see the result.`
+      )
+    },
+  })
+
   return {
     runner,
     extension: defineExtension({
       name: "jobs",
-      tools: [startTool, statusTool, outputTool, stopTool],
+      tools: [startTool, statusTool, outputTool, waitTool, focusTool, stopTool],
     }),
   }
 }

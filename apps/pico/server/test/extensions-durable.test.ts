@@ -12,6 +12,7 @@ import { HostBridge, type HostServices } from "../src/extensions/host.ts"
 import {
   createJobsExtension,
   deleteOldJobLogs,
+  jobNeedingUser,
   JobsDoc,
   plainText,
 } from "../src/extensions/jobs.ts"
@@ -291,6 +292,165 @@ void test("a background job runs, logs, and reports its exit", async () => {
     terminals.shutdown()
     await harness.close(ctx)
   }
+})
+
+void test("a job that asks for a password waits, takes focus, and goes on after input", async () => {
+  const dir = await tempDir()
+  const host = new HostBridge()
+  const jobs = createJobsExtension(host, dir)
+  let terminals: Terminals | undefined
+  const results: string[] = []
+  let jobId = ""
+  let sawFocus = false
+  let conversationId: Conversation["id"] | undefined
+  const harness = await openHarness(
+    join(dir, "db.sqlite"),
+    [jobs.extension],
+    (messages) => {
+      // A steer can come after a tool result: read the newest result.
+      const toolResults = messages.filter(
+        (message) => message.role === "toolResult"
+      )
+      const result =
+        toolResults.length > results.length
+          ? lastToolResult([toolResults.at(-1)!])
+          : undefined
+      if (result === undefined) {
+        if (toolResults.length > 0) return { text: "ok" }
+        return {
+          tools: [
+            {
+              name: "job_start",
+              arguments: {
+                command: "read -s -p 'Password: ' x; echo; echo got-$x",
+                name: "login",
+                wait_ms: 0,
+              },
+            },
+          ],
+        }
+      }
+      results.push(result)
+      if (result.startsWith("Job ")) {
+        jobId = /^Job (\S+)/.exec(result)![1]!
+        return {
+          tools: [
+            { name: "job_wait", arguments: { id: jobId, timeout_ms: 10_000 } },
+          ],
+        }
+      }
+      if (result.includes("waits for input"))
+        return {
+          tools: [
+            {
+              name: "job_focus",
+              arguments: { id: jobId, prompt: "Type the password" },
+            },
+          ],
+        }
+      if (result.startsWith("Asked the user")) {
+        // The user types the password into the job's tab.
+        setTimeout(() => {
+          void harness.snapshot(JobsDoc, conversationId!, ctx).then((state) => {
+            const job = state?.items[jobId]
+            sawFocus = Boolean(job?.focus && job.waiting?.secret)
+            const tab = terminals!.create("user", dir, `job:${jobId}`)
+            terminals!.write("user", tab.id, "hunter2\r", 1, "viewer")
+          })
+        }, 200)
+        return {
+          tools: [
+            {
+              name: "job_wait",
+              arguments: { id: jobId, pattern: "got-", timeout_ms: 10_000 },
+            },
+          ],
+        }
+      }
+      return { text: "done" }
+    },
+    dir
+  )
+  terminals = bindHost(host, harness, dir)
+  try {
+    const conversation = await harness.createConversation(
+      {
+        ownership: { kind: "ownerless" },
+        agent: { model: TEST_MODEL, cwd: dir },
+      },
+      ctx
+    )
+    conversationId = conversation.id
+    await (
+      await conversation.submit({ type: "input", content: "log in" }, ctx)
+    ).wait(ctx)
+    await eventually(async () =>
+      results.some((result) => result.includes("got-hunter2"))
+        ? true
+        : undefined
+    )
+    assert.match(results[1]!, /waits for input with echo off/)
+    assert.match(results[1]!, /Password:/)
+    assert.ok(
+      results.some((result) => /Matched new output: got-hunter2/.test(result))
+    )
+    assert.ok(sawFocus)
+    const state = await eventually(async () => {
+      const value = await harness.snapshot(JobsDoc, conversation.id, ctx)
+      return value?.items[jobId]?.status === "exited" ? value : undefined
+    })
+    assert.equal(state.items[jobId]?.focus, undefined)
+    assert.equal(state.items[jobId]?.waiting, undefined)
+    // The steer about the wait did not come: job_wait reported it.
+    const users = await userEntries(conversation)
+    assert.ok(!users.some((entry) => entry.includes("[Job waits for input]")))
+  } finally {
+    terminals.shutdown()
+    await harness.close(ctx)
+  }
+})
+
+void test("a running job that waits or has a focus request needs the user", () => {
+  const base = {
+    name: "login",
+    command: "ssh asahi",
+    cwd: "/",
+    startedAt: 1,
+    notifyOnExit: true,
+  }
+  assert.equal(jobNeedingUser({ items: {} }), undefined)
+  assert.deepEqual(
+    jobNeedingUser({
+      items: {
+        a: {
+          ...base,
+          id: "a",
+          status: "exited",
+          focus: { prompt: "x", at: 1 },
+        },
+        b: {
+          ...base,
+          id: "b",
+          status: "running",
+          waiting: { since: 1, prompt: "password:", secret: true },
+        },
+      },
+    }),
+    { jobId: "b", name: "login", prompt: "password:" }
+  )
+  assert.equal(
+    jobNeedingUser({
+      items: {
+        c: {
+          ...base,
+          id: "c",
+          status: "running",
+          focus: { prompt: "Type your password", at: 2 },
+        },
+      },
+    })?.prompt,
+    "Type your password"
+  )
 })
 
 void test("the scratchpad stores entries and spills large output", async () => {

@@ -128,8 +128,9 @@ export type HostTerminals = {
       label?: string
       onOutput: (data: string) => void
       onExit: (exit: { exitCode: number; signal?: number }) => void
+      onInput?: (data: string) => void
     }
-  ): { terminalId: string; pid: number }
+  ): { terminalId: string; pid: number; device?: string }
   releaseJobOutput(jobId: string, replay: (maxBytes: number) => string): void
   jobRunning(jobId: string): boolean
   stopJob(jobId: string, graceMs?: number): boolean

@@ -57,6 +57,7 @@ import type {
   HostSessionSummary,
 } from "../extensions/host.ts"
 import { updateTodo, type TodoChange } from "../extensions/todo.ts"
+import { jobNeedingUser, type JobsState } from "../extensions/jobs.ts"
 import {
   allProfiles,
   applyProfile,
@@ -402,6 +403,13 @@ export class Sessions implements HostSessions {
   readonly #naming = new Set<string>()
   /** Sessions whose agent waits for the user. */
   readonly #needsInput = new Set<string>()
+  /** Sessions with an open `ask_user` question. */
+  readonly #questionWaits = new Set<string>()
+  /** Sessions with a job that needs the user (see `jobNeedingUser`). */
+  readonly #jobWaits = new Map<
+    string,
+    { jobId: string; name: string; prompt: string }
+  >()
   readonly #held = new Map<string, HeldItem[]>()
   #stateKinds: Set<string> | undefined
   #flushScheduled = false
@@ -461,8 +469,10 @@ export class Sessions implements HostSessions {
           conversationId,
           ctx
         )
-        if (pendingQuestions(questions as QuestionsState | undefined).length)
+        if (pendingQuestions(questions as QuestionsState | undefined).length) {
+          this.#questionWaits.add(id)
           this.#needsInput.add(id)
+        }
       })
     )
     this.#harness.subscribeCommits((publication) => this.#observe(publication))
@@ -660,9 +670,15 @@ export class Sessions implements HostSessions {
           this.#markDirty(id, { usage: true })
         } else if (this.#isStateKind(kind)) {
           if (kind === "pico.questions") {
-            const waiting =
-              pendingQuestions(value as QuestionsState | undefined).length > 0
-            this.setNeedsInput(id, waiting)
+            if (pendingQuestions(value as QuestionsState | undefined).length)
+              this.#questionWaits.add(id)
+            else this.#questionWaits.delete(id)
+            this.#updateNeedsInput(id)
+          } else if (kind === "pico.jobs") {
+            const job = jobNeedingUser(value as JobsState | undefined)
+            if (job) this.#jobWaits.set(id, job)
+            else this.#jobWaits.delete(id)
+            this.#updateNeedsInput(id)
           }
           this.#markDirty(id, { extensions: true })
         }
@@ -755,8 +771,24 @@ export class Sessions implements HostSessions {
     return files.find((file) => file.path === path)?.content
   }
 
-  /** Mark that the agent of a session waits, or no longer waits, for the user. */
-  setNeedsInput(id: string, waiting: boolean) {
+  /** Questions and jobs that need the user make a session need input. */
+  #updateNeedsInput(id: string) {
+    this.setNeedsInput(
+      id,
+      this.#questionWaits.has(id) || this.#jobWaits.has(id),
+      this.#questionWaits.has(id) ? undefined : this.#jobWaits.get(id)
+    )
+  }
+
+  /**
+   * Mark that the agent of a session waits, or no longer waits, for the
+   * user. `job` names a job that needs the user, for the notification.
+   */
+  setNeedsInput(
+    id: string,
+    waiting: boolean,
+    job?: { jobId: string; name: string; prompt: string }
+  ) {
     if (!this.#metas.has(id)) return
     if (waiting === this.#needsInput.has(id)) return
     if (waiting) this.#needsInput.add(id)
@@ -770,6 +802,14 @@ export class Sessions implements HostSessions {
         sessionPath: sessionPath(id),
         streaming: this.isBusy(id),
         needsInput: waiting,
+        ...(waiting && job
+          ? {
+              reason: "job",
+              jobId: job.jobId,
+              jobName: job.name,
+              prompt: job.prompt,
+            }
+          : {}),
       },
       { sessionId: id }
     )

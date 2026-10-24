@@ -76,6 +76,7 @@ type Terminal = {
   label?: string
   /** The end of an exited job's output, read from its log file. */
   replay?: () => string
+  onInput?: (data: string) => void
 }
 
 /** A viewer ID from a client; an empty string for clients without one. */
@@ -284,6 +285,8 @@ export class Terminals {
       label?: string
       onOutput: (data: string) => void
       onExit: (exit: { exitCode: number; signal?: number }) => void
+      /** Input from a viewer, after it is written. */
+      onInput?: (data: string) => void
     }
   ) {
     // Jobs run commands that models write, so they need a POSIX shell. A POSIX
@@ -329,6 +332,7 @@ export class Terminals {
       shared: true,
       jobId,
       ...(handlers.label ? { label: handlers.label } : {}),
+      ...(handlers.onInput ? { onInput: handlers.onInput } : {}),
     }
     this.#terminals.set(id, terminal)
     this.#lookup.set(lookupKey, id)
@@ -346,7 +350,13 @@ export class Terminals {
       })
       handlers.onExit(terminal.exited)
     })
-    return { terminalId: id, pid: child.pid }
+    // The terminal device of the job (Unix only), to read its mode.
+    const device = (child as { ptsName?: unknown }).ptsName
+    return {
+      terminalId: id,
+      pid: child.pid,
+      ...(typeof device === "string" && device ? { device } : {}),
+    }
   }
 
   /**
@@ -361,6 +371,54 @@ export class Terminals {
     terminal.backlog = []
     terminal.backlogBytes = 0
     terminal.replay = () => replay(JOB_REPLAY_BYTES)
+  }
+
+  /** Whether this server has a terminal for a job, running or not. */
+  hasJob(jobId: string) {
+    return this.#lookup.has(JOB_LOOKUP_PREFIX + jobId)
+  }
+
+  /**
+   * A terminal for a finished job that has no terminal in this server any
+   * more (for example after a restart): it shows the end of the job's log.
+   */
+  addFinishedJob(
+    jobId: string,
+    info: {
+      label?: string
+      cwd: string
+      exit: { exitCode: number; signal?: number }
+      replay: (maxBytes: number) => string
+    }
+  ) {
+    const existing = this.#lookup.get(JOB_LOOKUP_PREFIX + jobId)
+    if (existing) return existing
+    const id = crypto.randomUUID()
+    const terminal: Terminal = {
+      id,
+      scopeKey: "job",
+      lookupKey: JOB_LOOKUP_PREFIX + jobId,
+      cwd: info.cwd,
+      shell: "job",
+      // No process: an exited terminal never uses it.
+      process: undefined as unknown as pty.IPty,
+      backlog: [],
+      backlogBytes: 0,
+      nextOutputSeq: 2,
+      lastInputSeq: new Map(),
+      cols: 120,
+      rows: 30,
+      exited: info.exit,
+      lastUsed: Date.now(),
+      listeners: new Set(),
+      shared: true,
+      jobId,
+      ...(info.label ? { label: info.label } : {}),
+      replay: () => info.replay(JOB_REPLAY_BYTES),
+    }
+    this.#terminals.set(id, terminal)
+    this.#lookup.set(terminal.lookupKey!, id)
+    return id
   }
 
   /** Whether a job still runs in this server. */
@@ -502,6 +560,7 @@ export class Terminals {
     }
     terminal.lastUsed = Date.now()
     terminal.process.write(data)
+    terminal.onInput?.(data)
     return inputSeq !== undefined && inputSeq > 0 ? inputSeq : undefined
   }
 

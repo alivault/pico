@@ -26,7 +26,7 @@ import {
 } from "./core/sessions.ts"
 import type { Viewers } from "./core/viewers.ts"
 import type { HostBridge } from "./extensions/host.ts"
-import { stopJob } from "./extensions/jobs.ts"
+import { JobsDoc, stopJob } from "./extensions/jobs.ts"
 import { ensurePreview } from "./extensions/preview.ts"
 import { TimersDoc } from "./extensions/schedule.ts"
 import type { TodoChange } from "./extensions/todo.ts"
@@ -47,6 +47,7 @@ import type { Notifier } from "./services/notify.ts"
 import { createWorktree, repoRoot } from "./services/worktree.ts"
 import type { HighlightService } from "./services/highlight.ts"
 import { looseNumber, type Terminals } from "./services/terminal.ts"
+import { jobLogParts, readLogTailRaw } from "./services/job-log.ts"
 
 export type ApiContext = {
   runtime: Runtime
@@ -1054,6 +1055,38 @@ export function createApi(api: ApiContext) {
     return { scopeKey: `${contextId}:${scopeTarget}:${cwd}`, cwd }
   }
 
+  /**
+   * A tab of a finished job whose terminal is gone (for example after a
+   * restart) shows the end of the job's log.
+   */
+  const addFinishedJobTerminal = async (
+    request: Request,
+    clientKey: string | undefined
+  ) => {
+    const jobId = clientKey?.startsWith("job:") ? clientKey.slice(4) : ""
+    if (!/^[a-z0-9]+$/i.test(jobId) || api.terminals.hasJob(jobId)) return
+    const id = sessionOf(request)
+    if (!id) return
+    const jobs = await runtime.harness.snapshot(
+      JobsDoc,
+      conversationIdOf(id),
+      BACKGROUND_CONTEXT
+    )
+    const job = jobs?.items[jobId]
+    if (!job || job.status === "running") return
+    const parts = jobLogParts(api.dataDir, jobId)
+    if (parts.length === 0) return
+    api.terminals.addFinishedJob(jobId, {
+      label: job.name,
+      cwd: job.cwd,
+      exit: {
+        exitCode: job.exitCode ?? -1,
+        ...(job.signal ? { signal: job.signal } : {}),
+      },
+      replay: (maxBytes) => readLogTailRaw(parts, maxBytes),
+    })
+  }
+
   router.post("/api/terminal", async (request) => {
     const body = await request.body<{
       clientKey?: string
@@ -1061,6 +1094,7 @@ export function createApi(api: ApiContext) {
       rows?: unknown
     }>()
     const { scopeKey, cwd } = terminalScope(request)
+    await addFinishedJobTerminal(request, body.clientKey)
     const created = api.terminals.create(
       scopeKey,
       cwd,
@@ -1291,10 +1325,10 @@ export function createApi(api: ApiContext) {
       5000,
       Math.max(1, queryNumber(request, "tail") ?? 500)
     )
-    const text = await runtime.extensions.jobs.log(jobId).catch(() => {
+    const text = await runtime.extensions.jobs.log(jobId, lines).catch(() => {
       throw badRequest("Invalid job id")
     })
-    return { ok: true, jobId, text: text.split("\n").slice(-lines).join("\n") }
+    return { ok: true, jobId, text }
   })
 
   router.get("/api/session/scratch", async (request) => {

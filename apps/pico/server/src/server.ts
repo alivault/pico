@@ -81,6 +81,16 @@ export async function startServer(options: {
       : {}),
   })
   hub.subscribe((event) => notifyFromEvent(event.payload))
+  /** The words of a notification for a job that needs the user. */
+  const jobNotice = (payload: Record<string, unknown>) => {
+    if (payload.reason !== "job") return undefined
+    const name = typeof payload.jobName === "string" ? payload.jobName : "job"
+    const prompt =
+      typeof payload.prompt === "string" && payload.prompt.trim()
+        ? payload.prompt.trim()
+        : "Type in its terminal"
+    return { title: `${name} needs you`, body: prompt }
+  }
   const sessionLink = (sessionId: unknown, machineId?: string) => {
     const base = runtime.settings.data.publicUrl.replace(/\/+$/, "")
     const query = new URLSearchParams()
@@ -117,10 +127,13 @@ export async function startServer(options: {
       payload.needsInput === true
     ) {
       if (!settings.notifyNeedsInput) return
+      const job = jobNotice(payload)
       void notifier.send(
         {
-          title: `Pico (${machine.label}): the agent asks a question`,
-          body: title,
+          title: job
+            ? `Pico (${machine.label}): ${job.title}`
+            : `Pico (${machine.label}): the agent asks a question`,
+          body: job ? `${job.body} · ${title}` : title,
           url: sessionLink(id || undefined, machine.id),
           tag: `ask-${machine.id}-${id}`,
           level: "warning",
@@ -153,12 +166,13 @@ export async function startServer(options: {
     ) {
       if (!settings.notifyNeedsInput) return
       const id = typeof payload.sessionId === "string" ? payload.sessionId : ""
+      const title = sessions.has(id)
+        ? (sessions.list({}).find((item) => item.id === id)?.title ?? "Session")
+        : "Session"
+      const job = jobNotice(payload)
       void notifier.send({
-        title: "Pico: the agent asks a question",
-        body: sessions.has(id)
-          ? (sessions.list({}).find((item) => item.id === id)?.title ??
-            "Session")
-          : "Session",
+        title: job ? `Pico: ${job.title}` : "Pico: the agent asks a question",
+        body: job ? `${job.body} · ${title}` : title,
         url: sessionLink(payload.sessionId),
         tag: `ask-${id}`,
         level: "warning",
