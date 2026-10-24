@@ -2710,11 +2710,20 @@ function AssistantSingleBlockGroupView({
     return <ToolBlockCard blockKey={blockKey} store={store} />
   }
 
+  if (blockType === "thinking" && hideThinking) {
+    return (
+      <CollapsedThinkingBlock
+        blockKey={blockKey}
+        store={store}
+        streaming={streaming}
+      />
+    )
+  }
+
   return (
     <AssistantSubscribedBlockView
       blockKey={blockKey}
       blockType={blockType}
-      hideThinking={hideThinking}
       store={store}
       streaming={streaming}
     />
@@ -2735,22 +2744,54 @@ function ThinkingBlockBody({
   )
 }
 
+function useThinkingBlockLabel(store: AssistantBlockStore, key: string) {
+  const getSnapshot = () => {
+    const block = store.getBlock(key)
+    return (block?.type === "thinking" && block.summaryLabel?.trim()) || ""
+  }
+
+  return React.useSyncExternalStore(
+    React.useCallback(
+      (listener) => store.subscribeBlocks([key], listener),
+      [key, store]
+    ),
+    getSnapshot,
+    getSnapshot
+  )
+}
+
+/** The text of an open hidden thinking block. It subscribes to the text. */
+function OpenThinkingBlockBody({
+  blockKey,
+  store,
+  streaming,
+}: {
+  blockKey: string
+  store: AssistantBlockStore
+  streaming: boolean
+}) {
+  const block = useAssistantBlock(store, blockKey)
+  if (block?.type !== "thinking") return null
+
+  return <ThinkingBlockBody text={block.text} streaming={streaming} />
+}
+
 /**
  * Hidden thinking: one line of muted text that opens the thinking block.
  * Each block opens alone, and the open state stays when the view renders
- * again.
+ * again. A closed row reads only the label, so streamed thinking text does
+ * not render it again.
  */
 function CollapsedThinkingBlock({
   blockKey,
-  label,
+  store,
   streaming,
-  text,
 }: {
   blockKey: string
-  label?: string
+  store: AssistantBlockStore
   streaming: boolean
-  text: string
 }) {
+  const label = useThinkingBlockLabel(store, blockKey)
   const [isOpen, setIsOpen] = useRememberedToolCollapsibleOpen(
     `thinking:${blockKey}`
   )
@@ -2759,11 +2800,15 @@ function CollapsedThinkingBlock({
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <CollapsibleTrigger className="group/thinking-trigger -ml-0.5 flex max-w-full items-center gap-1 rounded-sm text-sm text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
         <ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-aria-expanded/thinking-trigger:rotate-90" />
-        <span className="truncate">{label?.trim() || "Thinking"}</span>
+        <span className="truncate">{label || "Thinking"}</span>
       </CollapsibleTrigger>
       {isOpen ? (
         <CollapsibleContent className="pt-2">
-          <ThinkingBlockBody text={text} streaming={streaming} />
+          <OpenThinkingBlockBody
+            blockKey={blockKey}
+            store={store}
+            streaming={streaming}
+          />
         </CollapsibleContent>
       ) : null}
     </Collapsible>
@@ -2773,13 +2818,11 @@ function CollapsedThinkingBlock({
 function AssistantSubscribedBlockView({
   blockKey,
   blockType,
-  hideThinking,
   store,
   streaming,
 }: {
   blockKey: string
   blockType: AssistantConversationBlock["type"]
-  hideThinking: boolean
   store: AssistantBlockStore
   streaming: boolean
 }) {
@@ -2796,16 +2839,7 @@ function AssistantSubscribedBlockView({
         <MarkdownBlock text={block.text} streaming={streaming} />
       )
     case "thinking":
-      return hideThinking ? (
-        <CollapsedThinkingBlock
-          blockKey={blockKey}
-          label={block.summaryLabel}
-          streaming={streaming}
-          text={block.text}
-        />
-      ) : (
-        <ThinkingBlockBody text={block.text} streaming={streaming} />
-      )
+      return <ThinkingBlockBody text={block.text} streaming={streaming} />
     case "compaction":
       return <CompactionBlockCard block={block} />
     default:
