@@ -596,7 +596,8 @@ function sameSidebarSessionStatus(
     left?.sessionId === right.sessionId &&
     left?.sessionPath === right.sessionPath &&
     left?.streaming === right.streaming &&
-    left?.unread === right.unread
+    left?.unread === right.unread &&
+    left?.needsInput === right.needsInput
   )
 }
 
