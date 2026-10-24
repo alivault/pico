@@ -16,7 +16,7 @@
 import { userInfo } from "node:os"
 import { basename } from "node:path"
 
-import type { PtyMeta } from "../pty-host/protocol.ts"
+import type { PtyMeta, SpawnRequest } from "../pty-host/protocol.ts"
 import { posixShell } from "../extensions/util.ts"
 import { killScope, wrapInScope, type ScopeLimits } from "./containment.ts"
 import { plainText } from "./job-log.ts"
@@ -174,7 +174,10 @@ export class Terminals {
   readonly #terminals = new Map<string, Terminal>()
   readonly #lookup = new Map<string, string>()
   readonly #cleanup: NodeJS.Timeout
-  readonly #backend: PtyBackend
+  #backend: PtyBackend
+  readonly #dataDir: string | undefined
+  /** Why the ptys run in this process although a pty-host was asked for. */
+  #fallback: string | undefined
   readonly #idleShellMs: number
 
   constructor(
@@ -186,6 +189,7 @@ export class Terminals {
     } = {}
   ) {
     this.#backend = options.backend ?? new LocalPtyBackend(options.dataDir)
+    this.#dataDir = options.dataDir
     this.#idleShellMs = options.idleShellMs ?? IDLE_SHELL_MS
     this.#cleanup = setInterval(() => {
       this.#removeExpired()
@@ -197,6 +201,33 @@ export class Terminals {
   /** Where the ptys run: "host" (they survive a restart) or "local". */
   get backendKind() {
     return this.#backend.kind
+  }
+
+  /**
+   * The pty-host cannot start: run new ptys in this process until the
+   * server restarts (the next start tries the host again).
+   */
+  useLocalBackend(reason: string) {
+    if (this.#backend.kind === "local") return
+    console.warn(
+      `[pico] terminals run in the server and stop with it: ${reason}`
+    )
+    this.#fallback = reason
+    this.#backend.close()
+    this.#backend = new LocalPtyBackend(this.#dataDir)
+  }
+
+  /** Spawn in the backend; a host that cannot be reached means local ptys. */
+  async #spawn(request: SpawnRequest, sink: PtySink) {
+    try {
+      return await this.#backend.spawn(request, sink)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (this.#backend.kind !== "host" || !/reach the pty-host/.test(message))
+        throw error
+      this.useLocalBackend(message)
+      return this.#backend.spawn(request, sink)
+    }
   }
 
   #sink(terminal: Terminal): PtySink {
@@ -305,7 +336,7 @@ export class Terminals {
       terminalId: terminal.id,
     }
     try {
-      terminal.process = await this.#backend.spawn(
+      terminal.process = await this.#spawn(
         {
           file: shell,
           args: ["-l"],
@@ -483,6 +514,7 @@ export class Terminals {
     const all = [...this.#terminals.values()]
     return {
       backend: this.#backend.kind,
+      ...(this.#fallback ? { fallback: this.#fallback } : {}),
       host: await this.#backend.stats(),
       shells: all.filter((item) => !item.shared && !item.exited).length,
       jobs: all.filter((item) => item.shared && !item.exited).length,
@@ -654,7 +686,7 @@ export class Terminals {
       : { file: shell, args }
     if (options.scope) terminal.scoped = true
     try {
-      terminal.process = await this.#backend.spawn(
+      terminal.process = await this.#spawn(
         {
           file: line.file,
           args: line.args,

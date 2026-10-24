@@ -83,7 +83,9 @@ export async function startServer(options: {
   if (options.ptyHost) {
     // Find the terminals and jobs that ran on while the server was down.
     const kept = await terminals.start().catch((error: unknown) => {
-      console.warn("[pico] could not reach the pty-host:", error)
+      terminals.useLocalBackend(
+        error instanceof Error ? error.message : String(error)
+      )
       return 0
     })
     if (kept) console.log(`[pico] the pty-host kept ${kept} terminal(s)`)

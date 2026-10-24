@@ -23,7 +23,10 @@ import {
   type HostRequest,
 } from "./protocol.ts"
 
-const CONNECT_TIMEOUT_MS = 8000
+/** How long a connect waits for a host to start (tests make it short). */
+function connectTimeout() {
+  return Number(process.env.PICO_PTY_HOST_CONNECT_MS) || 8000
+}
 
 /**
  * Whether this process runs in a systemd service's cgroup. A stop of that
@@ -196,7 +199,7 @@ export class PtyHostClient {
 
   async #connect() {
     const paths = ptyHostPaths(this.#dataDir)
-    const deadline = Date.now() + CONNECT_TIMEOUT_MS
+    const deadline = Date.now() + connectTimeout()
     let started = false
     for (;;) {
       try {

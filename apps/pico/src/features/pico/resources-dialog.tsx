@@ -26,6 +26,8 @@ export type MachineResources = {
   ptyHost?: { pid: number; rss: number }
   terminals: {
     backend: "host" | "local"
+    /** Why terminals run in the server although a pty-host was asked for. */
+    fallback?: string
     shells: number
     jobs: number
     exited: number
@@ -134,9 +136,11 @@ function ResourcesView({ data }: { data: MachineResources }) {
           value={
             data.ptyHost
               ? formatBytes(data.ptyHost.rss)
-              : data.terminals.backend === "local"
-                ? "off: terminals run in the server"
-                : "not running"
+              : data.terminals.fallback
+                ? "could not start: terminals run in the server"
+                : data.terminals.backend === "local"
+                  ? "off: terminals run in the server"
+                  : "not running"
           }
         />
         <Row

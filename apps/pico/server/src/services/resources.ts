@@ -113,6 +113,7 @@ export async function collectResources(deps: ResourceDeps) {
       : undefined,
     terminals: {
       backend: terminals.backend,
+      ...(terminals.fallback ? { fallback: terminals.fallback } : {}),
       shells: terminals.shells,
       jobs: terminals.jobs,
       exited: terminals.exited,

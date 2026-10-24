@@ -453,3 +453,28 @@ void test("with no server for long, the host ends idle shells, and then itself",
     await stopHost(dataDir)
   }
 })
+
+void test("when the host cannot start, terminals run in the server", async () => {
+  const dataDir = await tempDir()
+  process.env.PICO_PTY_HOST_CONNECT_MS = "800"
+  const terminals = new Terminals({
+    dataDir,
+    backend: new HostPtyBackend({
+      dataDir,
+      script: join(dataDir, "missing.mjs"),
+      version: "test",
+    }),
+  })
+  try {
+    await assert.rejects(terminals.start(), /reach the pty-host/)
+    terminals.useLocalBackend("test")
+    const shell = await terminals.create("scope", dataDir, "tab", 80, 24)
+    assert.equal(shell.reused, false)
+    const stats = await terminals.stats()
+    assert.equal(stats.backend, "local")
+    assert.equal(stats.fallback, "test")
+  } finally {
+    delete process.env.PICO_PTY_HOST_CONNECT_MS
+    terminals.shutdown()
+  }
+})
