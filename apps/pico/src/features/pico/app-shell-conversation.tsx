@@ -9,7 +9,6 @@ import {
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
 import {
   Empty,
   EmptyContent,
@@ -107,7 +106,7 @@ function ConversationLatestMessageButton({
         variant="outline"
         size="icon"
         disabled={isDisabled}
-        className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full bg-secondary text-secondary-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-0 md:bottom-[18px] dark:bg-secondary dark:hover:bg-accent"
+        className="pointer-events-auto relative rounded-full bg-secondary text-secondary-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-0 dark:bg-secondary dark:hover:bg-accent"
         aria-label={label}
         onClick={onClick}
       >
@@ -167,45 +166,44 @@ function ConversationMessageJumpButton({
   )
 }
 
-function ConversationMessageJumpButtons({
-  centerMessages,
+// The latest message button sits in the center, with the previous and next
+// buttons at its left and right. A hidden button keeps its space, so the
+// buttons do not move.
+function ConversationJumpButtons({
+  conversationItemsStore,
+  draft,
   jumpStateStore,
+  onLatest,
   onNext,
   onPrevious,
+  streaming,
 }: {
-  centerMessages: boolean
+  conversationItemsStore: ConversationItemsStore
+  draft: boolean
   jumpStateStore: MessageJumpStateStore
+  onLatest: () => void
   onNext: () => void
   onPrevious: () => void
+  streaming: boolean
 }) {
-  const buttons = (
-    <div
-      className={cn(
-        "flex gap-2",
-        !centerMessages &&
-          "pointer-events-none absolute right-4 bottom-4 z-10 md:right-[18px] md:bottom-[18px]"
-      )}
-    >
-      <ConversationMessageJumpButton
-        direction="next"
-        jumpStateStore={jumpStateStore}
-        onClick={onNext}
-      />
+  return (
+    <div className="pointer-events-none absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2 md:bottom-[18px]">
       <ConversationMessageJumpButton
         direction="previous"
         jumpStateStore={jumpStateStore}
         onClick={onPrevious}
       />
-    </div>
-  )
-
-  if (!centerMessages) return buttons
-
-  return (
-    <div className="pointer-events-none absolute inset-x-4 bottom-4 z-10 md:bottom-[18px]">
-      <div className="mx-auto flex w-full max-w-[80ch] justify-end">
-        {buttons}
-      </div>
+      <ConversationLatestMessageButton
+        conversationItemsStore={conversationItemsStore}
+        draft={draft}
+        onClick={onLatest}
+        streaming={streaming}
+      />
+      <ConversationMessageJumpButton
+        direction="next"
+        jumpStateStore={jumpStateStore}
+        onClick={onNext}
+      />
     </div>
   )
 }
@@ -368,7 +366,6 @@ function AppShellConversationFrame(props: AppShellConversationFrameProps) {
 
 function AppShellConversationScroller({
   children,
-  centerMessages,
   conversationItemsStore,
   emptyState,
   isLoadingOlderHistory,
@@ -434,20 +431,15 @@ function AppShellConversationScroller({
       {emptyState}
 
       {!isSessionViewLoading ? (
-        <>
-          <ConversationLatestMessageButton
-            conversationItemsStore={conversationItemsStore}
-            draft={sessionState.draft}
-            onClick={scrollConversationToBottom}
-            streaming={sessionState.streaming}
-          />
-          <ConversationMessageJumpButtons
-            centerMessages={centerMessages}
-            jumpStateStore={jumpStateStore}
-            onNext={jumpToNextMessage}
-            onPrevious={jumpToPreviousMessage}
-          />
-        </>
+        <ConversationJumpButtons
+          conversationItemsStore={conversationItemsStore}
+          draft={sessionState.draft}
+          jumpStateStore={jumpStateStore}
+          onLatest={scrollConversationToBottom}
+          onNext={jumpToNextMessage}
+          onPrevious={jumpToPreviousMessage}
+          streaming={sessionState.streaming}
+        />
       ) : null}
     </MessageScroller>
   )
