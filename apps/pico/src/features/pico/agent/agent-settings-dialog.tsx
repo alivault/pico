@@ -50,6 +50,24 @@ export type AgentSettings = {
   worktreeCopy: Array<string>
   jobMemoryHigh: string
   jobMemoryMax: string
+  compactAtTokens: number
+}
+
+/** "200k" or "1.5M" as tokens; empty is 0. Undefined when it is not a count. */
+function parseTokenCount(value: string) {
+  const match = /^(\d+(?:\.\d+)?)\s*([km]?)$/i.exec(value.trim())
+  if (!value.trim()) return 0
+  if (!match) return undefined
+  const unit = match[2]?.toLowerCase()
+  const factor = unit === "m" ? 1_000_000 : unit === "k" ? 1_000 : 1
+  return Math.round(Number(match[1]) * factor)
+}
+
+function formatTokenCount(value: number) {
+  if (value <= 0) return ""
+  if (value % 1_000_000 === 0) return `${value / 1_000_000}M`
+  if (value % 1_000 === 0) return `${value / 1_000}k`
+  return String(value)
 }
 
 /** Extra sections, such as tool profiles and MCP, that other modules add. */
@@ -291,7 +309,7 @@ export function AgentSettingsDialog({
         <DialogHeader>
           <DialogTitle>Agent settings</DialogTitle>
           <DialogDescription>
-            Notifications, child sessions, and tools. Tools run without
+            Notifications, context, child sessions, and tools. Tools run without
             approval.
           </DialogDescription>
         </DialogHeader>
@@ -348,6 +366,27 @@ export function AgentSettingsDialog({
                     initial={settings.publicUrl}
                     placeholder="https://…"
                     onSave={(value) => save({ publicUrl: value })}
+                  />
+                )}
+              />
+            </SettingsSection>
+
+            <SettingsSection title="Context">
+              <Row
+                label="Compact at"
+                description="Summarize old messages when a session's context gets to this many tokens, for example 200k. A summary starts in the background about 33k before. Empty: compact near the full context window."
+                control={(id) => (
+                  <TextSetting
+                    id={id}
+                    width="w-24"
+                    placeholder="Window"
+                    initial={formatTokenCount(settings.compactAtTokens)}
+                    onSave={(value) => {
+                      const tokens = parseTokenCount(value)
+                      if (tokens === undefined)
+                        toast.error("Type a token count, such as 200k")
+                      else save({ compactAtTokens: tokens })
+                    }}
                   />
                 )}
               />

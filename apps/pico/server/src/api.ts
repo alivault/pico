@@ -1472,6 +1472,13 @@ export function createApi(api: ApiContext) {
     number("scratchSpillKb", 0, 10_000)
     number("maxChildSessions", 0, 50)
     number("maxSpawnDepth", 0, 10)
+    number("compactAtTokens", 0, 100_000_000)
+    if (
+      typeof change.compactAtTokens === "number" &&
+      change.compactAtTokens > 0 &&
+      change.compactAtTokens < 10_000
+    )
+      throw badRequest("compactAtTokens must be 0 (off) or at least 10000")
     text("ntfyUrl", (value) => /^https?:\/\//.test(value))
     text("publicUrl", (value) => /^https?:\/\//.test(value))
     text("previewPorts", (value) => /^\d+\s*-\s*\d+$/.test(value))
@@ -1482,7 +1489,12 @@ export function createApi(api: ApiContext) {
         .filter((item): item is string => typeof item === "string")
         .map((item) => item.trim())
         .filter(Boolean)
+    const compactAtChanged =
+      change.compactAtTokens !== undefined &&
+      change.compactAtTokens !== runtime.settings.data.compactAtTokens
     runtime.settings.update(change as never)
+    // The context usage of each session shows the compaction level.
+    if (compactAtChanged) await sessions.publishWatchedStates()
     return { ok: true, ...agentSettings(runtime) }
   })
 
@@ -1847,6 +1859,7 @@ function agentSettings(runtime: Runtime) {
     worktreeCopy: data.worktreeCopy,
     jobMemoryHigh: data.jobMemoryHigh,
     jobMemoryMax: data.jobMemoryMax,
+    compactAtTokens: data.compactAtTokens,
   }
 }
 

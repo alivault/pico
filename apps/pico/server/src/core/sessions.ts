@@ -85,6 +85,7 @@ import {
   type ModelOption,
   type UsageLike,
 } from "./items.ts"
+import { compactionLevels } from "./compaction.ts"
 import { expandPromptTemplate, expandSkillCommand } from "./resources.ts"
 import type { Runtime } from "./runtime.ts"
 import type { DraftSelection, Viewers } from "./viewers.ts"
@@ -1368,9 +1369,13 @@ export class Sessions implements HostSessions {
     }
     if (!contextWindow)
       return tokens === null ? undefined : { tokens, percent: null }
+    const levels =
+      ref &&
+      compactionLevels(this.#runtime.compactionPolicy(ref), contextWindow)
     return {
       tokens,
       contextWindow,
+      ...levels,
       percent:
         tokens === null ? null : Math.min(100, (tokens / contextWindow) * 100),
     }
@@ -1681,6 +1686,11 @@ export class Sessions implements HostSessions {
 
   async publishStateIfWatched(id: string) {
     if (this.#watched(id)) await this.publishState(id)
+  }
+
+  /** Publish the state of every watched session, after a setting changed. */
+  async publishWatchedStates() {
+    for (const id of this.#watchers.keys()) await this.publishState(id)
   }
 
   async abort(id: string) {

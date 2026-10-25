@@ -14,6 +14,8 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent"
 import {
+  type CompactionPolicy,
+  type CompactionSettings,
   createRegistry,
   Harness,
   type HarnessSettings,
@@ -35,6 +37,7 @@ import { createMcpExtension, type McpExtension } from "../extensions/mcp.ts"
 import { createPromptExtension } from "../extensions/prompt.ts"
 import { createWebAccessExtension } from "../extensions/web-access.ts"
 import { createPicoCodingTools } from "./coding-tools.ts"
+import { compactionSettings, modelCompactionPolicy } from "./compaction.ts"
 import { ResourceCache } from "./resources.ts"
 import { PicoSettings } from "./settings.ts"
 import { SidebarState } from "./sidebar-state.ts"
@@ -52,6 +55,11 @@ export type Runtime = {
   readonly extensions: PicoExtensionServices
   /** Pi's global settings: default model, thinking level, compaction, retry. */
   piSettings(): SettingsManager
+  /** The compaction policy that the harness uses for a model. */
+  compactionPolicy(model: {
+    provider: string
+    modelId: string
+  }): CompactionPolicy
   close(): Promise<void>
 }
 
@@ -138,12 +146,7 @@ export async function openRuntime(
       }
     },
     get compaction() {
-      const compaction = currentPiSettings().getCompactionSettings()
-      return {
-        enabled: compaction.enabled,
-        reserveTokens: compaction.reserveTokens,
-        keepRecentTokens: compaction.keepRecentTokens,
-      }
+      return currentCompaction()
     },
     get steeringMode() {
       return currentPiSettings().getSteeringMode()
@@ -152,6 +155,38 @@ export async function openRuntime(
       return currentPiSettings().getFollowUpMode()
     },
     toolExecution: "parallel",
+  }
+
+  // The settings have an override for each model, so build them again only
+  // when an input changes, or now and then for changes in the model catalog.
+  let compaction:
+    | {
+        value: CompactionSettings
+        pi: SettingsManager
+        compactAt: number
+        at: number
+      }
+    | undefined
+  function currentCompaction() {
+    const pi = currentPiSettings()
+    const compactAt = settings.data.compactAtTokens
+    if (
+      compaction?.pi !== pi ||
+      compaction.compactAt !== compactAt ||
+      Date.now() - compaction.at > 10_000
+    ) {
+      compaction = {
+        value: compactionSettings(
+          (model) => pi.getCompactionSettings(model),
+          models.getModels(),
+          compactAt
+        ),
+        pi,
+        compactAt,
+        at: Date.now(),
+      }
+    }
+    return compaction.value
   }
 
   const storage = await openNodeSqliteStorage(paths.database)
@@ -178,6 +213,8 @@ export async function openRuntime(
     mcp,
     extensions: pico.services,
     piSettings: currentPiSettings,
+    compactionPolicy: (model) =>
+      modelCompactionPolicy(currentCompaction(), model),
     async close() {
       await pico.services.close().catch(() => undefined)
       await mcp.close()

@@ -1,6 +1,7 @@
 /**
  * Pico's own settings, in `~/.pico/settings.json`. Model defaults, compaction,
- * and retry come from Pi's settings instead, so Pico and Pi agree.
+ * and retry come from Pi's settings instead, so Pico and Pi agree. Only the
+ * fixed compaction level (`compactAtTokens`) is Pico's, because Pi has none.
  */
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
@@ -45,6 +46,11 @@ export type PicoSettingsData = {
   jobMemoryMax: string
   /** The user's tool profiles, added to the built-in ones by name. */
   profiles: Record<string, Omit<Profile, "name">>
+  /**
+   * Compact a session when its context is above this many tokens, on every
+   * model with a larger window. 0 keeps Pi's threshold near the full window.
+   */
+  compactAtTokens: number
 }
 
 export const DEFAULT_SETTINGS: PicoSettingsData = {
@@ -65,6 +71,7 @@ export const DEFAULT_SETTINGS: PicoSettingsData = {
   jobMemoryHigh: "",
   jobMemoryMax: "",
   profiles: {},
+  compactAtTokens: 0,
 }
 
 export class PicoSettings {

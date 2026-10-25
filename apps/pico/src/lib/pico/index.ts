@@ -318,6 +318,10 @@ export type SessionState = {
     tokens?: number | null
     contextWindow?: number
     percent?: number | null
+    /** Tokens where a compaction starts that the turn waits for. */
+    compactAt?: number
+    /** Tokens where a compaction starts in the background. */
+    backgroundAt?: number
     [key: string]: unknown
   }
   uiState: SessionUiState

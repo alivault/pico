@@ -2,6 +2,7 @@ import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
 
 import type { SessionState } from "@/lib/pico"
+import { emitPicoEvent } from "@/features/pico/agent/events"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
@@ -94,6 +95,8 @@ type ComposerContextUsageQuotaSnapshot = {
 type ComposerContextUsageSnapshot = {
   contextWindow: number
   tokens: number | null
+  compactAt: number | null
+  backgroundAt: number | null
   percent: number | null
   roundedPercent: number | null
   fiveHourUsage: ComposerContextUsageQuotaSnapshot | null
@@ -333,6 +336,8 @@ function getComposerContextUsageSnapshot(
   return {
     contextWindow: contextUsage.contextWindow,
     tokens,
+    compactAt: getFiniteNumber(contextUsage.compactAt),
+    backgroundAt: getFiniteNumber(contextUsage.backgroundAt),
     percent: roundedPercent,
     roundedPercent,
     fiveHourUsage,
@@ -360,6 +365,8 @@ function sameComposerContextUsageSnapshot(
   return (
     left?.contextWindow === right?.contextWindow &&
     left?.tokens === right?.tokens &&
+    left?.compactAt === right?.compactAt &&
+    left?.backgroundAt === right?.backgroundAt &&
     left?.roundedPercent === right?.roundedPercent &&
     sameContextUsageQuotaSnapshot(left?.fiveHourUsage, right?.fiveHourUsage) &&
     sameContextUsageQuotaSnapshot(left?.weeklyUsage, right?.weeklyUsage)
@@ -382,11 +389,18 @@ function formatContextUsageQuotaValue(value: number | null) {
   return value == null ? null : formatContextUsageCompactNumber(value)
 }
 
-function TooltipUsageProgress({ percent }: { percent: number }) {
+function TooltipUsageProgress({
+  marks = [],
+  percent,
+}: {
+  /** Positions, in percent, to mark on the bar. */
+  marks?: Array<number>
+  percent: number
+}) {
   const clampedPercent = Math.max(0, Math.min(100, percent))
 
   return (
-    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+    <div className="relative mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
       <div
         className="h-full rounded-full"
         style={{
@@ -394,8 +408,27 @@ function TooltipUsageProgress({ percent }: { percent: number }) {
           backgroundColor: contextUsageStroke(clampedPercent),
         }}
       />
+      {marks.map((mark) => (
+        <div
+          key={mark}
+          className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-foreground/60"
+          style={{ left: `${Math.max(0, Math.min(100, mark))}%` }}
+        />
+      ))}
     </div>
   )
+}
+
+/** The point on the context ring where compaction starts. */
+function compactionRingPoint(
+  percent: number,
+  radius: number
+): { x: number; y: number } {
+  const angle = (Math.max(0, Math.min(100, percent)) / 100) * 2 * Math.PI
+  return {
+    x: CONTEXT_USAGE_CIRCLE_CENTER + radius * Math.sin(angle),
+    y: CONTEXT_USAGE_CIRCLE_CENTER - radius * Math.cos(angle),
+  }
 }
 
 function ContextUsageQuotaTooltipLine({
@@ -567,6 +600,8 @@ export function ComposerContextUsageIndicator({
   if (!contextUsage) return null
 
   const {
+    backgroundAt,
+    compactAt,
     contextWindow,
     fiveHourUsage,
     percent,
@@ -588,6 +623,18 @@ export function ComposerContextUsageIndicator({
     providerUsageWindows
   )
   const ringGeometry = getContextUsageRingGeometry(usageRings.length)
+  const compactAtPercent =
+    compactAt == null ? null : (compactAt / contextWindow) * 100
+  const compactionPoint =
+    compactAtPercent == null || !ringGeometry[0]
+      ? null
+      : compactionRingPoint(compactAtPercent, ringGeometry[0].radius)
+  const compactionText =
+    compactAt == null
+      ? null
+      : backgroundAt == null
+        ? `Compacts at ${formatContextUsageCompactNumber(compactAt)}`
+        : `Compacts at ${formatContextUsageCompactNumber(compactAt)} · starts in the background at ${formatContextUsageCompactNumber(backgroundAt)}`
   const usageRingAriaText = usageRings
     .slice(1)
     .map((ring) =>
@@ -655,6 +702,15 @@ export function ComposerContextUsageIndicator({
             />
           )
         })}
+        {compactionPoint ? (
+          <circle
+            cx={compactionPoint.x}
+            cy={compactionPoint.y}
+            r={1.3}
+            fill="var(--foreground)"
+            fillOpacity="0.7"
+          />
+        ) : null}
       </svg>
     </Button>
   )
@@ -669,12 +725,29 @@ export function ComposerContextUsageIndicator({
             {displayPercent}
           </span>
         </div>
-        {percent == null ? null : <TooltipUsageProgress percent={percent} />}
+        {percent == null ? null : (
+          <TooltipUsageProgress
+            percent={percent}
+            marks={compactAtPercent == null ? [] : [compactAtPercent]}
+          />
+        )}
         <div className="mt-1 text-xs text-muted-foreground">
           {compactTokens == null
             ? `Usage estimate pending · ${compactContextWindow} token window`
             : `${compactTokens} / ${compactContextWindow} tokens used`}
         </div>
+        {compactionText ? (
+          <div className="mt-1 flex items-baseline justify-between gap-3 text-xs text-muted-foreground">
+            <span>{compactionText}</span>
+            <button
+              type="button"
+              className="shrink-0 text-foreground underline-offset-2 hover:underline"
+              onClick={() => emitPicoEvent("pico:open-agent-settings", {})}
+            >
+              Change
+            </button>
+          </div>
+        ) : null}
       </div>
       {providerUsageWindows.length > 0 ? (
         providerUsageWindows.map((window) => (
