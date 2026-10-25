@@ -252,7 +252,11 @@ export class PreviewProxies {
           headers: { ...request.headers, host: target.host },
         },
         (reply) => {
-          response.writeHead(reply.statusCode ?? 502, reply.headers)
+          // Without a cache header, a browser keeps old pages for a time,
+          // and Reload shows them. Make it ask the dev server each time.
+          const headers = { ...reply.headers }
+          headers["cache-control"] ??= "no-cache"
+          response.writeHead(reply.statusCode ?? 502, headers)
           reply.pipe(response)
         }
       )

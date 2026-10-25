@@ -68,9 +68,9 @@ void test("a preview proxy forwards HTTP and WebSockets at the root path", async
       (await proxies.open(`http://localhost:${appPort}/x`, "s1")).port,
       proxy.port
     )
-    const body = await (
-      await fetch(`http://127.0.0.1:${proxy.port}/assets/app.js?q=1`)
-    ).text()
+    const page = await fetch(`http://127.0.0.1:${proxy.port}/assets/app.js?q=1`)
+    assert.equal(page.headers.get("cache-control"), "no-cache")
+    const body = await page.text()
     assert.match(body, /path=\/assets\/app\.js\?q=1/)
     assert.match(body, new RegExp(`host=localhost:${appPort}`))
     const reply = await new Promise<string>((resolve, reject) => {
