@@ -30,6 +30,7 @@ import {
   defineTask,
   defineTool,
   type ConversationId,
+  type EntryId,
   type EntryRecord,
   type Harness,
   type ToolExecutionApi,
@@ -80,16 +81,21 @@ export const STOPPED_ANSWER = "(stopped before it answered)"
 /**
  * The answer of the newest run of a conversation: assistant text after its
  * last user input. A run that was stopped or failed before it answered says
- * so, instead of returning the answer of an earlier run.
+ * so, instead of returning the answer of an earlier run. With `at`, the
+ * answer of the run that ends at that entry.
  */
 export async function lastAnswer(
   harness: Pick<Harness, "conversation">,
   conversationId: ConversationId,
-  context: Context
+  context: Context,
+  at?: EntryId
 ) {
   const conversation = await harness.conversation(conversationId, context)
   if (!conversation) return undefined
-  const view = await conversation.context(context)
+  const view = await conversation.context(
+    context,
+    at === undefined ? undefined : { at }
+  )
   let stopped = false
   for (let index = view.entries.length - 1; index >= 0; index -= 1) {
     const entry = view.entries[index]!
@@ -250,6 +256,31 @@ type ReportInput = {
   childTitle: string
   /** Distinguishes reports of several messages to one child. */
   key: string
+  /**
+   * The request ID of the message to the child. The report gives the answer
+   * to this message. Without it (tasks of older versions), the report gives
+   * the child's newest answer.
+   */
+  request?: string
+}
+
+/**
+ * The answer of the child to the message with request ID `request`.
+ * Undefined when the message has no answer yet, for example when it was
+ * withdrawn from the queue.
+ */
+async function answerTo(
+  harness: Harness,
+  child: ConversationId,
+  request: string,
+  context: Context
+) {
+  const record = await harness.commit(
+    (tx) => tx.submissionByRequest(child, request),
+    context
+  )
+  if (record?.type !== "input" || record.status !== "done") return undefined
+  return lastAnswer(harness, child, context, record.answer)
 }
 
 type ReportCheckpoint = { phase: "wait" } | { phase: "report"; answer: string }
@@ -265,11 +296,26 @@ function createReportTask(host: HostBridge) {
         const child = conversationOf(task.input.child)
         const handle = await runtime.conversation(child, context)
         let answer: string
+        let first = true
         // A turn that ends on a timer, a watch, or a job is `waiting`: wait
         // until the child runs again and ends with a question or done.
         for (;;) {
           if (handle) await handle.waitForIdle(context)
+          // A child can answer several queued messages before it is idle.
+          // Each report gives the answer to its own message, not the newest
+          // answer, so that the parent does not get one answer many times.
+          const own =
+            first && task.input.request
+              ? await answerTo(
+                  services.harness,
+                  child,
+                  task.input.request,
+                  context
+                )
+              : undefined
+          first = false
           answer =
+            own ??
             (await lastAnswer(services.harness, child, context)) ??
             "(no answer)"
           const needsInput = Boolean(
@@ -911,6 +957,7 @@ export function createSessionsExtension(host: HostBridge) {
             child,
             childTitle: title,
             key: `spawn-${api.callId}`,
+            request: `spawn:${api.callId}`,
           },
           context
         )
@@ -1122,6 +1169,7 @@ export function createSessionsExtension(host: HostBridge) {
             child: target,
             childTitle: title,
             key: `send-${api.callId}`,
+            request: `send:${api.callId}`,
           },
           context
         )

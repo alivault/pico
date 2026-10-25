@@ -410,6 +410,85 @@ void test("a child that waits on a job sends nothing until it is done", async ()
   }
 })
 
+void test("each message to a busy child gets its own answer back, one time", async () => {
+  const dir = await tempDir()
+  const host = new HostBridge()
+  let child = ""
+  let release = false
+  const script: Script = (messages) => {
+    const user = lastUser(messages)
+    if (user.startsWith("Slow work"))
+      return release
+        ? { text: "The work is done." }
+        : { tools: [{ name: "list_sessions", arguments: {} }] }
+    const fyi = /\] (FYI \d)/.exec(user)
+    if (fyi) return { text: `Noted ${fyi[1]}.` }
+    if (lastToolResult(messages)) return { text: "ok" }
+    if (user.includes(": done]")) return { text: "Thanks." }
+    if (user.startsWith("fyi"))
+      return {
+        tools: [
+          {
+            name: "send_to_session",
+            arguments: { id: child, message: user.replace("fyi", "FYI") },
+          },
+        ],
+      }
+    return {
+      tools: [{ name: "spawn_session", arguments: { goal: "Slow work" } }],
+    }
+  }
+  const harness = await openHarness(
+    join(dir, "db.sqlite"),
+    [createSessionsExtension(host)],
+    script,
+    dir
+  )
+  const fake = bind(host, harness, dir)
+  try {
+    const parent = await fake.sessions.create(dir)
+    const conversation = (await harness.conversation(
+      conversationOf(parent),
+      ctx
+    ))!
+    const reports = async () =>
+      (await conversation.context(ctx)).entries
+        .filter(
+          (entry) =>
+            entry.kind === "pi.user" &&
+            JSON.stringify(entry.model).includes("[Child session")
+        )
+        .map(
+          (entry) =>
+            /(The work is done|Noted FYI \d)/.exec(
+              lastUser(entry.model as Message[])
+            )?.[1]
+        )
+    await conversation.submit({ type: "input", content: "delegate" }, ctx)
+    child = await eventually(async () => fake.sessions.children(parent)[0])
+    await conversation.waitForIdle(ctx)
+    // The child is still busy: both messages wait in its follow-up queue.
+    for (const message of ["fyi 1", "fyi 2"]) {
+      await conversation.submit({ type: "input", content: message }, ctx)
+      await conversation.waitForIdle(ctx)
+    }
+    release = true
+    await eventually(
+      async () => ((await reports()).length >= 3 ? true : undefined),
+      12_000
+    )
+    await new Promise((done) => setTimeout(done, 300))
+    await conversation.waitForIdle(ctx)
+    // Each report waits for the child to be idle, so their order can vary.
+    assert.deepEqual(
+      (await reports()).toSorted((a, b) => String(a).localeCompare(String(b))),
+      ["Noted FYI 1", "Noted FYI 2", "The work is done"]
+    )
+  } finally {
+    await harness.close(ctx)
+  }
+})
+
 void test("spawn_session with wait returns the answer, and read_session reads it", async () => {
   const dir = await tempDir()
   const host = new HostBridge()
