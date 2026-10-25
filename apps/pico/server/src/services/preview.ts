@@ -40,6 +40,22 @@ export type PreviewProxy = {
   createdAt: number
 }
 
+/**
+ * A script for each HTML page of a preview. It tells the Preview panel (the
+ * parent frame) the address of the page, also after links, history changes,
+ * and hash changes. The panel cannot read it, because the preview has its
+ * own origin.
+ */
+export const PREVIEW_LOCATION_SCRIPT = `<script data-pico-preview>(()=>{if(window.parent===window)return;let last="";const send=()=>{if(location.href===last)return;last=location.href;window.parent.postMessage({type:"pico-preview-location",href:last},"*")};for(const name of["pushState","replaceState"]){const original=history[name];history[name]=function(...args){const result=original.apply(this,args);send();return result}}addEventListener("popstate",send);addEventListener("hashchange",send);send()})()</script>`
+
+/** An HTML page with the location script at the start of its head. */
+export function withLocationScript(html: string) {
+  const match = /<head(\s[^>]*)?>/i.exec(html) ?? /<html(\s[^>]*)?>/i.exec(html)
+  if (!match) return `${PREVIEW_LOCATION_SCRIPT}${html}`
+  const end = match.index + match[0].length
+  return `${html.slice(0, end)}${PREVIEW_LOCATION_SCRIPT}${html.slice(end)}`
+}
+
 export function parsePortRange(value: string | undefined) {
   const match = /^(\d+)\s*-\s*(\d+)$/.exec(value?.trim() ?? "")
   const start = Number(match?.[1] ?? 4100)
@@ -242,6 +258,13 @@ export class PreviewProxies {
   #listen(port: number, target: URL, sessionId: string) {
     const sockets = new Set<Duplex>()
     const server = createServer((request, response) => {
+      // A page in a frame gets the location script, so ask for it without
+      // compression.
+      const page =
+        request.method === "GET" &&
+        request.headers["sec-fetch-dest"] === "iframe"
+      const requestHeaders = { ...request.headers, host: target.host }
+      if (page) delete requestHeaders["accept-encoding"]
       const upstream = httpRequest(
         {
           protocol: target.protocol,
@@ -249,15 +272,35 @@ export class PreviewProxies {
           port: target.port,
           method: request.method,
           path: request.url,
-          headers: { ...request.headers, host: target.host },
+          headers: requestHeaders,
         },
         (reply) => {
           // Without a cache header, a browser keeps old pages for a time,
           // and Reload shows them. Make it ask the dev server each time.
           const headers = { ...reply.headers }
           headers["cache-control"] ??= "no-cache"
-          response.writeHead(reply.statusCode ?? 502, headers)
-          reply.pipe(response)
+          const html =
+            page &&
+            reply.statusCode === 200 &&
+            !reply.headers["content-encoding"] &&
+            /^text\/html\b/i.test(reply.headers["content-type"] ?? "")
+          if (!html) {
+            response.writeHead(reply.statusCode ?? 502, headers)
+            reply.pipe(response)
+            return
+          }
+          const chunks: Buffer[] = []
+          reply.on("data", (chunk: Buffer) => chunks.push(chunk))
+          reply.on("error", () => response.destroy())
+          reply.on("end", () => {
+            const body = Buffer.from(
+              withLocationScript(Buffer.concat(chunks).toString("utf8"))
+            )
+            delete headers["transfer-encoding"]
+            headers["content-length"] = String(body.length)
+            response.writeHead(200, headers)
+            response.end(body)
+          })
         }
       )
       upstream.on("error", (error) => {

@@ -51,6 +51,26 @@ export function previewAddress(port: number, path: string) {
   return `http://${host}:${port}${path.startsWith("/") ? path : `/${path}`}`
 }
 
+/** The path, query, and hash of a URL. */
+function pagePath(url: URL) {
+  return `${url.pathname}${url.search}${url.hash}`
+}
+
+/**
+ * The page that the address field asks for: a full URL (only its path is
+ * used, because the preview always shows its own dev server) or a path.
+ */
+function parsePageInput(value: string) {
+  const text = value.trim()
+  if (!text) return "/"
+  try {
+    if (/^\w+:\/\//.test(text)) return pagePath(new URL(text))
+  } catch {
+    // Use the text as a path.
+  }
+  return text.startsWith("/") ? text : `/${text}`
+}
+
 /** A page of a preview at its HTTPS address (from Tailscale Serve). */
 function httpsAddress(base: string, path: string) {
   return new URL(path.startsWith("/") ? path : `/${path}`, base).href
@@ -99,11 +119,40 @@ export function PreviewPanel({
     retry: false,
   })
   const [width, setWidth] = React.useState<keyof typeof WIDTHS>("full")
+  // `path` is the page that the frame loads. `currentPath` is the page that
+  // it shows now: the preview proxy adds a script to each HTML page that
+  // reports its address when it changes. `input` is the address field.
   const [path, setPath] = React.useState(preview?.path ?? "/")
+  const [currentPath, setCurrentPath] = React.useState(path)
+  const [input, setInput] = React.useState("")
+  const [editing, setEditing] = React.useState(false)
   const [reloadKey, setReloadKey] = React.useState(0)
+  const frameRef = React.useRef<HTMLIFrameElement | null>(null)
   React.useEffect(() => {
     setPath(preview?.path ?? "/")
+    setCurrentPath(preview?.path ?? "/")
   }, [preview?.path, preview?.updatedAt])
+  React.useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== frameRef.current?.contentWindow) return
+      const data = event.data as { type?: unknown; href?: unknown } | null
+      if (data?.type !== "pico-preview-location") return
+      if (typeof data.href !== "string") return
+      try {
+        setCurrentPath(pagePath(new URL(data.href)))
+      } catch {
+        // Not a URL: keep the last page.
+      }
+    }
+    window.addEventListener("message", onMessage)
+    return () => window.removeEventListener("message", onMessage)
+  }, [])
+  const shownUrl = preview?.target ? `${preview.target}${currentPath}` : ""
+  const openPage = (next: string) => {
+    setPath(next)
+    setCurrentPath(next)
+    setReloadKey((key) => key + 1)
+  }
 
   if (!sessionId || !preview?.target)
     return (
@@ -112,15 +161,19 @@ export function PreviewPanel({
       </div>
     )
   const port = ensured.data?.port ?? preview.port
-  const httpUrl = port ? previewAddress(port, path) : undefined
   const httpsUrl = ensured.data?.httpsUrl
-  const src = secure
-    ? httpsUrl
-      ? httpsAddress(httpsUrl, path)
-      : undefined
-    : httpUrl
+  const address = (page: string) =>
+    secure
+      ? httpsUrl
+        ? httpsAddress(httpsUrl, page)
+        : undefined
+      : port
+        ? previewAddress(port, page)
+        : undefined
+  const src = address(path)
+  const httpUrl = port ? previewAddress(port, currentPath) : undefined
   const blocked = secure && ensured.isSuccess && !httpsUrl
-  const openUrl = src ?? httpUrl
+  const openUrl = address(currentPath) ?? httpUrl
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -129,13 +182,23 @@ export function PreviewPanel({
           className="min-w-0 flex-1"
           onSubmit={(event) => {
             event.preventDefault()
-            setReloadKey((key) => key + 1)
+            openPage(parsePageInput(input))
+            setEditing(false)
+            ;(
+              event.currentTarget.elements[0] as HTMLElement | undefined
+            )?.blur()
           }}
         >
           <TitleTooltip title="The page of the app. Press Return to open it.">
             <Input
-              value={path}
-              onChange={(event) => setPath(event.target.value)}
+              value={editing ? input : shownUrl}
+              onFocus={(event) => {
+                setInput(shownUrl)
+                setEditing(true)
+                event.currentTarget.select()
+              }}
+              onBlur={() => setEditing(false)}
+              onChange={(event) => setInput(event.target.value)}
               className="h-8 font-mono text-xs"
               aria-label="Page path"
             />
@@ -174,7 +237,7 @@ export function PreviewPanel({
         <IconAction
           label="Reload"
           icon={<RefreshCwIcon />}
-          onClick={() => setReloadKey((key) => key + 1)}
+          onClick={() => openPage(currentPath)}
         />
         {openUrl ? (
           <IconAction
@@ -216,6 +279,7 @@ export function PreviewPanel({
           </div>
         ) : (
           <iframe
+            ref={frameRef}
             key={`${src}:${reloadKey}`}
             title={preview.title ?? "Preview"}
             src={src}

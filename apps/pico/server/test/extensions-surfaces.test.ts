@@ -17,6 +17,8 @@ import {
   parsePortRange,
   previewHttps,
   PreviewProxies,
+  PREVIEW_LOCATION_SCRIPT,
+  withLocationScript,
   TailscalePreviewServe,
   waitForUrl,
 } from "../src/services/preview.ts"
@@ -40,6 +42,14 @@ void test("preview targets must be local", () => {
   assert.throws(() => localTarget("https://example.com"), /Only local/)
   assert.deepEqual(parsePortRange("5000-5009"), { start: 5000, end: 5009 })
   assert.deepEqual(parsePortRange("nonsense"), { start: 4100, end: 4199 })
+  assert.equal(
+    withLocationScript('<!doctype html><html lang="en"><HEAD><title>x</title>'),
+    `<!doctype html><html lang="en"><HEAD>${PREVIEW_LOCATION_SCRIPT}<title>x</title>`
+  )
+  assert.equal(
+    withLocationScript("<html><body>x"),
+    `<html>${PREVIEW_LOCATION_SCRIPT}<body>x`
+  )
 })
 
 void test("a preview proxy forwards HTTP and WebSockets at the root path", async () => {
@@ -71,6 +81,13 @@ void test("a preview proxy forwards HTTP and WebSockets at the root path", async
     const page = await fetch(`http://127.0.0.1:${proxy.port}/assets/app.js?q=1`)
     assert.equal(page.headers.get("cache-control"), "no-cache")
     const body = await page.text()
+    assert.doesNotMatch(body, /data-pico-preview/)
+    const framed = await (
+      await fetch(`http://127.0.0.1:${proxy.port}/`, {
+        headers: { "sec-fetch-dest": "iframe" },
+      })
+    ).text()
+    assert.match(framed, /^<script data-pico-preview>.*<\/script><script src=/)
     assert.match(body, /path=\/assets\/app\.js\?q=1/)
     assert.match(body, new RegExp(`host=localhost:${appPort}`))
     const reply = await new Promise<string>((resolve, reject) => {
