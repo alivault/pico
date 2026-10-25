@@ -202,6 +202,27 @@ h3 {
   margin: 0;
 }
 
+.demo {
+  margin-bottom: 96px;
+  text-align: center;
+}
+
+.demo p {
+  color: var(--muted);
+  font-size: 1.1rem;
+  max-width: 640px;
+  margin: 0 auto 32px;
+}
+
+.demo video {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 24px 64px -24px rgb(0 0 0 / 0.35);
+}
+
 .split {
   display: grid;
   grid-template-columns: 1fr 1fr;
