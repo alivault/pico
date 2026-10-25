@@ -36,6 +36,12 @@ import { useMachineId } from "@/lib/pico/machine-context"
 import { hubUrl, LOCAL_MACHINE_ID, openMachine } from "@/lib/pico/machine"
 import { cn } from "@/lib/utils"
 import {
+  setSessionStatusFilter,
+  toggleSessionStatusFilter,
+  useSessionStatusFilter,
+  type SessionStatusFilter,
+} from "@/features/pico/session-status-filter"
+import {
   useMachines,
   viewerContextIdForSummaries,
   type MachineInfo,
@@ -131,40 +137,96 @@ function sessionCounts(machine: MachineInfo) {
   }
 }
 
+/**
+ * A count in a machine heading. A click shows only the sessions with that
+ * state; a second click shows all sessions again.
+ */
+function MachineCountButton({
+  machine,
+  filter,
+  count,
+  title,
+  className,
+  children,
+}: {
+  machine: MachineInfo
+  filter: SessionStatusFilter
+  count: number
+  title: string
+  className?: string
+  children: React.ReactNode
+}) {
+  const active = useSessionStatusFilter(machine.id) === filter
+  // The active filter keeps its button at 0, so you can remove it.
+  if (count === 0 && !active) return null
+  return (
+    <TitleTooltip
+      title={active ? `Show all sessions` : `Show only ${title.toLowerCase()}`}
+    >
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-pressed={active}
+        aria-label={`${count} ${title.toLowerCase()} on ${machine.label}`}
+        className={cn(
+          "h-6 shrink-0 gap-1 px-1.5 text-[11px] font-normal text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+          active &&
+            "bg-sidebar-accent text-sidebar-foreground ring-1 ring-sidebar-border",
+          className
+        )}
+        onClick={() => {
+          setMachinesCollapsed([machine.id], false)
+          toggleSessionStatusFilter(machine.id, filter)
+        }}
+      >
+        {children}
+        {count}
+      </Button>
+    </TitleTooltip>
+  )
+}
+
 function MachineCounts({ machine }: { machine: MachineInfo }) {
   const { working, waiting, done } = sessionCounts(machine)
-  if (machine.state !== "online")
+  const online = machine.state === "online"
+  // A machine that goes offline shows all its sessions again.
+  React.useEffect(() => {
+    if (!online) setSessionStatusFilter(machine.id, null)
+  }, [machine.id, online])
+  if (!online) {
     return (
       <span className="truncate text-[11px] font-normal text-sidebar-foreground/50">
         {machineStateLabel(machine)}
       </span>
     )
+  }
   return (
-    <span className="flex items-center gap-2 text-[11px] font-normal text-sidebar-foreground/50">
-      {waiting > 0 ? (
-        <TitleTooltip title={`${waiting} waiting for you`}>
-          <span className="flex items-center gap-0.5 text-amber-500">
-            <MessageCircleQuestionIcon className="size-3" />
-            {waiting}
-          </span>
-        </TitleTooltip>
-      ) : null}
-      {working > 0 ? (
-        <TitleTooltip title={`${working} working`}>
-          <span className="flex items-center gap-1">
-            <Spinner size="xs" />
-            {working}
-          </span>
-        </TitleTooltip>
-      ) : null}
-      {done > 0 ? (
-        <TitleTooltip title={`${done} done`}>
-          <span className="flex items-center gap-1">
-            <span className="size-2 rounded-full bg-primary" />
-            {done}
-          </span>
-        </TitleTooltip>
-      ) : null}
+    <span className="flex items-center">
+      <MachineCountButton
+        machine={machine}
+        filter="waiting"
+        count={waiting}
+        title="Waiting for you"
+        className="text-amber-500 hover:text-amber-500"
+      >
+        <MessageCircleQuestionIcon className="size-3" />
+      </MachineCountButton>
+      <MachineCountButton
+        machine={machine}
+        filter="working"
+        count={working}
+        title="Working"
+      >
+        <Spinner size="xs" />
+      </MachineCountButton>
+      <MachineCountButton
+        machine={machine}
+        filter="done"
+        count={done}
+        title="Done"
+      >
+        <span className="size-2 rounded-full bg-primary" />
+      </MachineCountButton>
     </span>
   )
 }
@@ -243,17 +305,18 @@ function MachineGroupLabel({
             <ChevronDownIcon className="size-4 shrink-0 opacity-0 transition-opacity group-hover/machine-label:opacity-100" />
           )}
         </span>
-        {/* In a narrow sidebar, the machine of this page has no room for its
-            counts next to its icon buttons. The session rows still show
-            their state. */}
-        {attention ? null : (
-          <span
-            className={cn("contents", actions && "@max-[18rem]/sidebar:hidden")}
-          >
-            <MachineCounts machine={machine} />
-          </span>
-        )}
       </CollapsibleTrigger>
+      {/* The counts are buttons, so they are not in the trigger. In a
+          narrow sidebar, the machine of this page has no room for its
+          counts next to its icon buttons. The session rows still show
+          their state. */}
+      {attention ? null : (
+        <span
+          className={cn("contents", actions && "@max-[18rem]/sidebar:hidden")}
+        >
+          <MachineCounts machine={machine} />
+        </span>
+      )}
       {attention ? <MachineProblemBadge machine={machine} /> : null}
       {actions}
     </SidebarGroupLabel>

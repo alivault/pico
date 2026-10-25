@@ -36,6 +36,11 @@ import {
 import type { SessionListEntry } from "@/lib/pico/api"
 import { ArchivedSessionsDialog } from "@/features/pico/archived-sessions-dialog"
 import { useMachineId } from "@/lib/pico/machine-context"
+import {
+  filterDirectorySessionsByStatus,
+  sessionMatchesStatusFilter,
+  useSessionStatusFilter,
+} from "@/features/pico/session-status-filter"
 
 const PINNED_SESSION_STORE_DIRECTORY = "__pico_pinned_sessions__"
 
@@ -107,15 +112,58 @@ function useAppShellSidebarControllerView({
     sidebarStore,
     (snapshot) => snapshot.derived.emptySidebarStateText
   )
-  const filteredDirectorySessions = useAppShellSidebarValue(
+  const searchedDirectorySessions = useAppShellSidebarValue(
     sidebarStore,
     (snapshot) => snapshot.derived.filteredDirectorySessions,
     sameSessionEntryRecord
   )
-  const pinnedSidebarSessions = useAppShellSidebarValue(
+  const allPinnedSidebarSessions = useAppShellSidebarValue(
     sidebarStore,
     (snapshot) => snapshot.derived.pinnedSidebarSessions
   )
+  const searchedDirectories = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) => snapshot.derived.visibleDirectories,
+    sameStringArray
+  )
+  // A click on a count in the machine heading shows only the sessions with
+  // that state.
+  const statusFilter = useSessionStatusFilter(machineId)
+  const pinnedSidebarSessions = React.useMemo(
+    () =>
+      statusFilter
+        ? allPinnedSidebarSessions.filter((entry) =>
+            sessionMatchesStatusFilter(entry, statusFilter)
+          )
+        : allPinnedSidebarSessions,
+    [allPinnedSidebarSessions, statusFilter]
+  )
+  const { visibleDirectories, filteredDirectorySessions } =
+    React.useMemo(() => {
+      if (!statusFilter)
+        return {
+          visibleDirectories: searchedDirectories,
+          filteredDirectorySessions: searchedDirectorySessions,
+        }
+      const pinnedKeys = new Set(
+        allPinnedSidebarSessions.map((entry) => sessionListEntryKey(entry))
+      )
+      const filtered = filterDirectorySessionsByStatus(
+        searchedDirectories,
+        searchedDirectorySessions,
+        statusFilter,
+        (entry) => pinnedKeys.has(sessionListEntryKey(entry))
+      )
+      return {
+        visibleDirectories: filtered.visibleDirectories,
+        filteredDirectorySessions: filtered.filteredSessions,
+      }
+    }, [
+      allPinnedSidebarSessions,
+      searchedDirectories,
+      searchedDirectorySessions,
+      statusFilter,
+    ])
   const pinnedSidebarSessionKeys = pinnedSidebarSessions.flatMap((entry) => {
     const key = sessionListEntryKey(entry)
     return key ? [key] : []
@@ -124,11 +172,6 @@ function useAppShellSidebarControllerView({
     sidebarStore,
     (snapshot) => snapshot.derived.sidebarSessionEntriesByKey,
     sameMapEntries
-  )
-  const visibleDirectories = useAppShellSidebarValue(
-    sidebarStore,
-    (snapshot) => snapshot.derived.visibleDirectories,
-    sameStringArray
   )
   const directoryIndexDataByPath = useAppShellSidebarValue(
     sidebarStore,
@@ -830,7 +873,10 @@ function useAppShellSidebarControllerView({
         activeSessionId={activeSidebarSessionId || undefined}
         activeSessionKey={activeSidebarSessionKey || undefined}
         pinnedSessionKeys={pinnedSidebarSessionKeys}
-        emptyStateText={emptySidebarStateText}
+        emptyStateText={
+          statusFilter ? "No sessions with this state." : emptySidebarStateText
+        }
+        statusFilterActive={Boolean(statusFilter)}
         onOpenAddDirectoryDialog={() => {
           sessionWorkspaceRef.current?.openAddDirectoryDialog()
         }}

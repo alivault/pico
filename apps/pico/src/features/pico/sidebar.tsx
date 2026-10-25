@@ -125,6 +125,10 @@ import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
 import { useSidebarSlot } from "@/features/pico/sidebar-slots"
 import { sortSidebarSessions } from "@/features/pico/session-order"
+import {
+  filterDirectorySessionsByStatus,
+  useSessionStatusFilter,
+} from "@/features/pico/session-status-filter"
 
 const SIDEBAR_LOADING_SPINNER_DELAY_MS = 250
 const SIDEBAR_TIME_MIN_DELAY_MS = 1000
@@ -486,6 +490,8 @@ type AppSidebarProps = {
   activeSessionKey?: string
   pinnedSessionKeys: Array<string>
   emptyStateText: string
+  /** The sessions show only one state (a count in the machine heading). */
+  statusFilterActive?: boolean
   onOpenAddDirectoryDialog: () => void
   onSessionClick?: (
     entry: SessionListEntry,
@@ -2022,7 +2028,31 @@ function useOtherMachinePinnedSessionKeys(machineId: string, online: boolean) {
  */
 export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
   const { isMobile, setOpenMobile } = useSidebar()
-  const grouped = React.useMemo(() => groupMachineSessions(machine), [machine])
+  const allGrouped = React.useMemo(
+    () => groupMachineSessions(machine),
+    [machine]
+  )
+  const statusFilter = useSessionStatusFilter(machine.id)
+  const [storedPinnedKeys, togglePinnedKey] = useOtherMachinePinnedSessionKeys(
+    machine.id,
+    machine.state === "online"
+  )
+  // A click on a count in the machine heading shows only the sessions with
+  // that state.
+  const grouped = React.useMemo(() => {
+    if (!statusFilter) return allGrouped
+    const pinned = new Set(storedPinnedKeys)
+    const filtered = filterDirectorySessionsByStatus(
+      allGrouped.directories,
+      allGrouped.sessionsByDirectory,
+      statusFilter,
+      (entry) => pinned.has(sessionListEntryKey(entry))
+    )
+    return {
+      directories: filtered.visibleDirectories,
+      sessionsByDirectory: filtered.filteredSessions,
+    }
+  }, [allGrouped, statusFilter, storedPinnedKeys])
   const [stores] = React.useState(() => {
     const collapsed = createCollapsedDirectoryStore(
       machine.id,
@@ -2042,10 +2072,6 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
   }, [grouped, stores])
 
   const online = machine.state === "online"
-  const [storedPinnedKeys, togglePinnedKey] = useOtherMachinePinnedSessionKeys(
-    machine.id,
-    online
-  )
   // Only the pins of sessions in the summary: the summary does not have
   // archived sessions, and it stops at 200 sessions.
   const pinnedSessionKeys = React.useMemo(() => {
@@ -2089,7 +2115,17 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
 
   // A machine without directories: add the first one there. The heading
   // shows the state of a machine that is not online.
-  if (grouped.directories.length === 0) {
+  if (
+    statusFilter &&
+    grouped.directories.length === 0 &&
+    pinnedSessionKeys.length === 0
+  )
+    return (
+      <p className="px-(--sidebar-item-pad) py-1 text-xs text-sidebar-foreground/50">
+        No sessions with this state.
+      </p>
+    )
+  if (!statusFilter && grouped.directories.length === 0) {
     if (!online) return null
     return (
       <SidebarMenu>
@@ -2118,7 +2154,7 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
         directorySessionsStore={stores.sessions}
         collapsedDirectoryStore={stores.collapsed}
         collapseAllKeys={collapseAllKeys}
-        searchActive={false}
+        searchActive={Boolean(statusFilter)}
         activeSessionStore={stores.active}
         selectedSessionKeyStore={stores.selected}
         isMobile={isMobile}
@@ -2135,7 +2171,7 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
           directorySessionsStore={stores.sessions}
           collapsedDirectoryStore={stores.collapsed}
           collapseAllKeys={collapseAllKeys}
-          searchActive={false}
+          searchActive={Boolean(statusFilter)}
           moveTargetDirectories={NO_MOVE_TARGET_DIRECTORIES}
           activeSessionStore={stores.active}
           selectedSessionKeyStore={stores.selected}
@@ -2183,6 +2219,7 @@ function useAppSidebarView({
   activeSessionKey,
   pinnedSessionKeys,
   emptyStateText,
+  statusFilterActive = false,
   onOpenAddDirectoryDialog,
   onSessionClick,
   onRenameSession,
@@ -2201,8 +2238,11 @@ function useAppSidebarView({
   const machineId = useMachineId()
   const { isMobile, setOpenMobile } = useSidebar()
   const searchActive = sessionSearch.trim().length > 0
+  // A search or a state filter shows all matching sessions, with their
+  // groups open, and stops the drag to reorder.
+  const listFiltered = searchActive || statusFilterActive
   const directoryOrderingEnabled =
-    !searchActive && visibleDirectories.length > 1
+    !listFiltered && visibleDirectories.length > 1
   const [activeDirectory, setActiveDirectory] = React.useState<string | null>(
     null
   )
@@ -2464,7 +2504,7 @@ function useAppSidebarView({
                 directorySessionsStore={directorySessionsStore}
                 collapsedDirectoryStore={collapsedDirectoryStore}
                 collapseAllKeys={collapseAllKeys}
-                searchActive={searchActive}
+                searchActive={listFiltered}
                 activeSessionStore={activeSessionStore}
                 selectedSessionKeyStore={selectedSessionKeyStore}
                 isMobile={isMobile}
@@ -2544,7 +2584,7 @@ function useAppSidebarView({
                                       collapsedDirectoryStore
                                     }
                                     collapseAllKeys={collapseAllKeys}
-                                    searchActive={searchActive}
+                                    searchActive={listFiltered}
                                     moveTargetDirectories={visibleDirectories}
                                     activeSessionStore={activeSessionStore}
                                     selectedSessionKeyStore={
@@ -2601,7 +2641,7 @@ function useAppSidebarView({
                     directorySessionsStore={directorySessionsStore}
                     collapsedDirectoryStore={collapsedDirectoryStore}
                     collapseAllKeys={collapseAllKeys}
-                    searchActive={searchActive}
+                    searchActive={listFiltered}
                     moveTargetDirectories={visibleDirectories}
                     activeSessionStore={activeSessionStore}
                     selectedSessionKeyStore={selectedSessionKeyStore}
