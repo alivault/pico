@@ -51,6 +51,11 @@ export function previewAddress(port: number, path: string) {
   return `http://${host}:${port}${path.startsWith("/") ? path : `/${path}`}`
 }
 
+/** A page of a preview at its HTTPS address (from Tailscale Serve). */
+function httpsAddress(base: string, path: string) {
+  return new URL(path.startsWith("/") ? path : `/${path}`, base).href
+}
+
 export function usePreviewState(viewerContextId: string, sessionId?: string) {
   const query = useSessionExtensions(viewerContextId, sessionId)
   return query.data?.preview as PreviewState | undefined
@@ -67,6 +72,9 @@ export function PreviewPanel({
 }) {
   const machineId = useMachineId()
   const preview = usePreviewState(viewerContextId, sessionId)
+  // An HTTPS page does not show an HTTP page in a frame, so it asks the
+  // server for an HTTPS address of the preview.
+  const secure = window.location.protocol === "https:"
   const ensured = useQuery({
     queryKey: [
       "pico",
@@ -74,14 +82,17 @@ export function PreviewPanel({
       viewerContextId,
       sessionId,
       preview?.target,
+      secure,
     ],
     queryFn: () =>
-      postSessionJson<PreviewState & { port: number }>(
+      postSessionJson<
+        PreviewState & { port: number; httpsUrl?: string; httpsError?: string }
+      >(
         machineId,
         viewerContextId,
         sessionId,
         "/api/session/preview/ensure",
-        {}
+        secure ? { https: true } : {}
       ),
     enabled: Boolean(active && sessionId && preview?.target),
     staleTime: 60_000,
@@ -101,8 +112,15 @@ export function PreviewPanel({
       </div>
     )
   const port = ensured.data?.port ?? preview.port
-  const src = port ? previewAddress(port, path) : undefined
-  const insecureFrame = window.location.protocol === "https:"
+  const httpUrl = port ? previewAddress(port, path) : undefined
+  const httpsUrl = ensured.data?.httpsUrl
+  const src = secure
+    ? httpsUrl
+      ? httpsAddress(httpsUrl, path)
+      : undefined
+    : httpUrl
+  const blocked = secure && ensured.isSuccess && !httpsUrl
+  const openUrl = src ?? httpUrl
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -158,11 +176,13 @@ export function PreviewPanel({
           icon={<RefreshCwIcon />}
           onClick={() => setReloadKey((key) => key + 1)}
         />
-        {src ? (
+        {openUrl ? (
           <IconAction
             label="Open in a new tab"
             icon={<ExternalLinkIcon />}
-            onClick={() => window.open(src, "_blank", "noopener,noreferrer")}
+            onClick={() =>
+              window.open(openUrl, "_blank", "noopener,noreferrer")
+            }
           />
         ) : null}
       </div>
@@ -171,23 +191,28 @@ export function PreviewPanel({
           <div className="p-6 text-sm text-destructive">
             {errorText(ensured.error)}
           </div>
+        ) : blocked ? (
+          <div className="max-w-sm p-6 text-sm text-muted-foreground">
+            Pico runs on HTTPS here, so the browser does not show the HTTP
+            preview in a frame, and the preview has no HTTPS address
+            {ensured.data?.httpsError ? ` (${ensured.data.httpsError})` : ""}.{" "}
+            {httpUrl ? (
+              <>
+                <a
+                  href={httpUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline"
+                >
+                  Open the HTTP address in a new tab
+                </a>
+                .
+              </>
+            ) : null}
+          </div>
         ) : !src ? (
           <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
             <Spinner size="xs" /> Opening the preview…
-          </div>
-        ) : insecureFrame ? (
-          <div className="max-w-sm p-6 text-sm text-muted-foreground">
-            Pico runs on HTTPS here, so the browser does not show the HTTP
-            preview in a frame.{" "}
-            <a
-              href={src}
-              target="_blank"
-              rel="noreferrer"
-              className="underline"
-            >
-              Open it in a new tab
-            </a>
-            .
           </div>
         ) : (
           <iframe

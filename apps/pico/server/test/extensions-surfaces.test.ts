@@ -15,7 +15,9 @@ import { Notifier } from "../src/services/notify.ts"
 import {
   localTarget,
   parsePortRange,
+  previewHttps,
   PreviewProxies,
+  TailscalePreviewServe,
   waitForUrl,
 } from "../src/services/preview.ts"
 import { tempDir } from "./support.ts"
@@ -87,6 +89,68 @@ void test("a preview proxy forwards HTTP and WebSockets at the root path", async
     app.closeAllConnections()
     await new Promise((done) => app.close(done))
   }
+})
+
+void test("a preview gets an HTTPS address through Tailscale Serve", async () => {
+  const host = "box.tail1.ts.net"
+  const web: Record<string, { Handlers: Record<string, { Proxy: string }> }> = {
+    [`${host}:443`]: { Handlers: { "/": { Proxy: "http://127.0.0.1:3141" } } },
+    [`${host}:4341`]: { Handlers: { "/": { Proxy: "http://127.0.0.1:9" } } },
+  }
+  const calls: string[] = []
+  const serve = new TailscalePreviewServe(async (args) => {
+    calls.push(args.join(" "))
+    if (args[1] === "status") return JSON.stringify({ Web: web })
+    const port = /--https=(\d+)/.exec(args.join(" "))?.[1] ?? ""
+    if (args.at(-1) === "off") delete web[`${host}:${port}`]
+    else web[`${host}:${port}`] = { Handlers: { "/": { Proxy: args.at(-1)! } } }
+    return ""
+  })
+  const app = createServer((_request, response) => response.end("ok"))
+  const appPort = await listen(app)
+  const proxies = new PreviewProxies(
+    "127.0.0.1",
+    () => ({ start: 4340, end: 4341 }),
+    serve
+  )
+  const request = (hostHeader: string) =>
+    ({ headers: { host: hostHeader } }) as never
+  try {
+    const proxy = await proxies.open(`http://localhost:${appPort}`, "s1")
+    assert.deepEqual(
+      await previewHttps(proxies, proxy.port, request("127.0.0.1:3141"), true),
+      {
+        httpsError:
+          "Pico gives previews an HTTPS address only through Tailscale Serve",
+      }
+    )
+    assert.deepEqual(
+      await previewHttps(proxies, proxy.port, request(host), undefined),
+      {}
+    )
+    const url = `https://${host}:${proxy.port}/`
+    assert.deepEqual(
+      await previewHttps(proxies, proxy.port, request(host), true),
+      { httpsUrl: url }
+    )
+    assert.equal(await proxies.httpsUrl(proxy.port), url)
+    assert.equal(
+      calls.filter((call) => call.startsWith("serve --bg")).length,
+      1,
+      "Pico adds the Serve entry one time"
+    )
+    // Pico does not replace a Serve entry that is not its own.
+    const other = await proxies.open("http://localhost:9", "s2")
+    assert.equal(other.port, 4341)
+    await assert.rejects(proxies.httpsUrl(other.port), /already uses port/)
+  } finally {
+    await proxies.shutdown()
+    app.closeAllConnections()
+    await new Promise((done) => app.close(done))
+  }
+  assert.ok(calls.includes(`serve --https=4340 off`))
+  assert.ok(!calls.includes(`serve --https=4341 off`))
+  assert.ok(web[`${host}:4341`], "the other entry stays")
 })
 
 void test("notifications keep keys, drop gone devices, and post to ntfy", async () => {

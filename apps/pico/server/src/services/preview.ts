@@ -7,9 +7,15 @@
  * traffic (for hot reload) to the dev server. Paths stay at `/`, so apps that
  * use absolute paths work.
  *
+ * When the browser reaches Pico through Tailscale Serve (HTTPS), it does not
+ * show an HTTP page in a frame. Then Pico also serves the preview port with
+ * Tailscale Serve, so the preview gets its own HTTPS origin on the same host
+ * (`https://<machine>.ts.net:<port>/`).
+ *
  * Only local targets are allowed. Anyone who can reach Pico can reach a
  * previewed dev server; that is the same trust as Pico's terminals.
  */
+import { execFile } from "node:child_process"
 import {
   createServer,
   request as httpRequest,
@@ -56,17 +62,155 @@ export function localTarget(value: string) {
   return url
 }
 
+/** Runs the `tailscale` command with arguments and gives its stdout. */
+export type TailscaleRunner = (args: string[]) => Promise<string>
+
+const runTailscale: TailscaleRunner = (args) =>
+  new Promise((resolve, reject) => {
+    execFile(
+      "tailscale",
+      args,
+      { timeout: 15_000, maxBuffer: 1024 * 1024 },
+      (error, stdout, stderr) => {
+        if (!error) return resolve(stdout)
+        const code = (error as NodeJS.ErrnoException).code
+        reject(
+          new Error(
+            code === "ENOENT"
+              ? "The tailscale command is not installed"
+              : stderr.trim() || error.message
+          )
+        )
+      }
+    )
+  })
+
+type ServeStatus = {
+  TCP?: Record<string, unknown>
+  Web?: Record<string, { Handlers?: Record<string, { Proxy?: string }> }>
+}
+
+/**
+ * Tailscale Serve entries for preview ports. Pico removes only the entries
+ * that it added.
+ */
+export class TailscalePreviewServe {
+  readonly #run: TailscaleRunner
+  readonly #urls = new Map<number, Promise<string>>()
+  readonly #owned = new Set<number>()
+
+  constructor(run: TailscaleRunner = runTailscale) {
+    this.#run = run
+  }
+
+  /** The HTTPS address of a port; adds the Serve entry when it is missing. */
+  url(port: number, target: string) {
+    let url = this.#urls.get(port)
+    if (!url) {
+      url = this.#serve(port, target)
+      this.#urls.set(port, url)
+      url.catch(() => this.#urls.delete(port))
+    }
+    return url
+  }
+
+  async remove(port: number) {
+    this.#urls.delete(port)
+    if (!this.#owned.delete(port)) return
+    await this.#run(["serve", `--https=${port}`, "off"])
+  }
+
+  async #status() {
+    return JSON.parse(
+      (await this.#run(["serve", "status", "--json"])) || "{}"
+    ) as ServeStatus
+  }
+
+  /** The `host:port` key of the Serve entry for a port, if it is there. */
+  #entry(status: ServeStatus, port: number) {
+    const key = Object.keys(status.Web ?? {}).find((name) =>
+      name.endsWith(`:${port}`)
+    )
+    if (key) return { key, proxy: status.Web?.[key]?.Handlers?.["/"]?.Proxy }
+    return status.TCP?.[String(port)] ? { key: undefined } : undefined
+  }
+
+  async #serve(port: number, target: string) {
+    let entry = this.#entry(await this.#status(), port)
+    if (!entry) {
+      await this.#run(["serve", "--bg", `--https=${port}`, target])
+      this.#owned.add(port)
+      entry = this.#entry(await this.#status(), port)
+    }
+    if (!entry?.key || entry.proxy?.replace(/\/$/, "") !== target)
+      throw new Error(
+        `Tailscale Serve already uses port ${port} for something else`
+      )
+    return `https://${entry.key}/`
+  }
+}
+
+/** True when the browser reaches Pico at a Tailscale (MagicDNS) host. */
+export function isTailscaleRequest(request: IncomingMessage) {
+  const host = request.headers.host ?? ""
+  return /\.ts\.net(:\d+)?$/i.test(host)
+}
+
+/**
+ * The HTTPS address of a preview, for a browser that shows Pico on HTTPS.
+ * The result goes into the answer of `/api/session/preview/ensure`.
+ */
+export async function previewHttps(
+  previews: PreviewProxies | undefined,
+  port: number,
+  request: IncomingMessage,
+  wanted: unknown
+): Promise<{ httpsUrl?: string; httpsError?: string }> {
+  if (wanted !== true || !previews) return {}
+  if (!isTailscaleRequest(request))
+    return {
+      httpsError:
+        "Pico gives previews an HTTPS address only through Tailscale Serve",
+    }
+  try {
+    return { httpsUrl: await previews.httpsUrl(port) }
+  } catch (error) {
+    return {
+      httpsError: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
+
 export class PreviewProxies {
   readonly #host: string
   readonly #range: () => { start: number; end: number }
+  readonly #serve: TailscalePreviewServe | undefined
   readonly #servers = new Map<
     number,
     { server: Server; proxy: PreviewProxy; sockets: Set<Duplex> }
   >()
 
-  constructor(host: string, range: () => { start: number; end: number }) {
+  constructor(
+    host: string,
+    range: () => { start: number; end: number },
+    serve?: TailscalePreviewServe
+  ) {
     this.#host = host
     this.#range = range
+    this.#serve = serve
+  }
+
+  /** The HTTPS address of an open proxy, through Tailscale Serve. */
+  async httpsUrl(port: number) {
+    if (!this.#servers.has(port)) throw new Error(`No preview on port ${port}`)
+    if (!this.#serve) throw new Error("HTTPS previews are not available")
+    const host =
+      this.#host === "0.0.0.0" || this.#host === "::" || this.#host === ""
+        ? "127.0.0.1"
+        : this.#host.includes(":")
+          ? `[${this.#host}]`
+          : this.#host
+    return this.#serve.url(port, `http://${host}:${port}`)
   }
 
   list() {
@@ -183,6 +327,11 @@ export class PreviewProxies {
     const entry = this.#servers.get(port)
     if (!entry) return false
     this.#servers.delete(port)
+    await this.#serve?.remove(port).catch((error: unknown) => {
+      console.warn(
+        `[pico] could not remove the Tailscale Serve entry for port ${port}: ${error instanceof Error ? error.message : String(error)}`
+      )
+    })
     for (const socket of entry.sockets) socket.destroy()
     await new Promise<void>((resolve) => entry.server.close(() => resolve()))
     return true

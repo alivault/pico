@@ -22,7 +22,7 @@ import type { Duplex } from "node:stream"
 import { StringDecoder } from "node:string_decoder"
 
 import { sendJson, SseStream } from "../http.ts"
-import type { PreviewProxies } from "../services/preview.ts"
+import { previewHttps, type PreviewProxies } from "../services/preview.ts"
 import { MachineError, SseParser, type MachineManager } from "./manager.ts"
 import {
   cacheableGet,
@@ -288,10 +288,15 @@ export class MachineProxy {
       const chunks: Buffer[] = []
       for await (const chunk of request) chunks.push(chunk as Buffer)
       const text = Buffer.concat(chunks).toString("utf8").trim()
+      // The hub gives the HTTPS address, so the remote does not get `https`.
+      const { https, ...body } = (text ? JSON.parse(text) : {}) as Record<
+        string,
+        unknown
+      >
       const result = (await connection.request(
         "POST",
         `${route.path}${route.search}`,
-        { body: text ? (JSON.parse(text) as unknown) : {} }
+        { body }
       )) as { ok: true; port?: number; [key: string]: unknown }
       if (typeof result.port !== "number") {
         sendJson(response, 200, result)
@@ -306,6 +311,7 @@ export class MachineProxy {
         ...result,
         port: proxy.port,
         remotePort: result.port,
+        ...(await previewHttps(this.#previews, proxy.port, request, https)),
       })
     } catch (error) {
       offline(response, error, connection.profile.label)

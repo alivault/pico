@@ -18,7 +18,11 @@ import { EventHub } from "./events.ts"
 import { HostBridge } from "./extensions/host.ts"
 import { BrowserManager } from "./services/browser.ts"
 import { Notifier } from "./services/notify.ts"
-import { parsePortRange, PreviewProxies } from "./services/preview.ts"
+import {
+  parsePortRange,
+  PreviewProxies,
+  TailscalePreviewServe,
+} from "./services/preview.ts"
 import { ApiError, sendError, sendJson, serveStatic } from "./http.ts"
 import { GitWatcher } from "./services/git.ts"
 import { HighlightService } from "./services/highlight.ts"
@@ -90,8 +94,10 @@ export async function startServer(options: {
     })
     if (kept) console.log(`[pico] the pty-host kept ${kept} terminal(s)`)
   }
-  const previews = new PreviewProxies(options.host, () =>
-    parsePortRange(runtime.settings.data.previewPorts)
+  const previews = new PreviewProxies(
+    options.host,
+    () => parsePortRange(runtime.settings.data.previewPorts),
+    new TailscalePreviewServe()
   )
   const notifier = new Notifier(
     options.paths.dataDir,

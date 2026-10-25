@@ -28,6 +28,7 @@ import type { Viewers } from "./core/viewers.ts"
 import type { HostBridge } from "./extensions/host.ts"
 import { JobsDoc, stopJob } from "./extensions/jobs.ts"
 import { ensurePreview } from "./extensions/preview.ts"
+import { previewHttps } from "./services/preview.ts"
 import { TimersDoc } from "./extensions/schedule.ts"
 import type { TodoChange } from "./extensions/todo.ts"
 import { eventMatches, type EventHub, type ServerEvent } from "./events.ts"
@@ -1361,10 +1362,18 @@ export function createApi(api: ApiContext) {
 
   router.post("/api/session/preview/ensure", async (request) => {
     const id = requireSession(request)
+    const body = await request.body<{ https?: boolean }>()
     try {
+      const state = await ensurePreview(api.host, conversationIdOf(id))
       return {
         ok: true,
-        ...(await ensurePreview(api.host, conversationIdOf(id))),
+        ...state,
+        ...(await previewHttps(
+          api.host.current?.previews,
+          state.port,
+          request.raw,
+          body.https
+        )),
       }
     } catch (error) {
       throw badRequest(error instanceof Error ? error.message : String(error))
