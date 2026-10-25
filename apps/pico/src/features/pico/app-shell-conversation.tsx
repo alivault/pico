@@ -2,6 +2,7 @@ import * as React from "react"
 import {
   ArrowDownIcon,
   ArrowDownToLineIcon,
+  ArrowUpIcon,
   ArrowUpToLineIcon,
   CheckIcon,
   OctagonXIcon,
@@ -126,6 +127,38 @@ function ConversationLatestMessageButton({
   )
 }
 
+function ConversationFirstMessageButton({
+  conversationItemsStore,
+  draft,
+  onClick,
+}: {
+  conversationItemsStore: ConversationItemsStore
+  draft: boolean
+  onClick: () => void
+}) {
+  const hasMessages = useConversationHasMessages(conversationItemsStore)
+  const scrollable = useMessageScrollerScrollable()
+  const isDisabled = draft || !hasMessages || !scrollable.start
+
+  return (
+    <TitleTooltip
+      title="Jump to first message"
+      kbd={formatShortcutLabel(appShortcut("ArrowUp"))}
+    >
+      <Button
+        variant="outline"
+        size="icon"
+        disabled={isDisabled}
+        className="pointer-events-auto rounded-full bg-secondary text-secondary-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-0 dark:bg-secondary dark:hover:bg-accent"
+        aria-label="Jump to first message"
+        onClick={onClick}
+      >
+        <ArrowUpIcon className="size-4" />
+      </Button>
+    </TitleTooltip>
+  )
+}
+
 function ConversationMessageJumpButton({
   direction,
   jumpStateStore,
@@ -167,13 +200,14 @@ function ConversationMessageJumpButton({
   )
 }
 
-// The buttons sit at the bottom right: latest, next, previous. A hidden
-// button keeps its space, so the buttons do not move.
+// The buttons sit in a column at the bottom right: first, previous, next,
+// latest. A hidden button keeps its space, so the buttons do not move.
 function ConversationJumpButtons({
   centerMessages,
   conversationItemsStore,
   draft,
   jumpStateStore,
+  onFirst,
   onLatest,
   onNext,
   onPrevious,
@@ -183,6 +217,7 @@ function ConversationJumpButtons({
   conversationItemsStore: ConversationItemsStore
   draft: boolean
   jumpStateStore: MessageJumpStateStore
+  onFirst: () => void
   onLatest: () => void
   onNext: () => void
   onPrevious: () => void
@@ -192,25 +227,30 @@ function ConversationJumpButtons({
     <div className="pointer-events-none absolute inset-x-4 bottom-4 z-10 md:inset-x-[18px] md:bottom-[18px]">
       <div
         className={cn(
-          "flex justify-end gap-2",
+          "flex flex-col items-end gap-2",
           centerMessages && "mx-auto w-full max-w-[80ch]"
         )}
       >
-        <ConversationLatestMessageButton
+        <ConversationFirstMessageButton
           conversationItemsStore={conversationItemsStore}
           draft={draft}
-          onClick={onLatest}
-          streaming={streaming}
+          onClick={onFirst}
+        />
+        <ConversationMessageJumpButton
+          direction="previous"
+          jumpStateStore={jumpStateStore}
+          onClick={onPrevious}
         />
         <ConversationMessageJumpButton
           direction="next"
           jumpStateStore={jumpStateStore}
           onClick={onNext}
         />
-        <ConversationMessageJumpButton
-          direction="previous"
-          jumpStateStore={jumpStateStore}
-          onClick={onPrevious}
+        <ConversationLatestMessageButton
+          conversationItemsStore={conversationItemsStore}
+          draft={draft}
+          onClick={onLatest}
+          streaming={streaming}
         />
       </div>
     </div>
@@ -446,6 +486,7 @@ function AppShellConversationScroller({
           conversationItemsStore={conversationItemsStore}
           draft={sessionState.draft}
           jumpStateStore={jumpStateStore}
+          onFirst={scrollConversationToTop}
           onLatest={scrollConversationToBottom}
           onNext={jumpToNextMessage}
           onPrevious={jumpToPreviousMessage}
