@@ -60,12 +60,18 @@
       </section>
 
       <figure class="shot">
-        <img
-          src="/screenshots/pico-workspace.png"
-          alt="Pico workspace where an agent runs two child sessions, each in its own worktree"
-          width="2898"
-          height="1916"
-        />
+        <picture>
+          <source
+            srcset="/screenshots/pico-workspace-alt.png"
+            media="(prefers-color-scheme: light)"
+          />
+          <img
+            src="/screenshots/pico-workspace.png"
+            alt="Pico workspace where an agent runs two child sessions, each in its own worktree"
+            width="2898"
+            height="1916"
+          />
+        </picture>
       </figure>
 
       <section id="features" class="features">
@@ -168,16 +174,6 @@
           />
         </div>
       </section>
-
-      <figure class="shot">
-        <img
-          src="/screenshots/pico-workspace-alt.png"
-          alt="Pico workspace in light mode with child sessions in the sidebar and the Agent tab"
-          width="2898"
-          height="1916"
-          loading="lazy"
-        />
-      </figure>
 
       <section id="start" class="start">
         <h2>Get started</h2>
