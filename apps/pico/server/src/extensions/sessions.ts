@@ -185,10 +185,7 @@ async function markDelivered(
   context: Context
 ) {
   if (marks.length === 0) return
-  await api.commit(
-    (tx) => addDelivered(tx, api.conversationId, marks),
-    context
-  )
+  await api.commit((tx) => addDelivered(tx, api.conversationId, marks), context)
 }
 
 async function wasDelivered(
@@ -367,7 +364,9 @@ async function answerTo(
   )
   if (record?.type !== "input" || record.status !== "done") return undefined
   const answer = await lastAnswerEntry(harness, child, context, record.answer)
-  return answer ? { text: answer.text, id: answer.id ?? record.answer } : undefined
+  return answer
+    ? { text: answer.text, id: answer.id ?? record.answer }
+    : undefined
 }
 
 type ReportCheckpoint =
@@ -1657,7 +1656,8 @@ export function createSessionsExtension(host: HostBridge) {
             connection: remote.connection,
             id: remote.id,
           })
-        else targets.push({ kind: "local", id: requireSession(services, value) })
+        else
+          targets.push({ kind: "local", id: requireSession(services, value) })
       }
     } catch (error) {
       return errorResult(error instanceof Error ? error.message : String(error))
@@ -1740,8 +1740,7 @@ export function createSessionsExtension(host: HostBridge) {
       .map(({ state, how }) => {
         if (state.state === "unknown")
           return `## ${state.name} (unknown: ${state.error})`
-        if (state.state === "working")
-          return `## ${state.name} (still working)`
+        if (state.state === "working") return `## ${state.name} (still working)`
         if (state.state === "waiting")
           return `## ${state.name} (idle, waiting on ${state.waiting})\n${clip(state.answer ?? "(no answer)", 8000)}`
         if (how === "queued")

@@ -443,7 +443,7 @@ export function AgentSettingsDialog({
             <SettingsSection title="Tools">
               <Row
                 label="Move large tool output to the scratchpad"
-                description="Output larger than this many KB goes to the scratchpad; the agent sees the start. 0 is off."
+                description="Output larger than this many KB goes to a file in the scratchpad. The agent sees the start and reads the rest with read. 0 is off."
                 control={(id) => (
                   <TextSetting
                     id={id}

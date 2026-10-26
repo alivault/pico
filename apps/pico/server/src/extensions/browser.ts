@@ -153,7 +153,9 @@ export function createBrowserExtension(host: HostBridge) {
 
   const snapshot: Action = async (browser, tabs, _args, api) => {
     const { page } = await browser.page(Number(api.conversationId), tabs)
-    return textResult(clip(formatSnapshot(await browser.snapshot(page)), 30_000))
+    return textResult(
+      clip(formatSnapshot(await browser.snapshot(page)), 30_000)
+    )
   }
 
   const act: Action = async (browser, tabs, args, api) => {
@@ -229,7 +231,9 @@ export function createBrowserExtension(host: HostBridge) {
       EVAL_TIMEOUT_MS,
       `The expression did not finish in ${EVAL_TIMEOUT_MS / 1000} seconds`
     )) as unknown
-    return textResult(clip(JSON.stringify(value, null, 2) ?? "undefined", 30_000))
+    return textResult(
+      clip(JSON.stringify(value, null, 2) ?? "undefined", 30_000)
+    )
   }
 
   const tabList: Action = async (browser, tabs, args, api) => {

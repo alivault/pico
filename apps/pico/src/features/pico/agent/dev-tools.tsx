@@ -270,6 +270,33 @@ registerToolRenderer("run_tests", {
 // -----------------------------------------------------------------------------
 // Language servers
 
+registerToolRenderer("lsp", {
+  summary(block) {
+    const args = toolArgs(block)
+    const action = typeof args.action === "string" ? args.action : ""
+    if (action === "diagnostics") {
+      const paths = Array.isArray(args.paths)
+        ? args.paths.join(", ")
+        : "changed files"
+      const first = block.output.split("\n")[0] ?? ""
+      return block.running
+        ? `diagnostics ${paths}`
+        : `diagnostics ${paths} · ${first}`
+    }
+    if (action === "symbols")
+      return `symbols ${argText(block, "query", "path")}`
+    const where = [
+      typeof args.path === "string" ? args.path : "",
+      typeof args.line === "number" ? `:${args.line}` : "",
+    ].join("")
+    const symbol = typeof args.symbol === "string" ? args.symbol : ""
+    const renamed =
+      typeof args.new_name === "string" ? ` → ${args.new_name}` : ""
+    return [action, where, symbol + renamed].filter(Boolean).join(" ")
+  },
+})
+
+// The old lsp tools, in earlier transcripts.
 for (const name of [
   "lsp_definition",
   "lsp_references",

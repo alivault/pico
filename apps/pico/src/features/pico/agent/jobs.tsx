@@ -299,6 +299,7 @@ registerToolRenderer("terminal", {
   },
 })
 
+// The old job tools, in earlier transcripts.
 for (const name of ["job_status", "job_output", "job_stop"]) {
   registerToolRenderer(name, {
     summary(block) {

@@ -240,7 +240,9 @@ export class BrowserManager {
     const session = await this.session(conversationId, tabs)
     const page = session.active ? session.pages.get(session.active) : undefined
     if (!page || page.isClosed())
-      throw new Error("No open tab. Open a page with the browser open action first.")
+      throw new Error(
+        "No open tab. Open a page with the browser open action first."
+      )
     return { session, page }
   }
 

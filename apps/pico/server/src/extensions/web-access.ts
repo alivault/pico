@@ -39,7 +39,10 @@ function retext(text: string) {
       /retrieval with get_search_content using the returned responseId/g,
       "reading with fetch_content and the returned responseId"
     )
-    .replace(/, retrievable with get_search_content/g, ", readable with fetch_content and the returned responseId")
+    .replace(
+      /, retrievable with get_search_content/g,
+      ", readable with fetch_content and the returned responseId"
+    )
 }
 
 function webTool(
@@ -67,7 +70,10 @@ function webTool(
           part.type === "text"
             ? {
                 ...part,
-                text: part.text.replace(/\bget_search_content\b/g, "fetch_content"),
+                text: part.text.replace(
+                  /\bget_search_content\b/g,
+                  "fetch_content"
+                ),
               }
             : part
         ),

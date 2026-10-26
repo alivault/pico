@@ -499,7 +499,11 @@ void test("spawn_session with wait returns the answer, and sessions read reads i
     const result = lastToolResult(messages)
     if (result?.includes("finished")) {
       childId = /session (s\d+)/.exec(result)?.[1] ?? ""
-      return { tools: [{ name: "sessions", arguments: { action: "read", id: childId } }] }
+      return {
+        tools: [
+          { name: "sessions", arguments: { action: "read", id: childId } },
+        ],
+      }
     }
     if (result) return { text: `read: ${result}` }
     return {
@@ -682,10 +686,14 @@ void test("an agent cannot archive itself", async () => {
   const script: Script = (messages) =>
     lastToolResult(messages)
       ? { text: "done" }
-      : { tools: [{
+      : {
+          tools: [
+            {
               name: "sessions",
               arguments: { action: "archive", ids: [self] },
-            }] }
+            },
+          ],
+        }
   const harness = await openHarness(
     join(dir, "db.sqlite"),
     [createSessionsExtension(host)],

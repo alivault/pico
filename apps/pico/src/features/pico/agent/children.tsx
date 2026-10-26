@@ -280,6 +280,27 @@ function SpawnCard({ block }: ToolRendererProps) {
 
 registerToolRenderer("spawn_session", { Card: SpawnCard })
 
+registerToolRenderer("sessions", {
+  summary(block) {
+    const args = toolArgs(block)
+    const ids = Array.isArray(args.ids)
+      ? args.ids.join(", ")
+      : typeof args.id === "string"
+        ? args.id
+        : typeof args.scope === "string"
+          ? args.scope
+          : ""
+    return [
+      typeof args.action === "string" ? args.action : "",
+      ids,
+      args.any === true ? "any" : "",
+    ]
+      .filter(Boolean)
+      .join(" · ")
+  },
+})
+
+// send_to_session, and the old session tools in earlier transcripts.
 for (const name of [
   "send_to_session",
   "read_session",
