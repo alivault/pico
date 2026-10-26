@@ -202,6 +202,9 @@ function ConversationMessageJumpButton({
 
 // The buttons sit in a column at the bottom right: first, previous, next,
 // latest. A hidden button keeps its space, so the buttons do not move.
+// With centered messages, the column is 6rem wider than the text column
+// (two buttons of 2.25rem and two gaps of 0.75rem). When the pane is wide
+// enough, the buttons sit next to the text, not on it.
 function ConversationJumpButtons({
   centerMessages,
   conversationItemsStore,
@@ -228,7 +231,7 @@ function ConversationJumpButtons({
       <div
         className={cn(
           "flex flex-col items-end gap-2",
-          centerMessages && "mx-auto w-full max-w-[80ch]"
+          centerMessages && "mx-auto w-full max-w-[calc(80ch+6rem)]"
         )}
       >
         <ConversationFirstMessageButton
