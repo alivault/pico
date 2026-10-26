@@ -1,6 +1,13 @@
 import assert from "node:assert/strict"
 import { existsSync } from "node:fs"
-import { mkdir, readdir, stat, utimes, writeFile } from "node:fs/promises"
+import {
+  mkdir,
+  readdir,
+  readFile,
+  stat,
+  utimes,
+  writeFile,
+} from "node:fs/promises"
 import { join } from "node:path"
 import { test } from "node:test"
 
@@ -819,9 +826,10 @@ void test("the scratchpad stores entries and spills large output", async () => {
       context.entries.find((item) => item.kind === "pi.tool-result")?.model
     )
     assert.match(result, /The full output \(601 lines/)
-    const id = /scratch (x[a-z0-9]+)/.exec(result)?.[1]
-    assert.ok(id)
-    assert.equal(await scratchpad.scratch.get(conversation.id, id), big)
+    // The note names the file, for read.
+    const path = /in the file (\S+\.txt)\./.exec(result)?.[1]
+    assert.ok(path)
+    assert.equal(await readFile(path, "utf8"), big)
   } finally {
     await harness.close(ctx)
   }

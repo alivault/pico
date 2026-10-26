@@ -1,11 +1,12 @@
 /**
  * The `preview` extension: show a running web app in the web client.
  *
- * `preview_url` opens a preview proxy (see `services/preview.ts`) for a local
+ * The show action opens a preview proxy (see `services/preview.ts`) for a local
  * dev server and records it in the `pico.preview` document; the client shows
  * it in the Preview panel. With `job_id`, it first waits until the job's
- * server answers. `preview_screenshot` gives the model an image of the page.
+ * server answers. The screenshot action gives the model an image of the page.
  */
+import type { Context } from "@earendil-works/chord"
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
 import { Type } from "@earendil-works/pi-ai"
 import {
@@ -13,6 +14,8 @@ import {
   defineExtension,
   defineTool,
   type ConversationId,
+  type ToolExecutionApi,
+  type ToolExecutionResult,
 } from "@earendil-works/pi-durable"
 
 import { localTarget, waitForUrl } from "../services/preview.ts"
@@ -78,22 +81,24 @@ export async function ensurePreview(
 }
 
 export function createPreviewExtension(host: HostBridge) {
-  const previewTool = defineTool({
-    name: "preview_url",
-    description: [
-      "Show a local web app (a dev server) in the user's Preview panel. It also works when the user is on a phone: Pico forwards a port to the dev server.",
-      "Give url (http://localhost:5173) or port. With job_id (from job_start), wait until that job's server answers. path opens a page of the app.",
-    ].join(" "),
-    parameters: Type.Object({
-      url: Type.Optional(Type.String()),
-      port: Type.Optional(Type.Number()),
-      job_id: Type.Optional(Type.String()),
-      path: Type.Optional(Type.String()),
-      title: Type.Optional(Type.String()),
-      wait_seconds: Type.Optional(Type.Number()),
-    }),
-    replay: "safe",
-    async execute(args, api, context) {
+  type Args = {
+    url?: string | undefined
+    port?: number | undefined
+    job_id?: string | undefined
+    path?: string | undefined
+    title?: string | undefined
+    wait_seconds?: number | undefined
+    width?: number | undefined
+    full_page?: boolean | undefined
+  }
+
+  /** The show action: put a local web app in the Preview panel. */
+  const show = async (
+    args: Args,
+    api: ToolExecutionApi,
+    context: Context
+  ): Promise<ToolExecutionResult> => {
+    {
       const services = await host.ready(context.abortSignal)
       if (!services.previews) return errorResult("Previews are not available")
       let target: URL
@@ -149,21 +154,16 @@ export function createPreviewExtension(host: HostBridge) {
         `The Preview panel shows ${target.origin}${path} (forwarded on port ${proxy.port}).`,
         { details: { target: target.origin, path, port: proxy.port } }
       )
-    },
-  })
+    }
+  }
 
-  const screenshotTool = defineTool({
-    name: "preview_screenshot",
-    description:
-      "Take a screenshot of this session's preview (or of url) at a viewport width, to check the page yourself.",
-    parameters: Type.Object({
-      url: Type.Optional(Type.String()),
-      path: Type.Optional(Type.String()),
-      width: Type.Optional(Type.Number()),
-      full_page: Type.Optional(Type.Boolean()),
-    }),
-    replay: "safe",
-    async execute(args, api, context) {
+  /** The screenshot action: the preview, or url, at a viewport width. */
+  const screenshot = async (
+    args: Args,
+    api: ToolExecutionApi,
+    context: Context
+  ): Promise<ToolExecutionResult> => {
+    {
       const services = await host.ready(context.abortSignal)
       if (!services.browser) return errorResult("The browser is not available")
       const state = await api.snapshot(PreviewDoc, api.conversationId, context)
@@ -181,7 +181,7 @@ export function createPreviewExtension(host: HostBridge) {
       }
       if (!url)
         return errorResult(
-          "This session has no preview. Use preview_url first."
+          "This session has no preview. Use the show action first."
         )
       try {
         const session = await services.browser.session(
@@ -218,15 +218,12 @@ export function createPreviewExtension(host: HostBridge) {
           error instanceof Error ? error.message : String(error)
         )
       }
-    },
-  })
+    }
+  }
 
-  const closeTool = defineTool({
-    name: "preview_close",
-    description: "Remove this session's preview from the Preview panel.",
-    parameters: Type.Object({}),
-    replay: "safe",
-    async execute(_args, api, context) {
+  /** The close action: remove the preview from the Preview panel. */
+  const close = async (api: ToolExecutionApi, context: Context) => {
+    {
       await api.commit(async (tx) => {
         const draft = await tx.doc(PreviewDoc, api.conversationId)
         delete draft.target
@@ -235,11 +232,43 @@ export function createPreviewExtension(host: HostBridge) {
         draft.updatedAt = Date.now()
       }, context)
       return textResult("The preview is closed.")
-    },
+    }
+  }
+
+  const previewTool = defineTool({
+    name: "preview",
+    deferred: true,
+    description: [
+      "The user's Preview panel. Actions:",
+      "show (default): show a local web app (a dev server). It also works when the user is on a phone: Pico forwards a port to the dev server. Give url (http://localhost:5173) or port. With job_id (from job_start), wait until that job's server answers. path opens a page of the app.",
+      "screenshot: a screenshot of the preview (or of url) at a viewport width (default 1280), to check the page yourself.",
+      "close: remove the preview from the panel.",
+    ].join(" "),
+    parameters: Type.Object({
+      action: Type.Optional(
+        Type.Union([
+          Type.Literal("show"),
+          Type.Literal("screenshot"),
+          Type.Literal("close"),
+        ])
+      ),
+      url: Type.Optional(Type.String()),
+      port: Type.Optional(Type.Number()),
+      job_id: Type.Optional(Type.String()),
+      path: Type.Optional(Type.String()),
+      title: Type.Optional(Type.String()),
+      wait_seconds: Type.Optional(Type.Number()),
+      width: Type.Optional(Type.Number()),
+      full_page: Type.Optional(Type.Boolean()),
+    }),
+    replay: "safe",
+    execute: (args, api, context) =>
+      args.action === "screenshot"
+        ? screenshot(args, api, context)
+        : args.action === "close"
+          ? close(api, context)
+          : show(args, api, context),
   })
 
-  return defineExtension({
-    name: "preview",
-    tools: [previewTool, screenshotTool, closeTool],
-  })
+  return defineExtension({ name: "preview", tools: [previewTool] })
 }

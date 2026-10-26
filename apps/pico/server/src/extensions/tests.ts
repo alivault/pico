@@ -484,6 +484,7 @@ const reportSchema = Type.Object({
 export function createTestsExtension() {
   const tool = defineTool({
     name: "run_tests",
+    deferred: true,
     description: [
       "Run the project's tests and get a structured result: counts and the failing tests with their messages.",
       "The runner is detected (vitest, jest, pytest, go test, cargo test); set runner or command to override. filter selects tests by name (a pattern); files selects test files or packages.",

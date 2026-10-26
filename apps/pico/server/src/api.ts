@@ -234,8 +234,6 @@ export function createApi(api: ApiContext) {
         "scratchpad",
         "child-sessions",
         "worktrees",
-        "git-tools",
-        "github",
         "run-tests",
         "lsp",
         "preview",

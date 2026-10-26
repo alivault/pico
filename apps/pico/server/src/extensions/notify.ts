@@ -12,6 +12,7 @@ import { errorResult, textResult } from "./util.ts"
 export function createNotifyExtension(host: HostBridge) {
   const tool = defineTool({
     name: "notify",
+    deferred: true,
     description:
       "Send a short notification to the user's phone or desktop, for example when a long task is done or something needs attention. Do not use it for every step.",
     parameters: Type.Object({

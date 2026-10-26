@@ -9,7 +9,7 @@
  * Messages from a child never steer: they go into the parent's follow-up
  * queue, in arrival order with the user's prompts. Each turn end of a child
  * is a question, done, or waiting (it ended on a timer, a watch, or a job;
- * see `childMessageKind`). Waiting sends nothing: `list_sessions` shows it. A child has limited tools (see
+ * see `childMessageKind`). Waiting sends nothing: the sessions list action shows it. A child has limited tools (see
  * `core/profiles.ts`): the parent picks a profile and adds or removes tools.
  * A child asks by ending its turn with a message that starts with `Question:`.
  *
@@ -202,7 +202,7 @@ async function wasDelivered(
   return Boolean(state?.items[session]?.includes(key))
 }
 
-/** The last messages of a session as text, for `read_session`. */
+/** The last messages of a session as text, for the sessions read action. */
 export async function transcriptText(
   harness: Pick<Harness, "conversation">,
   conversationId: ConversationId,
@@ -526,7 +526,7 @@ type RemoteSession = {
 /** How often a report task checks a waiting child. */
 const WAITING_POLL_MS = 3000
 
-/** The state of a session for `list_sessions`. */
+/** The state of a session for the sessions list action. */
 function status(item: {
   busy: boolean
   needsInput: boolean
@@ -835,7 +835,7 @@ export function createSessionsExtension(host: HostBridge) {
     executionMode: "sequential",
     description: [
       "Start a child session: a full agent with its own context that works on `goal`. The user can open it in the sidebar.",
-      "Use it to split independent work or to get a fresh review. By default it runs in the background. Its messages (done or a question) go into your follow-up queue: you get them after your current run answers, so keep working instead of waiting. A child whose turn ends on a timer, a watch, or a job is waiting: list_sessions shows it, and you get no message until it ends with done or a question. Set wait to get the answer as the result.",
+      "Use it to split independent work or to get a fresh review. By default it runs in the background. Its messages (done or a question) go into your follow-up queue: you get them after your current run answers, so keep working instead of waiting. A child whose turn ends on a timer, a watch, or a job is waiting: sessions list shows it, and you get no message until it ends with done or a question. Set wait to get the answer as the result.",
       "Without worktree, the child works in the same directory as you and can edit the same files. Set worktree: true for parallel edits; the child gets its own git branch and worktree.",
       "Tools: profile picks a set (builder, researcher, reviewer, read-only, or full; default full). A child has no ask_user, notify, or spawn_session unless you put them in add. remove takes more tools away. Bash in a child refuses git push to main, sudo, and the commands in deny_commands.",
       "Write the goal as a complete brief: the child does not see this conversation.",
@@ -943,7 +943,7 @@ export function createSessionsExtension(host: HostBridge) {
             context
           )
           return textResult(
-            `Started session ${name} in ${created.cwd} on ${connection.profile.label}. Its answer comes to you as a message when it finishes. Use read_session, send_to_session, or stop_session with id ${name}.`,
+            `Started session ${name} in ${created.cwd} on ${connection.profile.label}. Its answer comes to you as a message when it finishes. Use sessions (read, wait, stop) or send_to_session with id ${name}.`,
             { details: json({ ...details, status: "running" }) }
           )
         }
@@ -968,7 +968,7 @@ export function createSessionsExtension(host: HostBridge) {
           return textResult(
             done
               ? `Session ${name} (in ${created.cwd}) finished.\nIts answer:\n${clip(done.answer ?? "(no answer)", 20_000)}`
-              : `Session ${name} still runs after ${args.timeout}s. Check it later with read_session or wait_for_sessions.`,
+              : `Session ${name} still runs after ${args.timeout}s. Check it later with sessions read or wait.`,
             {
               details: json({
                 ...details,
@@ -1104,7 +1104,7 @@ export function createSessionsExtension(host: HostBridge) {
           context
         )
         return textResult(
-          `Started child session ${child} ${where}. Its answer comes to you as a message when it finishes. Use read_session, send_to_session, or stop_session with id ${child}.`,
+          `Started child session ${child} ${where}. Its answer comes to you as a message when it finishes. Use sessions (read, wait, stop) or send_to_session with id ${child}.`,
           {
             details: json({
               sessionId: child,
@@ -1134,7 +1134,7 @@ export function createSessionsExtension(host: HostBridge) {
       return textResult(
         finished
           ? `Child session ${child} (${where}) finished.\nIts answer:\n${clip(answer ?? "(no answer)", 20_000)}`
-          : `Child session ${child} still runs after ${args.timeout}s. Check it later with read_session or wait_for_sessions.`,
+          : `Child session ${child} still runs after ${args.timeout}s. Check it later with sessions read or wait.`,
         {
           details: json({
             sessionId: child,

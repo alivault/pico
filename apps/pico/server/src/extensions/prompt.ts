@@ -24,10 +24,12 @@ const TOOL_SNIPPETS: Record<string, string> = {
   codemode: "Run JavaScript that calls other tools",
   tool_search: "Search for and load tools that are not loaded yet",
   web_search: "Search the web",
-  fetch_content: "Fetch URL content as readable text",
-  get_search_content: "Read stored search results and fetched content",
-  source_check: "Gather web sources for a claim",
+  fetch_content:
+    "Fetch URL content as readable text, and read more of stored results",
 }
+
+/** At most this many deferred tool names in the prompt. */
+const MAX_DEFERRED_NAMES = 30
 
 const TOOL_GUIDELINES: Record<string, string[]> = {
   read: ["Use read to examine files instead of cat or sed."],
@@ -89,7 +91,14 @@ export function createPromptExtension(resources: ResourceCache) {
             `- ${tool.name}: ${TOOL_SNIPPETS[tool.name] ?? firstSentence(tool.description)}`
         )
         const list = lines.length > 0 ? lines.join("\n") : "(none)"
-        return `${list}\n\nIn addition to the tools above, you may have access to other custom tools depending on the project.`
+        const deferred = input.agent.deferred.map((tool) => tool.name)
+        const more = deferred.length - MAX_DEFERRED_NAMES
+        const load =
+          deferred.length > 0 &&
+          input.agent.tools.some((tool) => tool.name === "tool_search")
+            ? `\n\nMore tools are ready to load with tool_search: ${deferred.slice(0, MAX_DEFERRED_NAMES).join(", ")}${more > 0 ? `, and ${more} more` : ""}.`
+            : ""
+        return `${list}${load}\n\nIn addition to the tools above, you may have access to other custom tools depending on the project.`
       }),
       section("rules", (input) => rules(toolNames(input))),
       section("addendum", async (input) => {

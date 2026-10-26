@@ -19,6 +19,7 @@ import {
   hook,
   ToolTask,
   type ToolExecutionApi,
+  type ToolExecutionResult,
 } from "@earendil-works/pi-durable"
 
 import {
@@ -32,7 +33,14 @@ import {
   type WorkspaceEdit,
 } from "../services/lsp.ts"
 import type { HostBridge } from "./host.ts"
-import { clip, cwdOf, errorResult, runCommand, textResult } from "./util.ts"
+import {
+  clip,
+  cwdOf,
+  deniedAction,
+  errorResult,
+  runCommand,
+  textResult,
+} from "./util.ts"
 
 const SEVERITY = ["", "error", "warning", "info", "hint"]
 const MAX_RESULTS = 100
@@ -211,19 +219,27 @@ export function createLspExtension(host: HostBridge) {
     return { cwd, file, client, uri, text }
   }
 
+  type LspArgs = {
+    path: string
+    paths?: string[] | undefined
+    line?: number | undefined
+    column?: number | undefined
+    symbol?: string | undefined
+    query?: string | undefined
+    new_name: string
+    include_declaration?: boolean | undefined
+    errors_only?: boolean | undefined
+  }
+
   const fail = (error: unknown) =>
     errorResult(error instanceof Error ? error.message : String(error))
 
-  const diagnosticsTool = defineTool({
-    name: "lsp_diagnostics",
-    description:
-      "Get type errors and warnings from the language server for files: the given paths, or the files changed in git (default).",
-    parameters: Type.Object({
-      paths: Type.Optional(Type.Array(Type.String())),
-      errors_only: Type.Optional(Type.Boolean()),
-    }),
-    replay: "safe",
-    async execute(args, api, context) {
+  const diagnostics = async (
+    args: LspArgs,
+    api: ToolExecutionApi,
+    context: Context
+  ): Promise<ToolExecutionResult> => {
+    {
       try {
         const cwd = await cwdOf(api, context)
         const files = (
@@ -258,16 +274,15 @@ export function createLspExtension(host: HostBridge) {
       } catch (error) {
         return fail(error)
       }
-    },
-  })
+    }
+  }
 
-  const definitionTool = defineTool({
-    name: "lsp_definition",
-    description:
-      "Go to the definition of the symbol at a position (path and line, with column or symbol).",
-    parameters: Type.Object(fileArgs),
-    replay: "safe",
-    async execute(args, api, context) {
+  const definition = async (
+    args: LspArgs,
+    api: ToolExecutionApi,
+    context: Context
+  ): Promise<ToolExecutionResult> => {
+    {
       try {
         const { cwd, client, uri, text } = await open(api, context, args.path)
         const position = findPosition(text, args)
@@ -284,19 +299,15 @@ export function createLspExtension(host: HostBridge) {
       } catch (error) {
         return fail(error)
       }
-    },
-  })
+    }
+  }
 
-  const referencesTool = defineTool({
-    name: "lsp_references",
-    description:
-      "Find every reference to the symbol at a position (path and line, with column or symbol).",
-    parameters: Type.Object({
-      ...fileArgs,
-      include_declaration: Type.Optional(Type.Boolean()),
-    }),
-    replay: "safe",
-    async execute(args, api, context) {
+  const references = async (
+    args: LspArgs,
+    api: ToolExecutionApi,
+    context: Context
+  ): Promise<ToolExecutionResult> => {
+    {
       try {
         const { cwd, client, uri, text } = await open(api, context, args.path)
         const position = findPosition(text, args)
@@ -314,16 +325,15 @@ export function createLspExtension(host: HostBridge) {
       } catch (error) {
         return fail(error)
       }
-    },
-  })
+    }
+  }
 
-  const hoverTool = defineTool({
-    name: "lsp_hover",
-    description:
-      "Show the type and documentation of the symbol at a position (path and line, with column or symbol).",
-    parameters: Type.Object(fileArgs),
-    replay: "safe",
-    async execute(args, api, context) {
+  const hover = async (
+    args: LspArgs,
+    api: ToolExecutionApi,
+    context: Context
+  ): Promise<ToolExecutionResult> => {
+    {
       try {
         const { client, uri, text } = await open(api, context, args.path)
         const position = findPosition(text, args)
@@ -335,19 +345,15 @@ export function createLspExtension(host: HostBridge) {
       } catch (error) {
         return fail(error)
       }
-    },
-  })
+    }
+  }
 
-  const symbolsTool = defineTool({
-    name: "lsp_symbols",
-    description:
-      "List the symbols of a file (path), or search symbols in the project by name (query, with a path of the project's language).",
-    parameters: Type.Object({
-      path: Type.String(),
-      query: Type.Optional(Type.String()),
-    }),
-    replay: "safe",
-    async execute(args, api, context) {
+  const symbols = async (
+    args: LspArgs,
+    api: ToolExecutionApi,
+    context: Context
+  ): Promise<ToolExecutionResult> => {
+    {
       try {
         const { cwd, client, uri } = await open(api, context, args.path)
         if (args.query) {
@@ -386,15 +392,15 @@ export function createLspExtension(host: HostBridge) {
       } catch (error) {
         return fail(error)
       }
-    },
-  })
+    }
+  }
 
-  const renameTool = defineTool({
-    name: "lsp_rename",
-    description:
-      "Rename the symbol at a position everywhere in the project, with the language server. Changes files on disk.",
-    parameters: Type.Object({ ...fileArgs, new_name: Type.String() }),
-    async execute(args, api, context) {
+  const rename = async (
+    args: LspArgs,
+    api: ToolExecutionApi,
+    context: Context
+  ): Promise<ToolExecutionResult> => {
+    {
       try {
         const { cwd, client, uri, text } = await open(api, context, args.path)
         const position = findPosition(text, args)
@@ -414,6 +420,54 @@ export function createLspExtension(host: HostBridge) {
       } catch (error) {
         return fail(error)
       }
+    }
+  }
+
+  const ACTIONS = {
+    diagnostics,
+    definition,
+    references,
+    hover,
+    symbols,
+    rename,
+  }
+
+  const lspTool = defineTool({
+    name: "lsp",
+    deferred: true,
+    description: [
+      "Ask the language server. Actions:",
+      "diagnostics (type errors and warnings for paths, default the files changed in git; errors_only);",
+      "definition, references (include_declaration), hover: of the symbol at a position (path and line, with column or symbol);",
+      "symbols (the symbols of path, or with query a search in the project);",
+      "rename (rename the symbol at a position to new_name everywhere; changes files on disk).",
+    ].join(" "),
+    parameters: Type.Object({
+      action: Type.Union(
+        Object.keys(ACTIONS).map((name) => Type.Literal(name))
+      ),
+      path: Type.Optional(Type.String()),
+      paths: Type.Optional(Type.Array(Type.String())),
+      line: fileArgs.line,
+      column: fileArgs.column,
+      symbol: fileArgs.symbol,
+      query: Type.Optional(Type.String()),
+      new_name: Type.Optional(Type.String()),
+      include_declaration: Type.Optional(Type.Boolean()),
+      errors_only: Type.Optional(Type.Boolean()),
+    }),
+    async execute(args, api, context) {
+      const action = String(args.action) as keyof typeof ACTIONS
+      const run = ACTIONS[action]
+      if (!run) return errorResult(`Unknown action: ${action}`)
+      if (action !== "diagnostics" && !args.path)
+        return errorResult(`${action} needs path.`)
+      if (action === "rename") {
+        if (!args.new_name) return errorResult("rename needs new_name.")
+        const denied = deniedAction(host, api.conversationId, "lsp.rename")
+        if (denied) return denied
+      }
+      return run(args as LspArgs, api, context)
     },
   })
 
@@ -458,14 +512,7 @@ export function createLspExtension(host: HostBridge) {
     pool,
     extension: defineExtension({
       name: "lsp",
-      tools: [
-        diagnosticsTool,
-        definitionTool,
-        referencesTool,
-        hoverTool,
-        symbolsTool,
-        renameTool,
-      ],
+      tools: [lspTool],
       hooks: [afterEdit],
     }),
   }

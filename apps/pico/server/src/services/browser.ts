@@ -240,7 +240,7 @@ export class BrowserManager {
     const session = await this.session(conversationId, tabs)
     const page = session.active ? session.pages.get(session.active) : undefined
     if (!page || page.isClosed())
-      throw new Error("No open tab. Open a page with browser_open first.")
+      throw new Error("No open tab. Open a page with the browser open action first.")
     return { session, page }
   }
 
@@ -356,7 +356,7 @@ export function formatSnapshot(snapshot: PageSnapshot, maxElements = 150) {
     snapshot.headings.length
       ? `Headings:\n${snapshot.headings.join("\n")}`
       : "",
-    `Interactive elements (use ref with browser_act):\n${snapshot.elements.slice(0, maxElements).join("\n") || "(none)"}${snapshot.elements.length > maxElements ? `\n…and ${snapshot.elements.length - maxElements} more` : ""}`,
+    `Interactive elements (use ref with the browser actions):\n${snapshot.elements.slice(0, maxElements).join("\n") || "(none)"}${snapshot.elements.length > maxElements ? `\n…and ${snapshot.elements.length - maxElements} more` : ""}`,
     `Text:\n${snapshot.text}`,
   ]
     .filter(Boolean)

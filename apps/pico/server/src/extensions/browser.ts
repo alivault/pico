@@ -21,7 +21,14 @@ import {
   type BrowserTab,
 } from "../services/browser.ts"
 import type { HostBridge } from "./host.ts"
-import { clip, errorResult, json, registerState, textResult } from "./util.ts"
+import {
+  clip,
+  deniedAction,
+  errorResult,
+  json,
+  registerState,
+  textResult,
+} from "./util.ts"
 
 export type BrowserState = {
   tabs: BrowserTab[]
@@ -112,235 +119,216 @@ export function createBrowserExtension(host: HostBridge) {
     }
   }
 
-  const openTool = defineTool({
-    name: "browser_open",
-    // Browser tools share pages, so a round that uses them runs in order.
-    executionMode: "sequential",
-    description:
-      "Open a URL in your browser and read the page: its title, headings, numbered interactive elements (refs for browser_act), and text. Logins and cookies persist across restarts.",
-    parameters: Type.Object({
-      url: Type.String(),
-      new_tab: Type.Optional(Type.Boolean()),
-    }),
-    execute: (args, api, context) =>
-      withBrowser(api, context, async (browser, tabs) => {
-        const url = /^\w+:\/\//.test(args.url)
-          ? args.url
-          : `https://${args.url}`
-        const { id, page } = await browser.open(
-          Number(api.conversationId),
-          tabs,
-          url,
-          Boolean(args.new_tab)
-        )
-        const snapshot = await browser.snapshot(page)
-        return textResult(
-          `Tab ${id}: ${clip(formatSnapshot(snapshot), 30_000)}`
-        )
-      }),
-  })
+  type Args = {
+    action: string
+    url?: string | undefined
+    new_tab?: boolean | undefined
+    ref?: number | undefined
+    selector?: string | undefined
+    text?: string | undefined
+    value?: string | undefined
+    full_page?: boolean | undefined
+    expression?: string | undefined
+    id?: string | undefined
+  }
+  type Action = (
+    browser: BrowserManager,
+    tabs: BrowserTab[],
+    args: Args,
+    api: ToolExecutionApi
+  ) => Promise<ToolExecutionResult>
 
-  const snapshotTool = defineTool({
-    name: "browser_snapshot",
-    // Browser tools share pages, so a round that uses them runs in order.
-    executionMode: "sequential",
-    description:
-      "Read the current page of your browser again: elements with refs, and text.",
-    parameters: Type.Object({}),
-    replay: "safe",
-    execute: (_args, api, context) =>
-      withBrowser(api, context, async (browser, tabs) => {
-        const { page } = await browser.page(Number(api.conversationId), tabs)
-        return textResult(
-          clip(formatSnapshot(await browser.snapshot(page)), 30_000)
-        )
-      }),
-  })
+  const open: Action = async (browser, tabs, args, api) => {
+    if (!args.url) throw new Error("open needs url")
+    const url = /^\w+:\/\//.test(args.url) ? args.url : `https://${args.url}`
+    const { id, page } = await browser.open(
+      Number(api.conversationId),
+      tabs,
+      url,
+      Boolean(args.new_tab)
+    )
+    const snapshot = await browser.snapshot(page)
+    return textResult(`Tab ${id}: ${clip(formatSnapshot(snapshot), 30_000)}`)
+  }
 
-  const actTool = defineTool({
-    name: "browser_act",
-    // Browser tools share pages, so a round that uses them runs in order.
+  const snapshot: Action = async (browser, tabs, _args, api) => {
+    const { page } = await browser.page(Number(api.conversationId), tabs)
+    return textResult(clip(formatSnapshot(await browser.snapshot(page)), 30_000))
+  }
+
+  const act: Action = async (browser, tabs, args, api) => {
+    const { page } = await browser.page(Number(api.conversationId), tabs)
+    const action = args.action
+    const locator =
+      args.ref !== undefined
+        ? page.locator(`[data-pico-ref="${args.ref}"]`)
+        : args.selector
+          ? page.locator(args.selector).first()
+          : args.text
+            ? page.getByText(args.text, { exact: false }).first()
+            : undefined
+    const timeout = 15_000
+    switch (action) {
+      case "scroll":
+        await page.mouse.wheel(0, args.value === "up" ? -800 : 800)
+        break
+      case "press":
+        if (locator) await locator.press(args.value ?? "Enter", { timeout })
+        else await page.keyboard.press(args.value ?? "Enter")
+        break
+      default: {
+        if (!locator) throw new Error("Give ref, selector, or text")
+        if (action === "click") await locator.click({ timeout })
+        else if (action === "fill")
+          await locator.fill(args.value ?? "", { timeout })
+        else if (action === "type")
+          await locator.pressSequentially(args.value ?? "", { timeout })
+        else if (action === "select")
+          await locator.selectOption(args.value ?? "", { timeout })
+        else if (action === "check") await locator.check({ timeout })
+        else if (action === "uncheck") await locator.uncheck({ timeout })
+        else if (action === "hover") await locator.hover({ timeout })
+      }
+    }
+    await page
+      .waitForLoadState("domcontentloaded", { timeout: 10_000 })
+      .catch(() => undefined)
+    await page
+      .waitForLoadState("networkidle", { timeout: 3000 })
+      .catch(() => undefined)
+    return textResult(
+      `Done: ${action}.\n${clip(formatSnapshot(await browser.snapshot(page)), 30_000)}`
+    )
+  }
+
+  const screenshot: Action = async (browser, tabs, args, api) => {
+    const { page } = await browser.page(Number(api.conversationId), tabs)
+    const image = await page.screenshot({
+      fullPage: Boolean(args.full_page),
+      type: "png",
+    })
+    const data = image.toString("base64")
+    return {
+      output: [
+        { type: "text", text: `Screenshot of ${page.url()}` },
+        { type: "image", mimeType: "image/png", data },
+      ],
+      details: {
+        kind: "image",
+        title: page.url(),
+        data: `data:image/png;base64,${data}`,
+      },
+    }
+  }
+
+  const evaluate: Action = async (browser, tabs, args, api) => {
+    if (!args.expression) throw new Error("eval needs expression")
+    const { page } = await browser.page(Number(api.conversationId), tabs)
+    const value = (await withTimeout(
+      page.evaluate(`(async () => (${args.expression}))()`),
+      EVAL_TIMEOUT_MS,
+      `The expression did not finish in ${EVAL_TIMEOUT_MS / 1000} seconds`
+    )) as unknown
+    return textResult(clip(JSON.stringify(value, null, 2) ?? "undefined", 30_000))
+  }
+
+  const tabList: Action = async (browser, tabs, args, api) => {
+    const conversation = Number(api.conversationId)
+    await browser.session(conversation, tabs)
+    if (args.action === "switch_tab") {
+      if (!args.id) throw new Error("switch_tab needs id")
+      await browser.switchTab(conversation, args.id)
+    }
+    if (args.action === "close_tab") {
+      if (!args.id) throw new Error("close_tab needs id")
+      await browser.closeTab(conversation, args.id)
+    }
+    const now = await browser.tabs(conversation)
+    return textResult(
+      now.tabs.length
+        ? now.tabs
+            .map(
+              (tab) =>
+                `${tab.id === now.active ? "*" : " "} ${tab.id} ${tab.title} — ${tab.url}`
+            )
+            .join("\n")
+        : "No open tabs."
+    )
+  }
+
+  const close: Action = async (browser, _tabs, _args, api) => {
+    await browser.closeSession(Number(api.conversationId))
+    return textResult("The browser is closed. Its cookies are saved.")
+  }
+
+  const ACT = [
+    "click",
+    "fill",
+    "type",
+    "press",
+    "select",
+    "check",
+    "uncheck",
+    "hover",
+    "scroll",
+  ]
+  const ACTIONS: Record<string, Action> = {
+    open,
+    snapshot,
+    ...Object.fromEntries(ACT.map((name) => [name, act])),
+    screenshot,
+    eval: evaluate,
+    tabs: tabList,
+    switch_tab: tabList,
+    close_tab: tabList,
+    close,
+  }
+
+  const browserTool = defineTool({
+    name: "browser",
+    deferred: true,
+    // Actions share pages, so a round that uses them runs in order.
     executionMode: "sequential",
     description: [
-      "Act on the current page: click, fill (replace the text of a field), type (add keys), press (a key such as Enter), select (an option), check, uncheck, hover, or scroll (down or up).",
-      "Target an element with ref (from the last snapshot), a CSS selector, or its visible text. Returns the new page snapshot.",
+      "Your own browser. Logins and cookies persist across restarts. Actions:",
+      "open (url, new_tab: open a page and read it: its title, headings, numbered interactive elements, and text);",
+      "snapshot (read the current page again);",
+      "click, fill (replace the text of a field with value), type (add the keys of value), press (a key such as Enter), select (an option), check, uncheck, hover, scroll (value down or up): target an element with ref (from the last snapshot), a CSS selector, or its visible text; returns the new snapshot;",
+      "screenshot (full_page);",
+      "eval (a JavaScript expression in the page; returns its JSON value);",
+      "tabs, switch_tab (id), close_tab (id);",
+      "close (close the browser; cookies stay saved).",
     ].join(" "),
     parameters: Type.Object({
       action: Type.Union(
-        [
-          "click",
-          "fill",
-          "type",
-          "press",
-          "select",
-          "check",
-          "uncheck",
-          "hover",
-          "scroll",
-        ].map((action) => Type.Literal(action))
+        Object.keys(ACTIONS).map((name) => Type.Literal(name))
       ),
+      url: Type.Optional(Type.String()),
+      new_tab: Type.Optional(Type.Boolean()),
       ref: Type.Optional(Type.Number()),
       selector: Type.Optional(Type.String()),
       text: Type.Optional(Type.String()),
       value: Type.Optional(Type.String()),
+      full_page: Type.Optional(Type.Boolean()),
+      expression: Type.Optional(Type.String()),
+      id: Type.Optional(Type.String({ description: "A tab ID" })),
     }),
-    execute: (args, api, context) =>
-      withBrowser(api, context, async (browser, tabs) => {
-        const { page } = await browser.page(Number(api.conversationId), tabs)
-        const action = String(args.action)
-        const locator =
-          args.ref !== undefined
-            ? page.locator(`[data-pico-ref="${args.ref}"]`)
-            : args.selector
-              ? page.locator(args.selector).first()
-              : args.text
-                ? page.getByText(args.text, { exact: false }).first()
-                : undefined
-        const timeout = 15_000
-        switch (action) {
-          case "scroll":
-            await page.mouse.wheel(0, args.value === "up" ? -800 : 800)
-            break
-          case "press":
-            if (locator) await locator.press(args.value ?? "Enter", { timeout })
-            else await page.keyboard.press(args.value ?? "Enter")
-            break
-          default: {
-            if (!locator) throw new Error("Give ref, selector, or text")
-            if (action === "click") await locator.click({ timeout })
-            else if (action === "fill")
-              await locator.fill(args.value ?? "", { timeout })
-            else if (action === "type")
-              await locator.pressSequentially(args.value ?? "", { timeout })
-            else if (action === "select")
-              await locator.selectOption(args.value ?? "", { timeout })
-            else if (action === "check") await locator.check({ timeout })
-            else if (action === "uncheck") await locator.uncheck({ timeout })
-            else if (action === "hover") await locator.hover({ timeout })
-          }
-        }
-        await page
-          .waitForLoadState("domcontentloaded", { timeout: 10_000 })
-          .catch(() => undefined)
-        await page
-          .waitForLoadState("networkidle", { timeout: 3000 })
-          .catch(() => undefined)
-        return textResult(
-          `Done: ${action}.\n${clip(formatSnapshot(await browser.snapshot(page)), 30_000)}`
-        )
-      }),
+    async execute(args, api, context) {
+      const action = String(args.action)
+      const run = ACTIONS[action]
+      if (!run) return errorResult(`Unknown action: ${action}`)
+      const denied =
+        action === "eval"
+          ? deniedAction(host, api.conversationId, "browser.eval")
+          : ACT.includes(action)
+            ? deniedAction(host, api.conversationId, "browser.act")
+            : undefined
+      if (denied) return denied
+      return withBrowser(api, context, (browser, tabs) =>
+        run(browser, tabs, { ...args, action }, api)
+      )
+    },
   })
 
-  const screenshotTool = defineTool({
-    name: "browser_screenshot",
-    // Browser tools share pages, so a round that uses them runs in order.
-    executionMode: "sequential",
-    description: "Take a screenshot of the current page of your browser.",
-    parameters: Type.Object({ full_page: Type.Optional(Type.Boolean()) }),
-    replay: "safe",
-    execute: (args, api, context) =>
-      withBrowser(api, context, async (browser, tabs) => {
-        const { page } = await browser.page(Number(api.conversationId), tabs)
-        const image = await page.screenshot({
-          fullPage: Boolean(args.full_page),
-          type: "png",
-        })
-        const data = image.toString("base64")
-        return {
-          output: [
-            { type: "text", text: `Screenshot of ${page.url()}` },
-            { type: "image", mimeType: "image/png", data },
-          ],
-          details: {
-            kind: "image",
-            title: page.url(),
-            data: `data:image/png;base64,${data}`,
-          },
-        }
-      }),
-  })
-
-  const evalTool = defineTool({
-    name: "browser_eval",
-    // Browser tools share pages, so a round that uses them runs in order.
-    executionMode: "sequential",
-    description:
-      "Evaluate a JavaScript expression in the current page and return its JSON value.",
-    parameters: Type.Object({ expression: Type.String() }),
-    execute: (args, api, context) =>
-      withBrowser(api, context, async (browser, tabs) => {
-        const { page } = await browser.page(Number(api.conversationId), tabs)
-        const value = (await withTimeout(
-          page.evaluate(`(async () => (${args.expression}))()`),
-          EVAL_TIMEOUT_MS,
-          `The expression did not finish in ${EVAL_TIMEOUT_MS / 1000} seconds`
-        )) as unknown
-        return textResult(
-          clip(JSON.stringify(value, null, 2) ?? "undefined", 30_000)
-        )
-      }),
-  })
-
-  const tabsTool = defineTool({
-    name: "browser_tabs",
-    // Browser tools share pages, so a round that uses them runs in order.
-    executionMode: "sequential",
-    description: "List your browser tabs, switch to one, or close one.",
-    parameters: Type.Object({
-      action: Type.Optional(
-        Type.Union([
-          Type.Literal("list"),
-          Type.Literal("switch"),
-          Type.Literal("close"),
-        ])
-      ),
-      id: Type.Optional(Type.String()),
-    }),
-    execute: (args, api, context) =>
-      withBrowser(api, context, async (browser, tabs) => {
-        const conversation = Number(api.conversationId)
-        await browser.session(conversation, tabs)
-        if (args.action === "switch" && args.id)
-          await browser.switchTab(conversation, args.id)
-        if (args.action === "close" && args.id)
-          await browser.closeTab(conversation, args.id)
-        const now = await browser.tabs(conversation)
-        return textResult(
-          now.tabs.length
-            ? now.tabs
-                .map(
-                  (tab) =>
-                    `${tab.id === now.active ? "*" : " "} ${tab.id} ${tab.title} — ${tab.url}`
-                )
-                .join("\n")
-            : "No open tabs."
-        )
-      }),
-  })
-
-  const closeTool = defineTool({
-    name: "browser_close",
-    // Browser tools share pages, so a round that uses them runs in order.
-    executionMode: "sequential",
-    description: "Close your browser. Cookies stay saved for next time.",
-    parameters: Type.Object({}),
-    execute: (_args, api, context) =>
-      withBrowser(api, context, async (browser) => {
-        await browser.closeSession(Number(api.conversationId))
-        return textResult("The browser is closed. Its cookies are saved.")
-      }),
-  })
-
-  return defineExtension({
-    name: "browser",
-    tools: [
-      openTool,
-      snapshotTool,
-      actTool,
-      screenshotTool,
-      evalTool,
-      tabsTool,
-      closeTool,
-    ],
-  })
+  return defineExtension({ name: "browser", tools: [browserTool] })
 }

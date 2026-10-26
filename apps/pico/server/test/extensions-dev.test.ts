@@ -1,13 +1,11 @@
 import assert from "node:assert/strict"
-import { execFileSync } from "node:child_process"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { test } from "node:test"
 
-import { createGitExtension, parseStatus } from "../src/extensions/git.ts"
-import { summarizeChecks } from "../src/extensions/github.ts"
 import { HostBridge } from "../src/extensions/host.ts"
 import { createLspExtension, findPosition } from "../src/extensions/lsp.ts"
+import { summarizeChecks } from "../src/extensions/watch.ts"
 import {
   detectRunner,
   formatReport,
@@ -25,17 +23,6 @@ import {
   TEST_MODEL,
   type Script,
 } from "./support.ts"
-
-async function repo() {
-  const dir = await tempDir("pico-git-test-")
-  execFileSync("git", ["init", "-q", "-b", "main", dir])
-  execFileSync("git", ["-C", dir, "config", "user.email", "t@example.com"])
-  execFileSync("git", ["-C", dir, "config", "user.name", "Test"])
-  await writeFile(join(dir, "a.txt"), "one\n")
-  execFileSync("git", ["-C", dir, "add", "."])
-  execFileSync("git", ["-C", dir, "commit", "-qm", "init"])
-  return dir
-}
 
 /** Run one scripted turn: call `calls` in order, then answer with the results. */
 async function runTools(
@@ -57,7 +44,16 @@ async function runTools(
     const conversation = await harness.createConversation(
       {
         ownership: { kind: "ownerless" },
-        agent: { model: TEST_MODEL, cwd: dir },
+        agent: {
+          model: TEST_MODEL,
+          cwd: dir,
+          // Load deferred tools, as tool_search does.
+          modelTools: {
+            add: extensions
+              .flatMap((extension) => extension.tools ?? [])
+              .filter((tool) => calls.some((call) => call.name === tool.name)),
+          },
+        },
       },
       ctx
     )
@@ -69,66 +65,6 @@ async function runTools(
   }
   return results
 }
-
-void test("git status parses porcelain v2", () => {
-  const status = parseStatus(
-    [
-      "# branch.oid abc",
-      "# branch.head main",
-      "# branch.upstream origin/main",
-      "# branch.ab +2 -1",
-      "1 .M N... 100644 100644 100644 aaa bbb src/a.ts",
-      "1 A. N... 000000 100644 100644 000 ccc new file.ts",
-      "2 R. N... 100644 100644 100644 ddd eee R100 b.ts",
-      "old b.ts",
-      "? notes.md",
-      "",
-    ].join("\0")
-  )
-  assert.equal(status.branch, "main")
-  assert.equal(status.ahead, 2)
-  assert.equal(status.behind, 1)
-  assert.deepEqual(
-    status.files.map((file) => [
-      file.index,
-      file.worktree,
-      file.path,
-      file.previousPath,
-    ]),
-    [
-      [".", "M", "src/a.ts", undefined],
-      ["A", ".", "new file.ts", undefined],
-      ["R", ".", "b.ts", "old b.ts"],
-      ["?", "?", "notes.md", undefined],
-    ]
-  )
-})
-
-void test("git tools report status, diff, and commit once", async () => {
-  const dir = await repo()
-  await writeFile(join(dir, "a.txt"), "one\ntwo\n")
-  await writeFile(join(dir, "b.txt"), "new\n")
-  const results = await runTools(
-    dir,
-    [createGitExtension(new HostBridge())],
-    [
-      { name: "git_status", arguments: {} },
-      { name: "git_diff", arguments: {} },
-      { name: "git_commit", arguments: { message: "Add two", all: true } },
-      { name: "git_log", arguments: { n: 5 } },
-    ]
-  )
-  assert.match(results[0]!, /Branch: main/)
-  assert.match(results[0]!, /Not staged \(1\):\n {2}M a\.txt/)
-  assert.match(results[0]!, /Untracked \(1\):\n {2}b\.txt/)
-  assert.match(results[1]!, /\+two/)
-  assert.match(results[2]!, /Committed [0-9a-f]+: Add two/)
-  assert.match(results[3]!, /Add two[\s\S]*init/)
-  const count = execFileSync("git", ["-C", dir, "rev-list", "--count", "HEAD"])
-    .toString()
-    .trim()
-  assert.equal(count, "2")
-})
 
 void test("CI checks summarize by bucket", () => {
   const summary = summarizeChecks([
@@ -258,14 +194,23 @@ void test("the TypeScript language server finds errors, definitions, and renames
       dir,
       [lsp.extension],
       [
-        { name: "lsp_diagnostics", arguments: { paths: ["src/main.ts"] } },
         {
-          name: "lsp_definition",
-          arguments: { path: "src/main.ts", line: 2, symbol: "addNumbers" },
+          name: "lsp",
+          arguments: { action: "diagnostics", paths: ["src/main.ts"] },
         },
         {
-          name: "lsp_rename",
+          name: "lsp",
           arguments: {
+            action: "definition",
+            path: "src/main.ts",
+            line: 2,
+            symbol: "addNumbers",
+          },
+        },
+        {
+          name: "lsp",
+          arguments: {
+            action: "rename",
             path: "src/math.ts",
             line: 1,
             symbol: "addNumbers",

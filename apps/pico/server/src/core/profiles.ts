@@ -80,7 +80,7 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
   {
     name: "researcher",
     description:
-      "Web research, reading files, notes, and the browser. No shell and no file changes.",
+      "Web research, reading files, and the browser. No shell and no file changes.",
     extensions: [
       "coding-tools",
       "web-access",
