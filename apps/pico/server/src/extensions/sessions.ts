@@ -22,10 +22,13 @@
  * through the hub's SSH connection. An offline machine fails at once. A
  * remote agent cannot call back to the hub.
  */
+import { createHash } from "node:crypto"
+
 import type { Context } from "@earendil-works/chord"
 import { Type } from "@earendil-works/pi-ai"
 import {
   AgentDoc,
+  defineDoc,
   defineExtension,
   defineTask,
   defineTool,
@@ -34,6 +37,7 @@ import {
   type EntryRecord,
   type Harness,
   type ToolExecutionApi,
+  type Tx,
 } from "@earendil-works/pi-durable"
 
 import { createWorktree } from "../services/worktree.ts"
@@ -47,7 +51,7 @@ import { allProfiles, findProfile, nameList } from "../core/profiles.ts"
 import { JobsDoc } from "./jobs.ts"
 import { TimersDoc } from "./schedule.ts"
 import { waitingLabel } from "./waiting.ts"
-import { clip, errorResult, json, textResult } from "./util.ts"
+import { clip, deniedAction, errorResult, json, textResult } from "./util.ts"
 
 /** A session ID from `s123`, `123`, or `pico:s123`. */
 export function normalizeSessionId(value: string) {
@@ -80,16 +84,16 @@ export const STOPPED_ANSWER = "(stopped before it answered)"
 
 /**
  * The answer of the newest run of a conversation: assistant text after its
- * last user input. A run that was stopped or failed before it answered says
- * so, instead of returning the answer of an earlier run. With `at`, the
- * answer of the run that ends at that entry.
+ * last user input, with the ID of its entry. A run that was stopped or failed
+ * before it answered says so, instead of returning the answer of an earlier
+ * run. With `at`, the answer of the run that ends at that entry.
  */
-export async function lastAnswer(
+export async function lastAnswerEntry(
   harness: Pick<Harness, "conversation">,
   conversationId: ConversationId,
   context: Context,
   at?: EntryId
-) {
+): Promise<{ text: string; id?: EntryId } | undefined> {
   const conversation = await harness.conversation(conversationId, context)
   if (!conversation) return undefined
   const view = await conversation.context(
@@ -112,11 +116,90 @@ export async function lastAnswer(
       .filter((line) => !line.startsWith("[tool call:"))
       .join("\n")
       .trim()
-    if (text) return text
+    if (text) return { text, id: entry.id }
     if (message?.stopReason === "error")
-      return `(the run failed: ${message.errorMessage ?? "unknown error"})`
+      return {
+        text: `(the run failed: ${message.errorMessage ?? "unknown error"})`,
+        id: entry.id,
+      }
   }
-  return stopped ? STOPPED_ANSWER : undefined
+  if (!stopped) return undefined
+  const last = view.entries.at(-1)
+  return { text: STOPPED_ANSWER, ...(last ? { id: last.id } : {}) }
+}
+
+/** The text of `lastAnswerEntry`. */
+export async function lastAnswer(
+  harness: Pick<Harness, "conversation">,
+  conversationId: ConversationId,
+  context: Context,
+  at?: EntryId
+) {
+  return (await lastAnswerEntry(harness, conversationId, context, at))?.text
+}
+
+/**
+ * The key of one answer of a session: its entry ID, or a hash of its text
+ * when the entry ID is not known (older remote machines).
+ */
+export function answerKey(answer: string, id?: EntryId | number | string) {
+  return id !== undefined
+    ? `e${String(id)}`
+    : `h${createHash("sha1").update(answer).digest("hex").slice(0, 12)}`
+}
+
+/**
+ * The answers that a session has seen of other sessions, by session name:
+ * reports, waits, and reads put the answer keys here. A report task does not
+ * send an answer that is here, so an answer comes to a session one time.
+ */
+export const DeliveredDoc = defineDoc<{ items: Record<string, string[]> }>({
+  kind: "pico.delivered",
+  checkpointWhen: () => false,
+  version: 1,
+  scope: "conversation",
+  history: "latest",
+  fork: "initial",
+  initial: () => ({ items: {} }),
+})
+
+const MAX_DELIVERED = 20
+
+async function addDelivered(
+  tx: Tx,
+  watcher: ConversationId,
+  marks: Array<{ session: string; key: string }>
+) {
+  const draft = await tx.doc(DeliveredDoc, watcher)
+  for (const { session, key } of marks) {
+    const keys = (draft.items[session] ?? []).filter((item) => item !== key)
+    keys.push(key)
+    draft.items[session] = keys.slice(-MAX_DELIVERED)
+  }
+}
+
+/** Record that the calling session saw `key`, an answer of `session`. */
+async function markDelivered(
+  api: Pick<ToolExecutionApi, "commit" | "conversationId">,
+  marks: Array<{ session: string; key: string }>,
+  context: Context
+) {
+  if (marks.length === 0) return
+  await api.commit(
+    (tx) => addDelivered(tx, api.conversationId, marks),
+    context
+  )
+}
+
+async function wasDelivered(
+  harness: Pick<Harness, "snapshot">,
+  watcher: ConversationId,
+  session: string,
+  key: string,
+  context: Context
+) {
+  const state = await harness.snapshot(DeliveredDoc, watcher, context)
+  return Boolean(state?.items[session]?.includes(key))
 }
 
 /** The last messages of a session as text, for `read_session`. */
@@ -254,7 +337,10 @@ type ReportInput = {
   parent: number
   child: string
   childTitle: string
-  /** Distinguishes reports of several messages to one child. */
+  /**
+   * Distinguishes reports of several messages to one child. Reports of
+   * tasks of older versions use it in their request ID.
+   */
   key: string
   /**
    * The request ID of the message to the child. The report gives the answer
@@ -280,10 +366,18 @@ async function answerTo(
     context
   )
   if (record?.type !== "input" || record.status !== "done") return undefined
-  return lastAnswer(harness, child, context, record.answer)
+  const answer = await lastAnswerEntry(harness, child, context, record.answer)
+  return answer ? { text: answer.text, id: answer.id ?? record.answer } : undefined
 }
 
-type ReportCheckpoint = { phase: "wait" } | { phase: "report"; answer: string }
+type ReportCheckpoint =
+  | { phase: "wait" }
+  | {
+      phase: "report"
+      answer: string
+      /** The `answerKey` of the answer; absent in tasks of older versions. */
+      answerKey?: string
+    }
 
 function createReportTask(host: HostBridge) {
   return defineTask<ReportInput, ReportCheckpoint, null>({
@@ -296,14 +390,16 @@ function createReportTask(host: HostBridge) {
         const child = conversationOf(task.input.child)
         const handle = await runtime.conversation(child, context)
         let answer: string
+        let key: string
         let first = true
         // A turn that ends on a timer, a watch, or a job is `waiting`: wait
         // until the child runs again and ends with a question or done.
         for (;;) {
           if (handle) await handle.waitForIdle(context)
           // A child can answer several queued messages before it is idle.
-          // Each report gives the answer to its own message, not the newest
-          // answer, so that the parent does not get one answer many times.
+          // Each report gives the answer to its own message. Messages that
+          // join one run share its answer: the answer key lets only one
+          // report of it through.
           const own =
             first && task.input.request
               ? await answerTo(
@@ -314,10 +410,10 @@ function createReportTask(host: HostBridge) {
                 )
               : undefined
           first = false
-          answer =
-            own ??
-            (await lastAnswer(services.harness, child, context)) ??
-            "(no answer)"
+          const found =
+            own ?? (await lastAnswerEntry(services.harness, child, context))
+          answer = found?.text ?? "(no answer)"
+          key = answerKey(answer, found?.id)
           const needsInput = Boolean(
             services.sessions
               .list({})
@@ -341,7 +437,7 @@ function createReportTask(host: HostBridge) {
         await runtime.commit(
           () => ({
             status: "running",
-            checkpoint: { phase: "report", answer },
+            checkpoint: { phase: "report", answer, answerKey: key },
           }),
           context
         )
@@ -354,8 +450,19 @@ function createReportTask(host: HostBridge) {
             .list({})
             .find((session) => session.id === input.child)?.needsInput
         )
-        const parent = sessionIdOf(input.parent as unknown as ConversationId)
-        if (services.sessions.has(parent))
+        const parentConversation = input.parent as unknown as ConversationId
+        const parent = sessionIdOf(parentConversation)
+        const { answerKey: key } = task.state.checkpoint
+        const seen =
+          key !== undefined &&
+          (await wasDelivered(
+            services.harness,
+            parentConversation,
+            input.child,
+            key,
+            context
+          ))
+        if (services.sessions.has(parent) && !seen)
           await services.sessions.followUp(
             parent,
             reportMessage({
@@ -367,7 +474,7 @@ function createReportTask(host: HostBridge) {
                 services.sessions.has(input.child) &&
                 services.sessions.meta(input.child).parent === parent,
             }),
-            `report:${input.child}:${input.key}`
+            `report:${input.child}:${key ?? input.key}`
           )
         await runtime.commit(
           () => ({
@@ -519,7 +626,7 @@ async function remoteWait(
       "GET",
       `/api/machine/session/wait?id=${encodeURIComponent(id)}&timeoutMs=${Math.min(25_000, left)}`,
       { timeoutMs: 45_000 }
-    )) as RemoteSession & { idle: boolean; answer?: string }
+    )) as RemoteSession & { idle: boolean; answer?: string; answerId?: number }
     if (result.idle) return result
   }
 }
@@ -534,7 +641,13 @@ type RemoteReportInput = {
 
 type RemoteReportCheckpoint =
   | { phase: "wait" }
-  | { phase: "report"; answer: string; needsInput: boolean }
+  | {
+      phase: "report"
+      answer: string
+      needsInput: boolean
+      /** The `answerKey` of the answer; absent in tasks of older versions. */
+      answerKey?: string
+    }
 
 /**
  * Post the answer of a remote session to the caller when it is idle. It
@@ -548,6 +661,7 @@ function createRemoteReportTask(host: HostBridge) {
     phases: {
       wait: async (task, runtime, context) => {
         let answer: string | undefined
+        let answerId: number | undefined
         let needsInput = false
         for (;;) {
           const services = await host.ready(runtime.signal)
@@ -566,6 +680,7 @@ function createRemoteReportTask(host: HostBridge) {
             )
             if (result) {
               answer = result.answer ?? "(no answer)"
+              answerId = result.answerId
               needsInput = result.needsInput
               if (
                 childMessageKind(answer, needsInput, result.waiting) !==
@@ -583,7 +698,12 @@ function createRemoteReportTask(host: HostBridge) {
         await runtime.commit(
           () => ({
             status: "running",
-            checkpoint: { phase: "report", answer, needsInput },
+            checkpoint: {
+              phase: "report",
+              answer,
+              needsInput,
+              answerKey: answerKey(answer, answerId),
+            },
           }),
           context
         )
@@ -595,8 +715,19 @@ function createRemoteReportTask(host: HostBridge) {
         const label =
           services.machines?.find(input.machine)?.profile.label ?? input.machine
         const name = `${label}:${input.child}`
-        const parent = sessionIdOf(input.parent as unknown as ConversationId)
-        if (services.sessions.has(parent))
+        const parentConversation = input.parent as unknown as ConversationId
+        const parent = sessionIdOf(parentConversation)
+        const key = checkpoint.answerKey
+        const seen =
+          key !== undefined &&
+          (await wasDelivered(
+            services.harness,
+            parentConversation,
+            `${input.machine}:${input.child}`,
+            key,
+            context
+          ))
+        if (services.sessions.has(parent) && !seen)
           await services.sessions.followUp(
             parent,
             reportMessage({
@@ -606,7 +737,7 @@ function createRemoteReportTask(host: HostBridge) {
               needsInput: checkpoint.needsInput,
               child: false,
             }),
-            `report:${input.machine}:${input.child}:${input.key}`
+            `report:${input.machine}:${input.child}:${key ?? input.key}`
           )
         await runtime.commit(
           () => ({
@@ -823,6 +954,17 @@ export function createSessionsExtension(host: HostBridge) {
             args.timeout ? Date.now() + args.timeout * 1000 : undefined,
             context.abortSignal
           )
+          if (done)
+            await markDelivered(
+              api,
+              [
+                {
+                  session: `${connection.profile.id}:${created.sessionId}`,
+                  key: answerKey(done.answer ?? "", done.answerId),
+                },
+              ],
+              context
+            )
           return textResult(
             done
               ? `Session ${name} (in ${created.cwd}) finished.\nIts answer:\n${clip(done.answer ?? "(no answer)", 20_000)}`
@@ -977,11 +1119,18 @@ export function createSessionsExtension(host: HostBridge) {
         waitIdle(services, conversationOf(child), context),
         args.timeout ? args.timeout * 1000 : undefined
       )
-      const answer = await lastAnswer(
+      const found = await lastAnswerEntry(
         services.harness,
         conversationOf(child),
         context
       )
+      if (finished && found)
+        await markDelivered(
+          api,
+          [{ session: child, key: answerKey(found.text, found.id) }],
+          context
+        )
+      const answer = found?.text
       return textResult(
         finished
           ? `Child session ${child} (${where}) finished.\nIts answer:\n${clip(answer ?? "(no answer)", 20_000)}`
@@ -1087,6 +1236,17 @@ export function createSessionsExtension(host: HostBridge) {
             args.timeout ? Date.now() + args.timeout * 1000 : undefined,
             context.abortSignal
           )
+          if (done)
+            await markDelivered(
+              api,
+              [
+                {
+                  session: `${connection.profile.id}:${id}`,
+                  key: answerKey(done.answer ?? "", done.answerId),
+                },
+              ],
+              context
+            )
           return textResult(
             done
               ? `Session ${name} answered:\n${clip(done.answer ?? "(no answer)", 20_000)}`
@@ -1139,6 +1299,8 @@ export function createSessionsExtension(host: HostBridge) {
           .join(" ")
       }
       if (toParent) {
+        // A message to the parent is a note: the parent answers with
+        // send_to_session when it wants to, so no report comes back.
         await services.sessions.followUp(
           target,
           reportMessage({
@@ -1149,6 +1311,10 @@ export function createSessionsExtension(host: HostBridge) {
             child: true,
           }),
           `send:${api.callId}`
+        )
+        return textResult(
+          `Sent to your parent session ${target}. It gets the message in its follow-up queue. Keep working: its answer, if any, comes as a message.`,
+          { details: { sessionId: target } }
         )
       } else {
         await services.sessions.prompt(target, {
@@ -1182,11 +1348,18 @@ export function createSessionsExtension(host: HostBridge) {
         waitIdle(services, conversationOf(target), context),
         args.timeout ? args.timeout * 1000 : undefined
       )
-      const answer = await lastAnswer(
+      const found = await lastAnswerEntry(
         services.harness,
         conversationOf(target),
         context
       )
+      if (finished && found)
+        await markDelivered(
+          api,
+          [{ session: target, key: answerKey(found.text, found.id) }],
+          context
+        )
+      const answer = found?.text
       return textResult(
         finished
           ? `Session ${target} answered:\n${clip(answer ?? "(no answer)", 20_000)}`
@@ -1196,328 +1369,418 @@ export function createSessionsExtension(host: HostBridge) {
     },
   })
 
-  const readTool = defineTool({
-    name: "read_session",
-    description:
-      "Read the recent transcript of another session: its last messages (default 6), optionally with tool results.",
-    parameters: Type.Object({
-      id: Type.String(),
-      last: Type.Optional(Type.Number()),
-      include_tools: Type.Optional(Type.Boolean()),
-      machine: MACHINE_PARAMETER,
-    }),
-    replay: "safe",
-    async execute(args, _api, context) {
-      const services = await host.ready(context.abortSignal)
-      const remote = resolveRemote(services, args.machine, args.id)
-      if (remote.error) return remote.error
-      if (remote.target?.id) {
-        const { connection, id } = remote.target
-        try {
-          const result = (await connection.request(
-            "GET",
-            `/api/machine/session/read?id=${encodeURIComponent(id)}&last=${Math.min(50, Math.max(1, args.last ?? 6))}${args.include_tools ? "&includeTools=1" : ""}`
-          )) as RemoteSession & { text: string }
-          return textResult(
-            [
-              `Session ${remoteName(connection, id)}: ${result.title} (${result.busy ? "working" : "idle"}${result.needsInput ? ", waiting for the user" : ""})`,
-              `Machine: ${connection.profile.label}. Directory: ${result.cwd}${result.worktree ? ` (worktree, branch ${result.worktree.branch})` : ""}`,
-              "",
-              clip(result.text || "(no messages)", 40_000),
-            ].join("\n")
-          )
-        } catch (error) {
-          return errorResult(
-            error instanceof Error ? error.message : String(error)
-          )
-        }
-      }
-      let target: string
+  type SessionsArgs = {
+    action: string
+    id?: string | undefined
+    ids?: string[] | undefined
+    scope?: string | undefined
+    last?: number | undefined
+    include_tools?: boolean | undefined
+    timeout?: number | undefined
+    any?: boolean | undefined
+    machine?: string | undefined
+  }
+
+  const readSession = async (
+    args: SessionsArgs,
+    api: ToolExecutionApi,
+    context: Context
+  ) => {
+    const services = await host.ready(context.abortSignal)
+    const value = args.id ?? args.ids?.[0]
+    if (!value) return errorResult("read needs id.")
+    const last = Math.min(50, Math.max(1, args.last ?? 6))
+    const remote = resolveRemote(services, args.machine, value)
+    if (remote.error) return remote.error
+    if (remote.target?.id) {
+      const { connection, id } = remote.target
       try {
-        target = requireSession(services, args.id)
+        const result = (await connection.request(
+          "GET",
+          `/api/machine/session/read?id=${encodeURIComponent(id)}&last=${last}${args.include_tools ? "&includeTools=1" : ""}`
+        )) as RemoteSession & { text: string }
+        return textResult(
+          [
+            `Session ${remoteName(connection, id)}: ${result.title} (${result.busy ? "working" : "idle"}${result.needsInput ? ", waiting for the user" : ""})`,
+            `Machine: ${connection.profile.label}. Directory: ${result.cwd}${result.worktree ? ` (worktree, branch ${result.worktree.branch})` : ""}`,
+            "",
+            clip(result.text || "(no messages)", 40_000),
+          ].join("\n")
+        )
       } catch (error) {
         return errorResult(
           error instanceof Error ? error.message : String(error)
         )
       }
-      const summary = services.sessions
-        .list({})
-        .find((item) => item.id === target)
-      const text = await transcriptText(
+    }
+    let target: string
+    try {
+      target = requireSession(services, value)
+    } catch (error) {
+      return errorResult(error instanceof Error ? error.message : String(error))
+    }
+    const summary = services.sessions
+      .list({})
+      .find((item) => item.id === target)
+    const text = await transcriptText(
+      services.harness,
+      conversationOf(target),
+      { last, includeTools: Boolean(args.include_tools) },
+      context
+    )
+    // An idle session's transcript ends with its answer: the caller has
+    // seen it, so no report sends it again.
+    if (summary && !summary.busy) {
+      const found = await lastAnswerEntry(
         services.harness,
         conversationOf(target),
-        {
-          last: Math.min(50, Math.max(1, args.last ?? 6)),
-          includeTools: Boolean(args.include_tools),
-        },
         context
       )
-      const meta = services.sessions.meta(target)
-      return textResult(
-        [
-          `Session ${target}: ${summary?.title ?? ""} (${summary?.busy ? "working" : "idle"}${summary?.needsInput ? ", waiting for the user" : ""})`,
-          `Directory: ${meta.cwd}${meta.worktree ? ` (worktree, branch ${meta.worktree.branch})` : ""}`,
-          "",
-          clip(text || "(no messages)", 40_000),
-        ].join("\n")
-      )
-    },
-  })
+      if (found)
+        await markDelivered(
+          api,
+          [{ session: target, key: answerKey(found.text, found.id) }],
+          context
+        )
+    }
+    const meta = services.sessions.meta(target)
+    return textResult(
+      [
+        `Session ${target}: ${summary?.title ?? ""} (${summary?.busy ? "working" : "idle"}${summary?.needsInput ? ", waiting for the user" : ""})`,
+        `Directory: ${meta.cwd}${meta.worktree ? ` (worktree, branch ${meta.worktree.branch})` : ""}`,
+        "",
+        clip(text || "(no messages)", 40_000),
+      ].join("\n")
+    )
+  }
 
-  const listTool = defineTool({
-    name: "list_sessions",
-    description:
-      "List sessions: your children (default), the sessions of your directory, or all sessions.",
-    parameters: Type.Object({
-      scope: Type.Optional(
-        Type.Union([
-          Type.Literal("children"),
-          Type.Literal("directory"),
-          Type.Literal("all"),
-          Type.Literal("archived"),
-        ])
-      ),
-      machine: Type.Optional(
-        Type.String({
-          description:
-            "List the sessions of another machine of this hub (label or ID) instead.",
-        })
-      ),
-    }),
-    replay: "safe",
-    async execute(args, api, context) {
-      const services = await host.ready(context.abortSignal)
-      const remote = resolveRemote(services, args.machine)
-      if (remote.error) return remote.error
-      if (remote.target) {
-        const { connection } = remote.target
-        try {
-          if (args.scope === "archived") {
-            const archived = (await connection.request(
-              "GET",
-              "/api/machine/sessions/archived"
-            )) as {
-              sessions: Array<{ id: string; title: string; cwd: string }>
-            }
-            if (archived.sessions.length === 0)
-              return textResult(
-                `No archived sessions on ${connection.profile.label}.`
-              )
-            return textResult(
-              archived.sessions
-                .map(
-                  (item) =>
-                    `${remoteName(connection, item.id)} — ${item.title} [archived]\n  ${item.cwd}`
-                )
-                .join("\n")
-            )
-          }
-          const result = (await connection.request(
+  const listSessions = async (
+    args: SessionsArgs,
+    api: ToolExecutionApi,
+    context: Context
+  ) => {
+    const services = await host.ready(context.abortSignal)
+    const remote = resolveRemote(services, args.machine)
+    if (remote.error) return remote.error
+    if (remote.target) {
+      const { connection } = remote.target
+      try {
+        if (args.scope === "archived") {
+          const archived = (await connection.request(
             "GET",
-            "/api/machine/sessions"
+            "/api/machine/sessions/archived"
           )) as {
-            sessions: Array<{
-              id: string
-              title: string
-              cwd: string
-              busy: boolean
-              needsInput: boolean
-              unread?: boolean
-              lastMessagePreview?: string
-              waiting?: string
-            }>
+            sessions: Array<{ id: string; title: string; cwd: string }>
           }
-          if (result.sessions.length === 0)
-            return textResult(`No sessions on ${connection.profile.label}.`)
+          if (archived.sessions.length === 0)
+            return textResult(
+              `No archived sessions on ${connection.profile.label}.`
+            )
           return textResult(
-            result.sessions
+            archived.sessions
               .map(
                 (item) =>
-                  `${remoteName(connection, item.id)} — ${item.title} [${status(item)}]\n  ${item.cwd}${item.lastMessagePreview ? `\n  last: ${item.lastMessagePreview}` : ""}`
+                  `${remoteName(connection, item.id)} — ${item.title} [archived]\n  ${item.cwd}`
               )
               .join("\n")
           )
-        } catch (error) {
-          return errorResult(
-            error instanceof Error ? error.message : String(error)
-          )
         }
-      }
-      const self = sessionIdOf(api.conversationId)
-      const scope = args.scope ?? "children"
-      if (scope === "archived") {
-        const archived = services.sessions.archivedSessions().slice(0, 50)
-        if (archived.length === 0) return textResult("No archived sessions.")
+        const result = (await connection.request(
+          "GET",
+          "/api/machine/sessions"
+        )) as {
+          sessions: Array<{
+            id: string
+            title: string
+            cwd: string
+            busy: boolean
+            needsInput: boolean
+            unread?: boolean
+            lastMessagePreview?: string
+            waiting?: string
+          }>
+        }
+        if (result.sessions.length === 0)
+          return textResult(`No sessions on ${connection.profile.label}.`)
         return textResult(
-          archived
+          result.sessions
             .map(
               (item) =>
-                `${item.id} — ${item.title} [archived${item.archivedAt ? ` ${item.archivedAt}` : ""}]\n  ${item.cwd}`
+                `${remoteName(connection, item.id)} — ${item.title} [${status(item)}]\n  ${item.cwd}${item.lastMessagePreview ? `\n  last: ${item.lastMessagePreview}` : ""}`
             )
             .join("\n")
         )
-      }
-      const meta = services.sessions.has(self)
-        ? services.sessions.meta(self)
-        : undefined
-      const items = services.sessions
-        .list(
-          scope === "children"
-            ? { parent: self }
-            : scope === "directory" && meta
-              ? { directory: meta.group ?? meta.cwd }
-              : {}
+      } catch (error) {
+        return errorResult(
+          error instanceof Error ? error.message : String(error)
         )
-        .slice(0, 50)
-      if (items.length === 0) return textResult(`No sessions (${scope}).`)
-      const withWaiting = await Promise.all(
-        items.map(async (item) => {
-          if (item.busy || item.needsInput) return item
-          const waiting = await waitingOn(
-            services.harness,
-            conversationOf(item.id),
-            context
-          )
-          return waiting ? { ...item, waiting } : item
-        })
-      )
+      }
+    }
+    const self = sessionIdOf(api.conversationId)
+    const scope = args.scope ?? "children"
+    if (scope === "archived") {
+      const archived = services.sessions.archivedSessions().slice(0, 50)
+      if (archived.length === 0) return textResult("No archived sessions.")
       return textResult(
-        withWaiting
+        archived
           .map(
             (item) =>
-              `${item.id}${item.id === self ? " (you)" : ""} — ${item.title} [${status(item)}]${item.parent ? ` child of ${item.parent}` : ""}${item.worktreeBranch ? ` branch ${item.worktreeBranch}` : ""}\n  ${item.cwd}${item.lastMessagePreview ? `\n  last: ${item.lastMessagePreview}` : ""}`
+              `${item.id} — ${item.title} [archived${item.archivedAt ? ` ${item.archivedAt}` : ""}]\n  ${item.cwd}`
           )
           .join("\n")
       )
-    },
-  })
-
-  const waitTool = defineTool({
-    name: "wait_for_sessions",
-    description:
-      "Wait until the given sessions are idle (or the timeout passes), then return the answer of each.",
-    parameters: Type.Object({
-      ids: Type.Array(
-        Type.String({
-          description: "Session IDs; workbox:s12 is a session on workbox",
-        })
-      ),
-      timeout: Type.Optional(Type.Number({ description: "Seconds" })),
-      machine: MACHINE_PARAMETER,
-    }),
-    replay: "safe",
-    async execute(args, _api, context) {
-      const services = await host.ready(context.abortSignal)
-      let ids: string[]
-      const remotes: Array<{ connection: RemoteConnection; id: string }> = []
-      try {
-        ids = []
-        for (const value of args.ids) {
-          const remote = remoteTarget(services, args.machine, value)
-          if (remote?.id)
-            remotes.push({ connection: remote.connection, id: remote.id })
-          else ids.push(requireSession(services, value))
-        }
-      } catch (error) {
-        return errorResult(
-          error instanceof Error ? error.message : String(error)
-        )
-      }
-      const deadline = args.timeout
-        ? Date.now() + args.timeout * 1000
-        : undefined
-      const remoteResults = new Map<
-        string,
-        (RemoteSession & { answer?: string }) | Error | undefined
-      >()
-      const finished = await within(
-        Promise.all([
-          ...ids.map((id) => waitIdle(services, conversationOf(id), context)),
-          ...remotes.map(async ({ connection, id }) => {
-            const key = remoteName(connection, id)
-            try {
-              remoteResults.set(
-                key,
-                await remoteWait(connection, id, deadline, context.abortSignal)
-              )
-            } catch (error) {
-              remoteResults.set(
-                key,
-                error instanceof Error ? error : new Error(String(error))
-              )
-            }
-          }),
-        ]),
-        args.timeout ? args.timeout * 1000 : undefined
+    }
+    const meta = services.sessions.has(self)
+      ? services.sessions.meta(self)
+      : undefined
+    const items = services.sessions
+      .list(
+        scope === "children"
+          ? { parent: self }
+          : scope === "directory" && meta
+            ? { directory: meta.group ?? meta.cwd }
+            : {}
       )
-      const parts: string[] = []
-      for (const { connection, id } of remotes) {
-        const key = remoteName(connection, id)
-        const result = remoteResults.get(key)
-        parts.push(
-          result instanceof Error
-            ? `## ${key} (unknown: ${result.message})`
-            : result
-              ? `## ${key} (idle)\n${clip(result.answer ?? "(no answer)", 8000)}`
-              : `## ${key} (still working)`
-        )
-      }
-      for (const id of ids) {
-        const busy = services.sessions.isBusy(id)
-        const waiting = busy
-          ? undefined
-          : await waitingOn(services.harness, conversationOf(id), context)
-        const answer = await lastAnswer(
+      .slice(0, 50)
+    if (items.length === 0) return textResult(`No sessions (${scope}).`)
+    const withWaiting = await Promise.all(
+      items.map(async (item) => {
+        if (item.busy || item.needsInput) return item
+        const waiting = await waitingOn(
           services.harness,
-          conversationOf(id),
+          conversationOf(item.id),
           context
         )
-        parts.push(
-          `## ${id} (${busy ? "still working" : waiting ? `idle, waiting on ${waiting}` : "idle"})\n${clip(answer ?? "(no answer)", 8000)}`
+        return waiting ? { ...item, waiting } : item
+      })
+    )
+    return textResult(
+      withWaiting
+        .map(
+          (item) =>
+            `${item.id}${item.id === self ? " (you)" : ""} — ${item.title} [${status(item)}]${item.parent ? ` child of ${item.parent}` : ""}${item.worktreeBranch ? ` branch ${item.worktreeBranch}` : ""}\n  ${item.cwd}${item.lastMessagePreview ? `\n  last: ${item.lastMessagePreview}` : ""}`
         )
-      }
-      return textResult(
-        `${finished ? "All sessions are idle." : `Timed out after ${args.timeout}s.`}\n\n${parts.join("\n\n")}`
-      )
-    },
-  })
+        .join("\n")
+    )
+  }
 
-  const stopTool = defineTool({
-    name: "stop_session",
-    description: "Stop the current work of another session (like Esc).",
-    parameters: Type.Object({ id: Type.String(), machine: MACHINE_PARAMETER }),
-    replay: "safe",
-    async execute(args, api, context) {
-      const services = await host.ready(context.abortSignal)
-      const remote = resolveRemote(services, args.machine, args.id)
-      if (remote.error) return remote.error
-      if (remote.target?.id) {
-        const { connection, id } = remote.target
-        try {
-          await connection.request("POST", "/api/machine/session/stop", {
-            body: { id },
-          })
-        } catch (error) {
-          return errorResult(
-            error instanceof Error ? error.message : String(error)
-          )
-        }
-        return textResult(`Stopped session ${remoteName(connection, id)}.`)
-      }
-      let target: string
+  /** One session that `wait` looks at, on this machine or a remote one. */
+  type WaitTarget =
+    | { kind: "local"; id: string }
+    | { kind: "remote"; connection: RemoteConnection; id: string }
+
+  type WaitState = {
+    name: string
+    /** The delivered-list name of the session. */
+    session: string
+    state: "working" | "idle" | "waiting" | "unknown"
+    waiting?: string
+    answer?: string
+    key?: string
+    error?: string
+  }
+
+  /** The state of a session now, without waiting. */
+  const waitState = async (
+    services: HostServices,
+    target: WaitTarget,
+    context: Context
+  ): Promise<WaitState> => {
+    if (target.kind === "remote") {
+      const name = remoteName(target.connection, target.id)
+      const session = `${target.connection.profile.id}:${target.id}`
       try {
-        target = requireSession(services, args.id)
-      } catch (error) {
-        return errorResult(
-          error instanceof Error ? error.message : String(error)
+        const result = await remoteWait(
+          target.connection,
+          target.id,
+          Date.now() + 1,
+          context.abortSignal
         )
+        if (!result) return { name, session, state: "working" }
+        const answer = result.answer ?? "(no answer)"
+        return {
+          name,
+          session,
+          state: result.waiting ? "waiting" : "idle",
+          ...(result.waiting ? { waiting: result.waiting } : {}),
+          answer,
+          key: answerKey(answer, result.answerId),
+        }
+      } catch (error) {
+        return {
+          name,
+          session,
+          state: "unknown",
+          error: error instanceof Error ? error.message : String(error),
+        }
       }
-      if (target === sessionIdOf(api.conversationId))
-        return errorResult("A session cannot stop itself this way.")
-      await services.sessions.abort(target)
-      return textResult(`Stopped session ${target}.`)
-    },
-  })
+    }
+    const { id } = target
+    if (services.sessions.isBusy(id))
+      return { name: id, session: id, state: "working" }
+    const waiting = await waitingOn(
+      services.harness,
+      conversationOf(id),
+      context
+    )
+    const found = await lastAnswerEntry(
+      services.harness,
+      conversationOf(id),
+      context
+    )
+    const answer = found?.text ?? "(no answer)"
+    return {
+      name: id,
+      session: id,
+      state: waiting ? "waiting" : "idle",
+      ...(waiting ? { waiting } : {}),
+      answer,
+      key: answerKey(answer, found?.id),
+    }
+  }
+
+  const waitSessions = async (
+    args: SessionsArgs,
+    api: ToolExecutionApi,
+    context: Context
+  ) => {
+    const services = await host.ready(context.abortSignal)
+    const values = args.ids ?? (args.id ? [args.id] : [])
+    if (values.length === 0) return errorResult("wait needs ids.")
+    const targets: WaitTarget[] = []
+    try {
+      for (const value of values) {
+        const remote = remoteTarget(services, args.machine, value)
+        if (remote?.id)
+          targets.push({
+            kind: "remote",
+            connection: remote.connection,
+            id: remote.id,
+          })
+        else targets.push({ kind: "local", id: requireSession(services, value) })
+      }
+    } catch (error) {
+      return errorResult(error instanceof Error ? error.message : String(error))
+    }
+    const deadline = args.timeout ? Date.now() + args.timeout * 1000 : undefined
+    const delivered =
+      (await api.snapshot(DeliveredDoc, api.conversationId, context))?.items ??
+      {}
+    // How the caller knows each answer: shown by a tool before, sent as a
+    // report (still in its queue, or read), or not at all.
+    const seen = new Map<string, "shown" | "queued" | "read" | "new">()
+    const known = async (state: WaitState) => {
+      if (state.state !== "idle" || state.key === undefined) return "none"
+      const id = `${state.session}:${state.key}`
+      const cached = seen.get(id)
+      if (cached && cached !== "new") return cached
+      let result: "shown" | "queued" | "read" | "new"
+      if (delivered[state.session]?.includes(state.key)) result = "shown"
+      else {
+        const report = await services.harness.commit(
+          (tx) =>
+            tx.submissionByRequest(
+              api.conversationId,
+              `report:${state.session}:${state.key}`
+            ),
+          context
+        )
+        result = !report
+          ? "new"
+          : report.status === "queued"
+            ? "queued"
+            : "read"
+      }
+      seen.set(id, result)
+      return result
+    }
+    // `any` waits for an answer that the caller has not seen yet; `all`
+    // waits until no session works.
+    const arrived = async (state: WaitState) => {
+      const how = await known(state)
+      return how === "new" || how === "queued"
+    }
+    let states: WaitState[]
+    for (;;) {
+      states = await Promise.all(
+        targets.map((target) => waitState(services, target, context))
+      )
+      const done = args.any
+        ? (await Promise.all(states.map(arrived))).some(Boolean)
+        : states.every((state) => state.state !== "working")
+      if (done || (deadline !== undefined && Date.now() >= deadline)) break
+      // Local sessions end their runs in the harness; a short poll keeps
+      // this simple for a mix of local and remote sessions.
+      await sleep(
+        Math.min(
+          targets.some((target) => target.kind === "remote") ? 3000 : 500,
+          deadline === undefined ? 3000 : Math.max(0, deadline - Date.now())
+        ),
+        context.abortSignal
+      )
+    }
+    const hows = await Promise.all(states.map(known))
+    const finished = args.any
+      ? hows.some((how) => how === "new" || how === "queued")
+      : states.every((state) => state.state !== "working")
+    // The caller sees the new answers now: no report sends them again.
+    await markDelivered(
+      api,
+      states.flatMap((state, index) =>
+        hows[index] === "new" && state.key
+          ? [{ session: state.session, key: state.key }]
+          : []
+      ),
+      context
+    )
+    const rank = { new: 0, queued: 1, read: 2, shown: 2, none: 3 } as const
+    const parts = states
+      .map((state, index) => ({ state, how: hows[index]! }))
+      .toSorted((a, b) => rank[a.how] - rank[b.how])
+      .map(({ state, how }) => {
+        if (state.state === "unknown")
+          return `## ${state.name} (unknown: ${state.error})`
+        if (state.state === "working")
+          return `## ${state.name} (still working)`
+        if (state.state === "waiting")
+          return `## ${state.name} (idle, waiting on ${state.waiting})\n${clip(state.answer ?? "(no answer)", 8000)}`
+        if (how === "queued")
+          return `## ${state.name} (idle, new answer: it is in your follow-up queue as a message, so it is not repeated here)`
+        if (how === "new")
+          return `## ${state.name} (idle, new answer)\n${clip(state.answer ?? "(no answer)", 8000)}`
+        return `## ${state.name} (idle, you saw this answer before)\n${clip(state.answer ?? "(no answer)", 2000)}`
+      })
+    const head = finished
+      ? args.any
+        ? "A session has a new answer."
+        : "No session works now."
+      : `Timed out after ${args.timeout}s.`
+    return textResult(`${head}\n\n${parts.join("\n\n")}`)
+  }
+
+  const stopSessions = async (
+    services: HostServices,
+    ids: string[],
+    args: SessionsArgs,
+    api: ToolExecutionApi
+  ) =>
+    forEachSession(
+      services,
+      ids,
+      args.machine,
+      async (id) => {
+        if (id === sessionIdOf(api.conversationId))
+          throw new Error("A session cannot stop itself this way.")
+        await services.sessions.abort(id)
+        return `Stopped session ${id}.`
+      },
+      async (connection, id) => {
+        await connection.request("POST", "/api/machine/session/stop", {
+          body: { id },
+        })
+        return `Stopped session ${remoteName(connection, id)}.`
+      }
+    )
 
   /**
    * Run `action` for each ID, on this machine or a remote one. Returns one
@@ -1550,106 +1813,140 @@ export function createSessionsExtension(host: HostBridge) {
     return failed === ids.length ? errorResult(text) : textResult(text)
   }
 
-  const readStateTool = defineTool({
-    name: "mark_sessions_read",
-    description:
-      "Mark sessions as read (default) or unread. Read state is the same in every tab and client of the user.",
-    parameters: Type.Object({
-      ids: Type.Array(
-        Type.String({
-          description: "Session IDs; workbox:s12 is a session on workbox",
+  const markSessions = (
+    services: HostServices,
+    ids: string[],
+    args: SessionsArgs,
+    unread: boolean
+  ) => {
+    const word = unread ? "unread" : "read"
+    return forEachSession(
+      services,
+      ids,
+      args.machine,
+      (id) => {
+        services.sessions.setRead(id, !unread)
+        return `Marked ${id} ${word}.`
+      },
+      async (connection, id) => {
+        await connection.request("POST", "/api/machine/session/read-state", {
+          body: { id, unread },
         })
-      ),
-      unread: Type.Optional(
-        Type.Boolean({ description: "Mark them unread instead" })
-      ),
-      machine: MACHINE_PARAMETER,
-    }),
-    replay: "safe",
-    async execute(args, _api, context) {
-      const services = await host.ready(context.abortSignal)
-      const unread = args.unread === true
-      const word = unread ? "unread" : "read"
-      if (args.ids.length === 0) return errorResult("ids must not be empty.")
-      return forEachSession(
-        services,
-        args.ids,
-        args.machine,
-        (id) => {
-          services.sessions.setRead(id, !unread)
-          return `Marked ${id} ${word}.`
-        },
-        async (connection, id) => {
-          await connection.request("POST", "/api/machine/session/read-state", {
-            body: { id, unread },
-          })
-          return `Marked ${remoteName(connection, id)} ${word}.`
-        }
-      )
-    },
-  })
+        return `Marked ${remoteName(connection, id)} ${word}.`
+      }
+    )
+  }
 
-  const archiveTool = defineTool({
-    name: "archive_sessions",
-    description:
-      "Archive sessions: hide them from the sidebar. They stay on disk. Set restore to show archived sessions again; list_sessions with scope archived lists them. A busy session cannot be archived.",
-    parameters: Type.Object({
-      ids: Type.Array(
-        Type.String({
-          description: "Session IDs; workbox:s12 is a session on workbox",
+  const archiveSessions = (
+    services: HostServices,
+    ids: string[],
+    args: SessionsArgs,
+    api: ToolExecutionApi,
+    restore: boolean
+  ) => {
+    const self = sessionIdOf(api.conversationId)
+    return forEachSession(
+      services,
+      ids,
+      args.machine,
+      (id) => {
+        if (restore) {
+          services.sessions.restore(id)
+          return `Restored ${id}.`
+        }
+        if (id === self) throw new Error("A session cannot archive itself.")
+        if (
+          services.sessions.has(self) &&
+          id === services.sessions.meta(self).parent
+        )
+          throw new Error("A session cannot archive its parent.")
+        services.sessions.archive(id)
+        return `Archived ${id}.`
+      },
+      async (connection, id) => {
+        await connection.request("POST", "/api/machine/session/archive", {
+          body: { id, restore },
         })
+        return `${restore ? "Restored" : "Archived"} ${remoteName(connection, id)}.`
+      }
+    )
+  }
+
+  const SESSION_ACTIONS = [
+    "list",
+    "read",
+    "wait",
+    "stop",
+    "archive",
+    "restore",
+    "mark_read",
+    "mark_unread",
+  ] as const
+
+  const sessionsTool = defineTool({
+    name: "sessions",
+    description: [
+      "Look at and manage other sessions. Actions:",
+      "list (scope: children (default), directory, all, or archived);",
+      "read (the last messages of session id; last, default 6; include_tools);",
+      "wait (until no session of ids works, or with any: true until one of them has an answer you have not seen; timeout in seconds; returns their answers);",
+      "stop (stop the current work of ids, like Esc);",
+      "archive and restore (hide ids from the sidebar, or show them again; a busy session cannot be archived);",
+      "mark_read and mark_unread.",
+      "An answer that you got from wait or read does not come to you again as a message.",
+    ].join(" "),
+    parameters: Type.Object({
+      action: Type.Union(SESSION_ACTIONS.map((name) => Type.Literal(name))),
+      id: Type.Optional(Type.String()),
+      ids: Type.Optional(
+        Type.Array(
+          Type.String({
+            description: "Session IDs; workbox:s12 is a session on workbox",
+          })
+        )
       ),
-      restore: Type.Optional(
-        Type.Boolean({ description: "Restore archived sessions instead" })
+      scope: Type.Optional(
+        Type.Union([
+          Type.Literal("children"),
+          Type.Literal("directory"),
+          Type.Literal("all"),
+          Type.Literal("archived"),
+        ])
       ),
+      last: Type.Optional(Type.Number()),
+      include_tools: Type.Optional(Type.Boolean()),
+      timeout: Type.Optional(Type.Number({ description: "wait: seconds" })),
+      any: Type.Optional(Type.Boolean()),
       machine: MACHINE_PARAMETER,
     }),
     replay: "safe",
     async execute(args, api, context) {
+      const action = String(args.action)
+      if (action === "list") return listSessions(args, api, context)
+      if (action === "read") return readSession(args, api, context)
+      if (action === "wait") return waitSessions(args, api, context)
       const services = await host.ready(context.abortSignal)
-      const restore = args.restore === true
-      const self = sessionIdOf(api.conversationId)
-      if (args.ids.length === 0) return errorResult("ids must not be empty.")
-      return forEachSession(
-        services,
-        args.ids,
-        args.machine,
-        (id) => {
-          if (restore) {
-            services.sessions.restore(id)
-            return `Restored ${id}.`
-          }
-          if (id === self) throw new Error("A session cannot archive itself.")
-          if (
-            services.sessions.has(self) &&
-            id === services.sessions.meta(self).parent
-          )
-            throw new Error("A session cannot archive its parent.")
-          services.sessions.archive(id)
-          return `Archived ${id}.`
-        },
-        async (connection, id) => {
-          await connection.request("POST", "/api/machine/session/archive", {
-            body: { id, restore },
-          })
-          return `${restore ? "Restored" : "Archived"} ${remoteName(connection, id)}.`
-        }
-      )
+      const ids = args.ids ?? (args.id ? [args.id] : [])
+      if (ids.length === 0) return errorResult(`${action} needs ids.`)
+      if (action === "stop")
+        return (
+          deniedAction(host, api.conversationId, "sessions.stop") ??
+          stopSessions(services, ids, args, api)
+        )
+      if (action === "archive" || action === "restore")
+        return (
+          deniedAction(host, api.conversationId, "sessions.archive") ??
+          archiveSessions(services, ids, args, api, action === "restore")
+        )
+      if (action === "mark_read" || action === "mark_unread")
+        return markSessions(services, ids, args, action === "mark_unread")
+      return errorResult(`Unknown action: ${action}`)
     },
   })
 
   return defineExtension({
     name: "sessions",
-    tools: [
-      spawnTool,
-      sendTool,
-      readTool,
-      listTool,
-      waitTool,
-      stopTool,
-      readStateTool,
-      archiveTool,
-    ],
+    tools: [spawnTool, sendTool, sessionsTool],
     tasks: [ReportTask, RemoteReportTask],
   })
 }

@@ -8,6 +8,10 @@
  * Child sessions (sessions with a parent) get more limits: no `ask_user`,
  * `notify`, or `spawn_session` unless the parent grants them, and a bash
  * guard (see `bashGuard`). The parent can add and remove tools for each child.
+ *
+ * A name with a dot, such as `browser.eval`, is an action of a tool. The
+ * tool checks it with `actionRemoved`, so a profile can keep a tool and take
+ * away only the actions that change things.
  */
 import type { Context } from "@earendil-works/chord"
 import type {
@@ -45,19 +49,14 @@ const WRITE_TOOLS = [
   "write",
   "edit",
   "bash",
-  "git_commit",
-  "git_push",
-  "git_pull",
-  "git_branch",
-  "lsp_rename",
+  "lsp.rename",
   "job_start",
-  "job_stop",
   "terminal",
-  "browser_act",
-  "browser_eval",
+  "browser.act",
+  "browser.eval",
   "spawn_session",
   "send_to_session",
-  "stop_session",
+  "sessions.stop",
 ]
 
 export const BUILTIN_PROFILES: readonly Profile[] = [
@@ -70,16 +69,10 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
     description:
       "Build and change code: files, shell, git, tests, and language servers. No browser and no other sessions.",
     removeTools: [
-      "browser_open",
-      "browser_snapshot",
-      "browser_act",
-      "browser_screenshot",
-      "browser_eval",
-      "browser_tabs",
-      "browser_close",
+      "browser",
       "send_to_session",
-      "stop_session",
-      "archive_sessions",
+      "sessions.stop",
+      "sessions.archive",
     ],
     instructions:
       "You are a builder: make the change, run the checks and tests, and report what you changed and what you did not do.",
@@ -102,7 +95,7 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
       "notify",
       "todo",
     ],
-    removeTools: ["write", "edit", "bash", "browser_eval"],
+    removeTools: ["write", "edit", "bash", "browser.eval"],
     instructions:
       "You are a researcher: find and read sources, then report with links. Do not change files.",
   },
@@ -114,7 +107,7 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
       (tool) => tool !== "bash" && tool !== "send_to_session"
     ),
     instructions:
-      "You are a reviewer: read the diff (git_diff, gh_pr diff, read_session), run the tests, and report problems with file and line. Do not change files.",
+      "You are a reviewer: read the diff (git diff, gh pr diff, sessions read), run the tests, and report problems with file and line. Do not change files.",
   },
   {
     name: "read-only",
@@ -172,13 +165,13 @@ export function nameList(value: unknown) {
   return names.length > 0 ? [...new Set(names)] : undefined
 }
 
-/** What a session gets: the extensions, the removed tools, and the prompt text. */
-export function resolveSelection(
-  registry: RegistryReader,
+type SelectionOptions = { child?: { parent: string }; limits?: ToolLimits }
+
+/** The tool and action names that a profile and the limits take away. */
+export function removedNames(
   profile: Profile | undefined,
-  options: { child?: { parent: string }; limits?: ToolLimits } = {}
+  options: SelectionOptions = {}
 ) {
-  const snapshot = registry.snapshot()
   const add = new Set(options.limits?.add ?? [])
   const removeNames = new Set([
     ...(profile?.removeTools ?? []),
@@ -186,6 +179,30 @@ export function resolveSelection(
     ...(options.child ? CHILD_DENIED_TOOLS : []),
   ])
   for (const name of add) removeNames.delete(name)
+  return removeNames
+}
+
+/**
+ * True when a session may not use `action` (`tool.action`, for example
+ * `sessions.stop`). Profiles and limits remove actions by this name.
+ */
+export function actionRemoved(
+  action: string,
+  profile: Profile | undefined,
+  options: SelectionOptions = {}
+) {
+  return removedNames(profile, options).has(action)
+}
+
+/** What a session gets: the extensions, the removed tools, and the prompt text. */
+export function resolveSelection(
+  registry: RegistryReader,
+  profile: Profile | undefined,
+  options: SelectionOptions = {}
+) {
+  const snapshot = registry.snapshot()
+  const add = new Set(options.limits?.add ?? [])
+  const removeNames = removedNames(profile, options)
   let extensions: Extension[] | null = null
   if (profile?.extensions) {
     const names = [...profile.extensions]
@@ -215,6 +232,12 @@ export function resolveSelection(
     removeTools.push(tool)
     removed.push(tool.name)
   }
+  // Actions of tools that the session keeps, for example `browser.eval`.
+  for (const name of removeNames) {
+    const tool = name.split(".")[0]!
+    if (name.includes(".") && seen.has(tool) && !removed.includes(tool))
+      removed.push(name)
+  }
   const parts: string[] = []
   if (profile?.instructions) parts.push(profile.instructions)
   if (options.child)
@@ -242,11 +265,11 @@ function childInstructions(
   return [
     `You are a child session of session ${parent}. Your parent gave you this work and limited your tools${profile && profile.name !== "full" ? ` (profile: ${profile.name})` : ""}.`,
     removed.length > 0
-      ? `You do not have these tools: ${removed.sort().join(", ")}.`
+      ? `You do not have these tools or actions: ${removed.sort().join(", ")}.`
       : "",
     `Bash refuses: ${deny.join(", ")}.`,
     "If you need a tool, a command, or a decision, do not wait and do not work around the limit. End your turn with a message that starts with `Question:`. Give the question, the options, and your recommendation. Your parent reads it and answers you, and it can give you more tools.",
-    "When the work is done, end your turn with a short report of what you did.",
+    "When the work is done, end your turn with a short report of what you did. Your parent gets the end of your turn as a message, so do not also send the report with send_to_session.",
     "If you end your turn to wait on a timer, a watch, or a job, your parent gets no message: it gets one when you end with a question or with done.",
   ]
     .filter(Boolean)

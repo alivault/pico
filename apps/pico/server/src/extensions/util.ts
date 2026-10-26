@@ -14,6 +14,7 @@ import type {
   ToolExecutionResult,
 } from "@earendil-works/pi-durable"
 
+import { actionRemoved, findProfile } from "../core/profiles.ts"
 import { conversationOf, sessionIdOf, type HostBridge } from "./host.ts"
 
 /** A tool result with one text item. */
@@ -242,4 +243,33 @@ export function stateProviders(): readonly StateProvider[] {
 
 export function stateKinds(): Set<string> {
   return new Set([...providers.values()].flatMap((provider) => provider.kinds))
+}
+
+/**
+ * An error result when the calling session may not use `action` (for example
+ * `browser.eval`): its profile or its limits remove it. Undefined when it may.
+ */
+export function deniedAction(
+  host: HostBridge,
+  conversationId: ConversationId,
+  action: string
+) {
+  const services = host.current
+  const id = sessionIdOf(conversationId)
+  if (!services?.sessions.has(id)) return undefined
+  const meta = services.sessions.meta(id)
+  const profile = findProfile(meta.profile, services.settings().profiles)
+  const removed = actionRemoved(
+    action,
+    profile?.name === "full" ? undefined : profile,
+    {
+      ...(meta.parent ? { child: { parent: meta.parent } } : {}),
+      ...(meta.limits ? { limits: meta.limits } : {}),
+    }
+  )
+  return removed
+    ? errorResult(
+        `This session may not use ${action}: its profile or its limits remove it.${meta.parent ? " Ask your parent for it with a Question." : ""}`
+      )
+    : undefined
 }

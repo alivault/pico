@@ -420,7 +420,7 @@ void test("each message to a busy child gets its own answer back, one time", asy
     if (user.startsWith("Slow work"))
       return release
         ? { text: "The work is done." }
-        : { tools: [{ name: "list_sessions", arguments: {} }] }
+        : { tools: [{ name: "sessions", arguments: { action: "list" } }] }
     const fyi = /\] (FYI \d)/.exec(user)
     if (fyi) return { text: `Noted ${fyi[1]}.` }
     if (lastToolResult(messages)) return { text: "ok" }
@@ -489,7 +489,7 @@ void test("each message to a busy child gets its own answer back, one time", asy
   }
 })
 
-void test("spawn_session with wait returns the answer, and read_session reads it", async () => {
+void test("spawn_session with wait returns the answer, and sessions read reads it", async () => {
   const dir = await tempDir()
   const host = new HostBridge()
   let childId = ""
@@ -499,7 +499,7 @@ void test("spawn_session with wait returns the answer, and read_session reads it
     const result = lastToolResult(messages)
     if (result?.includes("finished")) {
       childId = /session (s\d+)/.exec(result)?.[1] ?? ""
-      return { tools: [{ name: "read_session", arguments: { id: childId } }] }
+      return { tools: [{ name: "sessions", arguments: { action: "read", id: childId } }] }
     }
     if (result) return { text: `read: ${result}` }
     return {
@@ -619,11 +619,23 @@ void test("agents mark sessions read and archive them", async () => {
   const script: Script = (messages) => {
     const step = messages.filter((m) => m.role === "toolResult").length
     const call = [
-      { name: "mark_sessions_read", arguments: { ids: [other] } },
-      { name: "mark_sessions_read", arguments: { ids: [other], unread: true } },
-      { name: "archive_sessions", arguments: { ids: [other, "s999"] } },
-      { name: "list_sessions", arguments: { scope: "archived" } },
-      { name: "archive_sessions", arguments: { ids: [other], restore: true } },
+      { name: "sessions", arguments: { action: "mark_read", ids: [other] } },
+      {
+        name: "sessions",
+        arguments: { action: "mark_unread", ids: [other] },
+      },
+      {
+        name: "sessions",
+        arguments: { action: "archive", ids: [other, "s999"] },
+      },
+      {
+        name: "sessions",
+        arguments: { action: "list", scope: "archived" },
+      },
+      {
+        name: "sessions",
+        arguments: { action: "restore", ids: [other] },
+      },
     ][step]
     return call ? { tools: [call] } : { text: "done" }
   }
@@ -670,7 +682,10 @@ void test("an agent cannot archive itself", async () => {
   const script: Script = (messages) =>
     lastToolResult(messages)
       ? { text: "done" }
-      : { tools: [{ name: "archive_sessions", arguments: { ids: [self] } }] }
+      : { tools: [{
+              name: "sessions",
+              arguments: { action: "archive", ids: [self] },
+            }] }
   const harness = await openHarness(
     join(dir, "db.sqlite"),
     [createSessionsExtension(host)],
@@ -691,6 +706,138 @@ void test("an agent cannot archive itself", async () => {
     const result = view.entries.find((entry) => entry.kind === "pi.tool-result")
     assert.match(JSON.stringify(result?.model), /cannot archive itself/)
     assert.equal(fake.metas.get(self)?.archived, undefined)
+  } finally {
+    await harness.close(ctx)
+  }
+})
+
+/** The user entries of a conversation that are reports of other sessions. */
+async function reportsIn(harness: Harness, id: string) {
+  const conversation = (await harness.conversation(conversationOf(id), ctx))!
+  return (await conversation.context(ctx)).entries
+    .filter((entry) => entry.kind === "pi.user")
+    .map((entry) => lastUser(entry.model as Message[]))
+    .filter((text) => /^\[(Child session|Session) s\d+: /.test(text))
+}
+
+void test("sessions wait and the report give an answer one time", async () => {
+  const dir = await tempDir()
+  const host = new HostBridge()
+  let child = ""
+  let release = false
+  const script: Script = (messages) => {
+    const user = lastUser(messages)
+    if (user.startsWith("Name a color"))
+      return release
+        ? { text: "Blue." }
+        : { tools: [{ name: "sessions", arguments: { action: "list" } }] }
+    if (user.startsWith("[Child session")) return { text: "Got a report." }
+    const result = lastToolResult(messages)
+    if (result?.includes("Started child session")) {
+      child = /session (s\d+)/.exec(result)?.[1] ?? ""
+      release = true
+      return {
+        tools: [
+          {
+            name: "sessions",
+            arguments: { action: "wait", ids: [child], any: true },
+          },
+        ],
+      }
+    }
+    if (result) return { text: "waited" }
+    return {
+      tools: [{ name: "spawn_session", arguments: { goal: "Name a color" } }],
+    }
+  }
+  const harness = await openHarness(
+    join(dir, "db.sqlite"),
+    [createSessionsExtension(host)],
+    script,
+    dir
+  )
+  const fake = bind(host, harness, dir)
+  try {
+    const parent = await fake.sessions.create(dir)
+    const conversation = (await harness.conversation(
+      conversationOf(parent),
+      ctx
+    ))!
+    await (
+      await conversation.submit({ type: "input", content: "go" }, ctx)
+    ).wait(ctx)
+    // Give the report task time to run.
+    await new Promise((done) => setTimeout(done, 800))
+    await conversation.waitForIdle(ctx)
+    const wait = (await conversation.context(ctx)).entries
+      .filter((entry) => entry.kind === "pi.tool-result")
+      .map((entry) => JSON.stringify(entry.model))
+      .at(-1)!
+    assert.match(wait, /new answer/)
+    const reports = await reportsIn(harness, parent)
+    const shown = (wait.includes("Blue.") ? 1 : 0) + reports.length
+    assert.equal(shown, 1, `wait: ${wait}\nreports: ${reports.join("\n")}`)
+  } finally {
+    await harness.close(ctx)
+  }
+})
+
+void test("a child's message to its parent gets no report back", async () => {
+  const dir = await tempDir()
+  const host = new HostBridge()
+  let parent = ""
+  const script: Script = (messages) => {
+    const user = lastUser(messages)
+    const result = lastToolResult(messages)
+    if (user.startsWith("Work and tell")) {
+      if (result?.includes("Sent to your parent"))
+        return { text: "The work is done." }
+      return {
+        tools: [
+          {
+            name: "send_to_session",
+            arguments: { id: parent, message: "Half done." },
+          },
+        ],
+      }
+    }
+    if (user.startsWith("[Child session")) return { text: "Noted." }
+    if (result) return { text: "ok" }
+    return {
+      tools: [{ name: "spawn_session", arguments: { goal: "Work and tell" } }],
+    }
+  }
+  const harness = await openHarness(
+    join(dir, "db.sqlite"),
+    [createSessionsExtension(host)],
+    script,
+    dir
+  )
+  const fake = bind(host, harness, dir)
+  try {
+    parent = await fake.sessions.create(dir)
+    const conversation = (await harness.conversation(
+      conversationOf(parent),
+      ctx
+    ))!
+    await conversation.submit({ type: "input", content: "go" }, ctx)
+    const child = await eventually(
+      async () => fake.sessions.children(parent)[0]
+    )
+    await eventually(async () =>
+      (await reportsIn(harness, parent)).some((text) =>
+        text.includes("The work is done.")
+      )
+        ? true
+        : undefined
+    )
+    await new Promise((done) => setTimeout(done, 800))
+    await conversation.waitForIdle(ctx)
+    const reports = await reportsIn(harness, parent)
+    assert.equal(reports.length, 2)
+    assert.match(reports.join("\n"), /Half done\./)
+    // The parent's "Noted." does not go back to the child.
+    assert.deepEqual(await reportsIn(harness, child), [])
   } finally {
     await harness.close(ctx)
   }

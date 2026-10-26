@@ -22,7 +22,7 @@ import type { Viewers } from "../core/viewers.ts"
 import { conversationIdOf, type Sessions } from "../core/sessions.ts"
 import type { EventHub } from "../events.ts"
 import {
-  lastAnswer,
+  lastAnswerEntry,
   normalizeSessionId,
   transcriptText,
   waitingOn,
@@ -320,7 +320,7 @@ export function addMachineServerRoutes(
     }
     if (idle && sessions.isBusy(id)) idle = false
     const answer = idle
-      ? await lastAnswer(
+      ? await lastAnswerEntry(
           runtime.harness,
           conversationIdOf(id),
           BACKGROUND_CONTEXT
@@ -330,7 +330,8 @@ export function addMachineServerRoutes(
       ok: true,
       ...sessionInfo(id),
       idle,
-      ...(answer !== undefined ? { answer } : {}),
+      ...(answer !== undefined ? { answer: answer.text } : {}),
+      ...(answer?.id !== undefined ? { answerId: Number(answer.id) } : {}),
       ...(idle ? { waiting: await waitingOf(id) } : {}),
     }
   })
