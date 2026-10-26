@@ -52,6 +52,11 @@ import {
   uiRequestExpectsResponse,
 } from "@/lib/pico/api"
 import { useMachineId } from "@/lib/pico/machine-context"
+import {
+  checkServerConnection,
+  markServerOnline,
+  onServerReconnect,
+} from "@/lib/pico/server-connection"
 
 const RESUME_RECONNECT_AFTER_MS = 30_000
 const COMPACT_WORKING_LABEL = "Compacting context..."
@@ -752,9 +757,27 @@ export function useAppShellSessionSync({
     }
   }, [queryClient, viewerContextId])
 
+  // The stream closes for good after an error status, such as a 502 from a
+  // proxy, and data can change while the server is down. Open the stream and
+  // load the data again when the server answers again.
+  React.useEffect(() => {
+    if (!viewerContextId) return
+    return onServerReconnect(() => {
+      const source = currentSourceRef.current
+      if (!source || source.readyState !== EventSource.OPEN) {
+        initialEventsSessionIdRef.current = currentSessionIdRef.current
+        setEventsReconnectNonce((nonce) => nonce + 1)
+      }
+      void queryClient
+        .invalidateQueries({ refetchType: "active" })
+        .catch(() => undefined)
+    })
+  }, [queryClient, viewerContextId])
+
   const handleEventSourceOpen = React.useCallback(
     (source: EventSource) => {
       if (currentSourceRef.current !== source) return
+      markServerOnline()
       // Events may be lost while the stream was closed.
       refreshSidebarState(machineId)
       const currentState = sessionStateRef.current
@@ -770,6 +793,7 @@ export function useAppShellSessionSync({
   const handleEventSourceError = React.useCallback(
     (source: EventSource) => {
       if (currentSourceRef.current !== source) return
+      checkServerConnection()
       const currentState = sessionStateRef.current
       if (!currentState.connected) return
       const nextState = { ...currentState, connected: false }

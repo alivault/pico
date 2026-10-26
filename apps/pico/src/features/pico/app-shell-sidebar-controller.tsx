@@ -36,6 +36,7 @@ import {
 import type { SessionListEntry } from "@/lib/pico/api"
 import { ArchivedSessionsDialog } from "@/features/pico/archived-sessions-dialog"
 import { useMachineId } from "@/lib/pico/machine-context"
+import { onServerReconnect } from "@/lib/pico/server-connection"
 import {
   filterDirectorySessionsByStatus,
   sessionMatchesStatusFilter,
@@ -257,6 +258,21 @@ function useAppShellSidebarControllerView({
   const directoryIndexRequestIdsByPathRef = React.useRef<
     Record<string, number>
   >({})
+  // Directories whose first load failed. The load effect skips them, else
+  // each failure starts the next request at once, in a loop. They load again
+  // when the server answers again after a failure.
+  const failedDirectoryIndexesRef = React.useRef(new Set<string>())
+  const [directoryIndexRetryNonce, setDirectoryIndexRetryNonce] =
+    React.useState(0)
+  React.useEffect(
+    () =>
+      onServerReconnect(() => {
+        if (failedDirectoryIndexesRef.current.size === 0) return
+        failedDirectoryIndexesRef.current.clear()
+        setDirectoryIndexRetryNonce((nonce) => nonce + 1)
+      }),
+    []
+  )
   const sidebarDirectorySessionsSnapshotRef = React.useRef<{
     activeSessionId: string
     activeSessionKey: string
@@ -623,7 +639,8 @@ function useAppShellSidebarControllerView({
           directory
         ) &&
         !directoryIndexLoading[directory] &&
-        !directoryIndexRequestIdsByPathRef.current[directory]
+        !directoryIndexRequestIdsByPathRef.current[directory] &&
+        !failedDirectoryIndexesRef.current.has(directory)
     )
 
     if (missingDirectories.length === 0) {
@@ -689,6 +706,9 @@ function useAppShellSidebarControllerView({
         )
         if (activeDirectories.length === 0) return
         clearDirectoryIndexRequestDirectories(activeDirectories, requestId)
+        for (const directory of activeDirectories) {
+          failedDirectoryIndexesRef.current.add(directory)
+        }
 
         sidebarStore.setDirectoryIndexLoading((current) =>
           updateDirectoryIndexLoadingState(current, activeDirectories, false)
@@ -703,6 +723,7 @@ function useAppShellSidebarControllerView({
     baseSidebarDirectories,
     directoryIndexDataByPath,
     directoryIndexLoading,
+    directoryIndexRetryNonce,
     sidebarDeferredDirectoryLoadingReady,
     sidebarStore,
     viewerContextId,

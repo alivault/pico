@@ -8,6 +8,7 @@ import { PortalContainerProvider } from "@/components/ui/portal-container"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { PicoAppShell } from "@/features/pico/app-shell"
 import { MachinesDialogController } from "@/features/pico/machines"
+import { ServerUnreachableOverlay } from "@/features/pico/server-unreachable-overlay"
 import { WindowSidebar } from "@/features/pico/window-sidebar"
 import type { SelectSessionNavigationOptions } from "@/features/pico/app-shell-types"
 import {
@@ -17,6 +18,7 @@ import {
 } from "@/lib/pico/machine"
 import { MachineProvider } from "@/lib/pico/machine-context"
 import { queryClientForMachine } from "@/lib/pico/query-client"
+import { useServerConnection } from "@/lib/pico/server-connection"
 
 const indexSearchSchema = z.object({
   session: z.string().optional(),
@@ -55,6 +57,7 @@ function App() {
   const { session, machine: machineParam } = Route.useSearch()
   const navigate = Route.useNavigate()
   const shownMachine = normalizeMachineId(machineParam)
+  const serverUnreachable = useServerConnection() === "unreachable"
 
   const [workspaces, setWorkspaces] = React.useState<MachineWorkspaces>(() => ({
     [shownMachine]: { sessionId: session },
@@ -107,7 +110,10 @@ function App() {
 
   return (
     <SidebarProvider className="h-full flex-col overflow-hidden bg-background [--header-height:calc(3rem+env(safe-area-inset-top))]">
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div
+        className="flex min-h-0 flex-1 overflow-hidden"
+        inert={serverUnreachable}
+      >
         <WindowSidebar shownMachineId={shownMachine} />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {Object.entries(workspaces).map(([machineId, workspace]) => (
@@ -130,6 +136,7 @@ function App() {
         </div>
       </div>
       <MachinesDialogController />
+      {serverUnreachable ? <ServerUnreachableOverlay /> : null}
     </SidebarProvider>
   )
 }

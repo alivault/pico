@@ -6,6 +6,11 @@ import {
   isRemoteMachine,
   setMachineOfflineLabels,
 } from "@/lib/pico/machine"
+import {
+  checkServerConnection,
+  markServerOnline,
+  onServerReconnect,
+} from "@/lib/pico/server-connection"
 
 /**
  * The machines of the hub: the local runtime and the SSH machines. The hub
@@ -77,8 +82,18 @@ let source: EventSource | undefined
 
 function connect() {
   if (source || typeof EventSource === "undefined") return
-  source = new EventSource(hubUrl("/api/machines/events"))
-  source.onmessage = (event: MessageEvent<string>) => {
+  const current = new EventSource(hubUrl("/api/machines/events"))
+  source = current
+  current.onopen = () => markServerOnline()
+  current.onerror = () => {
+    checkServerConnection()
+    // The browser does not reconnect after an error status, such as a 502
+    // from a proxy. Open a new stream when the server answers again.
+    if (current.readyState === EventSource.CLOSED && source === current) {
+      source = undefined
+    }
+  }
+  current.onmessage = (event: MessageEvent<string>) => {
     let data: { type?: string } & Partial<MachinesSnapshot>
     try {
       data = JSON.parse(event.data) as typeof data
@@ -105,6 +120,10 @@ function syncMachineOffline() {
   }
   setMachineOfflineLabels(labels)
 }
+
+onServerReconnect(() => {
+  if (listeners.size > 0) connect()
+})
 
 function subscribe(listener: () => void) {
   connect()

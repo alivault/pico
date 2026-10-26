@@ -680,8 +680,14 @@ function useAppShellSessionsDialogView({
   const deletePanelRef = React.useRef<HTMLDivElement | null>(null)
   const previousStageRef = React.useRef(stage)
 
+  // Directories whose load failed while the dialog is open. The load effect
+  // skips them, else each failure starts the next request at once, in a loop.
+  const failedDirectoriesRef = React.useRef(new Set<string>())
+
   React.useEffect(() => {
-    if (!open) dispatch({ type: "closed" })
+    if (open) return
+    failedDirectoriesRef.current.clear()
+    dispatch({ type: "closed" })
   }, [open])
 
   React.useEffect(() => {
@@ -692,7 +698,9 @@ function useAppShellSessionsDialogView({
         !Object.prototype.hasOwnProperty.call(
           mergedSessionsByPath,
           directory
-        ) && !loadingByPath[directory]
+        ) &&
+        !loadingByPath[directory] &&
+        !failedDirectoriesRef.current.has(directory)
     )
 
     if (missingDirectories.length === 0) return
@@ -715,6 +723,9 @@ function useAppShellSessionsDialogView({
         })
       })
       .catch((error: unknown) => {
+        for (const directory of missingDirectories) {
+          failedDirectoriesRef.current.add(directory)
+        }
         onError?.(error)
         dispatch({
           type: "directoriesLoadingFinished",

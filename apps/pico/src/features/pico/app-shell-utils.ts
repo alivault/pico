@@ -16,6 +16,12 @@ import {
   MachineOfflineError,
   machineApiUrl,
 } from "@/lib/pico/machine"
+import {
+  checkServerConnection,
+  isGatewayFailure,
+  markServerOnline,
+  ServerUnreachableError,
+} from "@/lib/pico/server-connection"
 
 /** The hub's answer when a machine is not online and has no offline copy. */
 function offlineMachineLabel(status: number, data: unknown) {
@@ -216,8 +222,21 @@ export async function fetchJson<T>(
     )
   }
   assertMachineWritable(input, init?.method)
-  const response = await fetch(input, init)
+  let response: Response
+  try {
+    response = await fetch(input, init)
+  } catch (error) {
+    // fetch throws a TypeError when it gets no response at all.
+    if (!(error instanceof TypeError)) throw error
+    checkServerConnection()
+    throw new ServerUnreachableError()
+  }
   const text = await response.text()
+  if (isGatewayFailure(response.status, text)) {
+    checkServerConnection()
+    throw new ServerUnreachableError()
+  }
+  markServerOnline()
   const data = text ? (JSON.parse(text) as T) : ({} as T)
 
   if (!response.ok) {
