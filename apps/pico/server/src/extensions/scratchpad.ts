@@ -1,24 +1,21 @@
 /**
- * The `scratchpad` extension: large intermediate text kept out of the model's
- * context and read back by ID.
- *
- * Entries are files in `<data>/scratch/<conversation>/`, each with a small
- * JSON file of metadata. Files, not a document, because a tool hook (the
- * output spill below) can read documents but not commit them. IDs are random
- * and global, so `scratch_get` also finds an entry from before a fork.
+ * The `scratchpad` extension: large tool output kept out of the model's
+ * context.
  *
  * When the `scratchSpillKb` setting is above 0, an `afterTool` hook saves
- * tool output larger than that to the scratchpad and gives the model the head
- * of it and the scratch ID.
+ * tool output larger than that to a file and gives the model the head of it
+ * and the file path. The model reads the rest with `read` or `bash`.
+ *
+ * Entries are files in `<data>/scratch/<conversation>/`, each with a small
+ * JSON file of metadata. Files, not a document, because a tool hook can read
+ * documents but not commit them. The web client lists them.
  */
 import { randomBytes } from "node:crypto"
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 
-import { Type } from "@earendil-works/pi-ai"
 import {
   defineExtension,
-  defineTool,
   hook,
   ToolTask,
   type ConversationId,
@@ -26,7 +23,7 @@ import {
 } from "@earendil-works/pi-durable"
 
 import type { HostBridge } from "./host.ts"
-import { clip, errorResult, registerState, textResult } from "./util.ts"
+import { registerState } from "./util.ts"
 
 export type ScratchEntry = {
   id: string
@@ -40,13 +37,8 @@ export type ScratchEntry = {
 
 const ID = /^x[a-z0-9]{6,12}$/
 const SPILL_HEAD_CHARS = 2000
-const NEVER_SPILL = new Set([
-  "scratch_get",
-  "scratch_put",
-  "scratch_list",
-  "scratch_delete",
-  "codemode",
-])
+/** Tools that read a spill file, or that spill on their own. */
+const NEVER_SPILL = new Set(["read", "codemode"])
 
 export class Scratchpad {
   readonly #root: string
@@ -82,6 +74,11 @@ export class Scratchpad {
     await writeFile(join(dir, `${id}.txt`), content)
     await writeFile(join(dir, `${id}.json`), JSON.stringify(entry))
     return entry
+  }
+
+  /** The file of an entry of the conversation. */
+  path(conversationId: ConversationId | number, id: string) {
+    return join(this.#dir(conversationId), `${id}.txt`)
   }
 
   async list(conversationId: ConversationId | number) {
@@ -156,108 +153,6 @@ export function createScratchpadExtension(host: HostBridge, dataDir: string) {
     },
   })
 
-  const putTool = defineTool({
-    name: "scratch_put",
-    description:
-      "Save large text (notes, data, intermediate results) to the scratchpad, out of your context. Returns an ID to read it back with scratch_get.",
-    parameters: Type.Object({
-      content: Type.String(),
-      name: Type.Optional(Type.String()),
-    }),
-    replay: "safe",
-    async execute(args, api, context) {
-      const id = await api.memo("scratch-id", Scratchpad.newId(), context)
-      const entry = await scratch.put(api.conversationId, args.content, {
-        id,
-        ...(args.name ? { name: args.name } : {}),
-      })
-      host.current?.sessions.extensionStateChanged(
-        `s${api.conversationId}`,
-        "pico.scratch"
-      )
-      return textResult(
-        `Saved scratch ${entry.id} (${entry.lines} lines, ${entry.bytes} bytes).`,
-        { details: entry }
-      )
-    },
-  })
-
-  const getTool = defineTool({
-    name: "scratch_get",
-    description:
-      "Read a scratchpad entry by ID: a line range (offset, limit; default the first 200 lines), or only lines that match grep.",
-    parameters: Type.Object({
-      id: Type.String(),
-      offset: Type.Optional(Type.Number({ description: "First line, from 1" })),
-      limit: Type.Optional(Type.Number()),
-      grep: Type.Optional(Type.String()),
-    }),
-    replay: "safe",
-    async execute(args, api) {
-      const text = await scratch.get(api.conversationId, args.id.trim())
-      if (text === undefined) return errorResult(`No scratch entry ${args.id}`)
-      const lines = text.split("\n")
-      if (args.grep) {
-        let pattern: RegExp
-        try {
-          pattern = new RegExp(args.grep, "i")
-        } catch {
-          return errorResult(`Invalid grep pattern: ${args.grep}`)
-        }
-        const matches = lines
-          .map((line, index) => `${index + 1}: ${line}`)
-          .filter((line) => pattern.test(line))
-        return textResult(
-          `${matches.length} matching line(s) of ${lines.length}\n${clip(matches.slice(0, 500).join("\n"), 30_000)}`
-        )
-      }
-      const start = Math.max(1, Math.floor(args.offset ?? 1))
-      const limit = Math.min(2000, Math.max(1, Math.floor(args.limit ?? 200)))
-      const slice = lines.slice(start - 1, start - 1 + limit)
-      const end = start + slice.length - 1
-      return textResult(
-        `Lines ${start}-${end} of ${lines.length}${end < lines.length ? ` (next: offset ${end + 1})` : ""}\n${clip(slice.join("\n"), 40_000)}`
-      )
-    },
-  })
-
-  const listTool = defineTool({
-    name: "scratch_list",
-    description: "List the scratchpad entries of this session.",
-    parameters: Type.Object({}),
-    replay: "safe",
-    async execute(_args, api) {
-      const entries = await scratch.list(api.conversationId)
-      return textResult(
-        entries.length > 0
-          ? entries
-              .map(
-                (entry) =>
-                  `${entry.id} ${entry.name} (${entry.lines} lines, ${entry.bytes} bytes)`
-              )
-              .join("\n")
-          : "The scratchpad is empty."
-      )
-    },
-  })
-
-  const deleteTool = defineTool({
-    name: "scratch_delete",
-    description: "Delete a scratchpad entry by ID.",
-    parameters: Type.Object({ id: Type.String() }),
-    replay: "safe",
-    async execute(args, api) {
-      const deleted = await scratch.delete(api.conversationId, args.id.trim())
-      host.current?.sessions.extensionStateChanged(
-        `s${api.conversationId}`,
-        "pico.scratch"
-      )
-      return deleted
-        ? textResult(`Deleted scratch ${args.id}.`)
-        : errorResult(`No scratch entry ${args.id} in this session`)
-    },
-  })
-
   const spill = hook(ToolTask, {
     afterTool: async (call, result, api) => {
       const limitKb = host.current?.settings().scratchSpillKb ?? 0
@@ -275,7 +170,7 @@ export function createScratchpadExtension(host: HostBridge, dataDir: string) {
         output: [
           {
             type: "text",
-            text: `${text.slice(0, SPILL_HEAD_CHARS)}\n…\n[The full output (${entry.lines} lines, ${entry.bytes} bytes) is in scratch ${entry.id}. Read more with scratch_get { id: "${entry.id}", offset, limit, grep }.]`,
+            text: `${text.slice(0, SPILL_HEAD_CHARS)}\n…\n[The full output (${entry.lines} lines, ${entry.bytes} bytes) is in the file ${scratch.path(api.conversationId, entry.id)}. Read more of it with read (offset, limit) or with rg in bash.]`,
           },
         ],
       }
@@ -286,7 +181,6 @@ export function createScratchpadExtension(host: HostBridge, dataDir: string) {
     scratch,
     extension: defineExtension({
       name: "scratchpad",
-      tools: [putTool, getTool, listTool, deleteTool],
       hooks: [spill],
     }),
   }

@@ -26,6 +26,7 @@ import {
 } from "@earendil-works/pi-durable"
 
 import type { HostBridge } from "./host.ts"
+import type { WatchCheck, WatchExtension } from "./watch.ts"
 import {
   errorResult,
   formatDuration,
@@ -274,7 +275,12 @@ export async function listTimers(
     .filter((item) => !kind || item.kind === kind)
     .sort((left, right) => left.createdAt - right.createdAt)
   const open = items.filter((item) => item.status === "pending")
-  if (items.length === 0) return `No ${kind ?? "timer"}s.`
+  if (items.length === 0)
+    return kind === "timer"
+      ? "No timers."
+      : kind === "watch"
+        ? "No watches."
+        : "No timers or watches."
   return [
     ...(open.length ? open : []).map((item) => describeTimer(item)),
     ...(items.length > open.length
@@ -322,30 +328,88 @@ registerState({
   },
 })
 
-export function createScheduleExtension(host: HostBridge) {
+export function createScheduleExtension(
+  host: HostBridge,
+  watch: WatchExtension
+) {
   const TimerTask = createTimerTask(host)
 
   const scheduleTool = defineTool({
     name: "schedule",
     description: [
-      "Schedule a durable timer that sends you `message` later. It survives server restarts. If you are busy then, the message arrives at your next turn boundary (after the current tool calls), so you can keep working.",
-      "Give one of: in (a duration such as 20m or 1h30m), at (an ISO time), every (repeat at a fixed interval), or cron (a 5-field cron expression, with optional timezone).",
-      "Use it to check on something later, for example CI, a deploy, or a long job, instead of waiting in a loop.",
+      "Durable timers and watches that send you `message` later. They survive server restarts. If you are busy then, the message arrives at your next turn boundary (after the current tool calls), so you can keep working.",
+      "Actions: timer (default): give one of in (a duration such as 20m or 1h30m), at (an ISO time), every (repeat at a fixed interval), or cron (a 5-field cron expression, with optional timezone).",
+      "watch: get `message` when `check` is true. check.type: command (until success, failure, match, or change), url (until status, match, change, up, or down), file (until change, exists, missing, or match), ci (GitHub checks of a PR through gh, until done, success, or failure). interval is at least 15s (default 1m); timeout ends the watch with a message when the condition stays false (default 24h).",
+      "list: the timers and watches, with the last check of each watch. cancel: cancel the timer or watch `id`.",
+      "Use it to check on something later, for example CI, a deploy, or a long job, instead of waiting in a loop. Example: after git push, schedule { action: 'watch', check: { type: 'ci' }, message: 'CI finished; fix failures' }.",
     ].join(" "),
     parameters: Type.Object({
-      message: Type.String({
-        description: "What you will receive when the timer fires",
-      }),
+      action: Type.Optional(
+        Type.Union([
+          Type.Literal("timer"),
+          Type.Literal("watch"),
+          Type.Literal("list"),
+          Type.Literal("cancel"),
+        ])
+      ),
+      message: Type.Optional(
+        Type.String({
+          description: "What you will receive when the timer or watch fires",
+        })
+      ),
       in: Type.Optional(Type.String()),
       at: Type.Optional(Type.String()),
       every: Type.Optional(Type.String()),
       cron: Type.Optional(Type.String()),
       timezone: Type.Optional(Type.String()),
       max_runs: Type.Optional(Type.Number({ minimum: 1 })),
+      check: Type.Optional(
+        Type.Object({
+          type: Type.Union(
+            ["command", "url", "file", "ci"].map((kind) => Type.Literal(kind))
+          ),
+          command: Type.Optional(Type.String()),
+          url: Type.Optional(Type.String()),
+          path: Type.Optional(Type.String()),
+          pr: Type.Optional(Type.String()),
+          until: Type.Optional(Type.String()),
+          pattern: Type.Optional(Type.String()),
+          status: Type.Optional(Type.Number()),
+        })
+      ),
+      interval: Type.Optional(Type.String()),
+      timeout: Type.Optional(Type.String()),
+      id: Type.Optional(Type.String({ description: "cancel: the id" })),
       label: Type.Optional(Type.String()),
     }),
     replay: "safe",
     async execute(args, api, context) {
+      const action = args.action ?? (args.check ? "watch" : "timer")
+      if (action === "list")
+        return textResult(
+          (await listTimers(api, undefined, context)) +
+            (await watch.lastChecks(api, context))
+        )
+      if (action === "cancel") {
+        if (!args.id) return errorResult("cancel needs id.")
+        return cancelTimer(host, api, args.id, context)
+      }
+      if (!args.message) return errorResult(`${action} needs message.`)
+      if (action === "watch") {
+        if (!args.check) return errorResult("watch needs check.")
+        return watch.start(
+          {
+            message: args.message,
+            check: args.check as WatchCheck,
+            interval: args.interval,
+            timeout: args.timeout,
+            label: args.label,
+          },
+          api,
+          context
+        )
+      }
+      const message = args.message
       const now = Date.now()
       let at: number
       let everyMs: number | undefined
@@ -362,9 +426,9 @@ export function createScheduleExtension(host: HostBridge) {
           error instanceof Error ? error.message : String(error)
         )
       }
-      const label = (args.label ?? args.message).trim().slice(0, 120)
+      const label = (args.label ?? message).trim().slice(0, 120)
       const input: TimerInput = {
-        message: args.message,
+        message,
         label,
         at,
         ...(everyMs ? { everyMs } : {}),
@@ -391,7 +455,7 @@ export function createScheduleExtension(host: HostBridge) {
           id: taskId,
           kind: "timer",
           label,
-          message: args.message,
+          message,
           status: "pending",
           createdAt: now,
           nextAt: at,
@@ -408,26 +472,9 @@ export function createScheduleExtension(host: HostBridge) {
     },
   })
 
-  const listTool = defineTool({
-    name: "schedule_list",
-    description: "List the timers of this session.",
-    parameters: Type.Object({}),
-    replay: "safe",
-    execute: async (_args, api, context) =>
-      textResult(await listTimers(api, "timer", context)),
-  })
-
-  const cancelTool = defineTool({
-    name: "schedule_cancel",
-    description: "Cancel a timer or a watch by id.",
-    parameters: Type.Object({ id: Type.String() }),
-    replay: "safe",
-    execute: (args, api, context) => cancelTimer(host, api, args.id, context),
-  })
-
   return defineExtension({
     name: "schedule",
-    tools: [scheduleTool, listTool, cancelTool],
+    tools: [scheduleTool],
     tasks: [TimerTask],
   })
 }

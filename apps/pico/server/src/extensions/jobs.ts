@@ -3,7 +3,7 @@
  *
  * `job_start` returns at once. The command runs in a shared pseudo-terminal
  * (see `Terminals.spawnJob`), so the user can open it live in the terminal
- * panel. Output also goes to `<data>/jobs/<id>.log` for `job_output`.
+ * panel. Output also goes to `<data>/jobs/<id>.log` for the terminal output action.
  *
  * A job's process runs in the pty-host process (see `pty-backend.ts`), so it
  * survives a server restart. The `pico.jobs` document keeps each job, and a
@@ -60,6 +60,7 @@ import {
 import {
   clip,
   cwdOf,
+  deniedAction,
   errorResult,
   formatDuration,
   json,
@@ -147,7 +148,7 @@ const EXIT_SETTLE_MS = 1000
 /** How long a wait message waits for a `wait` call to report the wait first. */
 const WAITING_MESSAGE_DELAY_MS = 8000
 
-/** Plain-text lines that `job_output` and `job_status` show at most. */
+/** Plain-text lines that the terminal list and output actions show at most. */
 const MAX_TAIL_LINES = 1000
 
 /** The last plain-text lines of a job log (all of a short log). */
@@ -558,7 +559,7 @@ class JobRunner {
           `[Job waits for input] ${job.name} (job ${job.id}) waits for input${secret ? " with echo off: a password or secret, so only the user can type it" : ""}.`,
           `Last line: ${clip(prompt, 300) || "(empty)"}`,
           secret
-            ? "Use the terminal tool: focus to bring the user to it, then wait for the result. Or stop it with job_stop."
+            ? "Use the terminal tool: focus to bring the user to it, then wait for the result. Or stop it with the stop action."
             : "Read it with the terminal tool (read). Answer with send_text or send_keys, or use focus when the answer is the user's.",
         ].join("\n"),
         `job:${job.id}:waiting:${live.episode}`
@@ -967,7 +968,7 @@ class JobRunner {
         services,
         conversationId,
         [
-          `[Job lost] ${job.name} stopped because ${reason}. Its output is in job_output ${jobId}.`,
+          `[Job lost] ${job.name} stopped because ${reason}. Read its output with terminal output (id ${jobId}).`,
           `(job ${jobId}: ${job.command})`,
         ].join("\n"),
         `job:${jobId}:lost`
@@ -1195,7 +1196,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     executionMode: "sequential",
     description: [
       "Start a long command in the background and return at once: dev servers, watchers, long builds or test runs.",
-      "The user can watch it live in the terminal panel. Read its output with job_output, check it with job_status, and stop it with job_stop. Use the terminal tool to read its screen, wait for output, type into it, or bring in the user.",
+      "The user can watch it live in the terminal panel. Use the terminal tool to list jobs, read their output, stop them, read the screen, wait for output, type into them, or bring in the user.",
       "With notify_on_exit (default true), you get a message with the exit code and the last output when it ends, also while you are busy (at your next turn boundary).",
       "With interactive, the command shows as a live terminal in the chat, where the user types (a login, a password, a choice that is the user's), and the call returns when the command exits. Give a short prompt for the user.",
     ].join(" "),
@@ -1247,13 +1248,14 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     },
   })
 
-  const statusTool = defineTool({
-    name: "job_status",
-    description:
-      "Show background jobs of this session: all of them, or one by id with its last output lines.",
-    parameters: Type.Object({ id: Type.Optional(Type.String()) }),
-    replay: "safe",
-    async execute(args, api, context) {
+  /** The list action: every job with its memory, or one job with its last output. */
+  const jobStatus = async (
+    args: { id?: string | undefined },
+    api: ToolExecutionApi,
+    context: Context,
+    shells: string[]
+  ) => {
+    {
       const services = await host.ready(context.abortSignal)
       // The memory of each running job, with every process it started.
       const usage = new Map(
@@ -1279,27 +1281,26 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
         )
       }
       const jobs = await api.snapshot(JobsDoc, api.conversationId, context)
-      const items = Object.values(jobs?.items ?? {}).sort(
-        (left, right) => left.startedAt - right.startedAt
-      )
-      return textResult(
-        items.length > 0 ? items.map(describe).join("\n") : "No jobs."
-      )
-    },
-  })
+      const items = Object.values(jobs?.items ?? {})
+        .sort((left, right) => right.startedAt - left.startedAt)
+        .slice(0, 15)
+      const lines = [...items.map(describe), ...shells]
+      return textResult(lines.length > 0 ? lines.join("\n") : "No terminals.")
+    }
+  }
 
-  const outputTool = defineTool({
-    name: "job_output",
-    description:
-      "Read the output of a background job: the last lines (tail, default 80), a line range (from_line), or only lines that match grep.",
-    parameters: Type.Object({
-      id: Type.String(),
-      tail: Type.Optional(Type.Number()),
-      from_line: Type.Optional(Type.Number()),
-      grep: Type.Optional(Type.String()),
-    }),
-    replay: "safe",
-    async execute(args, api, context) {
+  /** The output action: the last lines, a line range, or the lines that match grep. */
+  const jobOutput = async (
+    args: {
+      id: string
+      tail?: number | undefined
+      from_line?: number | undefined
+      grep?: string | undefined
+    },
+    api: ToolExecutionApi,
+    context: Context
+  ) => {
+    {
       const job = await jobFor(api, args.id, context)
       if (!job) return errorResult(`No job with id ${args.id}`)
       const parts = jobLogParts(dataDir, job.id)
@@ -1340,28 +1341,8 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       return textResult(
         `${describeJob(job)}\n(${note})\n${clip(selected.join("\n"), 30_000)}`
       )
-    },
-  })
-
-  const stopTool = defineTool({
-    name: "job_stop",
-    executionMode: "sequential",
-    description: "Stop a background job (SIGTERM, then SIGKILL).",
-    parameters: Type.Object({ id: Type.String() }),
-    async execute(args, api, context) {
-      const result = await stopJob(
-        await host.ready(context.abortSignal),
-        runner,
-        api,
-        api.conversationId,
-        args.id.trim(),
-        context
-      )
-      return result.ok
-        ? textResult(`Stopping job ${args.id}.`)
-        : errorResult(result.error)
-    },
-  })
+    }
+  }
 
   /** Wait for a job: the wait action of the terminal tool. */
   const waitJob = async (
@@ -1466,13 +1447,15 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     executionMode: "sequential",
     description: [
       "Use terminals: your jobs (from job_start or open) and the user's terminal tabs of this session.",
-      'Actions: list; open (a shell, or `command`, in a new terminal; it is a job); read (source visible: the screen now, for full-screen programs; recent: the last `lines` with scrollback); wait (until a line matches `pattern`, the job waits for input, or exits); send_text (type `text`, with `enter` to press Enter); send_keys (`keys`, for example ["up", "enter"] or ["ctrl+c"]); focus (bring the user to the terminal with `prompt`, only when the user is needed: a password, a login, a choice that is the user\'s); close (remove a finished job and its log).',
+      'Actions: list (all, with memory; with id, one job and its last output); output (the log of a job: the last `tail` lines, default 80, lines from `from_line`, or only lines that match `grep`); stop (stop a job: SIGTERM, then SIGKILL); open (a shell, or `command`, in a new terminal; it is a job); read (source visible: the screen now, for full-screen programs; recent: the last `lines` with scrollback); wait (until a line matches `pattern`, the job waits for input, or exits); send_text (type `text`, with `enter` to press Enter); send_keys (`keys`, for example ["up", "enter"] or ["ctrl+c"]); focus (bring the user to the terminal with `prompt`, only when the user is needed: a password, a login, a choice that is the user\'s); close (remove a finished job and its log).',
       "send_text and send_keys refuse when the terminal hides input: a secret is for the user. You can read the user's terminals, but not type in them.",
     ].join(" "),
     parameters: Type.Object({
       action: Type.Union(
         [
           "list",
+          "output",
+          "stop",
           "open",
           "read",
           "wait",
@@ -1496,6 +1479,9 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       lines: Type.Optional(
         Type.Number({ description: "read recent: lines (default 60)" })
       ),
+      tail: Type.Optional(Type.Number()),
+      from_line: Type.Optional(Type.Number()),
+      grep: Type.Optional(Type.String()),
       pattern: Type.Optional(Type.String()),
       regex: Type.Optional(Type.Boolean()),
       new_only: Type.Optional(Type.Boolean()),
@@ -1530,20 +1516,18 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
           ? shells().find((shell) => shell.id.startsWith(id.slice(2)))
           : undefined
 
-      if (args.action === "list") {
-        const jobs = await api.snapshot(JobsDoc, api.conversationId, context)
-        const items = Object.values(jobs?.items ?? {})
-          .sort((left, right) => right.startedAt - left.startedAt)
-          .slice(0, 15)
-        const lines = [
-          ...items.map((job) => describeJob(job)),
-          ...shells().map(
-            (shell) =>
-              `u-${shell.id.slice(0, 8)} (the user's ${shell.shell} tab in ${shell.cwd}) ${shell.exited ? `exited with code ${shell.exited.exitCode}` : "running"}; read only`
-          ),
-        ]
-        return textResult(lines.length ? lines.join("\n") : "No terminals.")
-      }
+      if (args.action === "list")
+        return jobStatus(
+          args,
+          api,
+          context,
+          args.id
+            ? []
+            : shells().map(
+                (shell) =>
+                  `u-${shell.id.slice(0, 8)} (the user's ${shell.shell} tab in ${shell.cwd}) ${shell.exited ? `exited with code ${shell.exited.exitCode}` : "running"}; read only`
+              )
+        )
 
       if (args.action === "open") {
         const shell = !args.command?.trim()
@@ -1577,6 +1561,24 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       const id = args.id?.trim()
       if (!id) return errorResult("Give the terminal id (see the list action).")
       const shell = userShell(id)
+
+      if (args.action === "output" && !shell)
+        return jobOutput({ ...args, id }, api, context)
+      if (args.action === "stop" && !shell) {
+        const denied = deniedAction(host, api.conversationId, "terminal.stop")
+        if (denied) return denied
+        const result = await stopJob(
+          services,
+          runner,
+          api,
+          api.conversationId,
+          id,
+          context
+        )
+        return result.ok
+          ? textResult(`Stopping job ${id}.`)
+          : errorResult(result.error)
+      }
 
       if (args.action === "read") {
         const source = args.source ?? "visible"
@@ -1632,7 +1634,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       if (args.action === "close") {
         if (job.status === "running")
           return errorResult(
-            `${job.name} (${job.id}) still runs. Stop it with job_stop first.`
+            `${job.name} (${job.id}) still runs. Stop it with the stop action first.`
           )
         await api.commit(async (tx) => {
           const draft = (await tx.doc(
@@ -1680,7 +1682,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     runner,
     extension: defineExtension({
       name: "jobs",
-      tools: [startTool, statusTool, outputTool, stopTool, terminalTool],
+      tools: [startTool, terminalTool],
     }),
   }
 }

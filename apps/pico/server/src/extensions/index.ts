@@ -7,8 +7,6 @@ import type { Extension } from "@earendil-works/pi-durable"
 
 import { createAskExtension } from "./ask.ts"
 import { createBrowserExtension } from "./browser.ts"
-import { createGitExtension } from "./git.ts"
-import { createGithubExtension } from "./github.ts"
 import type { HostBridge } from "./host.ts"
 import { createJobsExtension, type JobsExtension } from "./jobs.ts"
 import { createLspExtension } from "./lsp.ts"
@@ -43,17 +41,16 @@ export function createPicoExtensions(options: PicoExtensionOptions): {
   const jobs = createJobsExtension(host, dataDir)
   const scratchpad = createScratchpadExtension(host, dataDir)
   const lsp = createLspExtension(host)
+  const watch = createWatchExtension(host)
   return {
     extensions: [
       createAskExtension(),
       createRenderExtension(),
-      createScheduleExtension(host),
-      createWatchExtension(host),
+      createScheduleExtension(host, watch),
+      watch.extension,
       jobs.extension,
       scratchpad.extension,
       createSessionsExtension(host),
-      createGitExtension(host),
-      createGithubExtension(),
       createTestsExtension(),
       lsp.extension,
       createPreviewExtension(host),

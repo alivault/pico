@@ -10,18 +10,16 @@ import { createHash } from "node:crypto"
 import { readFile, stat } from "node:fs/promises"
 import { isAbsolute, resolve } from "node:path"
 
-import { Type } from "@earendil-works/pi-ai"
+import type { Context } from "@earendil-works/chord"
 import {
   defineExtension,
   defineTask,
-  defineTool,
+  type ToolExecutionApi,
+  type ToolExecutionResult,
 } from "@earendil-works/pi-durable"
 
-import { summarizeChecks, type CheckRun } from "./github.ts"
 import type { HostBridge } from "./host.ts"
 import {
-  cancelTimer,
-  listTimers,
   TimersDoc,
   updateTimer,
   type TimerItem,
@@ -357,40 +355,60 @@ function createWatchTask(host: HostBridge) {
   })
 }
 
+/** One CI check of a pull request, from `gh pr checks --json`. */
+export type CheckRun = {
+  name: string
+  state: string
+  bucket?: string
+  link?: string
+  workflow?: string
+}
+
+export function summarizeChecks(checks: CheckRun[]) {
+  const pending = checks.filter(
+    (check) =>
+      check.bucket === "pending" ||
+      /PENDING|QUEUED|IN_PROGRESS|WAITING/i.test(check.state)
+  )
+  const failed = checks.filter(
+    (check) =>
+      check.bucket === "fail" ||
+      check.bucket === "cancel" ||
+      /FAIL|ERROR|CANCEL|TIMED_OUT/i.test(check.state)
+  )
+  const passed = checks.length - pending.length - failed.length
+  return {
+    total: checks.length,
+    passed,
+    failed: failed.length,
+    pending: pending.length,
+    done: checks.length > 0 && pending.length === 0,
+    failures: failed.map((check) => ({
+      name: check.name,
+      ...(check.link ? { link: check.link } : {}),
+    })),
+  }
+}
+
 const MIN_INTERVAL_MS = 15_000
 
 export function createWatchExtension(host: HostBridge) {
   const WatchTask = createWatchTask(host)
 
-  const watchTool = defineTool({
-    name: "watch",
-    description: [
-      "Watch for a condition and get `message` when it is true. If you are busy then, it arrives at your next turn boundary (after the current tool calls), so you can keep working. The watch is durable: it survives server restarts.",
-      "check.type: command (until success, failure, match, or change), url (until status, match, change, up, or down), file (until change, exists, missing, or match), ci (GitHub checks of a PR through gh, until done, success, or failure).",
-      "interval is at least 15s (default 1m). timeout ends the watch with a message when the condition stays false (default 24h).",
-      "Example: after git push, watch { check: { type: 'ci' }, message: 'CI finished; fix failures' }.",
-    ].join(" "),
-    parameters: Type.Object({
-      message: Type.String(),
-      check: Type.Object({
-        type: Type.Union(
-          ["command", "url", "file", "ci"].map((kind) => Type.Literal(kind))
-        ),
-        command: Type.Optional(Type.String()),
-        url: Type.Optional(Type.String()),
-        path: Type.Optional(Type.String()),
-        pr: Type.Optional(Type.String()),
-        until: Type.Optional(Type.String()),
-        pattern: Type.Optional(Type.String()),
-        status: Type.Optional(Type.Number()),
-      }),
-      interval: Type.Optional(Type.String()),
-      timeout: Type.Optional(Type.String()),
-      label: Type.Optional(Type.String()),
-    }),
-    replay: "safe",
-    async execute(args, api, context) {
-      const check = args.check as WatchCheck
+  /** The watch action of the schedule tool. */
+  const startWatch = async (
+    args: {
+      message: string
+      check: WatchCheck
+      interval?: string | undefined
+      timeout?: string | undefined
+      label?: string | undefined
+    },
+    api: ToolExecutionApi,
+    context: Context
+  ): Promise<ToolExecutionResult> => {
+    {
+      const check = args.check
       const intervalMs = Math.max(
         MIN_INTERVAL_MS,
         parseDuration(args.interval ?? "1m") ?? 60_000
@@ -454,38 +472,29 @@ export function createWatchExtension(host: HostBridge) {
         `Watch ${id} checks ${describeCheck(check)} every ${formatDuration(intervalMs)}, for up to ${formatDuration(timeoutMs)}. You get a message when it fires.`,
         { details: { id } }
       )
-    },
-  })
+    }
+  }
 
-  const listTool = defineTool({
-    name: "watch_list",
-    description: "List the watches of this session, with their last check.",
-    parameters: Type.Object({}),
-    replay: "safe",
-    async execute(_args, api, context) {
-      const state = await api.snapshot(TimersDoc, api.conversationId, context)
-      const open = Object.values(state?.items ?? {}).filter(
-        (item) => item.kind === "watch" && item.status === "pending"
-      )
-      const text = await listTimers(api, "watch", context)
-      const last = open
-        .filter((item) => item.lastOutput)
-        .map((item) => `\n${item.id} last check:\n${item.lastOutput}`)
-      return textResult(text + last.join(""))
-    },
-  })
+  return {
+    start: startWatch,
+    lastChecks,
+    extension: defineExtension({ name: "watch", tasks: [WatchTask] }),
+  }
+}
 
-  const cancelTool = defineTool({
-    name: "watch_cancel",
-    description: "Cancel a watch by id.",
-    parameters: Type.Object({ id: Type.String() }),
-    replay: "safe",
-    execute: (args, api, context) => cancelTimer(host, api, args.id, context),
-  })
+export type WatchExtension = ReturnType<typeof createWatchExtension>
 
-  return defineExtension({
-    name: "watch",
-    tools: [watchTool, listTool, cancelTool],
-    tasks: [WatchTask],
-  })
+/** The last check of each open watch, for the list action. */
+async function lastChecks(
+  api: Pick<ToolExecutionApi, "snapshot" | "conversationId">,
+  context: Context
+) {
+  const state = await api.snapshot(TimersDoc, api.conversationId, context)
+  return Object.values(state?.items ?? {})
+    .filter(
+      (item) =>
+        item.kind === "watch" && item.status === "pending" && item.lastOutput
+    )
+    .map((item) => `\n${item.id} last check:\n${item.lastOutput}`)
+    .join("")
 }

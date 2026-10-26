@@ -1006,7 +1006,7 @@ export class Terminals {
 
   close(scopeKey: string, id: string) {
     const terminal = this.#record(scopeKey, id)
-    // A tab that shows a job only detaches; job_stop stops the job.
+    // A tab that shows a job only detaches; terminal stop stops the job.
     if (terminal.shared) return
     terminal.screen?.dispose()
     this.#terminals.delete(id)

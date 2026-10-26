@@ -120,7 +120,7 @@ void test("a timer fires once after a server restart", async () => {
     const host = new HostBridge()
     const harness = await openHarness(
       database,
-      [createScheduleExtension(host)],
+      [createScheduleExtension(host, createWatchExtension(host))],
       script
     )
     bindHost(host, harness, dir)
@@ -190,7 +190,10 @@ void test("a watch fires when its condition holds", async () => {
   const host = new HostBridge()
   const harness = await openHarness(
     join(dir, "db.sqlite"),
-    [createWatchExtension(host)],
+    (() => {
+      const watch = createWatchExtension(host)
+      return [createScheduleExtension(host, watch), watch.extension]
+    })(),
     (messages) => {
       const users = userTexts(messages)
       if (users.at(-1)?.startsWith("[Watch]")) return { text: "seen" }
@@ -198,8 +201,9 @@ void test("a watch fires when its condition holds", async () => {
       return {
         tools: [
           {
-            name: "watch",
+            name: "schedule",
             arguments: {
+              action: "watch",
               message: "The file is ready",
               check: { type: "file", path: "ready.txt", until: "exists" },
             },
