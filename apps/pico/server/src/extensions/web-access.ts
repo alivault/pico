@@ -118,7 +118,16 @@ function fetchTool(fetch: Definition, get: Definition | undefined) {
     {
       description:
         "Fetch URL(s) and return bounded content. Supports web pages, GitHub repositories, and PDFs. Full content is stored: with the returned responseId, read more pages of it (offset, limit) or find passages (findText). The same works for the results of web_search.",
-      parameters: Type.Object(properties),
+      // Every property is optional: a call gives url, urls, or responseId.
+      // Type.Object marks a property that is not Type.Optional as required.
+      parameters: Type.Object(
+        Object.fromEntries(
+          Object.entries(properties).map(([name, schema]) => [
+            name,
+            Type.Optional(schema),
+          ])
+        )
+      ),
     }
   )
 }
