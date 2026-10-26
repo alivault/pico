@@ -57,6 +57,7 @@ function fakeSessions(harness: Harness) {
     current: (id: string | undefined) => id,
     meta: (id: string) => metas.get(id)!,
     isBusy: () => false,
+    runningTools: () => [],
     children: (id: string) =>
       [...metas.entries()]
         .filter(([, meta]) => meta.parent === id)

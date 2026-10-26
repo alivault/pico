@@ -17,17 +17,37 @@ import {
 async function runBash(
   dir: string,
   prefix: string | undefined,
-  command: string
+  command: string,
+  options: { defaultTimeout?: number; timeout?: number } = {}
 ) {
   let result: string | undefined
   let step = 0
   const harness = await openHarness(
     join(dir, `db-${Math.random()}.sqlite`),
-    [createPicoCodingTools({ shellPrefix: () => prefix })],
+    [
+      createPicoCodingTools({
+        shellPrefix: () => prefix,
+        ...(options.defaultTimeout === undefined
+          ? {}
+          : { defaultTimeout: options.defaultTimeout }),
+      }),
+    ],
     (messages) => {
       step += 1
       if (step === 1)
-        return { tools: [{ name: "bash", arguments: { command } }] }
+        return {
+          tools: [
+            {
+              name: "bash",
+              arguments: {
+                command,
+                ...(options.timeout === undefined
+                  ? {}
+                  : { timeout: options.timeout }),
+              },
+            },
+          ],
+        }
       result = lastToolResult(messages)
       return { text: "done" }
     },
@@ -75,4 +95,46 @@ void test("with set -u, a variable from an earlier call stops rm before it runs"
     !existsSync(join(scratch, "keep")),
     "without it, rm ran with T empty"
   )
+})
+
+void test("a bash call cannot wait for input", async () => {
+  const dir = await tempDir()
+  const output = await runBash(
+    dir,
+    undefined,
+    'echo "[$GIT_EDITOR $GIT_SEQUENCE_EDITOR $EDITOR $VISUAL $GIT_PAGER $PAGER $GIT_TERMINAL_PROMPT]"; read line; echo "read=$?"'
+  )
+  assert.match(output, /\[true true true true cat cat 0\]/)
+  assert.match(output, /read=1/)
+})
+
+void test("git rebase -i does not open an editor", async () => {
+  const dir = await tempDir()
+  const git = "git -c user.name=t -c user.email=t@t -c commit.gpgsign=false"
+  const output = await runBash(
+    dir,
+    undefined,
+    `git init -q repo && cd repo && ${git} commit -q --allow-empty -m a && ${git} commit -q --allow-empty -m b && ${git} rebase -i HEAD~1 && echo rebased`,
+    { defaultTimeout: 20 }
+  )
+  assert.match(output, /rebased/)
+})
+
+void test("a bash call stops at the default timeout and says to use job_start", async () => {
+  const dir = await tempDir()
+  const output = await runBash(dir, undefined, "echo started; sleep 10", {
+    defaultTimeout: 1,
+  })
+  assert.match(output, /started/)
+  assert.match(output, /timed out after 1 seconds \(the default timeout\)/)
+  assert.match(output, /job_start/)
+})
+
+void test("a timeout of the call replaces the default timeout", async () => {
+  const dir = await tempDir()
+  const output = await runBash(dir, undefined, "sleep 2; echo finished", {
+    defaultTimeout: 1,
+    timeout: 10,
+  })
+  assert.match(output, /finished/)
 })

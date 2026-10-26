@@ -24,6 +24,7 @@ import type { EventHub } from "../events.ts"
 import {
   lastAnswerEntry,
   normalizeSessionId,
+  runningToolLines,
   transcriptText,
   waitingOn,
 } from "../extensions/sessions.ts"
@@ -171,6 +172,7 @@ export function addMachineServerRoutes(
       cwd: meta.cwd,
       busy: sessions.isBusy(id),
       needsInput: sessions.needsInput(id),
+      running: runningToolLines(sessions, id),
       ...(meta.worktree ? { worktree: meta.worktree } : {}),
     }
   }
@@ -210,7 +212,11 @@ export function addMachineServerRoutes(
       ok: true,
       sessions: await Promise.all(
         list.map(async (item) => {
-          if (item.busy || item.needsInput) return item
+          if (item.busy) {
+            const running = runningToolLines(sessions, item.id)
+            return running.length > 0 ? { ...item, running } : item
+          }
+          if (item.needsInput) return item
           const waiting = await waitingOf(item.id)
           return waiting ? { ...item, waiting } : item
         })

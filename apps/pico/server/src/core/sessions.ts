@@ -692,6 +692,7 @@ export class Sessions implements HostSessions {
         const value = change.value ?? undefined
         if (kind === "pi.live") {
           docs.live = value as LiveState | undefined
+          this.#noteRunningTools(id, docs.live)
           this.#markDirty(id, { live: true })
         } else if (kind === "pi.inbox") {
           docs.inbox = value as InboxState | undefined
@@ -722,6 +723,33 @@ export class Sessions implements HostSessions {
         }
       }
     }
+  }
+
+  readonly #runningTools = new Map<
+    string,
+    Map<string, { name: string; startedAt: number }>
+  >()
+
+  /** Note when each tool call of the current round started to run. */
+  #noteRunningTools(id: string, live: LiveState | undefined) {
+    const before = this.#runningTools.get(id)
+    const next = new Map<string, { name: string; startedAt: number }>()
+    for (const slot of live?.tools ?? []) {
+      if (slot.status !== "running") continue
+      next.set(
+        slot.callId,
+        before?.get(slot.callId) ?? { name: slot.name, startedAt: Date.now() }
+      )
+    }
+    if (next.size > 0) this.#runningTools.set(id, next)
+    else this.#runningTools.delete(id)
+  }
+
+  /** The tool calls that run now in a session, oldest first. */
+  runningTools(id: string) {
+    return [...(this.#runningTools.get(id) ?? new Map()).entries()]
+      .map(([callId, value]) => ({ callId, ...value }))
+      .sort((left, right) => left.startedAt - right.startedAt)
   }
 
   /** Keep the sidebar summary current as entries arrive. */

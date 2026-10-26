@@ -23,6 +23,10 @@ export type HostSessions = {
   current(id: string | undefined): string | undefined
   meta(id: string): HostSessionMeta
   isBusy(id: string): boolean
+  /** The tool calls that run now in a session, oldest first. */
+  runningTools(
+    id: string
+  ): Array<{ callId: string; name: string; startedAt: number }>
   create(cwd: string, options?: HostCreateOptions): Promise<string>
   prompt(
     id: string,

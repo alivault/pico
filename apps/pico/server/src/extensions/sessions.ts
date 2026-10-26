@@ -40,6 +40,7 @@ import {
   type Tx,
 } from "@earendil-works/pi-durable"
 
+import { bashCalls, commandLine, formatDuration } from "../core/bash-calls.ts"
 import { createWorktree } from "../services/worktree.ts"
 import {
   conversationOf,
@@ -520,6 +521,31 @@ type RemoteSession = {
   /** What the session waits on: a timer, a watch, or a job. */
   waiting?: string
   worktree?: { path: string; branch: string }
+  /** The tool calls that run now (see `runningToolLines`). */
+  running?: string[]
+}
+
+/**
+ * The tool calls that run now in a session, one per line: the tool, how long
+ * it has run, and for bash the command and how long it has had no output.
+ */
+export function runningToolLines(
+  sessions: Pick<HostServices["sessions"], "runningTools">,
+  id: string,
+  now = Date.now()
+) {
+  const bash = bashCalls().filter((call) => call.sessionId === id)
+  return sessions.runningTools(id).map((tool) => {
+    // A bash call made through codemode has the ID `<call>/<key>`.
+    const call = bash.find(
+      (item) =>
+        item.callId === tool.callId || item.callId.startsWith(`${tool.callId}/`)
+    )
+    const ran = `running ${tool.name} for ${formatDuration(now - tool.startedAt)}`
+    if (!call) return ran
+    const silent = now - call.lastOutputAt
+    return `${ran}${tool.name === "bash" ? "" : " (bash)"}${silent >= 60_000 ? `, no output for ${formatDuration(silent)}` : ""}: ${commandLine(call.command, 120)}`
+  })
 }
 
 /** How often a report task checks a waiting child. */
@@ -1402,6 +1428,7 @@ export function createSessionsExtension(host: HostBridge) {
           [
             `Session ${remoteName(connection, id)}: ${result.title} (${result.busy ? "working" : "idle"}${result.needsInput ? ", waiting for the user" : ""})`,
             `Machine: ${connection.profile.label}. Directory: ${result.cwd}${result.worktree ? ` (worktree, branch ${result.worktree.branch})` : ""}`,
+            ...(result.running ?? []).map((line) => `Now: ${line}`),
             "",
             clip(result.text || "(no messages)", 40_000),
           ].join("\n")
@@ -1443,10 +1470,12 @@ export function createSessionsExtension(host: HostBridge) {
         )
     }
     const meta = services.sessions.meta(target)
+    const running = runningToolLines(services.sessions, target)
     return textResult(
       [
         `Session ${target}: ${summary?.title ?? ""} (${summary?.busy ? "working" : "idle"}${summary?.needsInput ? ", waiting for the user" : ""})`,
         `Directory: ${meta.cwd}${meta.worktree ? ` (worktree, branch ${meta.worktree.branch})` : ""}`,
+        ...running.map((line) => `Now: ${line}`),
         "",
         clip(text || "(no messages)", 40_000),
       ].join("\n")
@@ -1497,6 +1526,7 @@ export function createSessionsExtension(host: HostBridge) {
             unread?: boolean
             lastMessagePreview?: string
             waiting?: string
+            running?: string[]
           }>
         }
         if (result.sessions.length === 0)
@@ -1505,7 +1535,7 @@ export function createSessionsExtension(host: HostBridge) {
           result.sessions
             .map(
               (item) =>
-                `${remoteName(connection, item.id)} — ${item.title} [${status(item)}]\n  ${item.cwd}${item.lastMessagePreview ? `\n  last: ${item.lastMessagePreview}` : ""}`
+                `${remoteName(connection, item.id)} — ${item.title} [${status(item)}]\n  ${item.cwd}${(item.running ?? []).map((line) => `\n  now: ${line}`).join("")}${item.lastMessagePreview ? `\n  last: ${item.lastMessagePreview}` : ""}`
             )
             .join("\n")
         )
@@ -1557,7 +1587,13 @@ export function createSessionsExtension(host: HostBridge) {
       withWaiting
         .map(
           (item) =>
-            `${item.id}${item.id === self ? " (you)" : ""} — ${item.title} [${status(item)}]${item.parent ? ` child of ${item.parent}` : ""}${item.worktreeBranch ? ` branch ${item.worktreeBranch}` : ""}\n  ${item.cwd}${item.lastMessagePreview ? `\n  last: ${item.lastMessagePreview}` : ""}`
+            `${item.id}${item.id === self ? " (you)" : ""} — ${item.title} [${status(item)}]${item.parent ? ` child of ${item.parent}` : ""}${item.worktreeBranch ? ` branch ${item.worktreeBranch}` : ""}\n  ${item.cwd}${
+              item.id === self
+                ? ""
+                : runningToolLines(services.sessions, item.id)
+                    .map((line) => `\n  now: ${line}`)
+                    .join("")
+            }${item.lastMessagePreview ? `\n  last: ${item.lastMessagePreview}` : ""}`
         )
         .join("\n")
     )
