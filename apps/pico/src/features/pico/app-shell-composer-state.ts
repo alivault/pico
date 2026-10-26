@@ -209,7 +209,7 @@ export function createInitialAppShellComposerSnapshot(
     activeSessionId: undefined,
     awaitingFirstTurn: false,
     canStartPendingQueue: false,
-    centerMessages: false,
+    centerMessages: true,
     composerDiffLineComments: EMPTY_COMPOSER_DIFF_LINE_COMMENTS,
     composerImages: EMPTY_COMPOSER_IMAGES,
     composerSkill: undefined,

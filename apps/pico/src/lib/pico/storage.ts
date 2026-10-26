@@ -458,7 +458,8 @@ export function readStoredHideToolBlocks() {
 }
 
 export function readStoredCenterMessages() {
-  return safeLocalStorageGetItem(CENTER_MESSAGES_STORAGE_KEY) === "1"
+  // On by default. Only a stored "0" turns it off.
+  return safeLocalStorageGetItem(CENTER_MESSAGES_STORAGE_KEY) !== "0"
 }
 
 export function readStoredAutoScrollEnabled() {

@@ -464,7 +464,13 @@ function AppShellConversationScroller({
         ref={setViewport}
         data-conversation-viewport="true"
         aria-label="Conversation messages"
-        className="overflow-x-hidden px-9 outline-none"
+        // Without centered messages, the text fills the width. The right
+        // padding keeps it clear of the jump buttons: inset, button width,
+        // and a gap of 0.75rem.
+        className={cn(
+          "overflow-x-hidden px-9 outline-none",
+          !centerMessages && "pr-16 md:pr-[66px]"
+        )}
       >
         {sessionState.historyOffset > 0 && !isSessionViewLoading ? (
           <ConversationEarlierMessages
