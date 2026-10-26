@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import ReactMarkdown from "react-markdown"
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown"
 import rehypeRaw from "rehype-raw"
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize"
 import remarkBreaks from "remark-breaks"
@@ -21,9 +21,28 @@ const highlightCache = new Map<
 
 const MemoizedReactMarkdown = React.memo(ReactMarkdown)
 type ReactMarkdownProps = React.ComponentProps<typeof ReactMarkdown>
+// Links that open a desktop app, for example a note in Obsidian. The default
+// schema removes them. Unsafe schemes such as javascript: stay blocked.
+const APP_LINK_PROTOCOLS = ["obsidian", "vscode", "cursor", "zed", "file"]
+const MARKDOWN_SANITIZE_SCHEMA = {
+  ...defaultSchema,
+  protocols: {
+    ...defaultSchema.protocols,
+    href: [...(defaultSchema.protocols?.href ?? []), ...APP_LINK_PROTOCOLS],
+  },
+}
+const APP_LINK_PATTERN = new RegExp(
+  `^(?:${APP_LINK_PROTOCOLS.join("|")}):`,
+  "i"
+)
+
+function markdownUrlTransform(url: string) {
+  return APP_LINK_PATTERN.test(url) ? url : defaultUrlTransform(url)
+}
+
 const MARKDOWN_REHYPE_PLUGINS = [
   rehypeRaw,
-  [rehypeSanitize, defaultSchema],
+  [rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA],
 ] satisfies NonNullable<ReactMarkdownProps["rehypePlugins"]>
 const MARKDOWN_REMARK_PLUGINS = [remarkGfm]
 // User text keeps each line break, as typed in the prompt box.
@@ -677,6 +696,7 @@ const MarkdownChunk = React.memo(function MarkdownChunk({
           breaks ? MARKDOWN_REMARK_PLUGINS_WITH_BREAKS : MARKDOWN_REMARK_PLUGINS
         }
         components={MARKDOWN_COMPONENTS}
+        urlTransform={markdownUrlTransform}
       >
         {text}
       </MemoizedReactMarkdown>
