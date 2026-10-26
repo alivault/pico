@@ -932,8 +932,10 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
       }
     }
 
+    // Alt+Q, not Alt+Up: on Linux and Windows, Alt+Up goes to the top of
+    // the conversation. Use event.code, because Alt+Q types "œ" on macOS.
     if (
-      event.key === "ArrowUp" &&
+      event.code === "KeyQ" &&
       event.altKey &&
       !event.shiftKey &&
       !event.metaKey &&

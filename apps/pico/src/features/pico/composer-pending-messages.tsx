@@ -472,7 +472,7 @@ export const ComposerPendingMessages = React.memo(
                 <span className="ml-auto flex items-center gap-1">
                   {!session && lane.lane === firstLane ? (
                     <span className="hidden items-center gap-1 text-muted-foreground md:inline-flex">
-                      <Kbd>Alt+↑</Kbd> edit
+                      <Kbd>Alt+Q</Kbd> edit
                     </span>
                   ) : null}
                   {lane.lane === "followUp" && paused ? (
