@@ -689,6 +689,12 @@ export type ExtensionUiEvent = UiRequest & {
   type: "extension_ui_request"
 }
 
+/** The server no longer waits for the request: close its dialog. */
+export type ExtensionUiDismissEvent = {
+  type: "extension_ui_dismiss"
+  id: string
+}
+
 export function uiRequestExpectsResponse(method: unknown): boolean {
   switch (method) {
     case "auth":
@@ -761,6 +767,7 @@ export type PicoServerEvent =
   | RequestErrorEvent
   | ExtensionErrorEvent
   | ExtensionUiEvent
+  | ExtensionUiDismissEvent
   | UserMessageEvent
   | AutoSessionNamingErrorEvent
   | GitChangedEvent

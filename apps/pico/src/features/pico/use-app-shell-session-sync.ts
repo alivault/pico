@@ -134,6 +134,7 @@ type UseAppShellSessionSyncOptions = {
   pendingUiRequestHandlerRef: React.RefObject<
     (request: ExtensionUiEvent) => void
   >
+  dismissUiRequestRef: React.RefObject<(id: string) => void>
   lastSyncedEditorTextRef: React.RefObject<string>
 }
 
@@ -606,6 +607,7 @@ export function useAppShellSessionSync({
   setComposerImages,
   setPendingMessages,
   pendingUiRequestHandlerRef,
+  dismissUiRequestRef,
   lastSyncedEditorTextRef,
 }: UseAppShellSessionSyncOptions) {
   const machineId = useMachineId()
@@ -1094,16 +1096,23 @@ export function useAppShellSessionSync({
         return
       }
 
+      if (payload.type === "extension_ui_dismiss") {
+        dismissUiRequestRef.current(payload.id)
+        return
+      }
+
       if (payload.type === "extension_ui_request") {
         if (payload.method === "notify") {
           const notifyMessage = payload.message || "Notification"
-          if (payload.notifyType === "success") toast.success(notifyMessage)
-          else if (payload.notifyType === "warning") {
-            toast.warning(notifyMessage)
+          const options = payload.toastId ? { id: payload.toastId } : undefined
+          if (payload.notifyType === "success") {
+            toast.success(notifyMessage, options)
+          } else if (payload.notifyType === "warning") {
+            toast.warning(notifyMessage, options)
           } else if (payload.notifyType === "error") {
-            toast.error(notifyMessage)
+            toast.error(notifyMessage, options)
           } else {
-            toast.info(notifyMessage)
+            toast.info(notifyMessage, options)
           }
           return
         }
@@ -1125,6 +1134,7 @@ export function useAppShellSessionSync({
       lastSyncedEditorTextRef,
       pendingRouteSessionIdRef,
       pendingUiRequestHandlerRef,
+      dismissUiRequestRef,
       replaceComposerDraftRef,
       sessionStateRef,
       setComposerContextUsage,

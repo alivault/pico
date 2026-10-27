@@ -67,9 +67,9 @@ export class UiRequests {
   request(
     contextId: string | undefined,
     payload: Record<string, unknown>,
-    waitForResponse = true
+    waitForResponse = true,
+    id: string = crypto.randomUUID()
   ) {
-    const id = crypto.randomUUID()
     this.#hub.push(
       { type: "extension_ui_request", id, ...payload },
       contextId ? { contextId } : {}
@@ -91,6 +91,20 @@ export class UiRequests {
     this.#pending.delete(id)
     clearTimeout(pending.timeout)
     pending.resolve(response)
+  }
+
+  /** Cancels a request and closes its dialog in the browser. */
+  dismiss(contextId: string | undefined, id: string) {
+    const pending = this.#pending.get(id)
+    if (pending) {
+      this.#pending.delete(id)
+      clearTimeout(pending.timeout)
+      pending.resolve({ cancelled: true })
+    }
+    this.#hub.push(
+      { type: "extension_ui_dismiss", id },
+      contextId ? { contextId } : {}
+    )
   }
 
   cancelAll() {
@@ -227,6 +241,17 @@ export class Auth {
     const abort = new AbortController()
     this.#activeLogins.set(provider, abort)
     const title = `Log in to ${oauth.name}`
+    // The login can end while its dialogs are still open, for example when
+    // the provider redirects back to the callback server. Close them then.
+    const requestIds: string[] = []
+    const ask = (payload: Record<string, unknown>, waitForResponse = true) => {
+      const id = crypto.randomUUID()
+      if (waitForResponse) requestIds.push(id)
+      return this.#ui.request(contextId, payload, waitForResponse, id)
+    }
+    // One toast for the login: each progress message replaces the last, and
+    // the browser replaces the last one with the result.
+    const toastId = `auth:${provider}`
     let manualInput: Promise<UiResponse> | undefined
     try {
       await this.#models.login(provider, "oauth", {
@@ -235,7 +260,7 @@ export class Auth {
           const request =
             prompt.type === "manual_code" && manualInput
               ? manualInput
-              : this.#ui.request(contextId, {
+              : ask({
                   method:
                     prompt.type === "select" ? "auth_select" : "auth_input",
                   title,
@@ -256,7 +281,7 @@ export class Auth {
         },
         notify: (event) => {
           if (event.type === "auth_url") {
-            manualInput = this.#ui.request(contextId, {
+            manualInput = ask({
               method: "auth",
               title,
               message:
@@ -271,26 +296,24 @@ export class Auth {
             return
           }
           if (event.type === "device_code") {
-            void this.#ui
-              .request(contextId, {
-                method: "auth",
-                title,
-                message: `Enter code ${event.userCode} to continue.`,
-                authUrl: event.verificationUri,
-                authManualAllowed: false,
-              })
-              .then((response) => {
-                if (response.cancelled) abort.abort()
-              })
+            void ask({
+              method: "auth",
+              title,
+              message: `Enter code ${event.userCode} to continue.`,
+              authUrl: event.verificationUri,
+              authManualAllowed: false,
+            }).then((response) => {
+              if (response.cancelled) abort.abort()
+            })
             return
           }
           const link = event.type === "info" ? event.links?.[0] : undefined
-          void this.#ui.request(
-            contextId,
+          void ask(
             {
               method: "notify",
               message: event.message,
               notifyType: "info",
+              toastId,
               ...(link ? { authUrl: link.url } : {}),
             },
             false
@@ -300,6 +323,7 @@ export class Auth {
       return { ok: true, provider, availableModels: this.availableModels() }
     } finally {
       this.#activeLogins.delete(provider)
+      for (const id of requestIds) this.#ui.dismiss(contextId, id)
     }
   }
 

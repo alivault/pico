@@ -195,6 +195,7 @@ export function createApi(api: ApiContext) {
         "request_error",
         "extension_error",
         "extension_ui_request",
+        "extension_ui_dismiss",
         "git_changed",
         "session_extensions",
       ],

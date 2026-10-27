@@ -331,16 +331,23 @@ function useAppShellAuthDialogControllerView({
       )
     },
     onSuccess: async (_response, variables) => {
-      toast.success(`Logged in to ${variables.provider}`)
+      // Replaces the progress toast of the login (same ID as the server's).
+      toast.success(`Logged in to ${variables.provider}`, {
+        id: `auth:${variables.provider}`,
+      })
       await queryClient.invalidateQueries({
         queryKey: ["pico", "auth", "providers", viewerContextId, sessionId],
       })
       closeAllDialogs()
     },
-    onError: (error) => {
+    onError: (error, variables) => {
+      const id = `auth:${variables.provider}`
       const message = error instanceof Error ? error.message : "Login failed"
-      if (message === "Login cancelled") return
-      toast.error(message)
+      if (message === "Login cancelled") {
+        toast.dismiss(id)
+        return
+      }
+      toast.error(message, { id })
     },
   })
 

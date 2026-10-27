@@ -161,6 +161,8 @@ export type UiRequest = {
   authManualAllowed?: boolean
   allowEmpty?: boolean
   notifyType?: "info" | "success" | "warning" | "error"
+  /** Notify toasts with the same ID replace each other. */
+  toastId?: string
   options?: Array<{ value: string; label?: string } | string>
   timeout?: number
 }

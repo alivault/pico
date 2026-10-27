@@ -867,6 +867,9 @@ function useAppShellSessionWorkspaceView({
   pendingUiRequestHandlerRef.current = (request) => {
     uiRequestDialogRef.current?.open(request)
   }
+  const dismissUiRequestRef = React.useRef((id: string) => {
+    uiRequestDialogRef.current?.close(id)
+  })
   const autoAddedSessionDirectoryKeysRef = React.useRef<Set<string>>(new Set())
   const pendingMobileSidebarPromptFocusRef = React.useRef(false)
   const conversationItemsStoreRef = React.useRef<ConversationItemsStore | null>(
@@ -2141,6 +2144,7 @@ function useAppShellSessionWorkspaceView({
     setComposerImages,
     setPendingMessages,
     pendingUiRequestHandlerRef,
+    dismissUiRequestRef,
     lastSyncedEditorTextRef,
   })
 

@@ -671,7 +671,8 @@ function AppShellUiRequestDialog({
 
 export type AppShellUiRequestDialogHandle = {
   open: (request: ExtensionUiEvent) => void
-  close: () => void
+  /** Closes the dialog. With an ID, only when it shows that request. */
+  close: (requestId?: string) => void
   isOpen: () => boolean
 }
 
@@ -760,8 +761,8 @@ export function AppShellUiRequestDialogController({
         setPendingUiValue(request.prefill || "")
         setOpenState(true)
       },
-      close: () => {
-        clearRequest()
+      close: (requestId) => {
+        clearRequest(requestId)
       },
       isOpen: () => openRef.current,
     }),
