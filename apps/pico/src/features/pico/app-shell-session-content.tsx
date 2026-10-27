@@ -26,6 +26,13 @@ import {
   type PicoStore,
 } from "@/features/pico/tanstack-store-utils"
 import type { SessionState } from "@/lib/pico"
+import { toast } from "@/lib/pico/toast"
+import { useMachineId } from "@/lib/pico/machine-context"
+import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import {
+  UserMessageActionsContext,
+  type UserMessageActions,
+} from "@/features/pico/conversation-view"
 import { ToolRenderContext } from "@/features/pico/tool-renderers/registry"
 import { WaitingCardChip } from "@/features/pico/agent/waiting-cards"
 import { TodoProgressChip } from "@/features/pico/agent/todo"
@@ -83,6 +90,7 @@ export function AppShellSessionContent({
       cwd: currentSessionState.cwd,
       draft: currentSessionState.draft,
       sessionId: currentSessionState.sessionId,
+      streaming: currentSessionState.streaming,
     }),
     { compare: shallowRecordEqual }
   )
@@ -97,6 +105,49 @@ export function AppShellSessionContent({
       sessionState.cwd,
       sessionState.draft,
       sessionState.sessionId,
+      viewerContextId,
+    ]
+  )
+  const machineId = useMachineId()
+  const editSessionId = toolRenderContext.sessionId
+  const userMessageActions = React.useMemo<UserMessageActions>(
+    () => ({
+      editDisabled: sessionState.streaming,
+      editUserMessage: editSessionId
+        ? (entryId) => {
+            void (async () => {
+              try {
+                // Tree navigation to a user message forks at its parent and
+                // puts its text back in the composer.
+                await fetchJson<{ cancelled?: boolean }>(
+                  buildRequestUrl("/api/session/tree", {
+                    machineId,
+                    contextId: viewerContextId,
+                    sessionId: editSessionId,
+                  }),
+                  {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ targetId: entryId }),
+                  }
+                )
+                composerPanelRef.current?.focusPrompt({ preventScroll: true })
+              } catch (error) {
+                toast.error(
+                  error instanceof Error
+                    ? error.message
+                    : "Failed to edit message"
+                )
+              }
+            })()
+          }
+        : undefined,
+    }),
+    [
+      composerPanelRef,
+      editSessionId,
+      machineId,
+      sessionState.streaming,
       viewerContextId,
     ]
   )
@@ -134,21 +185,23 @@ export function AppShellSessionContent({
 
   return (
     <ToolRenderContext.Provider value={toolRenderContext}>
-      <AppShellSessionConversation
-        awaitingFirstTurn={awaitingFirstTurn}
-        conversationFrameRef={conversationFrameRef}
-        conversationItemsStore={conversationItemsStore}
-        displaySettingsStore={displaySettingsStore}
-        isLoadingOlderHistory={isLoadingOlderHistory}
-        isSessionViewLoading={isSessionViewLoading}
-        isSubmitting={isSubmitting}
-        onCancelCompaction={onCancelCompaction}
-        onCreateSession={onCreateSession}
-        onLoadOlderHistory={onLoadOlderHistory}
-        sessionStore={sessionStore}
-        viewerContextId={viewerContextId}
-        workingStateStore={workingStateStore}
-      />
+      <UserMessageActionsContext.Provider value={userMessageActions}>
+        <AppShellSessionConversation
+          awaitingFirstTurn={awaitingFirstTurn}
+          conversationFrameRef={conversationFrameRef}
+          conversationItemsStore={conversationItemsStore}
+          displaySettingsStore={displaySettingsStore}
+          isLoadingOlderHistory={isLoadingOlderHistory}
+          isSessionViewLoading={isSessionViewLoading}
+          isSubmitting={isSubmitting}
+          onCancelCompaction={onCancelCompaction}
+          onCreateSession={onCreateSession}
+          onLoadOlderHistory={onLoadOlderHistory}
+          sessionStore={sessionStore}
+          viewerContextId={viewerContextId}
+          workingStateStore={workingStateStore}
+        />
+      </UserMessageActionsContext.Provider>
 
       {toolRenderContext.sessionId ? (
         <div className="flex shrink-0 flex-wrap justify-center gap-x-2 px-4">

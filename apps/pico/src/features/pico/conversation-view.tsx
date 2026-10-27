@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { PatchDiff } from "@pierre/diffs/react"
-import { CheckIcon, ChevronRightIcon, CopyIcon } from "lucide-react"
+import { CheckIcon, ChevronRightIcon, CopyIcon, PencilIcon } from "lucide-react"
 
 import type {
   ConversationImage,
@@ -2585,7 +2585,7 @@ export const UserMessageCard = React.memo(function UserMessageCard({
           </div>
         ) : null}
       </div>
-      <UserMessageFooter copyText={item.text} />
+      <UserMessageFooter copyText={item.text} entryId={item.forkEntryId} />
       {selectedImage ? (
         <ImageLightbox
           open={true}
@@ -2605,12 +2605,57 @@ export const UserMessageCard = React.memo(function UserMessageCard({
   )
 })
 
-function UserMessageFooter({ copyText }: { copyText: string }) {
-  if (!copyText.trim()) return null
+export type UserMessageActions = {
+  /** Fork at the message's parent and put its text back in the composer. */
+  editUserMessage?: (entryId: string) => void
+  /** True while the session works; the server refuses tree moves then. */
+  editDisabled?: boolean
+}
+
+export const UserMessageActionsContext =
+  React.createContext<UserMessageActions>({})
+
+function UserMessageFooter({
+  copyText,
+  entryId,
+}: {
+  copyText: string
+  entryId?: string
+}) {
+  const { editUserMessage, editDisabled } = React.useContext(
+    UserMessageActionsContext
+  )
+  const canEdit = Boolean(entryId && editUserMessage)
+  if (!copyText.trim() && !canEdit) return null
 
   return (
     <div className="mt-1 flex justify-end gap-1.5 text-xs font-medium text-muted-foreground">
-      <MessageFooterCopyButton idleLabel="Copy user message" text={copyText} />
+      {canEdit && entryId && editUserMessage ? (
+        <TitleTooltip
+          title={
+            editDisabled
+              ? "Wait for the session to finish to edit"
+              : "Edit and resend from here"
+          }
+        >
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="text-muted-foreground"
+            disabled={editDisabled}
+            aria-label="Edit user message"
+            onClick={() => editUserMessage(entryId)}
+          >
+            <PencilIcon />
+          </Button>
+        </TitleTooltip>
+      ) : null}
+      {copyText.trim() ? (
+        <MessageFooterCopyButton
+          idleLabel="Copy user message"
+          text={copyText}
+        />
+      ) : null}
     </div>
   )
 }
