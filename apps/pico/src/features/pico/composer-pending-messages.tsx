@@ -446,202 +446,204 @@ export const ComposerPendingMessages = React.memo(
 
     return (
       <div
-        className="flex max-h-[min(45vh,420px)] flex-col gap-1.5 overflow-y-auto"
+        className="flex max-h-[min(45vh,420px)] flex-col gap-1.5"
         data-queue-editing={session ? "true" : undefined}
       >
-        {LANES.map((lane) => {
-          const items = laneRows(rows, lane.lane)
-          if (items.length === 0 && !session) return null
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
+          {LANES.map((lane) => {
+            const items = laneRows(rows, lane.lane)
+            if (items.length === 0 && !session) return null
 
-          return (
-            <section
-              key={lane.lane}
-              aria-label={`${lane.title} queue`}
-              className={cn(
-                "rounded-xl border px-1.5 pb-1.5",
-                lane.boxClassName
-              )}
-            >
-              <div className="flex min-h-7 items-center gap-2 px-1.5 pt-1 text-xs">
-                <span className={cn("font-medium", lane.titleClassName)}>
-                  {lane.title}
-                </span>
-                <span className="text-muted-foreground">
-                  {items.length} · {lane.hint}
-                </span>
-                <span className="ml-auto flex items-center gap-1">
-                  {!session && lane.lane === firstLane ? (
-                    <span className="hidden items-center gap-1 text-muted-foreground md:inline-flex">
-                      <Kbd>Alt+Q</Kbd> edit
-                    </span>
-                  ) : null}
-                  {lane.lane === "followUp" && paused ? (
-                    <>
-                      <span className="text-muted-foreground">⏸ Paused</span>
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={onStartPendingQueue}
-                      >
-                        Resume
-                      </Button>
-                    </>
-                  ) : null}
-                  {session ? (
-                    <Button
-                      size="icon-xs"
-                      variant="ghost"
-                      title={`Add a ${lane.title.toLowerCase()} row`}
-                      onClick={() => append(lane.lane)}
-                    >
-                      <PlusIcon />
-                    </Button>
-                  ) : null}
-                </span>
-              </div>
-
-              {items.length === 0 ? (
-                <div className="px-1.5 pb-1 text-xs text-muted-foreground">
-                  Empty. Move a row here with{" "}
-                  <Kbd>{lane.lane === "steer" ? "Alt+↑" : "Alt+↓"}</Kbd>.
-                </div>
-              ) : (
-                <ol className="flex flex-col gap-0.5">
-                  {items.map((row, index) => {
-                    const selected = row.key === session?.selectedKey
-                    const icon = rowIcon(row, index, lane, {
-                      selected,
-                      paused,
-                      held: heldForEdit,
-                    })
-                    const changed = session ? isQueueRowChanged(row) : false
-
-                    return (
-                      <li
-                        key={row.key}
-                        className={cn(
-                          "flex items-start gap-2 rounded-lg px-1.5 py-1 text-sm",
-                          selected
-                            ? lane.selectedClassName
-                            : "cursor-text hover:bg-foreground/5"
-                        )}
-                        onMouseDown={(event) => {
-                          if (selected) return
-                          event.preventDefault()
-                          select(row.key, "end")
-                        }}
-                      >
-                        <span
-                          aria-hidden="true"
-                          className={cn(
-                            "w-3.5 shrink-0 text-center leading-6 select-none",
-                            row.removed
-                              ? "text-destructive"
-                              : lane.titleClassName
-                          )}
+            return (
+              <section
+                key={lane.lane}
+                aria-label={`${lane.title} queue`}
+                className={cn(
+                  "rounded-xl border px-1.5 pb-1.5",
+                  lane.boxClassName
+                )}
+              >
+                <div className="flex min-h-7 items-center gap-2 px-1.5 pt-1 text-xs">
+                  <span className={cn("font-medium", lane.titleClassName)}>
+                    {lane.title}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {items.length} · {lane.hint}
+                  </span>
+                  <span className="ml-auto flex items-center gap-1">
+                    {!session && lane.lane === firstLane ? (
+                      <span className="hidden items-center gap-1 text-muted-foreground md:inline-flex">
+                        <Kbd>Alt+Q</Kbd> edit
+                      </span>
+                    ) : null}
+                    {lane.lane === "followUp" && paused ? (
+                      <>
+                        <span className="text-muted-foreground">⏸ Paused</span>
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          onClick={onStartPendingQueue}
                         >
-                          {icon}
-                        </span>
+                          Resume
+                        </Button>
+                      </>
+                    ) : null}
+                    {session ? (
+                      <Button
+                        size="icon-xs"
+                        variant="ghost"
+                        title={`Add a ${lane.title.toLowerCase()} row`}
+                        onClick={() => append(lane.lane)}
+                      >
+                        <PlusIcon />
+                      </Button>
+                    ) : null}
+                  </span>
+                </div>
 
-                        <div className="min-w-0 flex-1">
-                          {selected ? (
-                            <textarea
-                              ref={attachEditor}
-                              value={row.text}
-                              rows={1}
-                              aria-label={`Edit ${lane.title.toLowerCase()} prompt ${index + 1}`}
-                              placeholder={
-                                row.images.length > 0
-                                  ? "Optional text for this image prompt"
-                                  : "Type a prompt"
-                              }
-                              className={cn(
-                                "block field-sizing-content max-h-60 min-h-6 w-full resize-none bg-transparent leading-6 outline-none placeholder:text-muted-foreground",
-                                row.removed && "line-through opacity-60"
-                              )}
-                              onChange={(event) =>
-                                setText(row.key, event.target.value)
-                              }
-                              onKeyDown={(event) =>
-                                handleEditorKeyDown(event, row)
-                              }
-                            />
-                          ) : (
-                            <div
-                              title={row.text || undefined}
-                              className={cn(
-                                "truncate leading-6",
-                                row.removed &&
-                                  "text-muted-foreground line-through",
-                                !row.text && "text-muted-foreground italic"
-                              )}
-                            >
-                              {row.text.replace(/\s+/g, " ").trim() ||
-                                (row.images.length > 0
-                                  ? "Image prompt"
-                                  : "Empty prompt")}
-                            </div>
+                {items.length === 0 ? (
+                  <div className="px-1.5 pb-1 text-xs text-muted-foreground">
+                    Empty. Move a row here with{" "}
+                    <Kbd>{lane.lane === "steer" ? "Alt+↑" : "Alt+↓"}</Kbd>.
+                  </div>
+                ) : (
+                  <ol className="flex flex-col gap-0.5">
+                    {items.map((row, index) => {
+                      const selected = row.key === session?.selectedKey
+                      const icon = rowIcon(row, index, lane, {
+                        selected,
+                        paused,
+                        held: heldForEdit,
+                      })
+                      const changed = session ? isQueueRowChanged(row) : false
+
+                      return (
+                        <li
+                          key={row.key}
+                          className={cn(
+                            "flex items-start gap-2 rounded-lg px-1.5 py-1 text-sm",
+                            selected
+                              ? lane.selectedClassName
+                              : "cursor-text hover:bg-foreground/5"
                           )}
-
-                          {row.images.length > 0 ||
-                          (changed && (row.moved || row.isNew)) ? (
-                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                              {row.images.length > 0 ? (
-                                <span className="inline-flex items-center gap-1">
-                                  <ImageIcon className="size-3" />
-                                  {row.images.length}
-                                </span>
-                              ) : null}
-                              {row.isNew ? <span>new</span> : null}
-                              {row.moved && !row.isNew ? (
-                                <span>saves in new position</span>
-                              ) : null}
-                            </div>
-                          ) : null}
-                        </div>
-
-                        {selected ? (
-                          <span className="flex shrink-0 items-center">
-                            <Button
-                              size="icon-xs"
-                              variant="ghost"
-                              title="Move up"
-                              onMouseDown={(event) => event.preventDefault()}
-                              onClick={() => move(row.key, -1)}
-                            >
-                              <ArrowUpIcon />
-                            </Button>
-                            <Button
-                              size="icon-xs"
-                              variant="ghost"
-                              title="Move down"
-                              onMouseDown={(event) => event.preventDefault()}
-                              onClick={() => move(row.key, 1)}
-                            >
-                              <ArrowDownIcon />
-                            </Button>
-                            <Button
-                              size="icon-xs"
-                              variant="ghost"
-                              title={row.removed ? "Keep" : "Remove"}
-                              onMouseDown={(event) => event.preventDefault()}
-                              onClick={() => toggleRemove(row.key)}
-                            >
-                              {row.removed ? <Undo2Icon /> : <Trash2Icon />}
-                            </Button>
+                          onMouseDown={(event) => {
+                            if (selected) return
+                            event.preventDefault()
+                            select(row.key, "end")
+                          }}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={cn(
+                              "w-3.5 shrink-0 text-center leading-6 select-none",
+                              row.removed
+                                ? "text-destructive"
+                                : lane.titleClassName
+                            )}
+                          >
+                            {icon}
                           </span>
-                        ) : null}
-                      </li>
-                    )
-                  })}
-                </ol>
-              )}
-            </section>
-          )
-        })}
+
+                          <div className="min-w-0 flex-1">
+                            {selected ? (
+                              <textarea
+                                ref={attachEditor}
+                                value={row.text}
+                                rows={1}
+                                aria-label={`Edit ${lane.title.toLowerCase()} prompt ${index + 1}`}
+                                placeholder={
+                                  row.images.length > 0
+                                    ? "Optional text for this image prompt"
+                                    : "Type a prompt"
+                                }
+                                className={cn(
+                                  "block field-sizing-content max-h-60 min-h-6 w-full resize-none bg-transparent leading-6 outline-none placeholder:text-muted-foreground",
+                                  row.removed && "line-through opacity-60"
+                                )}
+                                onChange={(event) =>
+                                  setText(row.key, event.target.value)
+                                }
+                                onKeyDown={(event) =>
+                                  handleEditorKeyDown(event, row)
+                                }
+                              />
+                            ) : (
+                              <div
+                                title={row.text || undefined}
+                                className={cn(
+                                  "truncate leading-6",
+                                  row.removed &&
+                                    "text-muted-foreground line-through",
+                                  !row.text && "text-muted-foreground italic"
+                                )}
+                              >
+                                {row.text.replace(/\s+/g, " ").trim() ||
+                                  (row.images.length > 0
+                                    ? "Image prompt"
+                                    : "Empty prompt")}
+                              </div>
+                            )}
+
+                            {row.images.length > 0 ||
+                            (changed && (row.moved || row.isNew)) ? (
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                {row.images.length > 0 ? (
+                                  <span className="inline-flex items-center gap-1">
+                                    <ImageIcon className="size-3" />
+                                    {row.images.length}
+                                  </span>
+                                ) : null}
+                                {row.isNew ? <span>new</span> : null}
+                                {row.moved && !row.isNew ? (
+                                  <span>saves in new position</span>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+
+                          {selected ? (
+                            <span className="flex shrink-0 items-center">
+                              <Button
+                                size="icon-xs"
+                                variant="ghost"
+                                title="Move up"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => move(row.key, -1)}
+                              >
+                                <ArrowUpIcon />
+                              </Button>
+                              <Button
+                                size="icon-xs"
+                                variant="ghost"
+                                title="Move down"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => move(row.key, 1)}
+                              >
+                                <ArrowDownIcon />
+                              </Button>
+                              <Button
+                                size="icon-xs"
+                                variant="ghost"
+                                title={row.removed ? "Keep" : "Remove"}
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => toggleRemove(row.key)}
+                              >
+                                {row.removed ? <Undo2Icon /> : <Trash2Icon />}
+                              </Button>
+                            </span>
+                          ) : null}
+                        </li>
+                      )
+                    })}
+                  </ol>
+                )}
+              </section>
+            )
+          })}
+        </div>
 
         {session ? (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-muted-foreground">
+          <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-muted-foreground">
             <span className="hidden flex-wrap items-center gap-x-3 gap-y-1 md:flex">
               <span className="inline-flex items-center gap-1">
                 <Kbd>↑↓</Kbd> select
