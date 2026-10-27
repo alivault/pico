@@ -1435,7 +1435,7 @@ export class Sessions implements HostSessions {
     return { committed: withTools, streaming }
   }
 
-  async stateSync(id: string, options: { editorText?: string } = {}) {
+  async stateSync(id: string, options: EditorContent = {}) {
     const meta = this.meta(id)
     const transcript = await this.transcript(id)
     const { committed, streaming } = await this.items(id)
@@ -1487,6 +1487,9 @@ export class Sessions implements HostSessions {
         ...(options.editorText !== undefined
           ? { editorText: options.editorText }
           : {}),
+        ...(options.editorImages !== undefined
+          ? { editorImages: options.editorImages }
+          : {}),
         ...(busy
           ? {
               workingMessage:
@@ -1525,7 +1528,7 @@ export class Sessions implements HostSessions {
   }
 
   /** Send the session's state to the clients that show it. */
-  async publishState(id: string, options: { editorText?: string } = {}) {
+  async publishState(id: string, options: EditorContent = {}) {
     if (!this.#metas.has(id)) return
     this.#hub.push(await this.stateSync(id, options), { sessionId: id })
   }
@@ -2537,8 +2540,7 @@ export class Sessions implements HostSessions {
     )
     this.#viewers.selectSession(contextId, forked)
     this.#scheduleSessionsBroadcast()
-    const editorText = messageText(entry.model?.[0] as never)
-    this.#watchOnce(forked, editorText)
+    this.#watchOnce(forked, editorContent(entry))
     return forked
   }
 
@@ -2596,9 +2598,9 @@ export class Sessions implements HostSessions {
       return { cancelled: false, aborted: false }
     }
     let at: string | undefined = targetId
-    let editorText: string | undefined
+    let editor: EditorContent = {}
     if (isUserInputEntry(target)) {
-      editorText = messageText(target.model?.[0] as never)
+      editor = editorContent(target)
       const previous =
         targetIndex > 0 ? ownerTranscript.entries[targetIndex - 1] : undefined
       at = previous ? String(previous.id) : undefined
@@ -2618,22 +2620,40 @@ export class Sessions implements HostSessions {
         this.#viewers.selectSession(contextId, replacement)
     }
     this.#scheduleSessionsBroadcast()
-    this.#watchOnce(replacement, editorText)
+    this.#watchOnce(replacement, editor)
     return {
       cancelled: false,
       aborted: false,
-      ...(editorText !== undefined ? { editorText } : {}),
+      ...(editor.editorText !== undefined
+        ? { editorText: editor.editorText }
+        : {}),
     }
   }
 
-  /** Publish a new session's first state with optional editor text. */
-  #watchOnce(id: string, editorText?: string) {
-    void this.stateSync(
-      id,
-      editorText !== undefined ? { editorText } : {}
-    ).then((payload) => {
+  /** Publish a new session's first state with optional editor content. */
+  #watchOnce(id: string, editor: EditorContent = {}) {
+    void this.stateSync(id, editor).then((payload) => {
       this.#hub.push(payload, { sessionId: id })
     })
+  }
+}
+
+/** Text and images to put back in the composer, for example after a fork. */
+type EditorContent = {
+  editorText?: string
+  editorImages?: Array<{ mimeType: string; data: string }>
+}
+
+/** The composer content that sends a user message again. */
+function editorContent(entry: EntryRecord): EditorContent {
+  const message = entry.model?.[0] as never
+  const images = messageImages(message).map(({ mimeType, data }) => ({
+    mimeType,
+    data,
+  }))
+  return {
+    editorText: messageText(message),
+    ...(images.length > 0 ? { editorImages: images } : {}),
   }
 }
 

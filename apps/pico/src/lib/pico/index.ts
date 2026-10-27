@@ -392,7 +392,10 @@ export type StateSyncPayload = {
   cwd?: string
   directory?: string
   modified?: string
-  uiState?: SessionUiState
+  uiState?: SessionUiState & {
+    /** Images to put in the composer, sent one time, for example after a fork. */
+    editorImages?: Array<{ mimeType: string; data: string }>
+  }
 }
 
 export type SessionsPayload = {

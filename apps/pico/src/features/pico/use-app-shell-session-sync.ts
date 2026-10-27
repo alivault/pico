@@ -915,6 +915,11 @@ export function useAppShellSessionSync({
           : (readStoredPromptDraft(machineId, nextState) ??
             nextState.uiState.editorText ??
             "")
+        // Sent one time with the editor text, for example after a fork at a
+        // user message. Not kept in the session state.
+        const editorImages = payload.uiState?.editorImages
+          ?.map(normalizePromptImage)
+          .filter((image) => image !== null)
 
         batch(() => {
           sessionStateRef.current = nextState
@@ -1004,7 +1009,9 @@ export function useAppShellSessionSync({
             })
           }
 
-          if (sessionChanged) {
+          if (editorImages && !preserveLocalPrompt) {
+            setComposerImages(editorImages)
+          } else if (sessionChanged) {
             setComposerImages((current) =>
               current.length === 0 ? current : []
             )
