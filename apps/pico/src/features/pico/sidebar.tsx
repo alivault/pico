@@ -127,6 +127,7 @@ import { useSidebarSlot } from "@/features/pico/sidebar-slots"
 import { sortSidebarSessions } from "@/features/pico/session-order"
 import {
   filterDirectorySessionsByStatus,
+  sessionMatchesStatusFilter,
   useSessionStatusFilter,
 } from "@/features/pico/session-status-filter"
 
@@ -1368,6 +1369,76 @@ function directoryUnreadSessions(
   return entries
 }
 
+type DirectoryStatusCounts = {
+  working: number
+  waiting: number
+  done: number
+}
+
+/** The same counts as the machine heading, for the sessions of one directory. */
+function directoryStatusCounts(
+  state: DirectorySessionsState,
+  directory: string
+): DirectoryStatusCounts {
+  const counts = { working: 0, waiting: 0, done: 0 }
+  for (const entryKey of state.sessionKeysByDirectory[directory] ?? []) {
+    const entry = state.entriesByKey.get(entryKey)
+    if (!entry) continue
+    if (sessionMatchesStatusFilter(entry, "working")) counts.working++
+    if (sessionMatchesStatusFilter(entry, "waiting")) counts.waiting++
+    if (sessionMatchesStatusFilter(entry, "done")) counts.done++
+  }
+  return counts
+}
+
+function sameDirectoryStatusCounts(
+  left: DirectoryStatusCounts,
+  right: DirectoryStatusCounts
+) {
+  return (
+    left.working === right.working &&
+    left.waiting === right.waiting &&
+    left.done === right.done
+  )
+}
+
+function DirectoryStatusCountBadges({
+  counts,
+}: {
+  counts: DirectoryStatusCounts
+}) {
+  const { working, waiting, done } = counts
+  if (working + waiting + done === 0) return null
+  return (
+    <span className="ml-auto flex shrink-0 items-center gap-2 pr-1 text-[11px] text-sidebar-foreground/50">
+      {waiting > 0 ? (
+        <span
+          className="flex items-center gap-1 text-amber-500"
+          aria-label={`${waiting} waiting for you`}
+        >
+          <MessageCircleQuestionIcon className="size-3" />
+          {waiting}
+        </span>
+      ) : null}
+      {working > 0 ? (
+        <span
+          className="flex items-center gap-1"
+          aria-label={`${working} working`}
+        >
+          <Spinner size="xs" />
+          {working}
+        </span>
+      ) : null}
+      {done > 0 ? (
+        <span className="flex items-center gap-1" aria-label={`${done} done`}>
+          <span className="size-2 rounded-full bg-primary" />
+          {done}
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
 const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
   directory,
   directorySessionsStore,
@@ -1413,6 +1484,11 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
   const hasUnreadSessions = useSelector(
     directorySessionsStore,
     (state) => directoryUnreadSessions(state, directory).length > 0
+  )
+  const statusCounts = useSelector(
+    directorySessionsStore,
+    (state) => directoryStatusCounts(state, directory),
+    { compare: sameDirectoryStatusCounts }
   )
   const markSessionsRead = () => {
     onMarkSessionsRead?.(
@@ -1479,6 +1555,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
         {showHeaderLoadingSpinner ? (
           <Spinner size="xs" className="shrink-0" />
         ) : null}
+        <DirectoryStatusCountBadges counts={statusCounts} />
       </CollapsibleTrigger>
 
       {onCreateSessionInDirectory && !overlay && !isMobile ? (
