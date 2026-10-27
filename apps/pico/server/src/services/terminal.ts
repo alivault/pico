@@ -55,6 +55,8 @@ export type TerminalEvent =
       cwd: string
       shell: string
       nextInputSeq: number
+      /** Output up to this seq is replay: its queries are old. */
+      replayUntilSeq: number
       label?: string
       jobId?: string
     }
@@ -858,6 +860,7 @@ export class Terminals {
         cwd: terminal.cwd,
         shell: basename(terminal.shell),
         nextInputSeq: (terminal.lastInputSeq.get(viewerKey(viewer)) ?? 0) + 1,
+        replayUntilSeq: terminal.nextOutputSeq - 1,
         ...(terminal.label ? { label: terminal.label } : {}),
         ...(terminal.jobId ? { jobId: terminal.jobId } : {}),
       },

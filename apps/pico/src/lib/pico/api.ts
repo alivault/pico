@@ -484,6 +484,8 @@ export type TerminalEvent =
       cwd: string
       shell: string
       nextInputSeq?: number
+      /** Output up to this seq is replay: its queries are old. */
+      replayUntilSeq?: number
       label?: string
       jobId?: string
     }

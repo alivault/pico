@@ -565,6 +565,11 @@ export function TerminalTabPane({
     let inputBuffer = ""
     let lastResizeKey = ""
     let lastOutputSeq = 0
+    // Replayed output can hold old terminal queries (colours, device
+    // attributes). xterm.js answers them, but the program does not wait for
+    // the answers, and its tty echoes them as text. Drop these answers.
+    let replayUntilSeq = 0
+    let replayWrites = 0
     let nextInputSeq = 1
     let reconnectAttempt = 0
     let terminalExited = false
@@ -709,6 +714,13 @@ export function TerminalTabPane({
         if (typeof event.seq === "number") {
           if (event.seq <= lastOutputSeq) return
           lastOutputSeq = event.seq
+          if (event.seq <= replayUntilSeq) {
+            replayWrites += 1
+            terminal.write(event.data, () => {
+              replayWrites -= 1
+            })
+            return
+          }
         }
         terminal.write(event.data)
         return
@@ -725,6 +737,7 @@ export function TerminalTabPane({
         terminalTransportReady = true
         reconnectAttempt = 0
         nextInputSeq = Math.max(nextInputSeq, event.nextInputSeq ?? 1)
+        replayUntilSeq = event.replayUntilSeq ?? 0
         publishStatus({ type: "connected", shell: event.shell })
         startPingTimer()
         sendPendingInputs()
@@ -834,6 +847,8 @@ export function TerminalTabPane({
         })
         inputDisposable = terminal.onData((data) => {
           if (!activeRef.current) return
+          // An answer to a query in replayed output.
+          if (replayWrites > 0 && data.startsWith("\x1b")) return
           // An offline machine is read-only: drop typing until it is back.
           if (machineOfflineLabel(machineId) !== undefined) return
 
