@@ -14,6 +14,7 @@ import {
   messageText,
   contextTokens,
   assistantBlocks,
+  detailsImage,
   itemsFromEntries,
 } from "../src/core/items.ts"
 import { Security } from "../src/security.ts"
@@ -61,11 +62,11 @@ void test("message conversion preserves text, images, and tool calls", () => {
     messageText({ content: [{ type: "text", text: "hello" }] }),
     "hello"
   )
-  assert.equal(
+  assert.deepEqual(
     messageImages({
       content: [{ type: "image", data: "aGVsbG8=", mimeType: "image/png" }],
-    })[0]!.previewUrl,
-    "data:image/png;base64,aGVsbG8="
+    }),
+    [{ type: "image", mimeType: "image/png", data: "aGVsbG8=" }]
   )
   const blocks = assistantBlocks(
     {
@@ -122,47 +123,64 @@ void test("local requests reject foreign hosts and origins", () => {
   )
 })
 
-void test("tool results keep their images", () => {
-  const items = itemsFromEntries([
-    {
-      id: 1,
-      kind: "pi.assistant",
-      model: [
-        {
-          role: "assistant",
-          content: [
-            {
-              type: "toolCall",
-              id: "call",
-              name: "read",
-              arguments: { path: "a.png" },
+void test("tool results keep their images as URLs", () => {
+  const items = itemsFromEntries(
+    [
+      {
+        id: 1,
+        kind: "pi.assistant",
+        model: [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "toolCall",
+                id: "call",
+                name: "read",
+                arguments: { path: "a.png" },
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 2,
+        kind: "pi.tool-result",
+        model: [
+          {
+            role: "toolResult",
+            toolCallId: "call",
+            content: [
+              { type: "text", text: "Read image file [image/png]" },
+              { type: "image", data: "aGVsbG8=", mimeType: "image/png" },
+            ],
+            details: {
+              kind: "image",
+              title: "a.png",
+              data: "data:image/png;base64,aGVsbG8=",
             },
-          ],
-        },
-      ],
-    },
-    {
-      id: 2,
-      kind: "pi.tool-result",
-      model: [
-        {
-          role: "toolResult",
-          toolCallId: "call",
-          content: [
-            { type: "text", text: "Read image file [image/png]" },
-            { type: "image", data: "aGVsbG8=", mimeType: "image/png" },
-          ],
-        },
-      ],
-    },
-  ] as never)
+          },
+        ],
+      },
+    ] as never,
+    "abc"
+  )
   const item = items[0]
   assert.equal(item?.kind, "assistant")
   const block = item?.kind === "assistant" ? item.blocks[0] : undefined
   assert.equal(block?.type, "tool")
   assert.deepEqual(block?.type === "tool" ? block.images : undefined, [
-    { mimeType: "image/png", data: "aGVsbG8=" },
+    { mimeType: "image/png", url: "/api/session-image/abc/2/0" },
   ])
+  assert.deepEqual(block?.type === "tool" ? block.details : undefined, {
+    kind: "image",
+    title: "a.png",
+    data: "/api/session-image/abc/2/details",
+  })
+  assert.deepEqual(
+    detailsImage({ kind: "image", data: "data:image/png;base64,aGVsbG8=" }),
+    { mimeType: "image/png", data: "aGVsbG8=" }
+  )
 })
 
 void test("read state is global and an open tab keeps its session read", async () => {

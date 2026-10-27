@@ -12,7 +12,24 @@ export type PromptImage = {
   type: "image"
   mimeType: string
   data: string
-  previewUrl: string
+}
+
+/**
+ * An image of a saved message. `url` is a server path that answers with the
+ * image bytes (see `imagePath`), so the items carry no base64 data.
+ */
+export type ConversationImage = { mimeType: string; url: string }
+
+/**
+ * The server path of image `index` of history entry `entryId`. Index
+ * `details` is the image of an image tool's details (see `detailsImage`).
+ */
+export function imagePath(
+  sessionId: string,
+  entryId: string,
+  index: number | "details"
+) {
+  return `/api/session-image/${encodeURIComponent(sessionId)}/${encodeURIComponent(entryId)}/${index}`
 }
 
 export type TextBlock = {
@@ -38,12 +55,10 @@ export type ToolBlock = {
   output: string
   details?: unknown
   /** Images in the tool result, for example from reading an image file. */
-  images?: ToolImage[]
+  images?: ConversationImage[]
   isError: boolean
   running: boolean
 }
-
-export type ToolImage = { mimeType: string; data: string }
 
 export type CompactionBlock = {
   type: "compaction"
@@ -71,7 +86,7 @@ export type UserItem = {
   itemKey: string
   forkEntryId?: string
   text: string
-  images: PromptImage[]
+  images: ConversationImage[]
 }
 
 export type AssistantItem = {
@@ -154,10 +169,26 @@ export function messageImages(message: MessageLike | undefined): PromptImage[] {
         type: "image" as const,
         mimeType: part.mimeType,
         data: part.data,
-        previewUrl: `data:${part.mimeType};base64,${part.data}`,
       },
     ]
   })
+}
+
+type ImageDetails = { kind: "image"; data: string; title?: string }
+
+/**
+ * The image in the details of an image tool result (`show`, browser and
+ * preview screenshots): `{ kind: "image", data: "data:image/...;base64,..." }`.
+ */
+export function detailsImage(
+  details: unknown
+): { mimeType: string; data: string } | undefined {
+  const value = details as Partial<ImageDetails> | null | undefined
+  if (value?.kind !== "image" || typeof value.data !== "string")
+    return undefined
+  const match = /^data:(image\/[^;,]+);base64,/i.exec(value.data)
+  if (!match) return undefined
+  return { mimeType: match[1]!, data: value.data.slice(match[0].length) }
 }
 
 /** Tokens a response's request occupied in the context window. */
@@ -312,9 +343,24 @@ function isUserEntry(entry: EntryRecord) {
 
 type ToolLocation = { item: AssistantItem; block: ToolBlock }
 
-/** Build items from history entries, oldest first. */
+/** The images of a message as URLs: `imageUrl(index)` names image `index`. */
+function messageImageUrls(
+  message: MessageLike | undefined,
+  imageUrl: (index: number) => string
+): ConversationImage[] {
+  return messageImages(message).map(({ mimeType }, index) => ({
+    mimeType,
+    url: imageUrl(index),
+  }))
+}
+
+/**
+ * Build items from history entries, oldest first. Images become URLs of the
+ * session `sessionId` (see `imagePath`).
+ */
 export function itemsFromEntries(
-  entries: readonly EntryRecord[]
+  entries: readonly EntryRecord[],
+  sessionId: string
 ): ConversationItem[] {
   const items: ConversationItem[] = []
   const tools = new Map<string, ToolLocation>()
@@ -323,6 +369,8 @@ export function itemsFromEntries(
   for (const entry of entries) {
     const entryId = String(entry.id)
     const key = `entry:${entryId}`
+    const imageUrl = (index: number | "details") =>
+      imagePath(sessionId, entryId, index)
     if (isUserEntry(entry)) {
       const message = entry.model?.[0] as MessageLike | undefined
       items.push({
@@ -330,7 +378,7 @@ export function itemsFromEntries(
         itemKey: key,
         forkEntryId: entryId,
         text: messageText(message),
-        images: messageImages(message),
+        images: messageImageUrls(message, imageUrl),
       })
       continue
     }
@@ -363,11 +411,11 @@ export function itemsFromEntries(
         : undefined
       if (!location) continue
       location.block.output = messageText(message)
-      location.block.details = message.details
-      const images = messageImages(message).map(({ mimeType, data }) => ({
-        mimeType,
-        data,
-      }))
+      // The details image goes as a URL too, not as a second base64 copy.
+      location.block.details = detailsImage(message.details)
+        ? { ...(message.details as ImageDetails), data: imageUrl("details") }
+        : message.details
+      const images = messageImageUrls(message, imageUrl)
       if (images.length > 0) location.block.images = images
       location.block.isError = Boolean(message.isError)
       location.block.running = false

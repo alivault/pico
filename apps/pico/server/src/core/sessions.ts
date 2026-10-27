@@ -75,6 +75,7 @@ import {
   contextTokens,
   entryStartsItem,
   isUserInputEntry,
+  detailsImage,
   itemsFromEntries,
   messageImages,
   messageText,
@@ -1425,7 +1426,7 @@ export class Sessions implements HostSessions {
   /** Items with the current tool round and the in-flight answer applied. */
   async items(id: string) {
     const transcript = await this.transcript(id)
-    transcript.items ??= itemsFromEntries(transcript.entries)
+    transcript.items ??= itemsFromEntries(transcript.entries, id)
     const live = await this.#doc(id, "live")
     const busy = live?.run !== undefined
     const withTools = applyLiveTools(transcript.items, live, busy)
@@ -2415,6 +2416,19 @@ export class Sessions implements HostSessions {
       entryId: String(entry.id),
       text: messageText(entry.model?.[0] as never),
     }))
+  }
+
+  /** Image `index` of history entry `entryId`, for `imagePath` URLs. */
+  async image(id: string, entryId: string, index: number | "details") {
+    const { entry } = await this.#entry(id, entryId)
+    const message = entry?.model?.[0] as { details?: unknown } | undefined
+    const image =
+      index === "details"
+        ? detailsImage(message?.details)
+        : messageImages(message as never)[index]
+    return image
+      ? { mimeType: image.mimeType, bytes: Buffer.from(image.data, "base64") }
+      : undefined
   }
 
   async #entry(id: string, entryId: string) {

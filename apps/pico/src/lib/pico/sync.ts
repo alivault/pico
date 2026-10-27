@@ -2,13 +2,13 @@ import type {
   AssistantBlock,
   AssistantItem,
   ConversationDeltaEvent,
+  ConversationImage,
   ConversationItem,
   PromptImage,
   SessionState,
   StateSyncPayload,
   StreamingBehavior,
   ToolBlock,
-  ToolImage,
 } from "@/lib/pico"
 import { toolCategoryFromTool } from "@/lib/pico/tool-classification"
 
@@ -132,31 +132,13 @@ export function sameContextUsage(
   return stableJsonValue(left) === stableJsonValue(right)
 }
 
-function samePromptImages(
-  leftImages: Array<PromptImage> = [],
-  rightImages: Array<PromptImage> = []
-) {
-  if (leftImages.length !== rightImages.length) return false
-
-  for (let index = 0; index < leftImages.length; index += 1) {
-    const left = leftImages[index]
-    const right = rightImages[index]
-    if (!left || !right) return false
-    if (left.mimeType !== right.mimeType) return false
-    if (left.data !== right.data) return false
-    if (left.previewUrl !== right.previewUrl) return false
-  }
-
-  return true
-}
-
 function sameUserMessageBody(
   left: Extract<ConversationItem, { kind: "user" }>,
   right: Extract<ConversationItem, { kind: "user" }>
 ) {
   return (
     left.text === right.text &&
-    samePromptImages(left.images, right.images) &&
+    sameConversationImages(left.images, right.images) &&
     Boolean(left.queued) === Boolean(right.queued) &&
     left.streamingBehavior === right.streamingBehavior &&
     (left.forkEntryId || "") === (right.forkEntryId || "")
@@ -200,7 +182,7 @@ function sameAssistantBlockPayload(
         stableJsonValue(left.args) === stableJsonValue(right.args) &&
         left.output === right.output &&
         stableJsonValue(left.details) === stableJsonValue(right.details) &&
-        sameToolImages(left.images, right.images) &&
+        sameConversationImages(left.images, right.images) &&
         Boolean(left.isError) === Boolean(right.isError) &&
         Boolean(left.running) === Boolean(right.running)
       )
@@ -863,10 +845,10 @@ export type ToolResultUpdate = Pick<
   "output" | "details" | "images" | "isError"
 >
 
-/** Whether two tool image lists are the same. Compares the data cheaply. */
-export function sameToolImages(
-  left: ToolImage[] | undefined,
-  right: ToolImage[] | undefined
+/** Whether two conversation image lists are the same. */
+export function sameConversationImages(
+  left: ConversationImage[] | undefined,
+  right: ConversationImage[] | undefined
 ) {
   if (left === right) return true
   if ((left?.length ?? 0) !== (right?.length ?? 0)) return false
@@ -875,18 +857,21 @@ export function sameToolImages(
     return (
       other !== undefined &&
       image.mimeType === other.mimeType &&
-      image.data.length === other.data.length &&
-      image.data.slice(0, 64) === other.data.slice(0, 64) &&
-      image.data.slice(-64) === other.data.slice(-64)
+      image.url === other.url
     )
   })
 }
 
-function toolImagesFromMessage(message: { content?: unknown }) {
-  const images = extractMessageImages(message).map(({ mimeType, data }) => ({
+/** The images of a raw message, as `data:` URLs. */
+function conversationImagesFromMessage(message: { content?: unknown }) {
+  return extractMessageImages(message).map(({ mimeType, previewUrl }) => ({
     mimeType,
-    data,
+    url: previewUrl,
   }))
+}
+
+function toolImagesFromMessage(message: { content?: unknown }) {
+  const images = conversationImagesFromMessage(message)
   return images.length > 0 ? images : undefined
 }
 
@@ -899,7 +884,7 @@ function applyToolResultToBlock(
   if (
     block.output === update.output &&
     block.details === update.details &&
-    sameToolImages(block.images, update.images) &&
+    sameConversationImages(block.images, update.images) &&
     block.isError === update.isError &&
     !block.running
   ) {
@@ -1085,7 +1070,9 @@ function sameUserPromptBody(
   left: Extract<ConversationItem, { kind: "user" }>,
   right: Extract<ConversationItem, { kind: "user" }>
 ) {
-  return left.text === right.text && samePromptImages(left.images, right.images)
+  // The server can resize an image, and it gives a saved image as a URL, so
+  // only the number of images can match an optimistic item.
+  return left.text === right.text && left.images.length === right.images.length
 }
 
 /**
@@ -1373,7 +1360,7 @@ export function buildItemsFromSync(
         kind: "user",
         itemKey,
         text: extractMessageText(message),
-        images: extractMessageImages(message),
+        images: conversationImagesFromMessage(message),
         streamingBehavior: normalizeStreamingBehavior(
           message.streamingBehavior ??
             message.deliverAs ??

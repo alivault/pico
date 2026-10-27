@@ -12,6 +12,8 @@ import {
   toolDetails,
   type ToolRendererProps,
 } from "@/features/pico/tool-renderers/registry"
+import { machineApiUrl } from "@/lib/pico/machine"
+import { useMachineId } from "@/lib/pico/machine-context"
 import { cn } from "@/lib/utils"
 
 const MermaidView = React.lazy(
@@ -151,7 +153,9 @@ export function DiffView({ patch }: { patch: string }) {
   )
 }
 
-function ImageView({ src, title }: { src: string; title?: string }) {
+function ImageView({ src: data, title }: { src: string; title?: string }) {
+  // The server gives a saved image as a path on its machine.
+  const src = machineApiUrl(useMachineId(), data)
   const [open, setOpen] = React.useState(false)
   return (
     <>
@@ -164,6 +168,8 @@ function ImageView({ src, title }: { src: string; title?: string }) {
         <img
           src={src}
           alt={title ?? "Image"}
+          loading="lazy"
+          decoding="async"
           className="max-h-96 max-w-full rounded-md border object-contain"
         />
       </button>

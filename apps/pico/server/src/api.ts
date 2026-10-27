@@ -97,6 +97,13 @@ function queryNumber(request: Request, name: string) {
   return value === null || !value.trim() ? undefined : looseNumber(value)
 }
 
+const INLINE_IMAGE_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+])
+
 function draftCwdFromKey(key: string | undefined) {
   if (!key?.startsWith("draft:")) return undefined
   const cwd = key.slice("draft:".length).trim()
@@ -803,6 +810,37 @@ export function createApi(api: ApiContext) {
     const cwd = await files.resolveDirectory(requested, baseCwd(request))
     return { ok: true, cwd, ...(await files.readProjectFile(cwd, path)) }
   })
+
+  // An image of a saved message (`imagePath` in core/items.ts). History
+  // entries do not change, so the browser can keep the image for good.
+  router.get(
+    "/api/session-image/:session/:entry/:index",
+    async (request, response) => {
+      const { session, entry } = request.params
+      const index =
+        request.params.index === "details"
+          ? "details"
+          : Number(request.params.index)
+      if (
+        !sessions.has(session) ||
+        (index !== "details" && (!Number.isInteger(index) || index < 0))
+      )
+        throw notFound("Unknown image")
+      const image = await sessions.image(session, entry!, index)
+      if (!image) throw notFound("Unknown image")
+      response.writeHead(200, {
+        // Only raster types: an SVG opened from this origin could run script.
+        "content-type": INLINE_IMAGE_TYPES.has(image.mimeType)
+          ? image.mimeType
+          : "application/octet-stream",
+        "content-length": image.bytes.length,
+        "cache-control": "private, max-age=31536000, immutable",
+        "x-content-type-options": "nosniff",
+      })
+      response.end(request.method === "HEAD" ? undefined : image.bytes)
+      return HANDLED
+    }
+  )
 
   router.post("/api/highlight", async (request) => {
     const body = await request.body<{ code?: unknown; language?: unknown }>()

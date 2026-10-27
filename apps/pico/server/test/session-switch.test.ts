@@ -11,6 +11,10 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import { SessionDoc, publicId } from "../src/core/sessions.ts"
 import { tempDir } from "./support.ts"
 
+// A 1×1 PNG.
+const IMAGE =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+
 void test("an open event stream follows session selection and moves its live watcher", async () => {
   const data = await tempDir("pico-switch-test-")
   const harness = await Harness.open(
@@ -36,7 +40,16 @@ void test("an open event stream follows session selection and moves its live wat
             })
             await tx.appendEntry(id, {
               kind: "pi.user",
-              model: [{ role: "user", content: name, timestamp: Date.now() }],
+              model: [
+                {
+                  role: "user",
+                  content: [
+                    { type: "text", text: name },
+                    { type: "image", mimeType: "image/png", data: IMAGE },
+                  ],
+                  timestamp: Date.now(),
+                },
+              ],
             })
           },
         },
@@ -113,7 +126,7 @@ void test("an open event stream follows session selection and moves its live wat
             type: string
             sessionId?: string
             sessionName?: string
-            items?: unknown[]
+            items?: Array<{ images?: Array<{ url: string }> }>
           }
           if (event.type === "state_sync") return event
           continue
@@ -132,6 +145,18 @@ void test("an open event stream follows session selection and moves its live wat
     const selected = await nextState()
     assert.equal(selected.sessionId, ids[1])
     assert.equal(selected.items?.length, 1)
+    // Images come as URLs, and the URL answers with the image bytes.
+    const imageUrl = selected.items?.[0]?.images?.[0]?.url
+    assert.match(imageUrl ?? "", /^\/api\/session-image\//)
+    const image = await fetch(`${url}${imageUrl}`)
+    assert.equal(image.status, 200)
+    assert.equal(image.headers.get("content-type"), "image/png")
+    assert.deepEqual(
+      Buffer.from(await image.arrayBuffer()),
+      Buffer.from(IMAGE, "base64")
+    )
+    const missing = await fetch(`${url}${imageUrl!.replace(/\/0$/, "/1")}`)
+    assert.equal(missing.status, 404)
     const renamed = await fetch(`${url}/api/session/rename`, {
       method: "POST",
       headers: { "content-type": "application/json" },

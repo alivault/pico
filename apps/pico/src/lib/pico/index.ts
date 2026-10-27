@@ -192,12 +192,17 @@ export type ToolBlock = {
   output: string
   details?: unknown
   /** Images in the tool result, for example from reading an image file. */
-  images?: ToolImage[]
+  images?: ConversationImage[]
   isError: boolean
   running: boolean
 }
 
-export type ToolImage = { mimeType: string; data: string }
+/**
+ * An image in the conversation. `url` is a server path on the machine of the
+ * session (give it to `machineApiUrl`), or a `data:` URL for a prompt that the
+ * server has not saved yet.
+ */
+export type ConversationImage = { mimeType: string; url: string }
 
 type CompactionBlock = {
   type: "compaction"
@@ -221,7 +226,7 @@ type UserItem = {
   pendingId?: string
   forkEntryId?: string
   text: string
-  images: Array<PromptImage>
+  images: Array<ConversationImage>
   queued?: boolean
   streamingBehavior?: StreamingBehavior
 }

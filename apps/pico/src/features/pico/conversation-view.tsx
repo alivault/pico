@@ -4,8 +4,13 @@ import * as React from "react"
 import { PatchDiff } from "@pierre/diffs/react"
 import { CheckIcon, ChevronRightIcon, CopyIcon } from "lucide-react"
 
-import type { ConversationItem, PromptImage, ToolImage } from "@/lib/pico"
-import { sameToolImages } from "@/lib/pico/sync"
+import type {
+  ConversationImage,
+  ConversationItem,
+  PromptImage,
+} from "@/lib/pico"
+import { machineApiUrl } from "@/lib/pico/machine"
+import { sameConversationImages } from "@/lib/pico/sync"
 import {
   CodeBlock,
   copyTextToClipboard,
@@ -711,7 +716,7 @@ function sameAssistantBlock(
         left.running === right.running &&
         sameUnknownValue(left.args, right.args) &&
         sameUnknownValue(left.details, right.details) &&
-        sameToolImages(left.images, right.images)
+        sameConversationImages(left.images, right.images)
       )
     case "compaction":
       if (right.type !== "compaction") return false
@@ -1156,23 +1161,29 @@ function useAssistantBlock(store: AssistantBlockStore, key: string) {
 }
 
 const EMPTY_TOOL_BLOCKS: Array<AssistantToolBlock> = []
-const EMPTY_TOOL_IMAGES: ToolImage[] = []
+const EMPTY_TOOL_IMAGES: ConversationImage[] = []
 
 function toolImagesFromBlocks(blocks: Array<AssistantToolBlock>) {
   const images = blocks.flatMap((block) => block.images ?? [])
   return images.length > 0 ? images : EMPTY_TOOL_IMAGES
 }
 
-function toolImageSrc(image: ToolImage) {
-  return `data:${image.mimeType};base64,${image.data}`
+/** The `src` of a conversation image on the machine of the conversation. */
+function useConversationImageSrc() {
+  const machineId = useMachineId()
+  return React.useCallback(
+    (image: ConversationImage) => machineApiUrl(machineId, image.url),
+    [machineId]
+  )
 }
 
 /** Images from tool results, shown below the tool card header. */
 const ToolResultImages = React.memo(function ToolResultImages({
   images,
 }: {
-  images: ToolImage[]
+  images: ConversationImage[]
 }) {
+  const imageSrc = useConversationImageSrc()
   const [selectedIndex, setSelectedIndex] = React.useState<number | null>(null)
   const selected = selectedIndex === null ? null : images[selectedIndex]
 
@@ -1182,14 +1193,16 @@ const ToolResultImages = React.memo(function ToolResultImages({
     <div className="flex flex-wrap gap-3 pt-2">
       {images.map((image, index) => (
         <button
-          key={`${image.data.slice(0, 24)}:${index}`}
+          key={`${image.url}:${index}`}
           type="button"
           className="max-w-full cursor-zoom-in overflow-hidden rounded-lg border bg-background/80 p-0 transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
           onClick={() => setSelectedIndex(index)}
         >
           <img
-            src={toolImageSrc(image)}
+            src={imageSrc(image)}
             alt="Tool result"
+            loading="lazy"
+            decoding="async"
             className="block max-h-64 max-w-full object-contain"
           />
           <span className="sr-only">Open image</span>
@@ -1201,7 +1214,7 @@ const ToolResultImages = React.memo(function ToolResultImages({
           onOpenChange={(open) => {
             if (!open) setSelectedIndex(null)
           }}
-          imageSrc={toolImageSrc(selected)}
+          imageSrc={imageSrc(selected)}
           imageAlt="Tool result"
           index={selectedIndex ?? 0}
           count={images.length}
@@ -1220,7 +1233,7 @@ type ToolBlockHeaderSnapshot = {
   isError: boolean
   summary: string
   editStats: EditDiffStatCounts | null
-  images: ToolImage[]
+  images: ConversationImage[]
   openStateKey: string
 }
 
@@ -1229,7 +1242,7 @@ type ExploreToolGroupHeaderSnapshot = {
   summary: string
   hasRunning: boolean
   hasError: boolean
-  images: ToolImage[]
+  images: ConversationImage[]
   openStateKey: string
 }
 
@@ -1292,7 +1305,7 @@ function sameToolBlockHeaderSnapshot(
     left.isError === right.isError &&
     left.summary === right.summary &&
     sameEditDiffStatCounts(left.editStats, right.editStats) &&
-    sameToolImages(left.images, right.images) &&
+    sameConversationImages(left.images, right.images) &&
     left.openStateKey === right.openStateKey
   )
 }
@@ -1371,7 +1384,7 @@ function sameExploreToolGroupHeaderSnapshot(
     left.summary === right.summary &&
     left.hasRunning === right.hasRunning &&
     left.hasError === right.hasError &&
-    sameToolImages(left.images, right.images) &&
+    sameConversationImages(left.images, right.images) &&
     left.openStateKey === right.openStateKey
   )
 }
@@ -2523,6 +2536,7 @@ export const UserMessageCard = React.memo(function UserMessageCard({
   item: Extract<ConversationItem, { kind: "user" }>
 }) {
   const labelText = userMessageLabel(item)
+  const imageSrc = useConversationImageSrc()
   const [selectedImageIndex, setSelectedImageIndex] = React.useState<
     number | null
   >(null)
@@ -2553,14 +2567,16 @@ export const UserMessageCard = React.memo(function UserMessageCard({
           <div className="mt-3 flex flex-wrap gap-3">
             {item.images.map((image, index) => (
               <button
-                key={`${promptImageKey(image)}:${index}`}
+                key={`${image.url}:${index}`}
                 type="button"
                 className="max-w-full cursor-zoom-in overflow-hidden rounded-lg border border-primary-foreground/20 bg-primary-foreground/10 p-0 transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary-foreground/70 focus-visible:ring-offset-2 focus-visible:ring-offset-primary focus-visible:outline-none"
                 onClick={() => setSelectedImageIndex(index)}
               >
                 <img
-                  src={image.previewUrl}
+                  src={imageSrc(image)}
                   alt="Prompt upload"
+                  loading="lazy"
+                  decoding="async"
                   className="block h-28 max-w-full object-cover"
                 />
                 <span className="sr-only">Open prompt upload</span>
@@ -2576,7 +2592,7 @@ export const UserMessageCard = React.memo(function UserMessageCard({
           onOpenChange={(open) => {
             if (!open) setSelectedImageIndex(null)
           }}
-          imageSrc={selectedImage.previewUrl}
+          imageSrc={imageSrc(selectedImage)}
           imageAlt="Prompt upload"
           index={selectedImageIndex ?? 0}
           count={item.images.length}

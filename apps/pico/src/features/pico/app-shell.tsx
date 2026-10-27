@@ -1104,7 +1104,10 @@ function useAppShellSessionWorkspaceView({
         itemKey: `pending:${pendingId}`,
         pendingId,
         text: options.message,
-        images: options.images.map((image) => ({ ...image })),
+        images: options.images.map((image) => ({
+          mimeType: image.mimeType,
+          url: image.previewUrl,
+        })),
         queued: options.queued,
         streamingBehavior: options.streamingBehavior,
       } satisfies UserConversationItem

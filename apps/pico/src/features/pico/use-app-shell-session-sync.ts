@@ -417,7 +417,7 @@ function visibleConversationSignature(
         `user:${itemKey}:${item.text}:${item.queued ? "1" : "0"}:${
           item.streamingBehavior || ""
         }:${item.images
-          .map((image) => `${image.mimeType}:${image.data}`)
+          .map((image) => `${image.mimeType}:${image.url}`)
           .join(",")}`
       )
       continue
