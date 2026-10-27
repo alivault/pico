@@ -1637,8 +1637,14 @@ export class Sessions implements HostSessions {
       resources.prompts
     )
     const busy = this.isBusy(id)
-    // A chat message answers an open question; it still reaches the model as a steer.
-    if (busy && this.#needsInput.has(id) && expanded.trim()) {
+    // A steer answers an open question; it still reaches the model as a steer.
+    // A follow-up waits for the run to end, so it does not answer the question.
+    if (
+      busy &&
+      input.streamingBehavior !== "followUp" &&
+      this.#needsInput.has(id) &&
+      expanded.trim()
+    ) {
       await answerQuestion(
         this.#harness,
         conversationIdOf(id),
