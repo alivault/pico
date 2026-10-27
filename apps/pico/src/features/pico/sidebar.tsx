@@ -128,6 +128,7 @@ import { sortSidebarSessions } from "@/features/pico/session-order"
 import {
   filterDirectorySessionsByStatus,
   sessionMatchesStatusFilter,
+  type SessionStatusFilter,
   useSessionStatusFilter,
 } from "@/features/pico/session-status-filter"
 
@@ -1402,39 +1403,101 @@ function sameDirectoryStatusCounts(
   )
 }
 
-function DirectoryStatusCountBadges({
-  counts,
+/**
+ * A count in a directory heading. Like the counts in the machine heading, a
+ * click shows only the sessions of the directory with that state; a second
+ * click shows all of them again.
+ */
+function DirectoryCountButton({
+  directory,
+  filter,
+  count,
+  activeFilter,
+  disabled,
+  title,
+  className,
+  onToggle,
+  children,
 }: {
-  counts: DirectoryStatusCounts
+  directory: string
+  filter: SessionStatusFilter
+  count: number
+  activeFilter: SessionStatusFilter | null
+  disabled: boolean
+  title: string
+  className?: string
+  onToggle: (filter: SessionStatusFilter) => void
+  children: React.ReactNode
 }) {
-  const { working, waiting, done } = counts
-  if (working + waiting + done === 0) return null
+  const active = activeFilter === filter
+  // The active filter keeps its button at 0, so you can remove it.
+  if (count === 0 && !active) return null
   return (
-    <span className="ml-auto flex shrink-0 items-center gap-2 pr-1 text-[11px] text-sidebar-foreground/50">
-      {waiting > 0 ? (
-        <span
-          className="flex items-center gap-1 text-amber-500"
-          aria-label={`${waiting} waiting for you`}
-        >
-          <MessageCircleQuestionIcon className="size-3" />
-          {waiting}
-        </span>
-      ) : null}
-      {working > 0 ? (
-        <span
-          className="flex items-center gap-1"
-          aria-label={`${working} working`}
-        >
-          <Spinner size="xs" />
-          {working}
-        </span>
-      ) : null}
-      {done > 0 ? (
-        <span className="flex items-center gap-1" aria-label={`${done} done`}>
-          <span className="size-2 rounded-full bg-primary" />
-          {done}
-        </span>
-      ) : null}
+    <TitleTooltip
+      title={active ? `Show all sessions` : `Show only ${title.toLowerCase()}`}
+    >
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={disabled}
+        aria-pressed={active}
+        aria-label={`${count} ${title.toLowerCase()} in ${directory}`}
+        className={cn(
+          "h-6 shrink-0 gap-1 px-1.5 text-[11px] font-normal text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground disabled:opacity-100",
+          active &&
+            "bg-sidebar-accent text-sidebar-foreground ring-1 ring-sidebar-border",
+          className
+        )}
+        onClick={() => onToggle(filter)}
+      >
+        {children}
+        {count}
+      </Button>
+    </TitleTooltip>
+  )
+}
+
+function DirectoryCounts({
+  directory,
+  counts,
+  activeFilter,
+  disabled,
+  onToggle,
+}: {
+  directory: string
+  counts: DirectoryStatusCounts
+  activeFilter: SessionStatusFilter | null
+  disabled: boolean
+  onToggle: (filter: SessionStatusFilter) => void
+}) {
+  const shared = { directory, activeFilter, disabled, onToggle }
+  return (
+    <span className="flex shrink-0 items-center">
+      <DirectoryCountButton
+        {...shared}
+        filter="waiting"
+        count={counts.waiting}
+        title="Waiting for you"
+        className="text-amber-500 hover:text-amber-500"
+      >
+        <MessageCircleQuestionIcon className="size-3" />
+      </DirectoryCountButton>
+      <DirectoryCountButton
+        {...shared}
+        filter="working"
+        count={counts.working}
+        title="Working"
+      >
+        <Spinner size="xs" />
+      </DirectoryCountButton>
+      <DirectoryCountButton
+        {...shared}
+        filter="done"
+        count={counts.done}
+        title="Done"
+      >
+        <span className="size-2 rounded-full bg-primary" />
+      </DirectoryCountButton>
     </span>
   )
 }
@@ -1472,9 +1535,22 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
   const [renderCount, setRenderCount] = React.useState(
     INITIAL_DIRECTORY_SESSION_RENDER_COUNT
   )
-  const { isLoadingSessions, sessionKeys } = useDirectorySessions(
+  const { isLoadingSessions, sessionKeys: allSessionKeys } =
+    useDirectorySessions(directorySessionsStore, directory)
+  const [statusFilter, setStatusFilter] =
+    React.useState<SessionStatusFilter | null>(null)
+  const sessionKeys = useSelector(
     directorySessionsStore,
-    directory
+    (state) => {
+      const keys =
+        state.sessionKeysByDirectory[directory] ?? EMPTY_DIRECTORY_SESSION_KEYS
+      if (!statusFilter) return keys
+      return keys.filter((entryKey) => {
+        const entry = state.entriesByKey.get(entryKey)
+        return entry ? sessionMatchesStatusFilter(entry, statusFilter) : false
+      })
+    },
+    { compare: directoryOrderEqual }
   )
   const collapsed = useDirectoryCollapsed(
     collapsedDirectoryStore,
@@ -1515,7 +1591,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
     isLoadingSessions,
     SIDEBAR_LOADING_SPINNER_DELAY_MS
   )
-  const showLoadingState = isLoadingSessions && sessionKeys.length === 0
+  const showLoadingState = isLoadingSessions && allSessionKeys.length === 0
   const showHeaderLoadingSpinner =
     showLoadingSpinner && unpinnedSessionKeys.length === 0 && collapsed
   const hasDirectoryActions =
@@ -1555,8 +1631,18 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
         {showHeaderLoadingSpinner ? (
           <Spinner size="xs" className="shrink-0" />
         ) : null}
-        <DirectoryStatusCountBadges counts={statusCounts} />
       </CollapsibleTrigger>
+
+      <DirectoryCounts
+        directory={directory}
+        counts={statusCounts}
+        activeFilter={statusFilter}
+        disabled={overlay}
+        onToggle={(filter) => {
+          collapsedDirectoryStore.setCollapsed(directory, false)
+          setStatusFilter((current) => (current === filter ? null : filter))
+        }}
+      />
 
       {onCreateSessionInDirectory && !overlay && !isMobile ? (
         <TitleTooltip title={`Create a session in ${directory}`}>
@@ -1763,10 +1849,10 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                 <div className="p-2 text-sm text-sidebar-foreground/70">
                   {/* "Unpinned" only when sessions are pinned. */}
                   {pinnedSessionKeys.length === 0
-                    ? searchActive
+                    ? searchActive || statusFilter
                       ? "No matching sessions."
                       : "No sessions."
-                    : searchActive
+                    : searchActive || statusFilter
                       ? "No matching unpinned sessions."
                       : "No unpinned sessions."}
                 </div>
