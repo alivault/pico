@@ -357,7 +357,10 @@ function heldInDeliveryOrder(items: HeldItem[]) {
   ]
 }
 
-/** One row of a queue edit: an existing prompt (`pendingId`) or a new one. */
+/**
+ * One row of a queue edit: an existing prompt (`pendingId`) or a new one.
+ * `images` replaces the images of an existing prompt.
+ */
 export type PendingEdit = {
   pendingId?: string
   text?: string
@@ -373,6 +376,16 @@ function replaceContentText(content: unknown, text: string) {
   )
   if (rest.length === 0) return text
   return [...(text ? [{ type: "text" as const, text }] : []), ...rest]
+}
+
+/** The content of a queued prompt after an edit of its text or images. */
+async function editedContent(content: JsonValue, edit: PendingEdit) {
+  if (edit.images) {
+    const text = edit.text ?? messageText({ content } as never)
+    return (await userContent(text, edit.images)) as JsonValue
+  }
+  if (edit.text === undefined) return content
+  return replaceContentText(content, edit.text) as JsonValue
 }
 
 function contentIsEmpty(content: unknown) {
@@ -1990,10 +2003,7 @@ export class Sessions implements HostSessions {
           continue
         }
         named.add(pendingKey)
-        const content =
-          edit.text === undefined
-            ? item.content
-            : replaceContentText(item.content, edit.text)
+        const content = await editedContent(item.content, edit)
         if (contentIsEmpty(content)) continue
         next.push({
           ...item,
@@ -2088,10 +2098,7 @@ export class Sessions implements HostSessions {
         }
         named.add(edit.pendingId)
         withdraw.push(item)
-        const content =
-          edit.text === undefined
-            ? item.content
-            : replaceContentText(item.content, edit.text)
+        const content = await editedContent(item.content, edit)
         if (contentIsEmpty(content)) continue
         plan.push({ item, content, mode: edit.streamingBehavior ?? item.mode })
         continue

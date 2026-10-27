@@ -6,11 +6,17 @@ import {
   PlusIcon,
   Trash2Icon,
   Undo2Icon,
+  XIcon,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
 import { cn } from "@/lib/utils"
+import {
+  getClipboardImageFiles,
+  readFileAsPromptImage,
+} from "@/features/pico/app-shell-utils"
+import { promptImageKey } from "@/features/pico/conversation-view"
 import {
   appendQueueRow,
   hasQueueChanges,
@@ -89,6 +95,9 @@ const LANES: Array<{
     selectedClassName: "bg-sky-500/10 ring-1 ring-sky-500/50",
   },
 ]
+
+/** The most images one prompt can have, as in the composer. */
+const MAX_PROMPT_IMAGES = 8
 
 function rowIcon(
   row: QueueEditRow,
@@ -380,6 +389,39 @@ export const ComposerPendingMessages = React.memo(
       }))
     }
 
+    const setImages = (
+      key: string,
+      update: (images: QueueEditRow["images"]) => QueueEditRow["images"]
+    ) => {
+      updateSession((current) => ({
+        ...current,
+        rows: current.rows.map((row) => {
+          if (row.key !== key) return row
+          const images = update(row.images)
+          // Removing the added images gives back the original row.
+          const same =
+            images.length === row.originalImages.length &&
+            images.every((image, index) => image === row.originalImages[index])
+          return { ...row, images: same ? row.originalImages : images }
+        }),
+      }))
+    }
+
+    const handleEditorPaste = (
+      event: React.ClipboardEvent<HTMLTextAreaElement>,
+      row: QueueEditRow
+    ) => {
+      const files = getClipboardImageFiles(event.clipboardData)
+      if (files.length === 0) return
+      void Promise.all(
+        files.slice(0, MAX_PROMPT_IMAGES).map(readFileAsPromptImage)
+      ).then((added) =>
+        setImages(row.key, (images) =>
+          [...images, ...added].slice(0, MAX_PROMPT_IMAGES)
+        )
+      )
+    }
+
     const handleEditorKeyDown = (
       event: React.KeyboardEvent<HTMLTextAreaElement>,
       row: QueueEditRow
@@ -566,6 +608,9 @@ export const ComposerPendingMessages = React.memo(
                                 onKeyDown={(event) =>
                                   handleEditorKeyDown(event, row)
                                 }
+                                onPaste={(event) =>
+                                  handleEditorPaste(event, row)
+                                }
                               />
                             ) : (
                               <div
@@ -584,10 +629,46 @@ export const ComposerPendingMessages = React.memo(
                               </div>
                             )}
 
-                            {row.images.length > 0 ||
+                            {selected && row.images.length > 0 ? (
+                              <div className="flex flex-wrap gap-2 py-1">
+                                {row.images.map((image, imageIndex) => (
+                                  <div
+                                    key={promptImageKey(image)}
+                                    className="relative"
+                                  >
+                                    <img
+                                      src={image.previewUrl}
+                                      alt="Attachment preview"
+                                      className="h-12 rounded-md border object-cover"
+                                    />
+                                    <Button
+                                      type="button"
+                                      size="icon-xs"
+                                      variant="ghost"
+                                      title="Remove image"
+                                      className="absolute top-0.5 right-0.5 size-5 rounded-full bg-background/90 shadow-sm"
+                                      onMouseDown={(event) =>
+                                        event.preventDefault()
+                                      }
+                                      onClick={() =>
+                                        setImages(row.key, (images) =>
+                                          images.filter(
+                                            (_, index) => index !== imageIndex
+                                          )
+                                        )
+                                      }
+                                    >
+                                      <XIcon className="size-3" />
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+
+                            {(!selected && row.images.length > 0) ||
                             (changed && (row.moved || row.isNew)) ? (
                               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                {row.images.length > 0 ? (
+                                {!selected && row.images.length > 0 ? (
                                   <span className="inline-flex items-center gap-1">
                                     <ImageIcon className="size-3" />
                                     {row.images.length}

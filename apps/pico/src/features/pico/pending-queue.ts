@@ -14,6 +14,8 @@ export type PendingQueueSaveRow = {
   pendingId?: string
   text: string
   images: Array<PromptImage>
+  /** The images changed: an existing prompt gets `images` in place of its own. */
+  imagesChanged?: boolean
   streamingBehavior: QueueLane
 }
 
@@ -24,6 +26,7 @@ export type QueueEditRow = {
   text: string
   originalText: string
   images: Array<PromptImage>
+  originalImages: Array<PromptImage>
   lane: QueueLane
   originalLane: QueueLane
   /** The place of the row when the session started. */
@@ -79,6 +82,7 @@ export function queueRowFromMessage(
     text: message.text,
     originalText: message.text,
     images: message.images,
+    originalImages: message.images,
     lane: message.streamingBehavior,
     originalLane: message.streamingBehavior,
     originalIndex,
@@ -106,8 +110,18 @@ function settleMoves(rows: Array<QueueEditRow>) {
   return rows.map((row) => (row.moved ? { ...row, moved: false } : row))
 }
 
+export function areQueueRowImagesChanged(row: QueueEditRow) {
+  return row.images !== row.originalImages
+}
+
 export function isQueueRowChanged(row: QueueEditRow) {
-  return row.isNew || row.removed || row.moved || row.text !== row.originalText
+  return (
+    row.isNew ||
+    row.removed ||
+    row.moved ||
+    row.text !== row.originalText ||
+    areQueueRowImagesChanged(row)
+  )
 }
 
 export function hasQueueChanges(session: QueueEditSession) {
@@ -193,6 +207,7 @@ export function insertQueueRow(
     text: "",
     originalText: "",
     images: [],
+    originalImages: [],
     lane: row.lane,
     originalLane: row.lane,
     originalIndex: 0,
@@ -215,6 +230,7 @@ export function appendQueueRow(
     text: "",
     originalText: "",
     images: [],
+    originalImages: [],
     lane,
     originalLane: lane,
     originalIndex: 0,
@@ -291,6 +307,9 @@ export function queueSessionSavePlan(session: QueueEditSession) {
       ...(row.pendingId ? { pendingId: row.pendingId } : {}),
       text: row.text,
       images: row.images,
+      ...(row.pendingId && areQueueRowImagesChanged(row)
+        ? { imagesChanged: true }
+        : {}),
       streamingBehavior: row.lane,
     })
   }

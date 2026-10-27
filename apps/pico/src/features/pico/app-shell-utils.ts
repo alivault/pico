@@ -255,6 +255,21 @@ export async function fetchJson<T>(
   return data
 }
 
+/** The image files of a paste or a drop. */
+export function getClipboardImageFiles(data: DataTransfer) {
+  const itemFiles = Array.from(data.items).flatMap((item) => {
+    if (item.kind !== "file" || !item.type.startsWith("image/")) return []
+    const file = item.getAsFile()
+    return file?.type.startsWith("image/") ? [file] : []
+  })
+
+  if (itemFiles.length > 0) {
+    return itemFiles
+  }
+
+  return Array.from(data.files).filter((file) => file.type.startsWith("image/"))
+}
+
 export async function readFileAsPromptImage(file: File) {
   const buffer = await file.arrayBuffer()
   const bytes = new Uint8Array(buffer)

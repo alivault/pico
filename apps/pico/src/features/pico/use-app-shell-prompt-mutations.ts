@@ -1502,6 +1502,14 @@ export function useAppShellPromptMutations({
                 ? {
                     pendingId: row.pendingId,
                     text: row.text,
+                    ...(row.imagesChanged
+                      ? {
+                          images: row.images.map(({ mimeType, data }) => ({
+                            mimeType,
+                            data,
+                          })),
+                        }
+                      : {}),
                     streamingBehavior: row.streamingBehavior,
                   }
                 : {

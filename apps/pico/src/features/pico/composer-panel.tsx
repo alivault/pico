@@ -44,6 +44,7 @@ import {
   parseComposerSkillMessage,
   serializeComposerDraft,
 } from "@/features/pico/composer-utils"
+import { getClipboardImageFiles } from "@/features/pico/app-shell-utils"
 import { promptImageKey } from "@/features/pico/conversation-view"
 import {
   findExactSlashCommand,
@@ -336,20 +337,6 @@ function composerPickerReducer(
       }
       return state
   }
-}
-
-function getClipboardImageFiles(data: DataTransfer) {
-  const itemFiles = Array.from(data.items).flatMap((item) => {
-    if (item.kind !== "file" || !item.type.startsWith("image/")) return []
-    const file = item.getAsFile()
-    return file?.type.startsWith("image/") ? [file] : []
-  })
-
-  if (itemFiles.length > 0) {
-    return itemFiles
-  }
-
-  return Array.from(data.files).filter((file) => file.type.startsWith("image/"))
 }
 
 export function ComposerPanel({
