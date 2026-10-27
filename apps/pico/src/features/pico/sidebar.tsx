@@ -128,7 +128,9 @@ import { sortSidebarSessions } from "@/features/pico/session-order"
 import {
   filterDirectorySessionsByStatus,
   sessionMatchesStatusFilter,
+  toggleStatusFilter,
   type SessionStatusFilter,
+  type SessionStatusFilters,
   useSessionStatusFilter,
 } from "@/features/pico/session-status-filter"
 
@@ -1405,8 +1407,8 @@ function sameDirectoryStatusCounts(
 
 /**
  * A count in a directory heading. Like the counts in the machine heading, a
- * click shows only the sessions of the directory with that state; a second
- * click shows all of them again.
+ * click turns its state on or off; more than one can be on. The directory
+ * shows only its sessions with a state that is on.
  */
 function DirectoryCountButton({
   directory,
@@ -1422,14 +1424,14 @@ function DirectoryCountButton({
   directory: string
   filter: SessionStatusFilter
   count: number
-  activeFilter: SessionStatusFilter | null
+  activeFilter: SessionStatusFilters | null
   disabled: boolean
   title: string
   className?: string
   onToggle: (filter: SessionStatusFilter) => void
   children: React.ReactNode
 }) {
-  const active = activeFilter === filter
+  const active = Boolean(activeFilter?.includes(filter))
   // The active filter keeps its button at 0, so you can remove it.
   if (count === 0 && !active) return null
   return (
@@ -1466,7 +1468,7 @@ function DirectoryCounts({
 }: {
   directory: string
   counts: DirectoryStatusCounts
-  activeFilter: SessionStatusFilter | null
+  activeFilter: SessionStatusFilters | null
   disabled: boolean
   onToggle: (filter: SessionStatusFilter) => void
 }) {
@@ -1538,7 +1540,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
   const { isLoadingSessions, sessionKeys: allSessionKeys } =
     useDirectorySessions(directorySessionsStore, directory)
   const [statusFilter, setStatusFilter] =
-    React.useState<SessionStatusFilter | null>(null)
+    React.useState<SessionStatusFilters | null>(null)
   const sessionKeys = useSelector(
     directorySessionsStore,
     (state) => {
@@ -1640,7 +1642,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
         disabled={overlay}
         onToggle={(filter) => {
           collapsedDirectoryStore.setCollapsed(directory, false)
-          setStatusFilter((current) => (current === filter ? null : filter))
+          setStatusFilter((current) => toggleStatusFilter(current, filter))
         }}
       />
 
@@ -2285,7 +2287,7 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
   )
     return (
       <p className="px-(--sidebar-item-pad) py-1 text-xs text-sidebar-foreground/50">
-        No sessions with this state.
+        No sessions with these states.
       </p>
     )
   if (!statusFilter && grouped.directories.length === 0) {

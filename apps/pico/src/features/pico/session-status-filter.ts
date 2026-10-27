@@ -4,12 +4,22 @@ import type { SessionListEntry } from "@/lib/pico/api"
 
 /**
  * A filter of the sidebar sessions by their state. A click on a count in a
- * machine heading sets it; a second click removes it. It is window state for
- * each machine, so the heading and the sessions of the machine use it.
+ * machine heading turns its state on or off; more than one state can be on.
+ * It is window state for each machine, so the heading and the sessions of the
+ * machine use it.
  */
 export type SessionStatusFilter = "working" | "waiting" | "done"
 
-let snapshot: Record<string, SessionStatusFilter> = {}
+/** The states that are on, in a fixed order. Never empty. */
+export type SessionStatusFilters = ReadonlyArray<SessionStatusFilter>
+
+const FILTER_ORDER: ReadonlyArray<SessionStatusFilter> = [
+  "waiting",
+  "working",
+  "done",
+]
+
+let snapshot: Record<string, SessionStatusFilters> = {}
 const listeners = new Set<() => void>()
 
 function subscribe(listener: () => void) {
@@ -19,13 +29,29 @@ function subscribe(listener: () => void) {
   }
 }
 
+/**
+ * Turns `filter` on or off in `current`. Returns null when no state is on.
+ */
+export function toggleStatusFilter(
+  current: SessionStatusFilters | null,
+  filter: SessionStatusFilter
+): SessionStatusFilters | null {
+  const on = new Set(current ?? [])
+  if (on.has(filter)) on.delete(filter)
+  else on.add(filter)
+  const next = FILTER_ORDER.filter((item) => on.has(item))
+  return next.length > 0 ? next : null
+}
+
 export function setSessionStatusFilter(
   machineId: string,
-  filter: SessionStatusFilter | null
+  filters: SessionStatusFilters | null
 ) {
-  if ((snapshot[machineId] ?? null) === filter) return
+  const current = snapshot[machineId] ?? null
+  if (current === filters) return
+  if (current && filters && current.join() === filters.join()) return
   const next = { ...snapshot }
-  if (filter) next[machineId] = filter
+  if (filters && filters.length > 0) next[machineId] = filters
   else delete next[machineId]
   snapshot = next
   for (const listener of listeners) listener()
@@ -37,10 +63,11 @@ export function toggleSessionStatusFilter(
 ) {
   setSessionStatusFilter(
     machineId,
-    snapshot[machineId] === filter ? null : filter
+    toggleStatusFilter(snapshot[machineId] ?? null, filter)
   )
 }
 
+/** The states that are on for the machine, or null when there is no filter. */
 export function useSessionStatusFilter(machineId: string) {
   return React.useSyncExternalStore(
     subscribe,
@@ -52,8 +79,10 @@ export function useSessionStatusFilter(machineId: string) {
 /** The same rules as the counts in the machine heading. */
 export function sessionMatchesStatusFilter(
   entry: SessionListEntry,
-  filter: SessionStatusFilter
-) {
+  filter: SessionStatusFilter | SessionStatusFilters
+): boolean {
+  if (typeof filter !== "string")
+    return filter.some((item) => sessionMatchesStatusFilter(entry, item))
   switch (filter) {
     case "working":
       return Boolean((entry.streaming || entry.waiting) && !entry.needsInput)
@@ -67,13 +96,13 @@ export function sessionMatchesStatusFilter(
 }
 
 /**
- * Keeps only the sessions with the state of the filter, and only the
+ * Keeps only the sessions with a state of the filter, and only the
  * directories that still have sessions outside the pinned group.
  */
 export function filterDirectorySessionsByStatus(
   directories: Array<string>,
   sessionsByDirectory: Record<string, Array<SessionListEntry>>,
-  filter: SessionStatusFilter,
+  filter: SessionStatusFilter | SessionStatusFilters,
   isPinned: (entry: SessionListEntry) => boolean
 ) {
   const visibleDirectories: Array<string> = []

@@ -895,7 +895,9 @@ function useAppShellSidebarControllerView({
         activeSessionKey={activeSidebarSessionKey || undefined}
         pinnedSessionKeys={pinnedSidebarSessionKeys}
         emptyStateText={
-          statusFilter ? "No sessions with this state." : emptySidebarStateText
+          statusFilter
+            ? "No sessions with these states."
+            : emptySidebarStateText
         }
         statusFilterActive={Boolean(statusFilter)}
         onOpenAddDirectoryDialog={() => {

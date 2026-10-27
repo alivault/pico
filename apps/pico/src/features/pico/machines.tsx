@@ -156,7 +156,7 @@ function MachineCountButton({
   className?: string
   children: React.ReactNode
 }) {
-  const active = useSessionStatusFilter(machine.id) === filter
+  const active = Boolean(useSessionStatusFilter(machine.id)?.includes(filter))
   // The active filter keeps its button at 0, so you can remove it.
   if (count === 0 && !active) return null
   return (
