@@ -3,7 +3,14 @@ import type { FlatTreeNode, TreeNode } from "@/lib/pico"
 export function flattenTree(tree: Array<TreeNode>) {
   const flatNodes: Array<FlatTreeNode> = []
 
-  function visit(node: TreeNode, depth: number) {
+  // A long linear session is one deep chain, so walk it with a stack, not recursion.
+  const stack: Array<[TreeNode, number]> = []
+  for (let index = tree.length - 1; index >= 0; index -= 1) {
+    stack.push([tree[index], 0])
+  }
+
+  while (stack.length > 0) {
+    const [node, depth] = stack.pop()!
     const entry = node.entry
     const role = entry.message?.role
     const label = node.label
@@ -37,13 +44,10 @@ export function flattenTree(tree: Array<TreeNode>) {
       node,
     })
 
-    for (const child of node.children || []) {
-      visit(child, depth + 1)
+    const children = node.children || []
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      stack.push([children[index], depth + 1])
     }
-  }
-
-  for (const node of tree) {
-    visit(node, 0)
   }
 
   return flatNodes

@@ -2347,6 +2347,8 @@ export function AppShellTreeDialogController({
       ),
     staleTime: 0,
     gcTime: 1000 * 60 * 10,
+    // Structural sharing recurses one level per tree depth and overflows the stack on long sessions.
+    structuralSharing: false,
     enabled: Boolean(viewerContextId && open && sessionScopeKey),
   })
 
