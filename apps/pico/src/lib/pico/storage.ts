@@ -185,6 +185,8 @@ export function normalizeSessionSelectionKeys(value: unknown) {
 export type StoredTerminalTabsState = {
   activeTabId: string | null
   tabs: Array<string>
+  /** Names that the user gave to tabs, by tab ID. */
+  names?: Record<string, string>
 }
 
 function normalizeStoredTerminalTabId(value: unknown) {
@@ -199,6 +201,7 @@ function normalizeStoredTerminalTabs(value: unknown): StoredTerminalTabsState {
   const rawState = value as {
     activeTabId?: unknown
     tabs?: unknown
+    names?: unknown
   }
   const tabs: Array<string> = []
   const seen = new Set<string>()
@@ -212,10 +215,19 @@ function normalizeStoredTerminalTabs(value: unknown): StoredTerminalTabsState {
     }
   }
 
+  const names: Record<string, string> = {}
+  if (rawState.names && typeof rawState.names === "object") {
+    for (const [id, name] of Object.entries(rawState.names)) {
+      const text = typeof name === "string" ? name.trim().slice(0, 100) : ""
+      if (text && seen.has(id)) names[id] = text
+    }
+  }
+
   const activeTabId = normalizeStoredTerminalTabId(rawState.activeTabId)
   return {
     activeTabId: activeTabId && seen.has(activeTabId) ? activeTabId : null,
     tabs,
+    ...(Object.keys(names).length > 0 ? { names } : {}),
   }
 }
 

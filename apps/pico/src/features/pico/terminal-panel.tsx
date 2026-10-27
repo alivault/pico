@@ -9,9 +9,37 @@ import type {
   ITheme,
   Terminal as XtermTerminal,
 } from "@xterm/xterm"
-import { KeyboardIcon, KeyRoundIcon, PlusIcon, XIcon } from "lucide-react"
+import {
+  closestCenter,
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import {
+  arrayMove,
+  horizontalListSortingStrategy,
+  SortableContext,
+  useSortable,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import {
+  ChevronDownIcon,
+  KeyboardIcon,
+  KeyRoundIcon,
+  PlusIcon,
+  XIcon,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
 import {
   jobPrompt,
   useSessionJobs,
@@ -52,6 +80,8 @@ type TerminalTab = {
   id: string
   /** The job's name, for a tab that shows a background job. */
   label?: string
+  /** The name that the user gave to the tab. */
+  name?: string
   status: TerminalStatus
   terminalId: string | null
   /** The job of a job tab, from the session's state (not stored). */
@@ -209,7 +239,11 @@ function createTerminalTabsState(
   scopeKey: string
 ): TerminalTabsState {
   const storedTabs = readStoredTerminalTabs(machineId, scopeKey)
-  const tabs = storedTabs.tabs.map((id) => createTerminalTab(id))
+  const tabs = storedTabs.tabs.map((id) => {
+    const tab = createTerminalTab(id)
+    const name = storedTabs.names?.[id]
+    return name ? { ...tab, name } : tab
+  })
   return {
     activeTabId: storedTabs.activeTabId ?? tabs[0]?.id ?? null,
     scopeKey,
@@ -224,6 +258,9 @@ function rememberTerminalTabsState(
   rememberStoredTerminalTabs(machineId, state.scopeKey, {
     activeTabId: state.activeTabId,
     tabs: state.tabs.map((tab) => tab.id),
+    names: Object.fromEntries(
+      state.tabs.flatMap((tab) => (tab.name ? [[tab.id, tab.name]] : []))
+    ),
   })
 }
 
@@ -289,6 +326,7 @@ function terminalStatusDetail(status: TerminalStatus) {
 }
 
 function terminalTabLabel(tab: TerminalTab, index: number) {
+  if (tab.name) return tab.name
   if (isJobTab(tab)) return tab.label ?? tab.job?.name ?? "Job"
   if (tab.status.type === "connected" && tab.status.shell) {
     return `${index + 1}: ${tab.status.shell}`
@@ -975,6 +1013,157 @@ export function TerminalTabPane({
   )
 }
 
+type TerminalTabButtonProps = {
+  index: number
+  onClose: () => void
+  onRename: (name: string) => void
+  onSelect: () => void
+  onShowStatus: () => void
+  selected: boolean
+  tab: TerminalTab
+}
+
+function TerminalTabButton({
+  index,
+  onClose,
+  onRename,
+  onSelect,
+  onShowStatus,
+  selected,
+  tab,
+}: TerminalTabButtonProps) {
+  const [renaming, setRenaming] = React.useState(false)
+  // Escape ends the rename without the blur saving the text.
+  const renameCancelledRef = React.useRef(false)
+  const startRename = () => {
+    renameCancelledRef.current = false
+    setRenaming(true)
+  }
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: tab.id, disabled: renaming })
+  const label = terminalTabLabel(tab, index)
+  const statusText = tabStatusText(tab)
+  const jobEnded = isJobTab(tab) && tab.status.type === "exited"
+
+  const tabElement = (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Translate.toString(transform),
+        transition,
+      }}
+      className={cn(
+        "group flex h-7 max-w-48 shrink-0 items-center overflow-hidden rounded-md border text-xs",
+        selected
+          ? "border-border bg-muted text-foreground"
+          : "border-transparent bg-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+        isDragging && "relative z-10 opacity-70"
+      )}
+      {...attributes}
+      {...listeners}
+      // The tab holds its own buttons: it is not one button itself.
+      role="presentation"
+      tabIndex={-1}
+    >
+      <TitleTooltip title={`${label} · ${statusText}`}>
+        <button
+          type="button"
+          className="flex h-full w-7 shrink-0 items-center justify-center outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+          aria-label={`Show ${label} status`}
+          onClick={(event) => {
+            event.stopPropagation()
+            onShowStatus()
+          }}
+        >
+          <TerminalStatusDot
+            status={tab.status}
+            waiting={jobPrompt(tab.job)?.quiet === false}
+          />
+        </button>
+      </TitleTooltip>
+      {renaming ? (
+        <input
+          // oxlint-disable-next-line jsx-a11y/no-autofocus
+          autoFocus
+          aria-label="Tab name"
+          defaultValue={tab.name ?? label}
+          className="h-full min-w-0 flex-1 bg-transparent px-1 outline-hidden"
+          onFocus={(event) => event.currentTarget.select()}
+          onBlur={(event) => {
+            setRenaming(false)
+            if (!renameCancelledRef.current) onRename(event.currentTarget.value)
+          }}
+          onKeyDown={(event) => {
+            event.stopPropagation()
+            if (event.key === "Enter") {
+              event.preventDefault()
+              event.currentTarget.blur()
+            } else if (event.key === "Escape") {
+              event.preventDefault()
+              renameCancelledRef.current = true
+              event.currentTarget.blur()
+            }
+          }}
+        />
+      ) : (
+        <TitleTooltip title={`${label} · ${statusText}`}>
+          <button
+            type="button"
+            className="flex h-full min-w-0 flex-1 items-center px-1 text-left outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+            onClick={onSelect}
+            onDoubleClick={startRename}
+          >
+            <span className="truncate">{label}</span>
+            {jobEnded ? (
+              <span className="ml-1 shrink-0 text-muted-foreground">
+                {statusText}
+              </span>
+            ) : null}
+          </button>
+        </TitleTooltip>
+      )}
+      <TitleTooltip title={`Close ${label}`}>
+        <button
+          type="button"
+          className="flex h-full w-6 shrink-0 items-center justify-center text-muted-foreground opacity-70 outline-hidden group-hover:opacity-100 hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-30"
+          aria-label={`Close ${label}`}
+          onClick={(event) => {
+            event.stopPropagation()
+            onClose()
+          }}
+        >
+          <XIcon className="size-3" />
+        </button>
+      </TitleTooltip>
+    </div>
+  )
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger render={tabElement} />
+      {/* The rename input takes the focus: the menu does not give it back. */}
+      <ContextMenuContent className="w-40" finalFocus={false}>
+        <ContextMenuItem onClick={startRename}>Rename</ContextMenuItem>
+        {tab.name ? (
+          <ContextMenuItem onClick={() => onRename("")}>
+            Reset name
+          </ContextMenuItem>
+        ) : null}
+        <ContextMenuSeparator />
+        <ContextMenuItem variant="destructive" onClick={onClose}>
+          Close
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
+
 export function TerminalPanel({
   active,
   className,
@@ -1241,6 +1430,57 @@ export function TerminalPanel({
     })
   }
 
+  const selectTab = (tabId: string) => {
+    setTabsState((current) => {
+      if (current.scopeKey !== scopeKey) return current
+
+      const nextState = { ...current, activeTabId: tabId }
+      rememberTerminalTabsState(machineId, nextState)
+      return nextState
+    })
+  }
+
+  const renameTab = (tabId: string, name: string) => {
+    const text = name.trim().slice(0, 100)
+    setTabsState((current) => {
+      if (current.scopeKey !== scopeKey) return current
+
+      const nextState = {
+        ...current,
+        tabs: current.tabs.map((tab) => {
+          if (tab.id !== tabId) return tab
+          const { name: _name, ...rest } = tab
+          return text ? { ...rest, name: text } : rest
+        }),
+      }
+      rememberTerminalTabsState(machineId, nextState)
+      return nextState
+    })
+  }
+
+  const tabSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+  )
+
+  const handleTabDragEnd = ({ active: dragged, over }: DragEndEvent) => {
+    if (!over || dragged.id === over.id) return
+
+    setTabsState((current) => {
+      if (current.scopeKey !== scopeKey) return current
+
+      const from = current.tabs.findIndex((tab) => tab.id === dragged.id)
+      const to = current.tabs.findIndex((tab) => tab.id === over.id)
+      if (from < 0 || to < 0) return current
+
+      const nextState = {
+        ...current,
+        tabs: arrayMove(current.tabs, from, to),
+      }
+      rememberTerminalTabsState(machineId, nextState)
+      return nextState
+    })
+  }
+
   return (
     <section
       data-terminal-panel="true"
@@ -1269,75 +1509,29 @@ export function TerminalPanel({
         </div>
 
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1">
-          {tabs.map((tab, index) => {
-            const selected = tab.id === selectedTabId
-            const label = terminalTabLabel(tab, index)
-            const statusText = tabStatusText(tab)
-            const jobEnded = isJobTab(tab) && tab.status.type === "exited"
-            return (
-              <div
-                key={tab.id}
-                className={cn(
-                  "group flex h-7 max-w-48 shrink-0 items-center overflow-hidden rounded-md border text-xs",
-                  selected
-                    ? "border-border bg-muted text-foreground"
-                    : "border-transparent bg-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                )}
-              >
-                <TitleTooltip title={`${label} · ${statusText}`}>
-                  <button
-                    type="button"
-                    className="flex h-full w-7 shrink-0 items-center justify-center outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
-                    aria-label={`Show ${label} status`}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      setStatusDialogTabId(tab.id)
-                    }}
-                  >
-                    <TerminalStatusDot
-                      status={tab.status}
-                      waiting={jobPrompt(tab.job)?.quiet === false}
-                    />
-                  </button>
-                </TitleTooltip>
-                <TitleTooltip title={`${label} · ${statusText}`}>
-                  <button
-                    type="button"
-                    className="flex h-full min-w-0 flex-1 items-center px-1 text-left outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
-                    onClick={() => {
-                      setTabsState((current) => {
-                        if (current.scopeKey !== scopeKey) return current
-
-                        const nextState = { ...current, activeTabId: tab.id }
-                        rememberTerminalTabsState(machineId, nextState)
-                        return nextState
-                      })
-                    }}
-                  >
-                    <span className="truncate">{label}</span>
-                    {jobEnded ? (
-                      <span className="ml-1 shrink-0 text-muted-foreground">
-                        {statusText}
-                      </span>
-                    ) : null}
-                  </button>
-                </TitleTooltip>
-                <TitleTooltip title={`Close ${label}`}>
-                  <button
-                    type="button"
-                    className="flex h-full w-6 shrink-0 items-center justify-center text-muted-foreground opacity-70 outline-hidden group-hover:opacity-100 hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-30"
-                    aria-label={`Close ${label}`}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      closeTerminalTab(tab.id)
-                    }}
-                  >
-                    <XIcon className="size-3" />
-                  </button>
-                </TitleTooltip>
-              </div>
-            )
-          })}
+          <DndContext
+            sensors={tabSensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleTabDragEnd}
+          >
+            <SortableContext
+              items={tabs.map((tab) => tab.id)}
+              strategy={horizontalListSortingStrategy}
+            >
+              {tabs.map((tab, index) => (
+                <TerminalTabButton
+                  key={tab.id}
+                  index={index}
+                  selected={tab.id === selectedTabId}
+                  tab={tab}
+                  onClose={() => closeTerminalTab(tab.id)}
+                  onRename={(name) => renameTab(tab.id, name)}
+                  onSelect={() => selectTab(tab.id)}
+                  onShowStatus={() => setStatusDialogTabId(tab.id)}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
 
           {normalizedCwd ? (
             <TitleTooltip title="New terminal tab">
@@ -1370,7 +1564,7 @@ export function TerminalPanel({
               aria-label="Hide terminal"
               onClick={onClose}
             >
-              <XIcon />
+              <ChevronDownIcon />
             </Button>
           </TitleTooltip>
         ) : null}
