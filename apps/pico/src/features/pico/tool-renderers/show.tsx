@@ -1,5 +1,6 @@
 import * as React from "react"
-import { PatchDiff } from "@pierre/diffs/react"
+import { parsePatchFiles } from "@pierre/diffs"
+import { FileDiff } from "@pierre/diffs/react"
 import { ExternalLinkIcon } from "lucide-react"
 
 import { Spinner } from "@/components/ui/spinner"
@@ -136,19 +137,42 @@ function HtmlView({ html, title }: { html: string; title?: string }) {
 
 export function DiffView({ patch }: { patch: string }) {
   const themeOptions = usePicoDiffThemeOptions()
+  // An agent can send a patch with more than one file, or text that is not a
+  // patch. PatchDiff throws on both, so parse here and show each file.
+  const fileDiffs = React.useMemo(() => {
+    try {
+      return parsePatchFiles(patch).flatMap((parsed) => parsed.files)
+    } catch {
+      return []
+    }
+  }, [patch])
+  if (fileDiffs.length === 0) {
+    return (
+      <pre className="max-h-96 overflow-auto rounded-md border bg-background p-3 font-mono text-xs whitespace-pre-wrap">
+        {patch}
+      </pre>
+    )
+  }
   return (
-    <div className="overflow-hidden rounded-md border bg-background text-xs">
-      <PatchDiff
-        patch={patch}
-        disableWorkerPool
-        options={{
-          ...themeOptions,
-          diffStyle: "unified",
-          lineDiffType: "word-alt",
-          maxLineDiffLength: 1000,
-          overflow: "wrap",
-        }}
-      />
+    <div className="space-y-2">
+      {fileDiffs.map((fileDiff, index) => (
+        <div
+          key={index}
+          className="overflow-hidden rounded-md border bg-background text-xs"
+        >
+          <FileDiff
+            fileDiff={fileDiff}
+            disableWorkerPool
+            options={{
+              ...themeOptions,
+              diffStyle: "unified",
+              lineDiffType: "word-alt",
+              maxLineDiffLength: 1000,
+              overflow: "wrap",
+            }}
+          />
+        </div>
+      ))}
     </div>
   )
 }
