@@ -16,6 +16,7 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type Modifier,
 } from "@dnd-kit/core"
 import {
   arrayMove,
@@ -94,6 +95,12 @@ type TerminalTab = {
 
 /** A successful job tab closes this long after the user saw it finish. */
 const SEEN_JOB_TAB_CLOSE_MS = 5000
+
+const restrictToHorizontalAxis: Modifier = ({ transform }) => ({
+  ...transform,
+  y: 0,
+})
+const TERMINAL_TAB_DRAG_MODIFIERS = [restrictToHorizontalAxis]
 
 /** The ID of the job that a tab shows, if it is a job tab. */
 function tabJobId(tab: TerminalTab) {
@@ -1521,6 +1528,7 @@ export function TerminalPanel({
           <DndContext
             sensors={tabSensors}
             collisionDetection={closestCenter}
+            modifiers={TERMINAL_TAB_DRAG_MODIFIERS}
             onDragEnd={handleTabDragEnd}
           >
             <SortableContext
