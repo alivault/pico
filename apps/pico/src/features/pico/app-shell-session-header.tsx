@@ -366,7 +366,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               >
                 <span>Terminal</span>
                 <DropdownMenuShortcut>
-                  {formatShortcutLabel("Control+`")}
+                  {formatShortcutLabel(appShortcut("J"))}
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuItem
@@ -393,7 +393,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
           </DropdownMenu>
           <TitleTooltip
             title="Toggle terminal"
-            kbd={formatShortcutLabel("Control+`")}
+            kbd={formatShortcutLabel(appShortcut("J"))}
           >
             <Button
               size="icon"

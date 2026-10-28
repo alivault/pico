@@ -428,7 +428,7 @@ export function useAppShellShortcuts({
     if (
       isTerminalTarget(event.target) &&
       !context.commandPaletteOpen &&
-      key !== "`"
+      key !== "j"
     ) {
       return
     }
@@ -440,7 +440,7 @@ export function useAppShellShortcuts({
       return
     }
 
-    if (key === "`") {
+    if (key === "j") {
       event.preventDefault()
       closeCommandPaletteForShortcut(context.commandPaletteOpen)
       shortcutActionsRef.current.toggleTerminalPanel()
@@ -719,6 +719,7 @@ export function useAppShellShortcuts({
         { key: "O" },
         { key: "C" },
         { key: "X" },
+        { key: "J" },
       ] as const
     ).map((hotkey) => ({
       hotkey: { ...hotkey, ...appModifierFlag },
@@ -746,18 +747,6 @@ export function useAppShellShortcuts({
         },
       },
     })),
-    {
-      // The terminal toggle uses Control on all platforms, like VS Code.
-      // Alt+` switches windows on some Linux desktops.
-      hotkey: { key: "`", ctrl: true },
-      callback: handleGlobalShortcut,
-      options: {
-        meta: {
-          name: "App shell shortcut",
-          description: "Run a Pico app shell command.",
-        },
-      },
-    },
     {
       hotkey: pullShortcut,
       callback: handleGlobalShortcut,

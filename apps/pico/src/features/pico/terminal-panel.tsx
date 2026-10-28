@@ -56,6 +56,10 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { formatDisplayPath } from "@/features/pico/app-shell-common"
+import {
+  appShortcut,
+  matchesShortcutEvent,
+} from "@/features/pico/keyboard-shortcuts"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { readStoredTerminalTabs, rememberStoredTerminalTabs } from "@/lib/pico"
 import { machineOfflineLabel } from "@/lib/pico/machine"
@@ -879,6 +883,11 @@ export function TerminalTabPane({
         terminal.loadAddon(fitAddon)
         terminal.open(terminalElement)
         terminalRef.current = terminal
+        // Let the terminal toggle shortcut through to the app, so it also
+        // closes the panel while the terminal has focus.
+        terminal.attachCustomKeyEventHandler(
+          (event) => !matchesShortcutEvent(event, appShortcut("J"))
+        )
         // The terminal takes the size of the viewer that the user works in.
         terminal.textarea?.addEventListener("focus", () => {
           sendTerminalMessage({ type: "focus" })

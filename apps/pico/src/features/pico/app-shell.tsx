@@ -3329,7 +3329,7 @@ function useAppShellSessionWorkspaceView({
         description: commandState.isMobile
           ? "Switch the mobile terminal tab on or off"
           : "Toggle the bottom terminal panel",
-        shortcut: formatShortcutLabel("Control+`"),
+        shortcut: formatShortcutLabel(appShortcut("J")),
         keywords: ["terminal", "shell", "console", "bottom", "panel"],
         onSelect: toggleTerminalPanel,
       },
