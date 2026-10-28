@@ -16,7 +16,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { useMachineId } from "@/lib/pico/machine-context"
+import { cn } from "@/lib/utils"
 
 const contextUsageNumberFormatter = new Intl.NumberFormat("en-US")
 const CONTEXT_USAGE_CIRCLE_CENTER = 14
@@ -549,6 +551,7 @@ export function ComposerContextUsageIndicator({
   viewerContextId,
 }: ComposerContextUsageIndicatorProps) {
   const machineId = useMachineId()
+  const isMobile = useIsMobile()
   const contextUsage = useComposerContextUsageSnapshot(contextUsageStore)
   const providerUsageQuery = useQuery({
     enabled: Boolean(modelProvider && viewerContextId),
@@ -633,7 +636,13 @@ export function ComposerContextUsageIndicator({
       type="button"
       variant="ghost"
       size="icon"
-      className="relative ml-auto shrink-0"
+      className={cn(
+        "relative ml-auto shrink-0",
+        // On desktop the popover opens on hover, so the button shows no
+        // highlight. On mobile a tap opens it and the highlight stays.
+        !isMobile &&
+          "hover:bg-transparent aria-expanded:bg-transparent dark:hover:bg-transparent"
+      )}
       aria-label={tooltipAriaLabel}
     >
       <svg
@@ -745,7 +754,7 @@ export function ComposerContextUsageIndicator({
 
   return (
     <Popover>
-      <PopoverTrigger render={trigger} />
+      <PopoverTrigger render={trigger} openOnHover={!isMobile} delay={100} />
       <PopoverContent
         side="top"
         align="end"
