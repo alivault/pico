@@ -81,12 +81,20 @@ import {
   closeRightSidebarFilesToRight,
   createInitialRightSidebarState,
   openRightSidebarFile,
+  pinRightSidebarFile,
   reorderRightSidebarFiles,
   resetRightSidebarFiles,
+  selectRightSidebarVisibleFileTabs,
   setRightSidebarActiveTab,
   type AppShellRightSidebarState,
   type OpenFileViewTabOptions,
 } from "@/features/pico/app-shell-right-sidebar-state"
+import {
+  endProjectFileEdits,
+  getDirtyProjectFilePaths,
+  useDirtyProjectFilePaths,
+} from "@/features/pico/project-file-edits"
+import { normalizeCwd } from "@/features/pico/right-sidebar-shared"
 import {
   createAppShellSidebarStore,
   mergeSidebarSessionStatusMap,
@@ -1194,19 +1202,59 @@ function useAppShellSessionWorkspaceView({
     })
   }
 
+  const fileEditCwd = normalizeCwd(sessionState.cwd)
+  const dirtyFileEditPaths = useDirtyProjectFilePaths(machineId, fileEditCwd)
+
+  // A file with unsaved changes keeps its tab: a preview tab becomes pinned.
+  React.useEffect(() => {
+    const previewPath = rightSidebarStore.state.filePreviewPath
+    if (previewPath && dirtyFileEditPaths.includes(previewPath))
+      pinRightSidebarFile(rightSidebarStore, previewPath)
+  }, [dirtyFileEditPaths, rightSidebarStore])
+
+  /**
+   * Before file tabs close, ask to discard their unsaved changes. Then end
+   * their edits. Returns false when the user keeps the tabs.
+   */
+  const discardFileEdits = (paths: Array<string>) => {
+    const dirty = getDirtyProjectFilePaths(machineId, fileEditCwd).filter(
+      (path) => paths.includes(path)
+    )
+    if (dirty.length > 0) {
+      const names = dirty.map((path) => path.split("/").at(-1) || path)
+      const message =
+        dirty.length === 1
+          ? `Discard your unsaved changes to ${names[0]}?`
+          : `Discard your unsaved changes to ${dirty.length} files (${names.join(", ")})?`
+      if (!window.confirm(message)) return false
+    }
+    endProjectFileEdits(machineId, fileEditCwd, paths)
+    return true
+  }
+
+  const visibleFileViewTabs = () =>
+    selectRightSidebarVisibleFileTabs(rightSidebarStore.state)
+
   const closeFileViewTab = (path: string) => {
+    if (!discardFileEdits([path])) return
     closeRightSidebarFile(rightSidebarStore, path)
   }
 
   const closeOtherFileViewTabs = (path: string) => {
+    if (!discardFileEdits(visibleFileViewTabs().filter((tab) => tab !== path)))
+      return
     closeOtherRightSidebarFiles(rightSidebarStore, path)
   }
 
   const closeFileViewTabsToRight = (path: string) => {
+    const tabs = visibleFileViewTabs()
+    const index = tabs.indexOf(path)
+    if (index >= 0 && !discardFileEdits(tabs.slice(index + 1))) return
     closeRightSidebarFilesToRight(rightSidebarStore, path)
   }
 
   const closeAllFileViewTabs = () => {
+    if (!discardFileEdits(visibleFileViewTabs())) return
     closeAllRightSidebarFiles(rightSidebarStore)
   }
 

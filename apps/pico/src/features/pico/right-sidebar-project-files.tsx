@@ -74,6 +74,7 @@ import { HighlightedCode } from "@/features/pico/highlighted-code"
 import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
 import { MarkdownBlock } from "@/features/pico/markdown-renderer"
 import { useProjectFileEditing } from "@/features/pico/project-file-editing"
+import { useDirtyProjectFilePaths } from "@/features/pico/project-file-edits"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
   ProjectFileIconSprite,
@@ -1068,6 +1069,7 @@ export function ProjectFileContent({
 
 function FileViewerTabContent({
   active,
+  dirty = false,
   dragging = false,
   dragListeners,
   dragAttributes,
@@ -1083,6 +1085,8 @@ function FileViewerTabContent({
   tabCount,
 }: {
   active: boolean
+  /** The file has unsaved changes. */
+  dirty?: boolean
   dragging?: boolean
   dragListeners?: ReturnType<typeof useSortable>["listeners"]
   dragAttributes?: ReturnType<typeof useSortable>["attributes"]
@@ -1100,7 +1104,7 @@ function FileViewerTabContent({
   const tab = (
     <div
       className={cn(
-        "inline-flex h-8 shrink-0 items-center rounded-md border border-transparent text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+        "group/file-tab inline-flex h-8 shrink-0 items-center rounded-md border border-transparent text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
         active && "bg-muted text-foreground",
         dragging && "border-transparent shadow-none ring-0"
       )}
@@ -1125,13 +1129,20 @@ function FileViewerTabContent({
       </button>
       <button
         type="button"
-        aria-label={`Close ${path}`}
+        aria-label={dirty ? `Close ${path} (unsaved changes)` : `Close ${path}`}
         className="mr-1 inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
         onClick={() => {
           onCloseFile?.(path)
         }}
       >
-        <XIcon className="size-3" />
+        {dirty ? (
+          <>
+            <span className="size-2 rounded-full bg-foreground/70 group-hover/file-tab:hidden" />
+            <XIcon className="hidden size-3 group-hover/file-tab:block" />
+          </>
+        ) : (
+          <XIcon className="size-3" />
+        )}
       </button>
     </div>
   )
@@ -1182,6 +1193,7 @@ function commitDiffKeyFromViewerTabId(id: string) {
 
 function SortableFileViewerTab(props: {
   active: boolean
+  dirty: boolean
   index: number
   onActiveFileChange?: (path: string) => void
   onActiveTabChange: (tab: RightSidebarTabValue) => void
@@ -1359,11 +1371,13 @@ function SortableCommitDiffViewerTab(props: {
 function FileViewerTabOverlay({
   activeFilePath,
   activePath,
+  dirty,
   filePreviewPath,
   fileTabs,
 }: {
   activeFilePath?: string
   activePath: string
+  dirty: boolean
   filePreviewPath: string
   fileTabs: Array<string>
 }) {
@@ -1373,6 +1387,7 @@ function FileViewerTabOverlay({
   return (
     <FileViewerTabContent
       active={activeFilePath === activePath}
+      dirty={dirty}
       dragging
       index={index}
       onActiveTabChange={() => {}}
@@ -1407,6 +1422,7 @@ export function RightSidebarTabStrip({
   activeFilePath,
   activeTab,
   commitDiffTabs = EMPTY_COMMIT_DIFF_TABS,
+  cwd = "",
   filePreviewPath = "",
   fileTabs = EMPTY_RIGHT_SIDEBAR_FILE_TABS,
   onActiveCommitDiffChange,
@@ -1434,6 +1450,8 @@ export function RightSidebarTabStrip({
   activeFilePath?: string
   activeTab: RightSidebarTabValue
   commitDiffTabs?: Array<GitCommitDiffTab>
+  /** The directory of the file tabs. It finds files with unsaved changes. */
+  cwd?: string
   filePreviewPath?: string
   fileTabs?: Array<string>
   onActiveCommitDiffChange?: (key: string) => void
@@ -1507,6 +1525,8 @@ export function RightSidebarTabStrip({
     ...mixedTabOrder.filter((id) => availableMixedTabIdSet.has(id)),
     ...availableMixedTabIds.filter((id) => !mixedTabOrder.includes(id)),
   ]
+  const machineId = useMachineId()
+  const dirtyFilePaths = useDirtyProjectFilePaths(machineId, cwd)
   const hasOpenFiles = fileTabs.length > 0
   const hasOpenCommitDiffs = commitDiffTabs.length > 0
   const hasFileTypeIconTabs =
@@ -1613,6 +1633,7 @@ export function RightSidebarTabStrip({
                   <SortableFileViewerTab
                     key={id}
                     active={activeTab === "files" && activeFilePath === path}
+                    dirty={dirtyFilePaths.includes(path)}
                     index={fileTabs.indexOf(path)}
                     onActiveFileChange={onActiveFileChange}
                     onActiveTabChange={onActiveTabChange}
@@ -1663,6 +1684,9 @@ export function RightSidebarTabStrip({
               <FileViewerTabOverlay
                 activeFilePath={activeFilePath}
                 activePath={filePathFromViewerTabId(activeDragTabId)}
+                dirty={dirtyFilePaths.includes(
+                  filePathFromViewerTabId(activeDragTabId)
+                )}
                 filePreviewPath={filePreviewPath}
                 fileTabs={fileTabs}
               />

@@ -1180,6 +1180,7 @@ export function RightSidebar({
       >
         <RightSidebarTabStrip
           activeCommitDiffKey={activeCommitDiffTab?.key || ""}
+          cwd={normalizedCwd}
           activeFilePath={currentFilePath}
           activeTab={activeTab}
           commitDiffTabs={localState.commitDiffTabs}

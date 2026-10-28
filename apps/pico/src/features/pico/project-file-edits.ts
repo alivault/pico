@@ -37,6 +37,13 @@ function editStore(machineId: string) {
   return store
 }
 
+// The browser asks before it closes or reloads the page with unsaved files.
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", (event) => {
+    if (hasDirtyProjectFiles()) event.preventDefault()
+  })
+}
+
 const editKey = (cwd: string, path: string) => `${cwd}\u0000${path}`
 
 export function isProjectFileEditDirty(edit: ProjectFileEdit | undefined) {

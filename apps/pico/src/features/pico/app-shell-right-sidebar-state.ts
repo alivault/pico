@@ -119,6 +119,24 @@ export function openRightSidebarFile(
   })
 }
 
+/** Make the preview tab of `path` a pinned tab. Do not change the shown tab. */
+export function pinRightSidebarFile(
+  store: PicoStore<AppShellRightSidebarState>,
+  path: string
+) {
+  setStoreState(store, (state) =>
+    state.filePreviewPath !== path
+      ? state
+      : {
+          ...state,
+          filePreviewPath: "",
+          fileTabs: state.fileTabs.includes(path)
+            ? state.fileTabs
+            : [...state.fileTabs, path],
+        }
+  )
+}
+
 export function closeRightSidebarFile(
   store: PicoStore<AppShellRightSidebarState>,
   path: string
