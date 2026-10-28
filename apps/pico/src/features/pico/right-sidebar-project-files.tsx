@@ -70,7 +70,6 @@ import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { HighlightedCode } from "@/features/pico/highlighted-code"
 import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
 import { MarkdownBlock } from "@/features/pico/markdown-renderer"
 import { useProjectFileEditing } from "@/features/pico/project-file-editing"
@@ -99,7 +98,6 @@ import {
 } from "@/lib/pico"
 import type {
   GitChangeFile,
-  HighlightResponse,
   ProjectFileReadResponse,
   ProjectFileTreeResponse,
 } from "@/lib/pico/api"
@@ -137,108 +135,16 @@ const FILE_TAB_DRAG_OVERLAY_MODIFIERS = [
   restrictFileTabDragOverlayToHorizontalAxis,
 ]
 
-const fileHighlightCache = new Map<
-  string,
-  Promise<HighlightResponse> | HighlightResponse
->()
-
 type MarkdownFileViewMode = "preview" | "source"
-
-const CODE_LANGUAGE_BY_EXTENSION: Record<string, string> = {
-  c: "c",
-  cc: "c",
-  cpp: "c",
-  cs: "c",
-  css: "css",
-  go: "go",
-  h: "c",
-  htm: "html",
-  html: "html",
-  java: "java",
-  js: "javascript",
-  jsx: "jsx",
-  json: "json",
-  markdown: "markdown",
-  md: "markdown",
-  jsonc: "jsonc",
-  mjs: "javascript",
-  mdx: "mdx",
-  py: "python",
-  rs: "rust",
-  ts: "typescript",
-  tsx: "tsx",
-  xml: "xml",
-  yaml: "yaml",
-  yml: "yaml",
-}
 
 function fileExtensionFromPath(path: string) {
   const cleanPath = path.split(/[?#]/)[0] || ""
   return cleanPath.match(/\.([A-Za-z0-9]+)$/)?.[1]?.toLowerCase()
 }
 
-function codeLanguageFromPath(path: string) {
-  const extension = fileExtensionFromPath(path)
-  if (!extension) return undefined
-
-  return CODE_LANGUAGE_BY_EXTENSION[extension]
-}
-
 function isMarkdownFilePath(path: string) {
   const extension = fileExtensionFromPath(path)
   return extension === "md" || extension === "markdown"
-}
-
-type ProjectFileHighlightAction =
-  | { type: "clear" }
-  | { type: "loaded"; payload: HighlightResponse }
-  | { type: "unavailable" }
-
-function hasHighlightHtml(
-  payload: HighlightResponse | null
-): payload is Extract<HighlightResponse, { html: string }> {
-  return Boolean(payload && "html" in payload && payload.html)
-}
-
-function projectFileHighlightReducer(
-  current: HighlightResponse | null,
-  action: ProjectFileHighlightAction
-) {
-  switch (action.type) {
-    case "clear":
-      return current ? null : current
-    case "loaded":
-      return action.payload
-    case "unavailable":
-      return { ok: true, unavailable: true } satisfies HighlightResponse
-    default:
-      action satisfies never
-      return current
-  }
-}
-
-async function getHighlightedProjectFile(code: string, language?: string) {
-  if (!language) {
-    return {
-      ok: true,
-      skipped: true,
-    } satisfies HighlightResponse
-  }
-
-  const cacheKey = `${language}\u0000${code}`
-  const cached = fileHighlightCache.get(cacheKey)
-  if (cached) return await cached
-
-  const promise = fetchJson<HighlightResponse>("/api/highlight", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ code, language }),
-  })
-
-  fileHighlightCache.set(cacheKey, promise)
-  const payload = await promise
-  fileHighlightCache.set(cacheKey, payload)
-  return payload
 }
 
 export function projectFileTreeQueryOptions({
@@ -854,7 +760,6 @@ export function ProjectFileContent({
   })
   const { edit } = editing
   const content = fileQuery.data?.content ?? ""
-  const language = codeLanguageFromPath(path)
   const isMarkdownFile = isMarkdownFilePath(path)
   const [markdownViewModes, setMarkdownViewModes] = React.useState<
     Record<string, MarkdownFileViewMode>
@@ -864,38 +769,6 @@ export function ProjectFileContent({
     : "source"
   const showMarkdownPreview =
     !edit && isMarkdownFile && markdownViewMode === "preview"
-  const [highlighted, dispatchHighlighted] = React.useReducer(
-    projectFileHighlightReducer,
-    null
-  )
-  const editActive = Boolean(edit)
-
-  React.useEffect(() => {
-    let cancelled = false
-
-    if (!active || !content || !language || showMarkdownPreview || editActive) {
-      dispatchHighlighted({ type: "clear" })
-      return
-    }
-
-    dispatchHighlighted({ type: "clear" })
-    void getHighlightedProjectFile(content, language)
-      .then((payload) => {
-        if (!cancelled) {
-          dispatchHighlighted({ type: "loaded", payload })
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          dispatchHighlighted({ type: "unavailable" })
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [active, content, editActive, language, showMarkdownPreview])
-
   if (!path) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
@@ -1010,59 +883,51 @@ export function ProjectFileContent({
           </GitSectionNote>
         </div>
       ) : null}
-      {edit ? (
-        <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="min-h-0 flex-1 overflow-hidden">
+        {!edit && fileQuery.isPending && !fileQuery.data ? (
+          <div className="p-4">
+            <GitSectionNote>
+              <Spinner /> Loading file…
+            </GitSectionNote>
+          </div>
+        ) : !edit && fileQuery.error ? (
+          <div className="p-4">
+            <GitSectionNote tone="destructive">
+              {getErrorMessage(fileQuery.error, "Failed to load file")}
+            </GitSectionNote>
+          </div>
+        ) : showMarkdownPreview ? (
+          <div className="h-full overflow-auto p-4 text-foreground">
+            <MarkdownBlock text={content} />
+          </div>
+        ) : (
           <React.Suspense
             fallback={
-              <div className="p-4">
-                <GitSectionNote>
-                  <Spinner /> Loading editor…
-                </GitSectionNote>
-              </div>
+              <pre className="m-0 h-full overflow-auto p-4 font-mono text-[13px] leading-5 whitespace-pre-wrap text-foreground">
+                <code>{edit ? edit.draft : content}</code>
+              </pre>
             }
           >
+            {/* One view for read mode and edit mode, so the colors match
+                and Edit keeps the scroll position. */}
             <ProjectFileEditor
               key={`${normalizedCwd}\u0000${path}`}
               path={path}
-              doc={edit.draft}
-              docRevision={edit.revision}
-              autoFocus
+              doc={edit ? edit.draft : content}
+              docVersion={
+                edit
+                  ? `edit:${edit.revision}`
+                  : `read:${fileQuery.data?.version ?? ""}`
+              }
+              readOnly={!edit}
               onChange={editing.setDraft}
               onSave={() => {
                 void editing.save()
               }}
             />
           </React.Suspense>
-        </div>
-      ) : (
-        <div className="min-h-0 flex-1 overflow-auto">
-          {fileQuery.isPending && !fileQuery.data ? (
-            <div className="p-4">
-              <GitSectionNote>
-                <Spinner /> Loading file…
-              </GitSectionNote>
-            </div>
-          ) : fileQuery.error ? (
-            <div className="p-4">
-              <GitSectionNote tone="destructive">
-                {getErrorMessage(fileQuery.error, "Failed to load file")}
-              </GitSectionNote>
-            </div>
-          ) : showMarkdownPreview ? (
-            <div className="min-h-full p-4 text-foreground">
-              <MarkdownBlock text={content} />
-            </div>
-          ) : hasHighlightHtml(highlighted) ? (
-            <pre className="m-0 min-h-full p-4 font-mono text-[13px] leading-5 whitespace-pre-wrap text-foreground">
-              <HighlightedCode html={highlighted.html} language={language} />
-            </pre>
-          ) : (
-            <pre className="m-0 min-h-full p-4 font-mono text-[13px] leading-5 whitespace-pre-wrap text-foreground">
-              <code>{content}</code>
-            </pre>
-          )}
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
