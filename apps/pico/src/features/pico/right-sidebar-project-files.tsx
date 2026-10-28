@@ -991,7 +991,9 @@ function FileViewerTabContent({
         }}
       >
         <ProjectFileTypeIcon path={path} />
-        <span className={cn("block min-w-0 truncate", preview && "italic")}>
+        <span
+          className={cn("block min-w-0 truncate", preview && "pr-0.5 italic")}
+        >
           {fileNameFromPath(path)}
         </span>
       </button>
