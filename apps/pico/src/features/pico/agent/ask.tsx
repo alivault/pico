@@ -242,13 +242,17 @@ export function QuestionForm({
       (field) =>
         field.required && field.type !== "boolean" && !form[field.name]?.trim()
     )
+    const sendForm = () => {
+      if (!disabled && !missing) onAnswer(form)
+    }
     return (
       <form
         className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault()
-          if (!missing) onAnswer(form)
+          sendForm()
         }}
+        onKeyDown={(event) => submitOnCommandEnter(event, sendForm)}
       >
         <FieldGroup className="gap-4">
           {fields.map((field) => {
@@ -322,9 +326,12 @@ export function QuestionForm({
             )
           })}
         </FieldGroup>
-        <Button disabled={disabled || missing} type="submit">
-          Send
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button disabled={disabled || missing} type="submit">
+            Send
+          </Button>
+          <SendHint />
+        </div>
       </form>
     )
   }
