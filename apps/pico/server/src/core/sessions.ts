@@ -2615,6 +2615,13 @@ export class Sessions implements HostSessions {
       family: meta.family ?? id,
     })
     this.#updateMeta(id, { replacedBy: replacement })
+    // The replacement is the same session to the user, so it keeps the
+    // children. Archived ones too, so that a restore puts them back under it.
+    for (const [childId, childMeta] of this.#metas) {
+      if (childMeta.parent === id)
+        this.#updateMeta(childId, { parent: replacement })
+    }
+    this.extensionStateChanged(replacement, "children")
     for (const [contextId, context] of this.#viewers.all()) {
       if (context.selectedSession === id)
         this.#viewers.selectSession(contextId, replacement)

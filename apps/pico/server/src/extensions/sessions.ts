@@ -189,6 +189,15 @@ async function markDelivered(
   await api.commit((tx) => addDelivered(tx, api.conversationId, marks), context)
 }
 
+/** The session that a conversation ID names now, after tree navigation. */
+function currentSession(
+  services: { sessions: { current(id: string): string | undefined } },
+  conversation: number
+) {
+  const id = sessionIdOf(conversation as unknown as ConversationId)
+  return services.sessions.current(id) ?? id
+}
+
 async function wasDelivered(
   harness: Pick<Harness, "snapshot">,
   watcher: ConversationId,
@@ -450,8 +459,9 @@ function createReportTask(host: HostBridge) {
             .list({})
             .find((session) => session.id === input.child)?.needsInput
         )
-        const parentConversation = input.parent as unknown as ConversationId
-        const parent = sessionIdOf(parentConversation)
+        // Tree navigation can replace the parent after the spawn.
+        const parent = currentSession(services, input.parent)
+        const parentConversation = conversationOf(parent)
         const { answerKey: key } = task.state.checkpoint
         const seen =
           key !== undefined &&
@@ -740,8 +750,8 @@ function createRemoteReportTask(host: HostBridge) {
         const label =
           services.machines?.find(input.machine)?.profile.label ?? input.machine
         const name = `${label}:${input.child}`
-        const parentConversation = input.parent as unknown as ConversationId
-        const parent = sessionIdOf(parentConversation)
+        const parent = currentSession(services, input.parent)
+        const parentConversation = conversationOf(parent)
         const key = checkpoint.answerKey
         const seen =
           key !== undefined &&
