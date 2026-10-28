@@ -2,12 +2,22 @@
  * Project files for the workspace panel and the composer: directory lookup
  * and search, path and `@file` completions, the file tree, and file preview.
  */
+import { createHash, randomBytes } from "node:crypto"
 import type { Dirent } from "node:fs"
-import { readdir, readFile, realpath, stat } from "node:fs/promises"
+import {
+  chmod,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises"
 import { homedir } from "node:os"
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path"
 
-import { badRequest } from "../http.ts"
+import { badRequest, conflict } from "../http.ts"
 
 const TREE_LIMIT = 20_000
 const READ_LIMIT = 1_000_000
@@ -220,7 +230,11 @@ export async function projectTree(cwd: string) {
     .sort()
 }
 
-export async function readProjectFile(cwd: string, path: string) {
+/** A version of the file content, so a save can see changes from others. */
+const fileVersion = (bytes: Uint8Array) =>
+  createHash("sha256").update(bytes).digest("hex")
+
+async function resolveProjectFile(cwd: string, path: string) {
   const normalized = path.trim().replace(/^\.\//, "")
   if (!normalized) throw badRequest("file path is required")
   if (isAbsolute(normalized) || normalized.split(/[/\\]/).includes("..")) {
@@ -237,15 +251,59 @@ export async function readProjectFile(cwd: string, path: string) {
     throw badRequest("file path must stay inside the directory")
   const info = await stat(resolved)
   if (!info.isFile()) throw badRequest("Not a file")
+  return { normalized, resolved, info }
+}
+
+export async function readProjectFile(cwd: string, path: string) {
+  const { normalized, resolved, info } = await resolveProjectFile(cwd, path)
   if (info.size > READ_LIMIT) throw badRequest("File is too large to preview")
   const bytes = await readFile(resolved)
   if (bytes.includes(0)) throw badRequest("Binary files cannot be previewed")
   const content = new TextDecoder("utf-8", { fatal: true })
   try {
-    return { path: display(normalized), content: content.decode(bytes) }
+    return {
+      path: display(normalized),
+      content: content.decode(bytes),
+      version: fileVersion(bytes),
+    }
   } catch {
     throw badRequest("Binary files cannot be previewed")
   }
+}
+
+/**
+ * Save a text file in the project. `version` is the version that the client
+ * read. When the file changed after that read, the save stops with a conflict,
+ * unless `version` is undefined (overwrite). The write goes to a temporary
+ * file first and then replaces the file, so a failure cannot leave half a file.
+ */
+export async function writeProjectFile(
+  cwd: string,
+  path: string,
+  content: string,
+  version: string | undefined
+) {
+  const { normalized, resolved, info } = await resolveProjectFile(cwd, path)
+  const bytes = Buffer.from(content, "utf8")
+  if (bytes.length > READ_LIMIT) throw badRequest("File is too large to save")
+  if (version !== undefined) {
+    const current = await readFile(resolved)
+    if (fileVersion(current) !== version)
+      throw conflict("The file changed on disk after you opened it")
+  }
+  const temporary = join(
+    dirname(resolved),
+    `.${basename(resolved)}.${randomBytes(6).toString("hex")}.pico-tmp`
+  )
+  try {
+    await writeFile(temporary, bytes, { flag: "wx", mode: info.mode & 0o7777 })
+    await chmod(temporary, info.mode & 0o7777)
+    await rename(temporary, resolved)
+  } catch (error) {
+    await unlink(temporary).catch(() => {})
+    throw error
+  }
+  return { path: display(normalized), version: fileVersion(bytes) }
 }
 
 export async function searchDirectories(

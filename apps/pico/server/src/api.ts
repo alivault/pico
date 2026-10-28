@@ -812,6 +812,28 @@ export function createApi(api: ApiContext) {
     return { ok: true, cwd, ...(await files.readProjectFile(cwd, path)) }
   })
 
+  router.post("/api/files/write", async (request) => {
+    const body = await request.body<{
+      cwd?: unknown
+      path?: unknown
+      content?: unknown
+      version?: unknown
+    }>()
+    const path = stringField(body.path)
+    if (!path) throw badRequest("path is required")
+    const requested = stringField(body.cwd)
+    if (!requested) throw badRequest("cwd is required")
+    if (typeof body.content !== "string")
+      throw badRequest("content is required")
+    const version = typeof body.version === "string" ? body.version : undefined
+    const cwd = await files.resolveDirectory(requested, baseCwd(request))
+    return {
+      ok: true,
+      cwd,
+      ...(await files.writeProjectFile(cwd, path, body.content, version)),
+    }
+  })
+
   // An image of a saved message (`imagePath` in core/items.ts). History
   // entries do not change, so the browser can keep the image for good.
   router.get(
