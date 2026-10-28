@@ -122,6 +122,17 @@ export type ProjectFileReadResponse =
       cwd: string
       path: string
       content: string
+      /** A hash of the content. A save sends it back to see changes. */
+      version: string
+    }
+  | ApiErrorResponse
+
+export type ProjectFileWriteResponse =
+  | {
+      ok: true
+      cwd: string
+      path: string
+      version: string
     }
   | ApiErrorResponse
 

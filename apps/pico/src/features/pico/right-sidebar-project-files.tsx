@@ -30,6 +30,7 @@ import {
   FileDiffIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
+  PencilIcon,
   XIcon,
 } from "lucide-react"
 
@@ -70,7 +71,9 @@ import { TitleTooltip } from "@/components/ui/tooltip"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { HighlightedCode } from "@/features/pico/highlighted-code"
+import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
 import { MarkdownBlock } from "@/features/pico/markdown-renderer"
+import { useProjectFileEditing } from "@/features/pico/project-file-editing"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
   ProjectFileIconSprite,
@@ -111,6 +114,11 @@ const EMPTY_PROJECT_FILE_PATHS: Array<string> = []
 const EMPTY_GIT_CHANGE_FILES: Array<GitChangeFile> = []
 const EMPTY_RIGHT_SIDEBAR_FILE_TABS: Array<string> = []
 const EMPTY_COMMIT_DIFF_TABS: Array<GitCommitDiffTab> = []
+
+const ProjectFileEditor = React.lazy(
+  () => import("@/features/pico/project-file-editor")
+)
+const SAVE_SHORTCUT_LABEL = formatShortcutLabel("Mod+S")
 
 const PROJECT_FILE_QUERY_STALE_TIME_MS = 1000 * 30
 const PROJECT_FILE_QUERY_GC_TIME_MS = 1000 * 60 * 10
@@ -835,6 +843,15 @@ export function ProjectFileContent({
     enabled: Boolean(active && viewerContextId && normalizedCwd && path),
     notifyOnChangeProps: ["data", "isPending", "error"],
   })
+  const editing = useProjectFileEditing({
+    machineId,
+    viewerContextId,
+    cwd: normalizedCwd,
+    path,
+    file: fileQuery.data,
+    refetch: fileQuery.refetch,
+  })
+  const { edit } = editing
   const content = fileQuery.data?.content ?? ""
   const language = codeLanguageFromPath(path)
   const isMarkdownFile = isMarkdownFilePath(path)
@@ -844,16 +861,18 @@ export function ProjectFileContent({
   const markdownViewMode: MarkdownFileViewMode = isMarkdownFile
     ? markdownViewModes[path] || "preview"
     : "source"
-  const showMarkdownPreview = isMarkdownFile && markdownViewMode === "preview"
+  const showMarkdownPreview =
+    !edit && isMarkdownFile && markdownViewMode === "preview"
   const [highlighted, dispatchHighlighted] = React.useReducer(
     projectFileHighlightReducer,
     null
   )
+  const editActive = Boolean(edit)
 
   React.useEffect(() => {
     let cancelled = false
 
-    if (!active || !content || !language || showMarkdownPreview) {
+    if (!active || !content || !language || showMarkdownPreview || editActive) {
       dispatchHighlighted({ type: "clear" })
       return
     }
@@ -874,7 +893,7 @@ export function ProjectFileContent({
     return () => {
       cancelled = true
     }
-  }, [active, content, language, showMarkdownPreview])
+  }, [active, content, editActive, language, showMarkdownPreview])
 
   if (!path) {
     return (
@@ -884,58 +903,165 @@ export function ProjectFileContent({
     )
   }
 
+  const canEdit = Boolean(fileQuery.data) && !fileQuery.error
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      {isMarkdownFile ? (
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/70 px-3 py-2">
-          <div className="truncate text-xs font-medium text-muted-foreground">
-            Markdown
+      <div className="flex h-10 shrink-0 items-center justify-between gap-3 border-b border-border/70 px-3">
+        <div className="flex min-w-0 items-center gap-2 truncate text-xs font-medium text-muted-foreground">
+          {edit ? (
+            <span>{editing.dirty ? "Unsaved changes" : "Editing"}</span>
+          ) : isMarkdownFile ? (
+            <ToggleGroup
+              variant="outline"
+              size="sm"
+              value={[markdownViewMode]}
+              onValueChange={(values) => {
+                const value = values[0]
+                if (value === "preview" || value === "source") {
+                  setMarkdownViewModes((current) => ({
+                    ...current,
+                    [path]: value,
+                  }))
+                }
+              }}
+            >
+              <ToggleGroupItem value="preview">Preview</ToggleGroupItem>
+              <ToggleGroupItem value="source">Source</ToggleGroupItem>
+            </ToggleGroup>
+          ) : (
+            <span>Read only</span>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {edit ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={editing.endEdit}
+              >
+                Done
+              </Button>
+              <TitleTooltip title="Save" kbd={SAVE_SHORTCUT_LABEL}>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!editing.dirty || editing.saving}
+                  onClick={() => {
+                    void editing.save()
+                  }}
+                >
+                  {editing.saving ? <Spinner /> : null}
+                  Save
+                </Button>
+              </TitleTooltip>
+            </>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!canEdit || editing.starting}
+              onClick={() => {
+                void editing.startEdit()
+              }}
+            >
+              {editing.starting ? <Spinner /> : <PencilIcon />}
+              Edit
+            </Button>
+          )}
+        </div>
+      </div>
+      {edit && editing.diskChanged && editing.dirty ? (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/70 bg-warning/10 px-3 py-2 text-xs">
+          <span className="text-foreground">
+            This file changed on disk after you started to edit it.
+          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={editing.reload}
+            >
+              Reload
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={editing.saving}
+              onClick={() => {
+                void editing.save({ overwrite: true })
+              }}
+            >
+              Overwrite
+            </Button>
           </div>
-          <ToggleGroup
-            variant="outline"
-            value={[markdownViewMode]}
-            onValueChange={(values) => {
-              const value = values[0]
-              if (value === "preview" || value === "source") {
-                setMarkdownViewModes((current) => ({
-                  ...current,
-                  [path]: value,
-                }))
-              }
-            }}
-          >
-            <ToggleGroupItem value="preview">Preview</ToggleGroupItem>
-            <ToggleGroupItem value="source">Source</ToggleGroupItem>
-          </ToggleGroup>
         </div>
       ) : null}
-      <div className="min-h-0 flex-1 overflow-auto">
-        {fileQuery.isPending && !fileQuery.data ? (
-          <div className="p-4">
-            <GitSectionNote>
-              <Spinner /> Loading file…
-            </GitSectionNote>
-          </div>
-        ) : fileQuery.error ? (
-          <div className="p-4">
-            <GitSectionNote tone="destructive">
-              {getErrorMessage(fileQuery.error, "Failed to load file")}
-            </GitSectionNote>
-          </div>
-        ) : showMarkdownPreview ? (
-          <div className="min-h-full p-4 text-foreground">
-            <MarkdownBlock text={content} />
-          </div>
-        ) : hasHighlightHtml(highlighted) ? (
-          <pre className="m-0 min-h-full p-4 font-mono text-[13px] leading-5 whitespace-pre-wrap text-foreground">
-            <HighlightedCode html={highlighted.html} language={language} />
-          </pre>
-        ) : (
-          <pre className="m-0 min-h-full p-4 font-mono text-[13px] leading-5 whitespace-pre-wrap text-foreground">
-            <code>{content}</code>
-          </pre>
-        )}
-      </div>
+      {edit && fileQuery.error ? (
+        <div className="shrink-0 border-b border-border/70 px-3 py-2">
+          <GitSectionNote tone="destructive">
+            {getErrorMessage(fileQuery.error, "Failed to load file")}
+          </GitSectionNote>
+        </div>
+      ) : null}
+      {edit ? (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <React.Suspense
+            fallback={
+              <div className="p-4">
+                <GitSectionNote>
+                  <Spinner /> Loading editor…
+                </GitSectionNote>
+              </div>
+            }
+          >
+            <ProjectFileEditor
+              key={`${normalizedCwd}\u0000${path}`}
+              path={path}
+              doc={edit.draft}
+              docRevision={edit.revision}
+              autoFocus
+              onChange={editing.setDraft}
+              onSave={() => {
+                void editing.save()
+              }}
+            />
+          </React.Suspense>
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-auto">
+          {fileQuery.isPending && !fileQuery.data ? (
+            <div className="p-4">
+              <GitSectionNote>
+                <Spinner /> Loading file…
+              </GitSectionNote>
+            </div>
+          ) : fileQuery.error ? (
+            <div className="p-4">
+              <GitSectionNote tone="destructive">
+                {getErrorMessage(fileQuery.error, "Failed to load file")}
+              </GitSectionNote>
+            </div>
+          ) : showMarkdownPreview ? (
+            <div className="min-h-full p-4 text-foreground">
+              <MarkdownBlock text={content} />
+            </div>
+          ) : hasHighlightHtml(highlighted) ? (
+            <pre className="m-0 min-h-full p-4 font-mono text-[13px] leading-5 whitespace-pre-wrap text-foreground">
+              <HighlightedCode html={highlighted.html} language={language} />
+            </pre>
+          ) : (
+            <pre className="m-0 min-h-full p-4 font-mono text-[13px] leading-5 whitespace-pre-wrap text-foreground">
+              <code>{content}</code>
+            </pre>
+          )}
+        </div>
+      )}
     </div>
   )
 }
