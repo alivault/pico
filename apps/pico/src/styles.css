@@ -127,7 +127,39 @@
     transparent;
 }
 
+/* The server's Shiki output colors tokens with `--sh-*` variables
+   (server/src/services/highlight.ts). Map them to the theme's code colors,
+   as PICO_SHIKI_VARIABLE_DEFAULTS in lib/pico/themes.ts does for diffs. */
 .shiki {
+  --sh-foreground: var(--code-fg);
+  --sh-token-comment: var(--code-comment);
+  --sh-token-constant: var(--code-number);
+  --sh-token-keyword: var(--code-keyword);
+  --sh-token-parameter: var(--code-variable);
+  --sh-token-function: var(--code-title);
+  --sh-token-string: var(--code-string);
+  --sh-token-string-expression: var(--code-string);
+  --sh-token-punctuation: var(--code-meta);
+  --sh-token-link: var(--code-title);
+  --sh-token-inserted: var(--success);
+  --sh-token-deleted: var(--danger);
+  --sh-token-changed: var(--warning);
+  --sh-ansi-black: var(--background);
+  --sh-ansi-red: var(--danger);
+  --sh-ansi-green: var(--success);
+  --sh-ansi-yellow: var(--warning);
+  --sh-ansi-blue: var(--primary);
+  --sh-ansi-magenta: var(--code-keyword);
+  --sh-ansi-cyan: var(--code-meta);
+  --sh-ansi-white: var(--foreground);
+  --sh-ansi-bright-black: var(--muted-foreground);
+  --sh-ansi-bright-red: var(--danger);
+  --sh-ansi-bright-green: var(--success);
+  --sh-ansi-bright-yellow: var(--warning);
+  --sh-ansi-bright-blue: var(--primary);
+  --sh-ansi-bright-magenta: var(--code-keyword);
+  --sh-ansi-bright-cyan: var(--code-meta);
+  --sh-ansi-bright-white: var(--foreground);
   color: var(--code-fg);
 }
 
