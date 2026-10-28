@@ -30,10 +30,15 @@ self.addEventListener("notificationclick", (event) => {
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((windows) => {
-        for (const client of windows) {
-          if ("navigate" in client && "focus" in client) {
-            return client.navigate(url).then((next) => (next || client).focus())
-          }
+        // Use an open Pico tab: focus it and tell the app to open the
+        // session. A navigation would load the whole app again.
+        const client =
+          windows.find((item) => item.focused) ??
+          windows.find((item) => item.visibilityState === "visible") ??
+          windows[0]
+        if (client && "focus" in client) {
+          client.postMessage({ type: "pico:open-url", url })
+          return client.focus()
         }
         return self.clients.openWindow(url)
       })

@@ -81,6 +81,32 @@ function App() {
     return () => setMachineNavigator(undefined)
   }, [navigate])
 
+  // A click on a push notification asks the service worker to open its
+  // session in this tab without a page load (see `public/sw.js`).
+  React.useEffect(() => {
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator))
+      return
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: unknown; url?: unknown } | null
+      if (data?.type !== "pico:open-url" || typeof data.url !== "string") return
+      let params: URLSearchParams
+      try {
+        params = new URL(data.url, window.location.origin).searchParams
+      } catch {
+        return
+      }
+      void navigate({
+        search: machineSearch(
+          normalizeMachineId(params.get("machine") ?? undefined),
+          params.get("session") ?? undefined
+        ),
+      })
+    }
+    navigator.serviceWorker.addEventListener("message", onMessage)
+    return () =>
+      navigator.serviceWorker.removeEventListener("message", onMessage)
+  }, [navigate])
+
   const selectSession = (
     machineId: string,
     nextSessionId: string | undefined,
