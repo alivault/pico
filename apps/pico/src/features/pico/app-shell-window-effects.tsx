@@ -21,6 +21,25 @@ import {
 } from "@/features/pico/tanstack-store-utils"
 import type { SessionState } from "@/lib/pico"
 import type { SessionDoneEvent } from "@/lib/pico/api"
+import { hasPushSubscription } from "@/features/pico/agent/push"
+
+/**
+ * Shows the desktop notification for a finished session. Web Push already
+ * tells this browser about a finished agent run, so skip those to show only
+ * one notification.
+ */
+function showDoneNotification(
+  event: SessionDoneEvent,
+  notification: { title: string; body: string; tag: string }
+) {
+  if (event.reason !== "agent") {
+    showSessionDoneDesktopNotification(notification)
+    return
+  }
+  void hasPushSubscription().then((subscribed) => {
+    if (!subscribed) showSessionDoneDesktopNotification(notification)
+  })
+}
 
 function getIsPageForeground() {
   if (typeof document === "undefined") return true
@@ -269,11 +288,7 @@ function AppShellWindowEffects({
         }
 
         if (sessionDoneDesktopNotificationsEnabled && !isPageForeground) {
-          showSessionDoneDesktopNotification({
-            title: label,
-            body,
-            tag,
-          })
+          showDoneNotification(event, { title: label, body, tag })
         }
 
         if (sessionDoneSoundEnabled && !isPageForeground && !playedSound) {
@@ -307,11 +322,7 @@ function AppShellWindowEffects({
       }
 
       if (sessionDoneDesktopNotificationsEnabled && !isPageForeground) {
-        showSessionDoneDesktopNotification({
-          title: label,
-          body,
-          tag,
-        })
+        showDoneNotification(event, { title: label, body, tag })
       }
 
       if (sessionDoneSoundEnabled && !playedSound) {

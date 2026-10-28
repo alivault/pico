@@ -23,6 +23,20 @@ async function registration() {
   return navigator.serviceWorker.register("/sw.js")
 }
 
+/**
+ * Whether this browser has a push subscription. It checks only the browser,
+ * so it does not register the service worker or ask the server.
+ */
+export async function hasPushSubscription() {
+  if (!pushSupported()) return false
+  try {
+    const worker = await navigator.serviceWorker.getRegistration()
+    return Boolean(await worker?.pushManager.getSubscription())
+  } catch {
+    return false
+  }
+}
+
 /** Whether this browser gets push notifications from this server. */
 export async function pushEnabled(viewerContextId: string) {
   if (!pushSupported()) return false
