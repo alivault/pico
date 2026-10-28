@@ -11,20 +11,57 @@ import { indentWithTab } from "@codemirror/commands"
 import {
   HighlightStyle,
   LanguageDescription,
+  LanguageSupport,
+  LRLanguage,
   syntaxHighlighting,
+  syntaxTree,
 } from "@codemirror/language"
+import { cssLanguage } from "@codemirror/lang-css"
+import { jsonLanguage } from "@codemirror/lang-json"
+import { yamlLanguage } from "@codemirror/lang-yaml"
 import { languages } from "@codemirror/language-data"
-import { Compartment, EditorState, Transaction } from "@codemirror/state"
-import { EditorView, keymap } from "@codemirror/view"
-import { tags } from "@lezer/highlight"
+import {
+  Compartment,
+  EditorState,
+  RangeSetBuilder,
+  Transaction,
+  type Extension,
+} from "@codemirror/state"
+import {
+  Decoration,
+  EditorView,
+  keymap,
+  ViewPlugin,
+  type DecorationSet,
+  type ViewUpdate,
+} from "@codemirror/view"
+import { styleTags, tags } from "@lezer/highlight"
 import { basicSetup } from "codemirror"
 
+// Colors follow Shiki's CSS-variables theme (createCssVariablesTheme in
+// @shikijs/core) with Pico's values from PICO_SHIKI_VARIABLE_DEFAULTS, so
+// files look like chat code blocks and diffs. Lezer tags are not TextMate
+// scopes, so some tokens still differ (for example primitive types).
+const code = {
+  comment: "var(--code-comment)",
+  constant: "var(--code-number)",
+  keyword: "var(--code-keyword)",
+  function: "var(--code-title)",
+  string: "var(--code-string)",
+  punctuation: "var(--code-meta)",
+  link: "var(--code-title)",
+}
+
+// Do not style propertyName or content here: the language styles below set
+// them for JSON, YAML, and CSS, and two styles for one token would conflict.
 const picoHighlightStyle = HighlightStyle.define([
+  // comment
   {
-    tag: [tags.comment, tags.lineComment, tags.blockComment],
-    color: "var(--code-comment)",
-    fontStyle: "italic",
+    tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment],
+    color: code.comment,
   },
+  // keyword, storage.type, storage.modifier, keyword.operator,
+  // punctuation.definition.template-expression
   {
     tag: [
       tags.keyword,
@@ -33,64 +70,290 @@ const picoHighlightStyle = HighlightStyle.define([
       tags.operatorKeyword,
       tags.definitionKeyword,
       tags.modifier,
+      tags.operator,
+      tags.arithmeticOperator,
+      tags.logicOperator,
+      tags.bitwiseOperator,
+      tags.compareOperator,
+      tags.updateOperator,
+      tags.definitionOperator,
+      tags.typeOperator,
+      tags.controlOperator,
+      tags.punctuation,
+      tags.function(tags.punctuation),
+      tags.special(tags.brace),
+      tags.unit,
     ],
-    color: "var(--code-keyword)",
+    color: code.keyword,
   },
+  // string, string.regexp, string.template, entity.name.tag, markup.inline
   {
-    tag: [tags.string, tags.special(tags.string), tags.regexp, tags.character],
-    color: "var(--code-string)",
+    tag: [
+      tags.string,
+      tags.special(tags.string),
+      tags.regexp,
+      tags.escape,
+      tags.character,
+      tags.attributeValue,
+      tags.tagName,
+      tags.standard(tags.tagName),
+      tags.monospace,
+    ],
+    color: code.string,
   },
+  // constant.numeric, constant.language, variable.language.this,
+  // variable.other.constant (`const` names), support
   {
     tag: [
       tags.number,
+      tags.integer,
+      tags.float,
       tags.bool,
       tags.null,
       tags.atom,
+      tags.self,
+      tags.color,
       tags.constant(tags.name),
+      tags.standard(tags.name),
+      tags.definition(tags.variableName),
     ],
-    color: "var(--code-number)",
+    color: code.constant,
   },
+  // entity.name.function, meta.function-call, entity.name.type,
+  // entity.other.attribute-name, meta.instance.constructor
   {
     tag: [
       tags.function(tags.variableName),
       tags.function(tags.propertyName),
+      tags.function(tags.definition(tags.variableName)),
       tags.typeName,
+      tags.definition(tags.typeName),
       tags.className,
+      tags.definition(tags.className),
+      // entity.other.attribute-name.pseudo-class (CSS :root)
+      tags.constant(tags.className),
       tags.namespace,
-      tags.heading,
-      tags.link,
-    ],
-    color: "var(--code-title)",
-  },
-  {
-    tag: [
-      tags.meta,
-      tags.punctuation,
-      tags.bracket,
-      tags.operator,
-      tags.processingInstruction,
-    ],
-    color: "var(--code-meta)",
-  },
-  {
-    tag: [
-      tags.variableName,
-      tags.propertyName,
       tags.attributeName,
-      tags.labelName,
-      tags.tagName,
+      tags.macroName,
     ],
-    color: "var(--code-variable)",
+    color: code.function,
   },
+  // The "." of a method call (meta.function-call)
+  { tag: tags.function(tags.derefOperator), color: code.function },
+  // punctuation.separator
+  { tag: tags.separator, color: code.punctuation },
+  // Brackets and "." (keyword.operator.accessor) keep the text color. Their
+  // Lezer tags are children of punctuation and operator, so say it here.
   {
-    tag: [tags.self, tags.special(tags.variableName)],
-    color: "var(--code-symbol)",
+    tag: [
+      tags.bracket,
+      tags.paren,
+      tags.brace,
+      tags.squareBracket,
+      tags.angleBracket,
+      tags.derefOperator,
+    ],
+    color: "inherit",
   },
-  { tag: tags.strong, fontWeight: "bold" },
+  // Markdown and diffs
+  { tag: [tags.strong, tags.heading], fontWeight: "bold" },
   { tag: tags.emphasis, fontStyle: "italic" },
   { tag: tags.strikethrough, textDecoration: "line-through" },
-  { tag: tags.invalid, color: "var(--danger)" },
+  { tag: tags.link, color: code.link, textDecoration: "underline" },
+  { tag: tags.url, color: code.link },
+  { tag: tags.inserted, color: "var(--success)" },
+  { tag: tags.deleted, color: "var(--danger)" },
+  { tag: tags.changed, color: "var(--warning)" },
 ])
+
+// The JavaScript parser tags every declared name as a definition, and every
+// object name as a plain variable. Shiki tells more cases apart, so add rules
+// for them: parameters, catch variables, and imports are plain; objects
+// before "." are variable.other.object; the "." of a method call is part of
+// meta.function-call. The deepest matching rule wins.
+const javaScriptStyleTags = styleTags({
+  "ParamList/VariableDefinition CatchClause/VariableDefinition ImportGroup/VariableDefinition ImportDeclaration/VariableDefinition":
+    tags.variableName,
+  "ParamList/ObjectPattern/PatternProperty/VariableDefinition ParamList/ArrayPattern/VariableDefinition":
+    tags.variableName,
+  // constant.language.import-export-all
+  "ImportDeclaration/Star": tags.atom,
+  // super() is meta.function-call; the base class is entity.other.inherited-class
+  "CallExpression/super": tags.function(tags.variableName),
+  "ClassDeclaration/VariableName": tags.className,
+  // keyword.operator.optional (name?: type)
+  '"?"': tags.operator,
+  "MemberExpression/VariableName MemberExpression/MemberExpression/PropertyName":
+    tags.standard(tags.variableName),
+  'CallExpression/MemberExpression/"."': tags.function(tags.derefOperator),
+  // punctuation.terminator.statement keeps the text color.
+  '";"': tags.bracket,
+})
+
+// YAML: ":" is punctuation.separator.key-value (keyword color), "-" keeps the
+// text color, and "|" or ">" is keyword.control.flow.block-scalar.
+const yamlStyleTags = styleTags({
+  '":"': tags.definitionOperator,
+  '"-"': tags.bracket,
+  BlockLiteralHeader: tags.keyword,
+})
+
+// CSS: ";" keeps the text color, functions such as var() are support.function,
+// pseudo-classes (with their ":") are entity.other.attribute-name, "*" is entity.name.tag, and
+// media feature names and values keep the text color.
+const cssStyleTags = styleTags({
+  '";"': tags.bracket,
+  Callee: tags.function(tags.variableName),
+  // Not attributeName: it is a child of propertyName, which the CSS style colors.
+  'PseudoOp PseudoClassSelector/":"': tags.constant(tags.className),
+  "ArgList/VariableName": tags.standard(tags.variableName),
+  UniversalSelector: tags.tagName,
+  "FeatureName FeatureQuery/ValueName": tags.variableName,
+})
+
+// Shiki colors TypeScript primitive types (support.type.primitive) and
+// ALL_CAPS names (variable.other.constant) as constants. Lezer gives them
+// the same tags as other names, so mark them by their text.
+const PRIMITIVE_TYPES = new Set([
+  "any",
+  "bigint",
+  "boolean",
+  "never",
+  "null",
+  "number",
+  "object",
+  "string",
+  "symbol",
+  "undefined",
+  "unknown",
+  "void",
+])
+const ALL_CAPS_NAME = /^[A-Z][A-Z0-9_]*[A-Z0-9]$/
+const constantMark = Decoration.mark({ class: "cm-pico-constant" })
+// entity.name.function for `const f = () => …`, plain for `let` and `var`
+// names (Lezer tags them like `const` names), storage.type for constructor.
+const functionMark = Decoration.mark({ class: "cm-pico-function" })
+const plainMark = Decoration.mark({ class: "cm-pico-plain" })
+const keywordMark = Decoration.mark({ class: "cm-pico-keyword" })
+
+type SyntaxNode = ReturnType<typeof syntaxTree>["topNode"]
+
+function declarationMark(node: SyntaxNode) {
+  if (node.parent?.name !== "VariableDeclaration") return undefined
+  const value =
+    node.nextSibling?.name === "Equals" ? node.nextSibling.nextSibling : null
+  if (value?.name === "ArrowFunction" || value?.name === "FunctionExpression")
+    return functionMark
+  const keyword = node.parent.firstChild?.name
+  return keyword === "let" || keyword === "var" ? plainMark : undefined
+}
+
+function shikiNameDecorations(view: EditorView) {
+  const builder = new RangeSetBuilder<Decoration>()
+  for (const { from, to } of view.visibleRanges) {
+    syntaxTree(view.state).iterate({
+      from,
+      to,
+      enter: (node) => {
+        const isType = node.name === "TypeName"
+        if (
+          !isType &&
+          node.name !== "VariableName" &&
+          node.name !== "VariableDefinition" &&
+          node.name !== "PropertyName" &&
+          node.name !== "PropertyDefinition"
+        )
+          return
+        const text = view.state.sliceDoc(node.from, node.to)
+        if (isType ? PRIMITIVE_TYPES.has(text) : ALL_CAPS_NAME.test(text)) {
+          builder.add(node.from, node.to, constantMark)
+          return
+        }
+        const mark =
+          node.name === "VariableDefinition"
+            ? declarationMark(node.node)
+            : node.name === "PropertyDefinition" && text === "constructor"
+              ? keywordMark
+              : undefined
+        if (mark) builder.add(node.from, node.to, mark)
+      },
+    })
+  }
+  return builder.finish()
+}
+
+const shikiNamePlugin = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet
+    constructor(view: EditorView) {
+      this.decorations = shikiNameDecorations(view)
+    }
+    update(update: ViewUpdate) {
+      if (
+        update.docChanged ||
+        update.viewportChanged ||
+        syntaxTree(update.startState) !== syntaxTree(update.state)
+      )
+        this.decorations = shikiNameDecorations(update.view)
+    }
+  },
+  { decorations: (plugin) => plugin.decorations }
+)
+
+const JAVASCRIPT_LANGUAGE_NAMES = new Set([
+  "JavaScript",
+  "TypeScript",
+  "JSX",
+  "TSX",
+])
+
+/** Add Pico's style rules to a language that CodeMirror loaded. */
+function withPicoStyleTags(
+  description: LanguageDescription,
+  support: LanguageSupport
+): Extension {
+  if (!(support.language instanceof LRLanguage)) return support
+  if (JAVASCRIPT_LANGUAGE_NAMES.has(description.name))
+    return [
+      new LanguageSupport(
+        support.language.configure({ props: [javaScriptStyleTags] }),
+        support.support
+      ),
+      shikiNamePlugin,
+    ]
+  const props =
+    description.name === "YAML"
+      ? yamlStyleTags
+      : description.name === "CSS"
+        ? cssStyleTags
+        : undefined
+  if (!props) return support
+  return new LanguageSupport(
+    support.language.configure({ props: [props] }),
+    support.support
+  )
+}
+
+// support.type.property-name.json
+const jsonHighlightStyle = HighlightStyle.define(
+  [{ tag: tags.propertyName, color: code.keyword }],
+  { scope: jsonLanguage }
+)
+
+// entity.name.tag.yaml for keys, string.unquoted.plain.out.yaml for values
+const yamlHighlightStyle = HighlightStyle.define(
+  [
+    { tag: tags.propertyName, color: code.keyword },
+    { tag: tags.content, color: code.string },
+  ],
+  { scope: yamlLanguage }
+)
+
+// meta.property-name
+const cssHighlightStyle = HighlightStyle.define(
+  [{ tag: tags.propertyName, color: code.constant }],
+  { scope: cssLanguage }
+)
 
 const picoEditorTheme = EditorView.theme({
   "&": {
@@ -117,6 +380,19 @@ const picoEditorTheme = EditorView.theme({
     color: "var(--muted-foreground)",
     borderRight:
       "1px solid color-mix(in oklab, var(--border) 70%, transparent)",
+  },
+  // Two classes, so the mark wins over the syntax class inside or around it.
+  ".cm-content .cm-pico-constant, .cm-content .cm-pico-constant *": {
+    color: code.constant,
+  },
+  ".cm-content .cm-pico-function, .cm-content .cm-pico-function *": {
+    color: code.function,
+  },
+  ".cm-content .cm-pico-plain, .cm-content .cm-pico-plain *": {
+    color: "var(--code-fg)",
+  },
+  ".cm-content .cm-pico-keyword, .cm-content .cm-pico-keyword *": {
+    color: code.keyword,
   },
   ".cm-activeLine": {
     backgroundColor: "color-mix(in oklab, var(--muted) 50%, transparent)",
@@ -216,6 +492,9 @@ export default function ProjectFileEditor({
           ]),
           languageCompartment.of([]),
           readOnlyCompartment.of(readOnlyExtensions(readOnlyRef.current)),
+          syntaxHighlighting(jsonHighlightStyle),
+          syntaxHighlighting(yamlHighlightStyle),
+          syntaxHighlighting(cssHighlightStyle),
           syntaxHighlighting(picoHighlightStyle),
           picoEditorTheme,
           EditorView.lineWrapping,
@@ -252,7 +531,9 @@ export default function ProjectFileEditor({
     void description.load().then((support) => {
       if (cancelled) return
       viewRef.current?.dispatch({
-        effects: languageCompartment.reconfigure(support),
+        effects: languageCompartment.reconfigure(
+          withPicoStyleTags(description, support)
+        ),
       })
     })
     return () => {
