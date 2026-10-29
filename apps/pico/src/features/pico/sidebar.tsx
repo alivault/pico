@@ -81,6 +81,7 @@ import {
   DIRECTORY_SESSION_LOAD_MORE_COUNT,
   INITIAL_DIRECTORY_SESSION_RENDER_COUNT,
   PINNED_SESSIONS_STORAGE_KEY,
+  SIDEBAR_DIRECTORIES_STORAGE_KEY,
   readStoredCollapsedDirectories,
   readStoredPinnedSessionKeys,
   machineLocalStorageSetItem,
@@ -2193,10 +2194,29 @@ function useOtherMachinePinnedSessionKeys(machineId: string, online: boolean) {
  */
 export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
   const { isMobile, setOpenMobile } = useSidebar()
-  const allGrouped = React.useMemo(
-    () => groupMachineSessions(machine),
-    [machine]
-  )
+  // Directories that this page removed, hidden until the summary of the
+  // machine stops showing them.
+  const [removedDirectories, setRemovedDirectories] = React.useState<
+    ReadonlySet<string>
+  >(() => new Set())
+  const summaryDirectories = machine.summary?.directories
+  React.useEffect(() => {
+    setRemovedDirectories((current) => {
+      const shown = new Set(summaryDirectories ?? [])
+      const next = new Set([...current].filter((entry) => shown.has(entry)))
+      return next.size === current.size ? current : next
+    })
+  }, [summaryDirectories])
+  const allGrouped = React.useMemo(() => {
+    const grouped = groupMachineSessions(machine)
+    if (removedDirectories.size === 0) return grouped
+    return {
+      ...grouped,
+      directories: grouped.directories.filter(
+        (directory) => !removedDirectories.has(directory)
+      ),
+    }
+  }, [machine, removedDirectories])
   const statusFilter = useSessionStatusFilter(machine.id)
   const [storedPinnedKeys, togglePinnedKey] = useOtherMachinePinnedSessionKeys(
     machine.id,
@@ -2277,6 +2297,20 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
     },
     [isMobile, machine.id, setOpenMobile]
   )
+  // The summary has the directory list of the machine's server, so the new
+  // list starts from it. The sidebar sync sends it to the machine.
+  const removeDirectory = (directory: string) => {
+    const next = (summaryDirectories ?? []).filter(
+      (entry) => entry !== directory && !removedDirectories.has(entry)
+    )
+    stores.collapsed.remove(directory)
+    machineLocalStorageSetItem(
+      machine.id,
+      SIDEBAR_DIRECTORIES_STORAGE_KEY,
+      JSON.stringify(next)
+    )
+    setRemovedDirectories((current) => new Set([...current, directory]))
+  }
 
   // A machine without directories: add the first one there. The heading
   // shows the state of a machine that is not online.
@@ -2346,6 +2380,7 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
           sessionsDraggable={false}
           onSessionClick={openSession}
           onCreateSessionInDirectory={online ? createSession : undefined}
+          onRemoveDirectory={online ? removeDirectory : undefined}
           {...sessionActions}
         />
       ))}
