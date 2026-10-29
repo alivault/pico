@@ -222,7 +222,7 @@ function reviewBulkGitActionErrorFallback(action: ReviewBulkGitAction) {
 
 type ReviewDiffCommentTarget = Omit<
   ComposerDiffLineComment,
-  "cwd" | "id" | "text"
+  "cwd" | "id" | "kind" | "text"
 >
 
 type PendingReviewDiffLineComment = ReviewDiffCommentTarget & {

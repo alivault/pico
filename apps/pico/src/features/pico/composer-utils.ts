@@ -1,5 +1,11 @@
 import type { CompletionItem } from "@/lib/pico/api"
-import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
+import {
+  isComposerDiffLineComment,
+  isComposerFileLineComment,
+  type ComposerDiffLineComment,
+  type ComposerFileLineComment,
+  type ComposerLineComment,
+} from "@/features/pico/app-shell-composer-state"
 
 export type SlashCommandInput = {
   rawValue: string
@@ -126,27 +132,101 @@ export function formatComposerDiffLineCommentForPrompt(
   return `- ${formatComposerDiffLineCommentReference(comment)} in ${sourceLabel}: ${comment.text}`
 }
 
+export function formatComposerFileLineCommentReference(
+  comment: Pick<ComposerFileLineComment, "path" | "startLine" | "endLine">
+) {
+  return comment.endLine > comment.startLine
+    ? `${comment.path}:L${comment.startLine}-L${comment.endLine}`
+    : `${comment.path}:L${comment.startLine}`
+}
+
+export function formatComposerLineCommentReference(
+  comment: ComposerLineComment
+) {
+  return isComposerFileLineComment(comment)
+    ? formatComposerFileLineCommentReference(comment)
+    : formatComposerDiffLineCommentReference(comment)
+}
+
+/** The most lines and characters of code that a file comment sends. */
+export const FILE_COMMENT_SNIPPET_MAX_LINES = 20
+export const FILE_COMMENT_SNIPPET_MAX_CHARS = 2000
+
+/** The code of a file comment: the lines, shortened to the limits. */
+export function fileLineCommentSnippet(lines: Array<string>) {
+  const kept: Array<string> = []
+  let chars = 0
+  for (const line of lines) {
+    if (
+      kept.length >= FILE_COMMENT_SNIPPET_MAX_LINES ||
+      chars + line.length > FILE_COMMENT_SNIPPET_MAX_CHARS
+    )
+      break
+    kept.push(line)
+    chars += line.length + 1
+  }
+  const omitted = lines.length - kept.length
+  if (omitted > 0)
+    kept.push(`… (${omitted} more line${omitted === 1 ? "" : "s"})`)
+  return kept.join("\n")
+}
+
+function codeFence(code: string) {
+  const longest = Math.max(
+    2,
+    ...Array.from(code.matchAll(/`+/g), (match) => match[0].length)
+  )
+  return "`".repeat(longest + 1)
+}
+
+function fileExtension(path: string) {
+  return path.match(/\.([A-Za-z0-9]+)$/)?.[1]?.toLowerCase() ?? ""
+}
+
+export function formatComposerFileLineCommentForPrompt(
+  comment: ComposerFileLineComment
+) {
+  const line = `- ${formatComposerFileLineCommentReference(comment)}: ${comment.text}`
+  if (!comment.snippet) return line
+  const fence = codeFence(comment.snippet)
+  const code = [
+    `${fence}${fileExtension(comment.path)}`,
+    ...comment.snippet.split("\n"),
+    fence,
+  ]
+    .map((codeLine) => (codeLine ? `  ${codeLine}` : codeLine))
+    .join("\n")
+  return `${line}\n${code}`
+}
+
 export function buildComposerPromptMessage({
-  diffLineComments,
+  lineComments,
   skillName,
   text,
 }: {
-  diffLineComments?: Array<ComposerDiffLineComment>
+  lineComments?: Array<ComposerLineComment>
   skillName?: string
   text?: string
 }) {
   const baseMessage = serializeComposerDraft({ text, skillName }).trim()
-  const comments = diffLineComments?.filter(
-    (comment) => comment.text.trim().length > 0
-  )
-
-  if (!comments || comments.length === 0) return baseMessage
-
-  const commentBlock = `Diff comments:\n${comments
-    .map(formatComposerDiffLineCommentForPrompt)
-    .join("\n")}`
-
-  return baseMessage ? `${baseMessage}\n\n${commentBlock}` : commentBlock
+  const comments =
+    lineComments?.filter((comment) => comment.text.trim().length > 0) ?? []
+  const diffComments = comments.filter(isComposerDiffLineComment)
+  const fileComments = comments.filter(isComposerFileLineComment)
+  const blocks = [
+    baseMessage,
+    diffComments.length > 0
+      ? `Diff comments:\n${diffComments
+          .map(formatComposerDiffLineCommentForPrompt)
+          .join("\n")}`
+      : "",
+    fileComments.length > 0
+      ? `File comments:\n${fileComments
+          .map(formatComposerFileLineCommentForPrompt)
+          .join("\n")}`
+      : "",
+  ].filter(Boolean)
+  return blocks.join("\n\n")
 }
 
 export function parseSlashCommandInput(value = ""): SlashCommandInput | null {

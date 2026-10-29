@@ -87,7 +87,7 @@ const EMPTY_RIGHT_SIDEBAR_FILE_TABS: NonNullable<
 
 type CommitDiffCommentTarget = Omit<
   ComposerDiffLineComment,
-  "cwd" | "id" | "text"
+  "cwd" | "id" | "kind" | "text"
 >
 
 type PendingCommitDiffLineComment = CommitDiffCommentTarget & {

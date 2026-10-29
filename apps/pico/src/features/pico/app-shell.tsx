@@ -49,7 +49,7 @@ import {
   useLatestRef,
 } from "@/features/pico/app-shell-common"
 import {
-  EMPTY_COMPOSER_DIFF_LINE_COMMENTS,
+  EMPTY_COMPOSER_LINE_COMMENTS,
   EMPTY_COMPOSER_IMAGES,
   EMPTY_COMPOSER_PENDING_MESSAGES,
   createInitialAppShellComposerSnapshot,
@@ -62,9 +62,16 @@ import {
   type AppShellComposerActions,
   type AppShellComposerSnapshot,
   type ComposerDiffLineComment,
+  type ComposerLineComment,
+  isComposerDiffLineComment,
+  isComposerFileLineComment,
   type PendingComposerMessage,
   type UserConversationItem,
 } from "@/features/pico/app-shell-composer-state"
+import {
+  FileLineCommentsProvider,
+  type FileLineCommentsValue,
+} from "@/features/pico/file-line-comments"
 import {
   isHeldPendingId,
   type PendingQueueSaveRow,
@@ -390,11 +397,10 @@ function useAppShellSessionWorkspaceView({
   }
   const composerImagesStore = composerImagesStoreRef.current
   const composerImagesRef = React.useRef<Array<PromptImage>>([])
-  const composerDiffLineCommentsRef = React.useRef<
-    Array<ComposerDiffLineComment>
+  const composerLineCommentsRef = React.useRef<Array<ComposerLineComment>>([])
+  const [composerLineComments, setComposerLineCommentsState] = React.useState<
+    Array<ComposerLineComment>
   >([])
-  const [composerDiffLineComments, setComposerDiffLineCommentsState] =
-    React.useState<Array<ComposerDiffLineComment>>([])
   const displaySettingsStoreRef =
     React.useRef<PicoStore<AppShellDisplaySettingsState> | null>(null)
   if (!displaySettingsStoreRef.current) {
@@ -633,20 +639,20 @@ function useAppShellSessionWorkspaceView({
     )
   }
   const composerStore = composerStoreRef.current
-  const setComposerDiffLineComments = React.useCallback<
-    React.Dispatch<React.SetStateAction<Array<ComposerDiffLineComment>>>
+  const setComposerLineComments = React.useCallback<
+    React.Dispatch<React.SetStateAction<Array<ComposerLineComment>>>
   >(
     (action) => {
-      const current = composerDiffLineCommentsRef.current
+      const current = composerLineCommentsRef.current
       const next = applyStoreAction(current, action)
       if (next === current) return
 
-      composerDiffLineCommentsRef.current = next
-      setComposerDiffLineCommentsState(next)
+      composerLineCommentsRef.current = next
+      setComposerLineCommentsState(next)
       const currentComposerSnapshot = composerStore.state
       setStoreState(composerStore, {
         ...currentComposerSnapshot,
-        composerDiffLineComments: currentComposerSnapshot.disabled ? [] : next,
+        composerLineComments: currentComposerSnapshot.disabled ? [] : next,
       })
     },
     [composerStore]
@@ -2549,7 +2555,7 @@ function useAppShellSessionWorkspaceView({
     pendingDraftFollowUps,
     awaitingFirstTurn,
     pendingMessages,
-    composerDiffLineCommentsRef,
+    composerLineCommentsRef,
     composerImagesRef,
     composerTextRef,
     composerSkillRef,
@@ -2571,7 +2577,7 @@ function useAppShellSessionWorkspaceView({
     setPendingMessages,
     setAwaitingFirstTurn,
     setIsSubmitting,
-    setComposerDiffLineComments,
+    setComposerLineComments,
     setComposerImages,
   })
 
@@ -2727,7 +2733,7 @@ function useAppShellSessionWorkspaceView({
     return onMachineAction(machineId, run)
   }, [machineId, viewerContextId])
 
-  const createDiffLineCommentId = () => {
+  const createLineCommentId = () => {
     if (
       typeof crypto !== "undefined" &&
       typeof crypto.randomUUID === "function"
@@ -2747,11 +2753,11 @@ function useAppShellSessionWorkspaceView({
     const cwd = sessionStateRef.current.cwd?.trim() || ""
     if (!text || !cwd) return
 
-    setComposerDiffLineComments((current) => [
+    setComposerLineComments((current) => [
       ...current,
       {
         ...comment,
-        id: createDiffLineCommentId(),
+        id: createLineCommentId(),
         cwd,
         text,
       },
@@ -2787,9 +2793,37 @@ function useAppShellSessionWorkspaceView({
       ? [...pendingDraftFollowUpMessages, ...pendingMessages]
       : EMPTY_COMPOSER_PENDING_MESSAGES
   const composerDisabled = isSessionViewLoading
-  const displayedDiffLineComments = composerDisabled
-    ? EMPTY_COMPOSER_DIFF_LINE_COMMENTS
-    : composerDiffLineComments
+  const displayedLineComments = composerDisabled
+    ? EMPTY_COMPOSER_LINE_COMMENTS
+    : composerLineComments
+  const displayedDiffLineComments = React.useMemo(
+    () => displayedLineComments.filter(isComposerDiffLineComment),
+    [displayedLineComments]
+  )
+  const displayedFileLineComments = React.useMemo(
+    () => displayedLineComments.filter(isComposerFileLineComment),
+    [displayedLineComments]
+  )
+  const fileLineComments = React.useMemo<FileLineCommentsValue>(
+    () => ({
+      comments: displayedFileLineComments,
+      add: (comment) => {
+        const text = comment.text.trim()
+        if (!text || !comment.cwd) return
+        setComposerLineComments((current) => [
+          ...current,
+          { ...comment, kind: "file", id: createLineCommentId(), text },
+        ])
+        composerPanelRef.current?.focusPrompt({ preventScroll: true })
+      },
+      remove: (id) => {
+        setComposerLineComments((current) =>
+          current.filter((comment) => comment.id !== id)
+        )
+      },
+    }),
+    [displayedFileLineComments, setComposerLineComments]
+  )
   const displayedPendingMessages = composerDisabled
     ? EMPTY_COMPOSER_PENDING_MESSAGES
     : currentPendingMessages
@@ -3254,7 +3288,7 @@ function useAppShellSessionWorkspaceView({
       !awaitingFirstTurn &&
       !isSubmitting,
     centerMessages: displaySettingsRef.current.centerMessages,
-    composerDiffLineComments: displayedDiffLineComments,
+    composerLineComments: displayedLineComments,
     composerImages: displayedComposerImages,
     composerSkill: displayedComposerSkill,
     composerSyncNonce: composerDraftSeed.syncNonce,
@@ -3274,8 +3308,8 @@ function useAppShellSessionWorkspaceView({
   const composerActionsRef = useLatestRef<AppShellComposerActions>({
     abortSession,
     onPickImages,
-    removeDiffLineComment: (id) => {
-      setComposerDiffLineComments((current) =>
+    removeLineComment: (id) => {
+      setComposerLineComments((current) =>
         current.filter((comment) => comment.id !== id)
       )
     },
@@ -3841,7 +3875,7 @@ function useAppShellSessionWorkspaceView({
   ])
 
   return (
-    <>
+    <FileLineCommentsProvider value={fileLineComments}>
       <AppShellWindowEffectsHost
         isSessionViewLoading={isSessionViewLoading}
         loadingDisplaySessionTitle={loadingDisplaySessionTitle}
@@ -3857,7 +3891,7 @@ function useAppShellSessionWorkspaceView({
           <AppShellTabsController
             actionsRef={composerActionsRef}
             appUiStore={appUiStore}
-            composerDiffLineComments={displayedDiffLineComments}
+            diffLineComments={displayedDiffLineComments}
             composerPanelRef={composerPanelRef}
             contextUsageStore={contextUsageStore}
             conversationFrameRef={conversationFrameRef}
@@ -3979,7 +4013,7 @@ function useAppShellSessionWorkspaceView({
         uiRequestOpenRef={uiRequestOpenRef}
         viewerContextId={viewerContextId}
       />
-    </>
+    </FileLineCommentsProvider>
   )
 }
 

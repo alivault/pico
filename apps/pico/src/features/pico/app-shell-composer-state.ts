@@ -29,7 +29,9 @@ export function pendingDraftFollowUpId(
   return message.optimisticId || `pending-draft:${index}`
 }
 
+/** A comment on a line of a diff in the Git tab. */
 export type ComposerDiffLineComment = {
+  kind?: "diff"
   id: string
   cwd: string
   path: string
@@ -43,12 +45,42 @@ export type ComposerDiffLineComment = {
   mode: GitCommitDiffMode
 }
 
+/** A comment on lines of a project file in the file viewer. */
+export type ComposerFileLineComment = {
+  kind: "file"
+  id: string
+  cwd: string
+  path: string
+  startLine: number
+  endLine: number
+  /** The commented lines, so the agent sees what the user saw. */
+  snippet: string
+  text: string
+}
+
+/** A comment that the next prompt sends with its text. */
+export type ComposerLineComment =
+  | ComposerDiffLineComment
+  | ComposerFileLineComment
+
+export function isComposerFileLineComment(
+  comment: ComposerLineComment
+): comment is ComposerFileLineComment {
+  return comment.kind === "file"
+}
+
+export function isComposerDiffLineComment(
+  comment: ComposerLineComment
+): comment is ComposerDiffLineComment {
+  return comment.kind !== "file"
+}
+
 export type AppShellComposerSnapshot = {
   activeSessionId?: string
   awaitingFirstTurn: boolean
   canStartPendingQueue: boolean
   centerMessages: boolean
-  composerDiffLineComments: Array<ComposerDiffLineComment>
+  composerLineComments: Array<ComposerLineComment>
   composerImages: Array<PromptImage>
   composerSkill?: string
   composerSyncNonce: number
@@ -61,36 +93,27 @@ export type AppShellComposerSnapshot = {
   viewerContextId: string
 }
 
-export const EMPTY_COMPOSER_DIFF_LINE_COMMENTS: Array<ComposerDiffLineComment> =
-  []
+export const EMPTY_COMPOSER_LINE_COMMENTS: Array<ComposerLineComment> = []
 export const EMPTY_COMPOSER_IMAGES: Array<PromptImage> = []
 export const EMPTY_COMPOSER_PENDING_MESSAGES: Array<PendingComposerMessage> = []
 
-function sameComposerDiffLineComments(
-  left: Array<ComposerDiffLineComment>,
-  right: Array<ComposerDiffLineComment>
+function sameComposerLineComments(
+  left: Array<ComposerLineComment>,
+  right: Array<ComposerLineComment>
 ) {
   if (left === right) return true
   if (left.length !== right.length) return false
 
-  for (let index = 0; index < left.length; index += 1) {
-    const leftComment = left[index]
-    const rightComment = right[index]
-    if (!leftComment || !rightComment) return false
-    if (leftComment.id !== rightComment.id) return false
-    if (leftComment.cwd !== rightComment.cwd) return false
-    if (leftComment.path !== rightComment.path) return false
-    if (leftComment.lineNumber !== rightComment.lineNumber) return false
-    if (leftComment.side !== rightComment.side) return false
-    if (leftComment.text !== rightComment.text) return false
-    if (leftComment.tabKey !== rightComment.tabKey) return false
-    if (leftComment.tabTitle !== rightComment.tabTitle) return false
-    if (leftComment.commit !== rightComment.commit) return false
-    if (leftComment.shortHash !== rightComment.shortHash) return false
-    if (leftComment.mode !== rightComment.mode) return false
-  }
-
-  return true
+  // Comments are plain objects of strings and numbers, so compare their fields.
+  return left.every((leftComment, index) => {
+    const rightComment = right[index] as Record<string, unknown> | undefined
+    if (!rightComment) return false
+    const leftFields = Object.entries(leftComment)
+    return (
+      leftFields.length === Object.keys(rightComment).length &&
+      leftFields.every(([key, value]) => rightComment[key] === value)
+    )
+  })
 }
 
 function sameComposerPromptImages(
@@ -145,9 +168,9 @@ export function sameAppShellComposerSnapshot(
     left.awaitingFirstTurn === right.awaitingFirstTurn &&
     left.canStartPendingQueue === right.canStartPendingQueue &&
     left.centerMessages === right.centerMessages &&
-    sameComposerDiffLineComments(
-      left.composerDiffLineComments,
-      right.composerDiffLineComments
+    sameComposerLineComments(
+      left.composerLineComments,
+      right.composerLineComments
     ) &&
     left.composerSkill === right.composerSkill &&
     left.composerSyncNonce === right.composerSyncNonce &&
@@ -169,7 +192,7 @@ export type AppShellComposerActions = {
   abortSession: () => void | Promise<unknown>
   onPickImages: (files: FileList | Array<File> | null) => void | Promise<void>
   onRemoveComposerImage: (index: number) => void
-  removeDiffLineComment: (id: string) => void
+  removeLineComment: (id: string) => void
   /** Save the draft follow-up rows and return the rows for the server. */
   savePendingDraftFollowUps: (
     rows: Array<PendingQueueSaveRow>
@@ -210,7 +233,7 @@ export function createInitialAppShellComposerSnapshot(
     awaitingFirstTurn: false,
     canStartPendingQueue: false,
     centerMessages: true,
-    composerDiffLineComments: EMPTY_COMPOSER_DIFF_LINE_COMMENTS,
+    composerLineComments: EMPTY_COMPOSER_LINE_COMMENTS,
     composerImages: EMPTY_COMPOSER_IMAGES,
     composerSkill: undefined,
     composerSyncNonce: 0,
