@@ -72,6 +72,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
 import { MarkdownBlock } from "@/features/pico/markdown-renderer"
+import { useFileLineComments } from "@/features/pico/file-line-comments"
 import { useProjectFileEditing } from "@/features/pico/project-file-editing"
 import { useDirtyProjectFilePaths } from "@/features/pico/project-file-edits"
 import { picoQueryKeys } from "@/features/pico/query-keys"
@@ -759,6 +760,17 @@ export function ProjectFileContent({
     refetch: fileQuery.refetch,
   })
   const { edit } = editing
+  const fileComments = useFileLineComments()
+  const commentsForFile = React.useMemo(
+    () =>
+      fileComments?.comments.filter(
+        (comment) => comment.cwd === normalizedCwd && comment.path === path
+      ) ?? [],
+    [fileComments, normalizedCwd, path]
+  )
+  // Line numbers of a draft with unsaved changes may not match the file on
+  // disk, so comments wait for a save.
+  const commentsBlocked = Boolean(edit && editing.dirty)
   const content = fileQuery.data?.content ?? ""
   const isMarkdownFile = isMarkdownFilePath(path)
   const [markdownViewModes, setMarkdownViewModes] = React.useState<
@@ -920,6 +932,22 @@ export function ProjectFileContent({
                   : `read:${fileQuery.data?.version ?? ""}`
               }
               readOnly={!edit}
+              comments={commentsForFile}
+              canComment={Boolean(fileComments) && !commentsBlocked}
+              commentDisabledReason="Save your changes to comment"
+              onAddComment={
+                fileComments
+                  ? (range, text, snippet) =>
+                      fileComments.add({
+                        cwd: normalizedCwd,
+                        path,
+                        ...range,
+                        snippet,
+                        text,
+                      })
+                  : undefined
+              }
+              onRemoveComment={fileComments?.remove}
               onChange={editing.setDraft}
               onSave={() => {
                 void editing.save()

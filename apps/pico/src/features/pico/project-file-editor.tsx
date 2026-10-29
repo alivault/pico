@@ -37,6 +37,19 @@ import {
 } from "@codemirror/view"
 import { styleTags, tags } from "@lezer/highlight"
 import { basicSetup } from "codemirror"
+import { createPortal } from "react-dom"
+
+import {
+  fileLineCommentSnippet,
+  formatComposerFileLineCommentReference,
+} from "@/features/pico/composer-utils"
+import { LineCommentForm } from "@/features/pico/line-comment-form"
+import {
+  fileCommentsExtension,
+  setFileCommentLayout,
+  type FileCommentHandlers,
+  type FileCommentRange,
+} from "@/features/pico/project-file-comments-extension"
 
 // Colors follow Shiki's CSS-variables theme (createCssVariablesTheme in
 // @shikijs/core) with Pico's values from PICO_SHIKI_VARIABLE_DEFAULTS, so
@@ -441,6 +454,12 @@ const readOnlyExtensions = (readOnly: boolean) => [
     : [],
 ]
 
+/** A saved comment on lines of this file. */
+export type ProjectFileEditorComment = FileCommentRange & {
+  id: string
+  text: string
+}
+
 export type ProjectFileEditorProps = {
   path: string
   /** The document. The editor reads it at the start and on a new `docVersion`. */
@@ -449,6 +468,47 @@ export type ProjectFileEditorProps = {
   readOnly: boolean
   onChange: (doc: string) => void
   onSave: () => void
+  comments: Array<ProjectFileEditorComment>
+  /** False hides the comment buttons, for example with unsaved changes. */
+  canComment: boolean
+  commentDisabledReason?: string
+  onAddComment?: (
+    range: FileCommentRange,
+    text: string,
+    snippet: string
+  ) => void
+  onRemoveComment?: (id: string) => void
+}
+
+function FileCommentNote({
+  text,
+  onRemove,
+}: {
+  text: string
+  onRemove?: () => void
+}) {
+  return (
+    <div className="my-1 ml-2 inline-flex max-w-[min(32rem,calc(100%_-_1rem))] items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 py-0.5 pr-0.5 pl-2 font-sans text-[11px] text-amber-800 dark:text-amber-200">
+      <span className="shrink-0">💬</span>
+      <span className="truncate" title={text}>
+        {text}
+      </span>
+      {onRemove ? (
+        <button
+          type="button"
+          aria-label="Remove comment"
+          className="inline-flex size-4 shrink-0 items-center justify-center rounded-full hover:bg-amber-500/20"
+          onClick={onRemove}
+        >
+          ×
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
+function commentTitle(path: string, range: FileCommentRange) {
+  return `Comment on ${formatComposerFileLineCommentReference({ path, ...range })}`
 }
 
 export default function ProjectFileEditor({
@@ -458,7 +518,36 @@ export default function ProjectFileEditor({
   readOnly,
   onChange,
   onSave,
+  comments,
+  canComment,
+  commentDisabledReason,
+  onAddComment,
+  onRemoveComment,
 }: ProjectFileEditorProps) {
+  const [pendingComment, setPendingComment] =
+    React.useState<FileCommentRange | null>(null)
+  const commentHandlers = React.useRef<FileCommentHandlers>({
+    start: () => {},
+  })
+  commentHandlers.current = {
+    start: (range) => {
+      if (onAddComment) setPendingComment(range)
+    },
+  }
+  // One element for each comment widget; React draws into it.
+  const commentContainers = React.useRef(new Map<string, HTMLElement>())
+  const commentContainer = (key: string) => {
+    let element = commentContainers.current.get(key)
+    if (!element) {
+      element = document.createElement("div")
+      element.className = "cm-pico-comment-block"
+      commentContainers.current.set(key, element)
+    }
+    return element
+  }
+  const pendingKey = pendingComment
+    ? `pending:${pendingComment.startLine}-${pendingComment.endLine}`
+    : ""
   const containerRef = React.useRef<HTMLDivElement | null>(null)
   const viewRef = React.useRef<EditorView | null>(null)
   const languageCompartment = React.useRef(new Compartment()).current
@@ -498,6 +587,7 @@ export default function ProjectFileEditor({
           syntaxHighlighting(picoHighlightStyle),
           picoEditorTheme,
           EditorView.lineWrapping,
+          fileCommentsExtension(commentHandlers),
           EditorView.updateListener.of((update) => {
             if (update.docChanged)
               callbacks.current.onChange(update.state.doc.toString())
@@ -569,5 +659,83 @@ export default function ProjectFileEditor({
     })
   }, [docVersion])
 
-  return <div ref={containerRef} className="h-full min-h-0 overflow-hidden" />
+  // Comments are off with unsaved changes: close an open form.
+  const commentsOn = canComment && Boolean(onAddComment)
+  React.useEffect(() => {
+    if (!commentsOn) setPendingComment(null)
+  }, [commentsOn])
+
+  // Give CodeMirror the layout of the notes and the open form.
+  React.useEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+    view.dispatch({
+      effects: setFileCommentLayout.of({
+        canComment: commentsOn,
+        disabledReason: commentDisabledReason,
+        notes: comments.map((comment) => ({
+          startLine: comment.startLine,
+          endLine: comment.endLine,
+          container: commentContainer(comment.id),
+        })),
+        pending: pendingComment
+          ? { ...pendingComment, container: commentContainer(pendingKey) }
+          : null,
+      }),
+    })
+    // Drop the elements of comments that are gone.
+    const keys = new Set([...comments.map((comment) => comment.id), pendingKey])
+    for (const key of commentContainers.current.keys())
+      if (!keys.has(key)) commentContainers.current.delete(key)
+    // commentContainer only reads a ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comments, commentsOn, commentDisabledReason, pendingComment, pendingKey])
+
+  const submitComment = (text: string) => {
+    const view = viewRef.current
+    if (!view || !pendingComment) return
+    const doc = view.state.doc
+    const start = Math.min(Math.max(1, pendingComment.startLine), doc.lines)
+    const end = Math.min(Math.max(start, pendingComment.endLine), doc.lines)
+    const lines: Array<string> = []
+    for (let line = start; line <= end; line += 1)
+      lines.push(doc.line(line).text)
+    onAddComment?.(
+      { startLine: start, endLine: end },
+      text,
+      fileLineCommentSnippet(lines)
+    )
+    setPendingComment(null)
+    view.dispatch({ selection: { anchor: view.state.selection.main.head } })
+  }
+
+  return (
+    <>
+      <div ref={containerRef} className="h-full min-h-0 overflow-hidden" />
+      {pendingComment
+        ? createPortal(
+            <LineCommentForm
+              key={pendingKey}
+              title={commentTitle(path, pendingComment)}
+              onCancel={() => setPendingComment(null)}
+              onSubmit={submitComment}
+            />,
+            commentContainer(pendingKey),
+            pendingKey
+          )
+        : null}
+      {comments.map((comment) =>
+        createPortal(
+          <FileCommentNote
+            text={comment.text}
+            onRemove={
+              onRemoveComment ? () => onRemoveComment(comment.id) : undefined
+            }
+          />,
+          commentContainer(comment.id),
+          comment.id
+        )
+      )}
+    </>
+  )
 }
