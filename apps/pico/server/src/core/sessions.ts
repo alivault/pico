@@ -279,10 +279,10 @@ async function fitImage(image: ImageContent): Promise<ImageContent> {
   }
 }
 
-async function userContent(
-  text: string,
+/** The valid images of a request, fitted to the model limits. */
+async function promptImages(
   images: PromptImageInput[]
-): Promise<string | (TextContent | ImageContent)[]> {
+): Promise<ImageContent[]> {
   const valid = images.flatMap((image) => {
     let data = typeof image.data === "string" ? image.data.trim() : ""
     let mimeType =
@@ -295,8 +295,15 @@ async function userContent(
     if (!data || !/^image\//i.test(mimeType)) return []
     return [{ type: "image" as const, mimeType, data }]
   })
-  if (valid.length === 0) return text
-  const fitted = await Promise.all(valid.map(fitImage))
+  return Promise.all(valid.map(fitImage))
+}
+
+async function userContent(
+  text: string,
+  images: PromptImageInput[]
+): Promise<string | (TextContent | ImageContent)[]> {
+  const fitted = await promptImages(images)
+  if (fitted.length === 0) return text
   return [...(text ? [{ type: "text" as const, text }] : []), ...fitted]
 }
 
@@ -1763,7 +1770,8 @@ export class Sessions implements HostSessions {
   async answer(
     id: string,
     questionId: string | undefined,
-    value: QuestionAnswer["value"]
+    value: QuestionAnswer["value"],
+    images: PromptImageInput[] = []
   ) {
     this.meta(id)
     const answered = await answerQuestion(
@@ -1772,7 +1780,8 @@ export class Sessions implements HostSessions {
       questionId,
       value,
       "ui",
-      ctx
+      ctx,
+      await promptImages(images)
     )
     if (!answered) throw conflict("The question is already closed")
   }

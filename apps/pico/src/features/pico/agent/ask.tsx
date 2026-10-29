@@ -25,6 +25,11 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { postSessionJson } from "@/features/pico/agent/session-extensions"
 import {
+  getClipboardImageFiles,
+  readFileAsPromptImage,
+} from "@/features/pico/app-shell-utils"
+import { ToolResultImages } from "@/features/pico/tool-result-images"
+import {
   useTrackWaitingCard,
   waitingCardKey,
 } from "@/features/pico/agent/waiting-cards"
@@ -37,6 +42,7 @@ import {
   type ToolRendererProps,
 } from "@/features/pico/tool-renderers/registry"
 import { cn } from "@/lib/utils"
+import type { PromptImage } from "@/lib/pico"
 import { useMachineId } from "@/lib/pico/machine-context"
 
 type QuestionOption = { label: string; description?: string }
@@ -49,6 +55,8 @@ type QuestionField = {
   placeholder?: string
 }
 type AnswerValue = string | Array<string> | Record<string, string>
+
+const MAX_ANSWER_IMAGES = 8
 
 export type Question = {
   id: string
@@ -104,6 +112,57 @@ function SendHint() {
   )
 }
 
+/** Images that the user pastes into an answer. */
+function usePastedImages() {
+  const [images, setImages] = React.useState<Array<PromptImage>>([])
+  const onPaste = (event: React.ClipboardEvent) => {
+    const files = getClipboardImageFiles(event.clipboardData)
+    if (files.length === 0) return
+    event.preventDefault()
+    void Promise.all(
+      files.slice(0, MAX_ANSWER_IMAGES).map(readFileAsPromptImage)
+    ).then((added) =>
+      setImages((current) => [...current, ...added].slice(0, MAX_ANSWER_IMAGES))
+    )
+  }
+  const remove = (index: number) =>
+    setImages((current) => current.filter((_, at) => at !== index))
+  return { images, onPaste, remove }
+}
+
+function PastedImages({
+  images,
+  onRemove,
+}: {
+  images: Array<PromptImage>
+  onRemove: (index: number) => void
+}) {
+  if (images.length === 0) return null
+  return (
+    <div className="flex flex-wrap gap-2">
+      {images.map((image, index) => (
+        <div key={`${index}:${image.data.length}`} className="relative">
+          <img
+            src={image.previewUrl}
+            alt="Pasted image"
+            className="h-16 rounded-md border object-cover"
+          />
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            title="Remove image"
+            className="absolute top-0.5 right-0.5 size-5 rounded-full bg-background/90 shadow-sm"
+            onClick={() => onRemove(index)}
+          >
+            <XIcon className="size-3" />
+          </Button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function submitOnCommandEnter(event: React.KeyboardEvent, send: () => void) {
   if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
     event.preventDefault()
@@ -117,10 +176,12 @@ export function QuestionForm({
   question,
 }: {
   disabled?: boolean
-  onAnswer: (value: AnswerValue) => void
+  onAnswer: (value: AnswerValue, images: Array<PromptImage>) => void
   question: Question
 }) {
   const [text, setText] = React.useState("")
+  const pasted = usePastedImages()
+  const hasImages = pasted.images.length > 0
   const [selected, setSelected] = React.useState<Array<string>>([])
   const [form, setForm] = React.useState<Record<string, string>>({})
   const options = question.options ?? []
@@ -129,12 +190,12 @@ export function QuestionForm({
   if (question.kind === "confirm") {
     return (
       <div className="flex gap-2">
-        <Button disabled={disabled} onClick={() => onAnswer("yes")}>
+        <Button disabled={disabled} onClick={() => onAnswer("yes", [])}>
           <CheckIcon /> Yes
         </Button>
         <Button
           disabled={disabled}
-          onClick={() => onAnswer("no")}
+          onClick={() => onAnswer("no", [])}
           variant="outline"
         >
           <XIcon /> No
@@ -188,7 +249,7 @@ export function QuestionForm({
                 variant="outline"
                 disabled={disabled}
                 className="h-auto w-full flex-col items-start gap-0.5 py-2 text-left whitespace-normal"
-                onClick={() => onAnswer(option.label)}
+                onClick={() => onAnswer(option.label, pasted.images)}
               >
                 <span className="font-medium">{option.label}</span>
                 {option.description ? (
@@ -203,33 +264,37 @@ export function QuestionForm({
         {multi ? (
           <Button
             disabled={disabled || selected.length === 0}
-            onClick={() => onAnswer(selected)}
+            onClick={() => onAnswer(selected, pasted.images)}
           >
             {selected.length > 0 ? `Send ${selected.length} choices` : "Send"}
           </Button>
         ) : null}
         {question.allowOther ? (
           <form
-            className="flex gap-2"
+            className="space-y-2"
             onSubmit={(event) => {
               event.preventDefault()
-              if (text.trim()) onAnswer(text.trim())
+              if (text.trim() || hasImages) onAnswer(text.trim(), pasted.images)
             }}
           >
-            <Input
-              disabled={disabled}
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              placeholder="Or type another answer"
-              aria-label="Another answer"
-            />
-            <Button
-              disabled={disabled || !text.trim()}
-              type="submit"
-              variant="outline"
-            >
-              Send
-            </Button>
+            <div className="flex gap-2">
+              <Input
+                disabled={disabled}
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                onPaste={pasted.onPaste}
+                placeholder="Or type another answer"
+                aria-label="Another answer"
+              />
+              <Button
+                disabled={disabled || (!text.trim() && !hasImages)}
+                type="submit"
+                variant="outline"
+              >
+                Send
+              </Button>
+            </div>
+            <PastedImages images={pasted.images} onRemove={pasted.remove} />
           </form>
         ) : null}
       </div>
@@ -243,7 +308,7 @@ export function QuestionForm({
         field.required && field.type !== "boolean" && !form[field.name]?.trim()
     )
     const sendForm = () => {
-      if (!disabled && !missing) onAnswer(form)
+      if (!disabled && !missing) onAnswer(form, pasted.images)
     }
     return (
       <form
@@ -253,6 +318,7 @@ export function QuestionForm({
           sendForm()
         }}
         onKeyDown={(event) => submitOnCommandEnter(event, sendForm)}
+        onPaste={pasted.onPaste}
       >
         <FieldGroup className="gap-4">
           {fields.map((field) => {
@@ -329,6 +395,7 @@ export function QuestionForm({
             )
           })}
         </FieldGroup>
+        <PastedImages images={pasted.images} onRemove={pasted.remove} />
         <div className="flex items-center gap-3">
           <Button disabled={disabled || missing} type="submit">
             Send
@@ -340,7 +407,7 @@ export function QuestionForm({
   }
 
   const send = () => {
-    if (text.trim()) onAnswer(text.trim())
+    if (text.trim() || hasImages) onAnswer(text.trim(), pasted.images)
   }
   return (
     <form
@@ -357,9 +424,14 @@ export function QuestionForm({
         placeholder={question.placeholder ?? "Your answer"}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => submitOnCommandEnter(event, send)}
+        onPaste={pasted.onPaste}
       />
+      <PastedImages images={pasted.images} onRemove={pasted.remove} />
       <div className="flex items-center gap-3">
-        <Button disabled={disabled || !text.trim()} type="submit">
+        <Button
+          disabled={disabled || (!text.trim() && !hasImages)}
+          type="submit"
+        >
           Send
         </Button>
         <SendHint />
@@ -371,7 +443,11 @@ export function QuestionForm({
 function useAnswer(viewerContextId: string, sessionId: string | undefined) {
   const machineId = useMachineId()
   const [sending, setSending] = React.useState(false)
-  const answer = (questionId: string, value: AnswerValue) => {
+  const answer = (
+    questionId: string,
+    value: AnswerValue,
+    images: Array<PromptImage>
+  ) => {
     setSending(true)
     void postSessionJson(
       machineId,
@@ -381,6 +457,7 @@ function useAnswer(viewerContextId: string, sessionId: string | undefined) {
       {
         questionId,
         value,
+        images: images.map(({ mimeType, data }) => ({ mimeType, data })),
       }
     )
       .catch((error: unknown) =>
@@ -430,7 +507,7 @@ function QuestionCard({ block }: ToolRendererProps) {
         <QuestionForm
           disabled={sending}
           question={question}
-          onAnswer={(value) => answer(questionId, value)}
+          onAnswer={(value, images) => answer(questionId, value, images)}
         />
       ) : answered ? (
         <div className="rounded-lg bg-muted/60 px-3 py-2">
@@ -443,6 +520,9 @@ function QuestionCard({ block }: ToolRendererProps) {
             {details.answer?.text ??
               block.output.replace(/^The user answered[^:]*: /, "")}
           </span>
+          {block.images?.length ? (
+            <ToolResultImages images={block.images} />
+          ) : null}
         </div>
       ) : (
         <div className="text-xs text-muted-foreground">

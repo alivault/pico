@@ -1291,7 +1291,11 @@ export function createApi(api: ApiContext) {
 
   router.post("/api/session/answer", async (request) => {
     const id = requireSession(request)
-    const body = await request.body<{ questionId?: unknown; value?: unknown }>()
+    const body = await request.body<{
+      questionId?: unknown
+      value?: unknown
+      images?: unknown
+    }>()
     const value = body.value
     const valid =
       typeof value === "string" ||
@@ -1305,7 +1309,10 @@ export function createApi(api: ApiContext) {
     await sessions.answer(
       id,
       stringField(body.questionId),
-      value as string | string[] | Record<string, string>
+      value as string | string[] | Record<string, string>,
+      Array.isArray(body.images)
+        ? (body.images as Array<{ mimeType?: string; data?: string }>)
+        : []
     )
     return { ok: true }
   })

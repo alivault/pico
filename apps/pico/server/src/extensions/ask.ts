@@ -39,6 +39,8 @@ export type QuestionAnswer = {
   text: string
   at: number
   via: "ui" | "chat"
+  /** Images that the user pasted into the answer. */
+  images?: Array<{ type: "image"; mimeType: string; data: string }>
 }
 
 export type Question = {
@@ -93,7 +95,8 @@ export async function answerQuestion(
   questionId: string | undefined,
   value: QuestionAnswer["value"],
   via: QuestionAnswer["via"],
-  context: Context
+  context: Context,
+  images: NonNullable<QuestionAnswer["images"]> = []
 ) {
   return harness.commit(async (tx) => {
     const draft = (await tx.doc(
@@ -109,6 +112,7 @@ export async function answerQuestion(
       text: answerText(question, value),
       at: Date.now(),
       via,
+      ...(images.length > 0 ? { images } : {}),
     })
     return true
   }, context)
@@ -263,14 +267,25 @@ const askTool = defineTool({
         details: { questionId: id, status: "cancelled" },
       })
     }
-    const answer = question.answer
+    const { images = [], ...answer } = question.answer
+    const attached =
+      images.length === 0
+        ? ""
+        : images.length === 1
+          ? "an image"
+          : `${images.length} images`
     const text =
       answer.via === "chat"
         ? `The user answered in chat: ${answer.text}`
-        : `The user answered: ${answer.text}`
-    return textResult(text, {
+        : !attached
+          ? `The user answered: ${answer.text}`
+          : answer.text.trim()
+            ? `The user answered with ${attached}: ${answer.text}`
+            : `The user answered with ${attached}.`
+    return {
+      output: [{ type: "text" as const, text }, ...images],
       details: json({ questionId: id, status: "answered", answer }),
-    })
+    }
   },
 })
 
