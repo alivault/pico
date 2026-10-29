@@ -299,7 +299,10 @@ export function QuestionForm({
                     onValueChange={(next) => set(String(next ?? ""))}
                     disabled={disabled}
                   >
-                    <SelectTrigger id={fieldId} className="w-full">
+                    <SelectTrigger
+                      id={fieldId}
+                      className="h-auto! min-h-8 w-full text-left whitespace-normal *:data-[slot=select-value]:line-clamp-none"
+                    >
                       <SelectValue
                         placeholder={`Choose ${(field.label ?? field.name).toLowerCase()}`}
                       />
