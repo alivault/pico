@@ -10,7 +10,7 @@ export type PicoEventMap = {
   /** Select a session, for example a child session. */
   "pico:open-session": { sessionId: string }
   /** Show a right sidebar tab. */
-  "pico:open-sidebar-tab": { tab: "agent" | "preview" | "review" }
+  "pico:open-sidebar-tab": { tab: "agent" | "review" }
   /** Show a background job in the terminal panel. */
   "pico:open-job-terminal": { jobId: string }
   /** Another device changed the shared sidebar layout in local storage. */

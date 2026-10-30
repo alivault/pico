@@ -1334,7 +1334,6 @@ export function RightSidebarTabStrip({
   onReorderFiles,
   agentBusy = false,
   showAgent = false,
-  showPreview = false,
   showFiles = false,
   showHistory = false,
   showReview = false,
@@ -1364,7 +1363,6 @@ export function RightSidebarTabStrip({
   /** Show a dot on the Agent tab while the agent has live work there. */
   agentBusy?: boolean
   showAgent?: boolean
-  showPreview?: boolean
   showFiles?: boolean
   showHistory?: boolean
   showReview?: boolean
@@ -1494,7 +1492,6 @@ export function RightSidebarTabStrip({
             value: "agent",
           })
         : null}
-      {showPreview ? renderTab({ label: "Preview", value: "preview" }) : null}
       {!hasOpenFiles || showFiles
         ? renderTab({
             active: activeTab === "files" && (!hasOpenFiles || !activeFilePath),

@@ -71,7 +71,6 @@ import {
 import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
 import "@/features/pico/agent/register"
 import { AgentPanel, useAgentBusy } from "@/features/pico/agent/agent-panel"
-import { PreviewPanel, usePreviewState } from "@/features/pico/agent/preview"
 import type { GitCommitDiffMode, GitCommitDiffResponse } from "@/lib/pico/api"
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
@@ -1035,8 +1034,6 @@ export function RightSidebar({
   const machineId = useMachineId()
   const normalizedCwd = normalizeCwd(cwd)
   const isMobile = useIsMobile()
-  const preview = usePreviewState(viewerContextId, sessionId)
-  const previewAvailable = useMachineFeature("preview")
   const agentPanelAvailable = useMachineFeature("agent-panel")
   const [localState, dispatchLocal] = React.useReducer(
     rightSidebarLocalReducer,
@@ -1206,10 +1203,6 @@ export function RightSidebar({
           onReorderFiles={onReorderFiles}
           agentBusy={agentBusy}
           showAgent={!isMobile && agentPanelAvailable}
-          showPreview={
-            previewAvailable &&
-            (Boolean(preview?.target) || activeTab === "preview")
-          }
           showFiles={isMobile && hasOpenFileTabs}
           showHistory={historyAsTab || activeTab === "history"}
           showReview
@@ -1228,21 +1221,6 @@ export function RightSidebar({
             sessionId={sessionId}
             viewerContextId={viewerContextId}
           />
-        </div>
-        <div
-          className={
-            activeTab === "preview"
-              ? "min-h-0 flex-1 overflow-hidden"
-              : "hidden"
-          }
-        >
-          {activeTab === "preview" ? (
-            <PreviewPanel
-              active={active}
-              sessionId={sessionId}
-              viewerContextId={viewerContextId}
-            />
-          ) : null}
         </div>
         <div
           className={

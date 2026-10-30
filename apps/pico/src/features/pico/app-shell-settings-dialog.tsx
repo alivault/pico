@@ -599,7 +599,7 @@ function getSettingsCommandGroups({
           id: "agent-settings",
           title: "Agent settings",
           description:
-            "Push notifications, child sessions, worktrees, previews, tool profiles, and MCP servers.",
+            "Push notifications, child sessions, worktrees, tool profiles, and MCP servers.",
           valueLabel: "Open",
           keywords: [
             "agent",
@@ -607,7 +607,6 @@ function getSettingsCommandGroups({
             "notifications",
             "ntfy",
             "worktree",
-            "preview",
             "profile",
             "mcp",
             "tools",
@@ -635,7 +634,7 @@ function getSettingsCommandGroups({
           id: "resources",
           title: "Resources",
           description:
-            "What uses memory on this machine: the server, terminals, jobs, the agent browser, and language servers.",
+            "What uses memory on this machine: the server, terminals, jobs, and the agent browser.",
           valueLabel: "Open",
           keywords: ["resources", "memory", "ram", "jobs", "processes"],
           onSelect: () => emitPicoEvent("pico:open-resources", {}),

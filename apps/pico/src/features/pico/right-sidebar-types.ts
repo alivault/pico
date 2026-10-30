@@ -34,7 +34,6 @@ export type RightSidebarTabValue =
   | "history"
   | "commit-diff"
   | "agent"
-  | "preview"
 
 export type RightSidebarProps = {
   viewerContextId: string

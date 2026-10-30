@@ -41,12 +41,10 @@ export type AgentSettings = {
   notifyNeedsInput: boolean
   ntfyUrl: string
   publicUrl: string
-  lspAfterEdit: boolean
   browserHeadless: boolean
   scratchSpillKb: number
   maxChildSessions: number
   maxSpawnDepth: number
-  previewPorts: string
   worktreeCopy: Array<string>
   jobMemoryHigh: string
   jobMemoryMax: string
@@ -455,17 +453,6 @@ export function AgentSettingsDialog({
                 )}
               />
               <Row
-                label="Report type errors after edits"
-                description="Add language server errors to the results of edit and write."
-                control={(id) => (
-                  <Switch
-                    id={id}
-                    checked={settings.lspAfterEdit}
-                    onCheckedChange={(value) => save({ lspAfterEdit: value })}
-                  />
-                )}
-              />
-              <Row
                 label="Browser without a window"
                 description="Turn off to watch the agent's browser on the server's screen."
                 control={(id) => (
@@ -498,18 +485,6 @@ export function AgentSettingsDialog({
                       onSave={(value) => save({ jobMemoryMax: value })}
                     />
                   </div>
-                )}
-              />
-              <Row
-                label="Preview ports"
-                description="Ports for app previews, as start-end."
-                control={(id) => (
-                  <TextSetting
-                    id={id}
-                    width="w-28"
-                    initial={settings.previewPorts}
-                    onSave={(value) => save({ previewPorts: value })}
-                  />
                 )}
               />
             </SettingsSection>

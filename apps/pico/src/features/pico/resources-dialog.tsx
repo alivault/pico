@@ -44,8 +44,6 @@ export type MachineResources = {
     processes: number
   }>
   browser?: { contexts: number; running: boolean; rss: number }
-  lsp: Array<{ kind: string; root: string; pid?: number; rss?: number }>
-  previews: number
 }
 
 export function formatBytes(bytes: number | undefined) {
@@ -159,7 +157,6 @@ function ResourcesView({ data }: { data: MachineResources }) {
               : "not running"
           }
         />
-        <Row label="App previews" value={data.previews} />
       </Section>
       <Section title="Running jobs">
         {data.jobs.length === 0 ? (
@@ -170,19 +167,6 @@ function ResourcesView({ data }: { data: MachineResources }) {
               key={job.id}
               label={`${job.name} · ${job.sessionId}`}
               value={`${formatBytes(job.memory)} · ${job.processes} proc${job.scoped ? " · scope" : ""}`}
-            />
-          ))
-        )}
-      </Section>
-      <Section title="Language servers">
-        {data.lsp.length === 0 ? (
-          <p className="py-1 text-sm text-muted-foreground">None runs.</p>
-        ) : (
-          data.lsp.map((server) => (
-            <Row
-              key={`${server.kind}:${server.root}`}
-              label={`${server.kind} · ${server.root}`}
-              value={formatBytes(server.rss)}
             />
           ))
         )}

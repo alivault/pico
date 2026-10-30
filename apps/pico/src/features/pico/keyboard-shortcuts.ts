@@ -26,7 +26,6 @@ export const rightSidebarPaneShortcutKeys = {
   review: "G",
   history: "H",
   agent: "A",
-  preview: "V",
 } as const
 
 export type RightSidebarShortcutPane = keyof typeof rightSidebarPaneShortcutKeys

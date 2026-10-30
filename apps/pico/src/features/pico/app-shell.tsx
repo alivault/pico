@@ -3592,15 +3592,6 @@ function useAppShellSessionWorkspaceView({
         onSelect: () => toggleRightSidebarPane("agent"),
       },
       {
-        id: "toggle-preview-pane",
-        group: "Workspace",
-        title: "Toggle Preview Pane",
-        description: "Toggle the web preview pane",
-        shortcut: formatShortcutLabel(rightSidebarPaneShortcut("preview")),
-        keywords: ["preview", "browser", "web", "localhost", "pane"],
-        onSelect: () => toggleRightSidebarPane("preview"),
-      },
-      {
         id: "login-provider",
         group: "App",
         title: "Login to provider",

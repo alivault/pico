@@ -22,10 +22,7 @@ export type AppShellRightSidebarState = {
 
 function readStoredRightSidebarActiveTab(): RightSidebarTabValue {
   const stored = safeLocalStorageGetItem(RIGHT_SIDEBAR_ACTIVE_TAB_STORAGE_KEY)
-  return stored === "files" ||
-    stored === "review" ||
-    stored === "agent" ||
-    stored === "preview"
+  return stored === "files" || stored === "review" || stored === "agent"
     ? stored
     : "review"
 }
