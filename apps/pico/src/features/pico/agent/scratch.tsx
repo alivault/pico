@@ -26,11 +26,11 @@ function formatBytes(bytes: number) {
 }
 
 function ScratchSection({
-  sessionId,
+  agentId,
   state,
   viewerContextId,
 }: {
-  sessionId: string
+  agentId: string
   state: Record<string, unknown>
   viewerContextId: string
 }) {
@@ -70,9 +70,9 @@ function ScratchSection({
             if (!next) setOpen(null)
           }}
           title={open.name}
-          path="/api/session/scratch"
+          path="/api/agent/scratch"
           searchParams={{ id: open.id }}
-          sessionId={sessionId}
+          agentId={agentId}
           viewerContextId={viewerContextId}
         />
       ) : null}

@@ -19,7 +19,7 @@ export type PendingQueueSaveRow = {
   streamingBehavior: QueueLane
 }
 
-/** One row of a queue edit session. */
+/** One row of a queue edit agent. */
 export type QueueEditRow = {
   key: string
   pendingId?: string
@@ -29,14 +29,14 @@ export type QueueEditRow = {
   originalImages: Array<PromptImage>
   lane: QueueLane
   originalLane: QueueLane
-  /** The place of the row when the session started. */
+  /** The place of the row when the agent started. */
   originalIndex: number
   removed: boolean
   moved: boolean
   isNew: boolean
 }
 
-export type QueueEditSession = {
+export type QueueEditAgent = {
   rows: Array<QueueEditRow>
   selectedKey: string
   /** The direction of the last selection change, for the caret position. */
@@ -124,8 +124,8 @@ export function isQueueRowChanged(row: QueueEditRow) {
   )
 }
 
-export function hasQueueChanges(session: QueueEditSession) {
-  return session.rows.some(isQueueRowChanged)
+export function hasQueueChanges(agent: QueueEditAgent) {
+  return agent.rows.some(isQueueRowChanged)
 }
 
 /** The row that the user queued last: the highest server ID, or the last row. */
@@ -242,14 +242,14 @@ export function appendQueueRow(
 }
 
 /**
- * Bring a session up to date with the queue: drop rows that were sent and
- * that the user did not touch, and add prompts queued since the session
+ * Bring an agent up to date with the queue: drop rows that were sent and
+ * that the user did not touch, and add prompts queued since the agent
  * started at the end of their lane.
  */
-export function mergeQueueSession(
-  session: QueueEditSession,
+export function mergeQueueAgent(
+  agent: QueueEditAgent,
   messages: Array<PendingQueueMessage>
-): QueueEditSession {
+): QueueEditAgent {
   const live = new Map(
     messages.map((message) => [
       queueIdentity(message.pendingId),
@@ -257,12 +257,12 @@ export function mergeQueueSession(
     ])
   )
   const known = new Set(
-    session.rows.flatMap((row) =>
+    agent.rows.flatMap((row) =>
       row.pendingId ? [queueIdentity(row.pendingId)] : []
     )
   )
   let renamed = false
-  const kept = session.rows.flatMap((row) => {
+  const kept = agent.rows.flatMap((row) => {
     if (!row.pendingId) return [row]
     const pendingId = live.get(queueIdentity(row.pendingId))
     if (!pendingId) return isQueueRowChanged(row) ? [row] : []
@@ -273,31 +273,31 @@ export function mergeQueueSession(
   const added = messages
     .filter((message) => !known.has(queueIdentity(message.pendingId)))
     .map((message, index) =>
-      queueRowFromMessage(message, session.rows.length + index)
+      queueRowFromMessage(message, agent.rows.length + index)
     )
 
-  if (!renamed && kept.length === session.rows.length && added.length === 0) {
-    return session
+  if (!renamed && kept.length === agent.rows.length && added.length === 0) {
+    return agent
   }
 
   const rows = orderQueueRows([...kept, ...added])
-  let selectedKey = session.selectedKey
+  let selectedKey = agent.selectedKey
   if (!rows.some((row) => row.key === selectedKey)) {
-    const oldIndex = session.rows.findIndex((row) => row.key === selectedKey)
+    const oldIndex = agent.rows.findIndex((row) => row.key === selectedKey)
     const fallback =
       kept.find((_, index) => index >= oldIndex) ?? kept.at(-1) ?? rows[0]
     selectedKey = fallback?.key ?? ""
   }
 
-  return { ...session, rows, selectedKey }
+  return { ...agent, rows, selectedKey }
 }
 
-/** The rows and removals to send when the user saves a session. */
-export function queueSessionSavePlan(session: QueueEditSession) {
+/** The rows and removals to send when the user saves an agent. */
+export function queueAgentSavePlan(agent: QueueEditAgent) {
   const rows: Array<PendingQueueSaveRow> = []
   const removedPendingIds: Array<string> = []
 
-  for (const row of session.rows) {
+  for (const row of agent.rows) {
     const empty = !row.text.trim() && row.images.length === 0
     if (row.removed || empty) {
       if (row.pendingId) removedPendingIds.push(row.pendingId)

@@ -1,9 +1,6 @@
 import * as React from "react"
 import { ProfileMenuSub } from "@/features/pico/agent/profiles"
-import {
-  SessionLineage,
-  useSessionInfo,
-} from "@/features/pico/agent/session-lineage"
+import { AgentLineage, useAgentInfo } from "@/features/pico/agent/agent-lineage"
 import {
   EllipsisIcon,
   PanelRightIcon,
@@ -28,7 +25,7 @@ import { TitleTooltip } from "@/components/ui/tooltip"
 import {
   formatDisplayPath,
   formatFolderName,
-  getCurrentSessionTitleFromState,
+  getCurrentAgentTitleFromState,
   shallowRecordEqual,
 } from "@/features/pico/app-shell-common"
 import type { AppShellDisplaySettingsState } from "@/features/pico/app-shell-types"
@@ -41,68 +38,68 @@ import {
   useSelector,
   type PicoStore,
 } from "@/features/pico/tanstack-store-utils"
-import type { SessionState } from "@/lib/pico"
+import type { AgentState } from "@/lib/pico"
 import { cn } from "@/lib/utils"
 import { useMachineFeature } from "@/features/pico/machine-store"
 
-export type AppShellSessionHeaderActions = {
-  createSession: (cwdOverride?: string) => void | Promise<unknown>
-  onDeleteCurrentSession: () => void
-  onForkSession: () => void | Promise<unknown>
-  onMoveCurrentSession: (directory: string) => void | Promise<unknown>
-  onMoveCurrentSessionToAnyDirectory: () => void
+export type AppShellAgentHeaderActions = {
+  createAgent: (cwdOverride?: string) => void | Promise<unknown>
+  onDeleteCurrentAgent: () => void
+  onForkAgent: () => void | Promise<unknown>
+  onMoveCurrentAgent: (directory: string) => void | Promise<unknown>
+  onMoveCurrentAgentToAnyDirectory: () => void
   onOpenCommandPalette: () => void
   onOpenSettings: () => void
-  onRenameSession: () => void
+  onRenameAgent: () => void
   onRunCompact: () => void | Promise<unknown>
-  onToggleCurrentSessionPinned: () => void
+  onToggleCurrentAgentPinned: () => void
   onToggleHideThinking: () => void | Promise<unknown>
   onToggleHideToolBlocks: () => void
-  onTreeSession: () => void | Promise<unknown>
+  onTreeAgent: () => void | Promise<unknown>
 }
 
-type AppShellSessionHeaderProps = {
-  actionsRef: React.RefObject<AppShellSessionHeaderActions>
-  defaultNewSessionDirectory: string
-  displaySessionCwd?: string
+type AppShellAgentHeaderProps = {
+  actionsRef: React.RefObject<AppShellAgentHeaderActions>
+  defaultNewAgentDirectory: string
+  displayAgentCwd?: string
   gitPanelOpen: boolean
   terminalPanelOpen: boolean
-  loadingDisplaySessionTitle: string
-  currentSessionPinned: boolean
+  loadingDisplayAgentTitle: string
+  currentAgentPinned: boolean
   displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
-  isSessionViewLoading: boolean
-  newSessionDirectoryOptions: Array<{ path: string; label: string }>
+  isAgentViewLoading: boolean
+  newAgentDirectoryOptions: Array<{ path: string; label: string }>
   onToggleGitPanel: () => void
   onToggleTerminalPanel: () => void
-  sessionStore: PicoStore<SessionState>
+  agentStore: PicoStore<AgentState>
   viewerContextId: string
 }
 
-export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
+export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
   actionsRef,
-  defaultNewSessionDirectory,
-  displaySessionCwd,
+  defaultNewAgentDirectory,
+  displayAgentCwd,
   gitPanelOpen,
   terminalPanelOpen,
-  loadingDisplaySessionTitle,
-  currentSessionPinned,
+  loadingDisplayAgentTitle,
+  currentAgentPinned,
   displaySettingsStore,
-  isSessionViewLoading,
-  newSessionDirectoryOptions,
+  isAgentViewLoading,
+  newAgentDirectoryOptions,
   onToggleGitPanel,
   onToggleTerminalPanel,
-  sessionStore,
+  agentStore,
   viewerContextId,
-}: AppShellSessionHeaderProps) {
+}: AppShellAgentHeaderProps) {
   const terminalsAvailable = useMachineFeature("native-pty")
-  const sessionHeaderState = useSelector(
-    sessionStore,
-    (sessionState) => ({
-      firstMessage: sessionState.firstMessage,
-      hideThinkingBlock: sessionState.hideThinkingBlock,
-      sessionHasFile: Boolean(sessionState.sessionFile),
-      sessionName: sessionState.sessionName,
-      sessionId: sessionState.draft ? undefined : sessionState.sessionId,
+  const agentHeaderState = useSelector(
+    agentStore,
+    (agentState) => ({
+      firstMessage: agentState.firstMessage,
+      hideThinkingBlock: agentState.hideThinkingBlock,
+      agentHasFile: Boolean(agentState.agentFile),
+      agentName: agentState.agentName,
+      agentId: agentState.draft ? undefined : agentState.agentId,
     }),
     { compare: shallowRecordEqual }
   )
@@ -110,17 +107,14 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
     displaySettingsStore,
     (settings) => settings.hideToolBlocks
   )
-  const displaySessionTitle = isSessionViewLoading
-    ? loadingDisplaySessionTitle
-    : getCurrentSessionTitleFromState(sessionHeaderState)
-  const sessionInfo = useSessionInfo(
-    viewerContextId,
-    sessionHeaderState.sessionId
-  )
+  const displayAgentTitle = isAgentViewLoading
+    ? loadingDisplayAgentTitle
+    : getCurrentAgentTitleFromState(agentHeaderState)
+  const agentInfo = useAgentInfo(viewerContextId, agentHeaderState.agentId)
   // A worktree folder has the branch name, so the branch text covers it.
-  const showFolderName = Boolean(displaySessionCwd && !sessionInfo?.worktree)
-  const moveSessionDirectoryOptions = newSessionDirectoryOptions.filter(
-    (option) => option.path !== displaySessionCwd
+  const showFolderName = Boolean(displayAgentCwd && !agentInfo?.worktree)
+  const moveAgentDirectoryOptions = newAgentDirectoryOptions.filter(
+    (option) => option.path !== displayAgentCwd
   )
 
   return (
@@ -129,11 +123,11 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
         <SidebarTrigger className="shrink-0" />
         <TitleTooltip
           title={
-            defaultNewSessionDirectory
-              ? `Create a new session in ${formatDisplayPath(
-                  defaultNewSessionDirectory
+            defaultNewAgentDirectory
+              ? `Create a new agent in ${formatDisplayPath(
+                  defaultNewAgentDirectory
                 )}`
-              : "Create a new session"
+              : "Create a new agent"
           }
           kbd={formatShortcutLabel(appShortcut("N"))}
         >
@@ -141,9 +135,9 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
             size="icon"
             variant="ghost"
             className="shrink-0"
-            aria-label="Create a new session"
+            aria-label="Create a new agent"
             onClick={() => {
-              void actionsRef.current.createSession()
+              void actionsRef.current.createAgent()
             }}
           >
             <SquarePenIcon />
@@ -151,41 +145,37 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
         </TitleTooltip>
         <div className="ml-1 flex min-w-0 flex-1 flex-col items-start justify-center gap-0 text-left">
           <div className="flex max-w-full min-w-0 items-center gap-1.5">
-            <TitleTooltip title={displaySessionTitle}>
+            <TitleTooltip title={displayAgentTitle}>
               <h2 className="min-w-0 truncate text-[13px] leading-tight font-semibold">
-                {displaySessionTitle}
+                {displayAgentTitle}
               </h2>
             </TitleTooltip>
           </div>
           <div className="flex max-w-full min-w-0 items-center gap-x-2">
-            {showFolderName && displaySessionCwd ? (
+            {showFolderName && displayAgentCwd ? (
               <span className="inline-flex min-w-0 items-center text-xs text-muted-foreground">
                 <span className="truncate">
-                  {formatFolderName(displaySessionCwd)}
+                  {formatFolderName(displayAgentCwd)}
                 </span>
               </span>
             ) : null}
             <HeaderGitStatusText
               viewerContextId={viewerContextId}
               className="min-w-0"
-              cwd={displaySessionCwd}
+              cwd={displayAgentCwd}
             />
-            <SessionLineage
-              sessionId={sessionHeaderState.sessionId}
+            <AgentLineage
+              agentId={agentHeaderState.agentId}
               viewerContextId={viewerContextId}
             />
           </div>
         </div>
         <div className="ml-auto flex shrink-0 flex-wrap items-center gap-1">
           <DropdownMenu>
-            <TitleTooltip title="Session menu">
+            <TitleTooltip title="Agent menu">
               <DropdownMenuTrigger
                 render={
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    aria-label="Session menu"
-                  />
+                  <Button size="icon" variant="ghost" aria-label="Agent menu" />
                 }
               >
                 <EllipsisIcon />
@@ -194,25 +184,23 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuItem
                 onClick={() => {
-                  void actionsRef.current.createSession()
+                  void actionsRef.current.createAgent()
                 }}
               >
-                <span>Create new session</span>
+                <span>Create new agent</span>
                 <DropdownMenuShortcut>
                   {formatShortcutLabel(appShortcut("N"))}
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
-              {newSessionDirectoryOptions.length > 0 ? (
+              {newAgentDirectoryOptions.length > 0 ? (
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    New session in…
-                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubTrigger>New agent in…</DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-72">
-                    {newSessionDirectoryOptions.map((option) => (
+                    {newAgentDirectoryOptions.map((option) => (
                       <DropdownMenuItem
                         key={option.path}
                         onClick={() => {
-                          void actionsRef.current.createSession(option.path)
+                          void actionsRef.current.createAgent(option.path)
                         }}
                       >
                         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -223,7 +211,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                             {formatDisplayPath(option.path)}
                           </span>
                         </div>
-                        {option.path === defaultNewSessionDirectory ? (
+                        {option.path === defaultNewAgentDirectory ? (
                           <DropdownMenuShortcut>Default</DropdownMenuShortcut>
                         ) : null}
                       </DropdownMenuItem>
@@ -233,26 +221,24 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               ) : null}
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                disabled={!sessionHeaderState.sessionHasFile}
+                disabled={!agentHeaderState.agentHasFile}
                 onClick={() => {
-                  actionsRef.current.onToggleCurrentSessionPinned()
+                  actionsRef.current.onToggleCurrentAgentPinned()
                 }}
               >
                 <span>
-                  {currentSessionPinned
-                    ? "Unpin from sidebar"
-                    : "Pin to sidebar"}
+                  {currentAgentPinned ? "Unpin from sidebar" : "Pin to sidebar"}
                 </span>
               </DropdownMenuItem>
-              {sessionHeaderState.sessionHasFile ? (
+              {agentHeaderState.agentHasFile ? (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>Move to…</DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-72">
-                    {moveSessionDirectoryOptions.map((option) => (
+                    {moveAgentDirectoryOptions.map((option) => (
                       <DropdownMenuItem
                         key={option.path}
                         onClick={() => {
-                          void actionsRef.current.onMoveCurrentSession(
+                          void actionsRef.current.onMoveCurrentAgent(
                             option.path
                           )
                         }}
@@ -269,7 +255,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                     ))}
                     <DropdownMenuItem
                       onClick={() => {
-                        actionsRef.current.onMoveCurrentSessionToAnyDirectory()
+                        actionsRef.current.onMoveCurrentAgentToAnyDirectory()
                       }}
                     >
                       Other directory…
@@ -282,11 +268,11 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                   void actionsRef.current.onRunCompact()
                 }}
               >
-                <span>Compact session</span>
+                <span>Compact conversation</span>
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => {
-                  void actionsRef.current.onTreeSession()
+                  void actionsRef.current.onTreeAgent()
                 }}
               >
                 <span>Tree</span>
@@ -294,7 +280,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => {
-                  void actionsRef.current.onForkSession()
+                  void actionsRef.current.onForkAgent()
                 }}
               >
                 <span>Fork</span>
@@ -309,7 +295,7 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
                 }}
               >
                 <span>
-                  {sessionHeaderState.hideThinkingBlock
+                  {agentHeaderState.hideThinkingBlock
                     ? "Show thinking"
                     : "Hide thinking"}
                 </span>
@@ -329,34 +315,34 @@ export const AppShellSessionHeader = React.memo(function AppShellSessionHeader({
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                disabled={!sessionHeaderState.sessionHasFile}
+                disabled={!agentHeaderState.agentHasFile}
                 onClick={() => {
-                  actionsRef.current.onRenameSession()
+                  actionsRef.current.onRenameAgent()
                 }}
               >
-                <span>Rename session</span>
+                <span>Rename agent</span>
                 <DropdownMenuShortcut>
                   {formatShortcutLabel(appShortcut("E"))}
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuItem
                 variant="destructive"
-                disabled={!sessionHeaderState.sessionHasFile}
+                disabled={!agentHeaderState.agentHasFile}
                 onClick={() => {
-                  actionsRef.current.onDeleteCurrentSession()
+                  actionsRef.current.onDeleteCurrentAgent()
                 }}
               >
-                <span>Archive session</span>
+                <span>Archive agent</span>
                 <DropdownMenuShortcut>
                   {formatShortcutLabel(appShortcut("X"))}
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              {sessionHeaderState.sessionId ? (
+              {agentHeaderState.agentId ? (
                 <ProfileMenuSub
                   className="md:hidden"
-                  cwd={displaySessionCwd}
-                  sessionId={sessionHeaderState.sessionId}
+                  cwd={displayAgentCwd}
+                  agentId={agentHeaderState.agentId}
                   viewerContextId={viewerContextId}
                 />
               ) : null}

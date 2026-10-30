@@ -43,7 +43,7 @@ export type AgentSettings = {
   publicUrl: string
   browserHeadless: boolean
   scratchSpillKb: number
-  maxChildSessions: number
+  maxSubagents: number
   maxSpawnDepth: number
   worktreeCopy: Array<string>
   jobMemoryHigh: string
@@ -307,7 +307,7 @@ export function AgentSettingsDialog({
         <DialogHeader>
           <DialogTitle>Agent settings</DialogTitle>
           <DialogDescription>
-            Notifications, context, child sessions, and tools. Tools run without
+            Notifications, context, subagents, and tools. Tools run without
             approval.
           </DialogDescription>
         </DialogHeader>
@@ -372,7 +372,7 @@ export function AgentSettingsDialog({
             <SettingsSection title="Context">
               <Row
                 label="Compact at"
-                description="Summarize old messages when a session's context gets to this many tokens, for example 200k. A summary starts in the background about 33k before. Empty: compact near the full context window."
+                description="Summarize old messages when an agent's context gets to this many tokens, for example 200k. A summary starts in the background about 33k before. Empty: compact near the full context window."
                 control={(id) => (
                   <TextSetting
                     id={id}
@@ -390,23 +390,21 @@ export function AgentSettingsDialog({
               />
             </SettingsSection>
 
-            <SettingsSection title="Child sessions">
+            <SettingsSection title="Subagents">
               <Row
-                label="Child sessions that can run at once"
+                label="Subagents that can run at once"
                 control={(id) => (
                   <TextSetting
                     id={id}
                     type="number"
                     width="w-20"
-                    initial={String(settings.maxChildSessions)}
-                    onSave={(value) =>
-                      save({ maxChildSessions: Number(value) })
-                    }
+                    initial={String(settings.maxSubagents)}
+                    onSave={(value) => save({ maxSubagents: Number(value) })}
                   />
                 )}
               />
               <Row
-                label="How deep child sessions can nest"
+                label="How deep subagents can nest"
                 control={(id) => (
                   <TextSetting
                     id={id}

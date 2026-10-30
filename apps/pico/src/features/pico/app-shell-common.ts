@@ -1,27 +1,27 @@
 import * as React from "react"
 
-import type { SessionState } from "@/lib/pico"
-import type { SessionDoneEvent, SessionListEntry } from "@/lib/pico/api"
-import { getSessionTitle, sessionListEntryKey } from "@/lib/pico"
-import { picoSessionScopeKey } from "@/features/pico/query-keys"
+import type { AgentState } from "@/lib/pico"
+import type { AgentDoneEvent, AgentListEntry } from "@/lib/pico/api"
+import { getAgentTitle, agentListEntryKey } from "@/lib/pico"
+import { picoAgentScopeKey } from "@/features/pico/query-keys"
 
-export function sessionNotificationKey(sessionLike: {
-  sessionFile?: string | undefined
-  sessionPath?: string | undefined
+export function agentNotificationKey(agentLike: {
+  agentFile?: string | undefined
+  agentPath?: string | undefined
   path?: string | undefined
-  sessionId?: string | undefined
+  agentId?: string | undefined
   id?: string | undefined
 }) {
-  const sessionFile = (
-    sessionLike.sessionFile ||
-    sessionLike.sessionPath ||
-    sessionLike.path ||
+  const agentFile = (
+    agentLike.agentFile ||
+    agentLike.agentPath ||
+    agentLike.path ||
     ""
   ).trim()
-  if (sessionFile) return `path:${sessionFile}`
+  if (agentFile) return `path:${agentFile}`
 
-  const sessionId = (sessionLike.sessionId || sessionLike.id || "").trim()
-  if (sessionId) return `id:${sessionId}`
+  const agentId = (agentLike.agentId || agentLike.id || "").trim()
+  if (agentId) return `id:${agentId}`
 
   return ""
 }
@@ -44,39 +44,35 @@ export function formatFolderName(value: string | undefined) {
   return parts[parts.length - 1] || path
 }
 
-function finishedSessionLabel(title: string) {
-  return title !== "New session"
-    ? `Session finished: ${title}`
-    : "Session finished"
+function finishedAgentLabel(title: string) {
+  return title !== "New agent" ? `Agent finished: ${title}` : "Agent finished"
 }
 
-export function doneEventLabel(event: SessionDoneEvent) {
-  const title = event.title?.trim() || "New session"
+export function doneEventLabel(event: AgentDoneEvent) {
+  const title = event.title?.trim() || "New agent"
   if (event.reason === "manual_compaction") {
-    return title !== "New session"
+    return title !== "New agent"
       ? `Compaction complete: ${title}`
       : "Compaction complete"
   }
 
   if (event.outcome === "error") {
-    return title !== "New session"
-      ? `Session stopped: ${title}`
-      : "Session stopped"
+    return title !== "New agent" ? `Agent stopped: ${title}` : "Agent stopped"
   }
 
-  return finishedSessionLabel(title)
+  return finishedAgentLabel(title)
 }
 
-export function sessionScrollKey(sessionState: {
+export function agentScrollKey(agentState: {
   draft: boolean
-  sessionFile?: string
-  sessionId?: string
+  agentFile?: string
+  agentId?: string
   cwd?: string
 }) {
-  return picoSessionScopeKey(sessionState)
+  return picoAgentScopeKey(agentState)
 }
 
-export function resolveNewSessionCwd(options: {
+export function resolveNewAgentCwd(options: {
   cwdOverride?: string | undefined
   defaultDirectory?: string | undefined
   currentCwd?: string | undefined
@@ -142,30 +138,30 @@ export function shallowRecordEqual<T extends Record<string, unknown>>(
   return true
 }
 
-export function findSidebarSessionSelectionKey(
-  entriesByKey: Map<string, SessionListEntry>,
-  sessionLike: {
-    sessionId?: string | undefined
-    sessionPath?: string | undefined
+export function findSidebarAgentSelectionKey(
+  entriesByKey: Map<string, AgentListEntry>,
+  agentLike: {
+    agentId?: string | undefined
+    agentPath?: string | undefined
   }
 ) {
-  const sessionPath = sessionLike.sessionPath?.trim() || ""
-  const sessionId = sessionLike.sessionId?.trim() || ""
+  const agentPath = agentLike.agentPath?.trim() || ""
+  const agentId = agentLike.agentId?.trim() || ""
 
-  if (sessionPath) {
-    const pathKey = sessionListEntryKey({ path: sessionPath })
+  if (agentPath) {
+    const pathKey = agentListEntryKey({ path: agentPath })
     if (entriesByKey.has(pathKey)) return pathKey
   }
 
-  if (sessionId) {
-    const idKey = sessionListEntryKey({ id: sessionId })
+  if (agentId) {
+    const idKey = agentListEntryKey({ id: agentId })
     if (entriesByKey.has(idKey)) return idKey
   }
 
   for (const [key, entry] of entriesByKey) {
     if (
-      (sessionPath && entry.path === sessionPath) ||
-      (sessionId && entry.id === sessionId)
+      (agentPath && entry.path === agentPath) ||
+      (agentId && entry.id === agentId)
     ) {
       return key
     }
@@ -174,12 +170,11 @@ export function findSidebarSessionSelectionKey(
   return ""
 }
 
-export function getCurrentSessionTitleFromState(
-  sessionState: Pick<SessionState, "firstMessage" | "sessionName">
+export function getCurrentAgentTitleFromState(
+  agentState: Pick<AgentState, "firstMessage" | "agentName">
 ) {
-  return getSessionTitle({
-    title:
-      sessionState.sessionName || sessionState.firstMessage || "New session",
-    name: sessionState.sessionName,
+  return getAgentTitle({
+    title: agentState.agentName || agentState.firstMessage || "New agent",
+    name: agentState.agentName,
   })
 }

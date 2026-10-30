@@ -2,9 +2,9 @@ export type DesktopNotificationPermission =
   | NotificationPermission
   | "unsupported"
 
-const SESSION_DONE_NOTIFICATION_DURATION_MS = 4_000
-const SESSION_DONE_SOUND_URL = "/sounds/session-done.mp3"
-const SESSION_DONE_SOUND_GAIN = 0.85
+const AGENT_DONE_NOTIFICATION_DURATION_MS = 4_000
+const AGENT_DONE_SOUND_URL = "/sounds/session-done.mp3"
+const AGENT_DONE_SOUND_GAIN = 0.85
 
 type AudioContextConstructor = typeof AudioContext
 
@@ -13,8 +13,8 @@ type WindowWithWebkitAudioContext = Window & {
 }
 
 let sharedAudioContext: AudioContext | null = null
-let sessionDoneSoundBuffer: AudioBuffer | null = null
-let sessionDoneSoundBufferPromise: Promise<AudioBuffer | null> | null = null
+let agentDoneSoundBuffer: AudioBuffer | null = null
+let agentDoneSoundBufferPromise: Promise<AudioBuffer | null> | null = null
 
 function audioContextConstructor() {
   if (typeof window === "undefined") return null
@@ -64,31 +64,31 @@ async function ensureAudioContextRunning(audioContext: AudioContext) {
   return audioContext.state === "running"
 }
 
-async function loadSessionDoneSound(audioContext: AudioContext) {
-  if (sessionDoneSoundBuffer) return sessionDoneSoundBuffer
+async function loadAgentDoneSound(audioContext: AudioContext) {
+  if (agentDoneSoundBuffer) return agentDoneSoundBuffer
 
-  sessionDoneSoundBufferPromise ??= fetch(SESSION_DONE_SOUND_URL)
+  agentDoneSoundBufferPromise ??= fetch(AGENT_DONE_SOUND_URL)
     .then((response) => {
       if (!response.ok) {
-        throw new Error(`Failed to load ${SESSION_DONE_SOUND_URL}`)
+        throw new Error(`Failed to load ${AGENT_DONE_SOUND_URL}`)
       }
 
       return response.arrayBuffer()
     })
     .then((arrayBuffer) => audioContext.decodeAudioData(arrayBuffer))
     .then((buffer) => {
-      sessionDoneSoundBuffer = buffer
+      agentDoneSoundBuffer = buffer
       return buffer
     })
     .catch(() => {
-      sessionDoneSoundBufferPromise = null
+      agentDoneSoundBufferPromise = null
       return null
     })
 
-  return sessionDoneSoundBufferPromise
+  return agentDoneSoundBufferPromise
 }
 
-function playGeneratedSessionDoneSound(audioContext: AudioContext) {
+function playGeneratedAgentDoneSound(audioContext: AudioContext) {
   const oscillator = audioContext.createOscillator()
   const gainNode = audioContext.createGain()
 
@@ -116,27 +116,27 @@ function playGeneratedSessionDoneSound(audioContext: AudioContext) {
   oscillator.stop(audioContext.currentTime + 0.3)
 }
 
-export async function primeSessionDoneSound() {
+export async function primeAgentDoneSound() {
   const audioContext = getSharedAudioContext({ requireUserActivation: true })
   if (!audioContext) return false
 
   const running = await ensureAudioContextRunning(audioContext)
   if (!running) return false
 
-  const soundBuffer = await loadSessionDoneSound(audioContext)
+  const soundBuffer = await loadAgentDoneSound(audioContext)
   return Boolean(soundBuffer)
 }
 
-export async function playSessionDoneSound() {
+export async function playAgentDoneSound() {
   const audioContext = getSharedAudioContext({ requireUserActivation: true })
   if (!audioContext) return false
 
   const running = await ensureAudioContextRunning(audioContext)
   if (!running) return false
 
-  const soundBuffer = await loadSessionDoneSound(audioContext)
+  const soundBuffer = await loadAgentDoneSound(audioContext)
   if (!soundBuffer) {
-    playGeneratedSessionDoneSound(audioContext)
+    playGeneratedAgentDoneSound(audioContext)
     return true
   }
 
@@ -144,7 +144,7 @@ export async function playSessionDoneSound() {
   const gainNode = audioContext.createGain()
 
   source.buffer = soundBuffer
-  gainNode.gain.value = SESSION_DONE_SOUND_GAIN
+  gainNode.gain.value = AGENT_DONE_SOUND_GAIN
 
   source.connect(gainNode)
   gainNode.connect(audioContext.destination)
@@ -170,7 +170,7 @@ export async function requestDesktopNotificationPermission() {
   return typeof result === "string" ? result : await result
 }
 
-export function showSessionDoneDesktopNotification({
+export function showAgentDoneDesktopNotification({
   title,
   body,
   tag,
@@ -196,7 +196,7 @@ export function showSessionDoneDesktopNotification({
 
     window.setTimeout(() => {
       notification.close()
-    }, SESSION_DONE_NOTIFICATION_DURATION_MS)
+    }, AGENT_DONE_NOTIFICATION_DURATION_MS)
 
     return true
   } catch {

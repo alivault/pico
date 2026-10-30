@@ -46,7 +46,7 @@ import {
 } from "@/features/pico/machine-store"
 import { useHasMachineGroups } from "@/features/pico/machines"
 import { openMachine } from "@/lib/pico/machine"
-import { NewSessionWorktreeToggle } from "@/features/pico/agent/worktree-toggle"
+import { NewAgentWorktreeToggle } from "@/features/pico/agent/worktree-toggle"
 import { ProfilePicker } from "@/features/pico/agent/profiles"
 import {
   ComposerPanel,
@@ -62,7 +62,7 @@ import type {
   AppShellComposerActions,
   AppShellComposerSnapshot,
 } from "@/features/pico/app-shell-composer-state"
-import type { SessionState, StreamingBehavior } from "@/lib/pico"
+import type { AgentState, StreamingBehavior } from "@/lib/pico"
 import { isApiErrorResponse } from "@/lib/pico/api"
 import type {
   FileCompletionsResponse,
@@ -151,8 +151,8 @@ function localBranchTrackText(branch: GitLocalBranch) {
 }
 
 /**
- * The directories of another machine in the new-session directory picker.
- * A choice opens that machine and starts the session there; the prompt
+ * The directories of another machine in the new-agent directory picker.
+ * A choice opens that machine and starts the agent there; the prompt
  * draft goes with it.
  */
 function OtherMachineDirectoryGroup({
@@ -202,25 +202,25 @@ function OtherMachineDirectoryGroup({
   )
 }
 
-type NewSessionComposerBranchCheckoutPayload = {
+type NewAgentComposerBranchCheckoutPayload = {
   branch: string
   create?: boolean
 }
 
-export function NewSessionComposerSelectors({
+export function NewAgentComposerSelectors({
   cwd,
-  defaultNewSessionDirectory,
+  defaultNewAgentDirectory,
   directoryOptions,
-  onCreateSession,
+  onCreateAgent,
   onMoveDraftToMachine,
   onOpenAddDirectoryDialog,
   viewerContextId,
 }: {
   cwd?: string
-  defaultNewSessionDirectory: string
+  defaultNewAgentDirectory: string
   directoryOptions: Array<{ path: string; label: string }>
-  onCreateSession: (cwdOverride?: string) => void
-  /** Start the session on another machine, with the prompt draft. */
+  onCreateAgent: (cwdOverride?: string) => void
+  /** Start the agent on another machine, with the prompt draft. */
   onMoveDraftToMachine: (machineId: string, directory: string) => void
   onOpenAddDirectoryDialog: () => void
   viewerContextId: string
@@ -235,7 +235,7 @@ export function NewSessionComposerSelectors({
   const queryClient = useQueryClient()
   const [createBranchOpen, setCreateBranchOpen] = React.useState(false)
   const [createBranchName, setCreateBranchName] = React.useState("")
-  const selectedDirectory = cwd?.trim() || defaultNewSessionDirectory.trim()
+  const selectedDirectory = cwd?.trim() || defaultNewAgentDirectory.trim()
   const directoryMenuOptions = (() => {
     const seen = new Set<string>()
     const options: Array<{ path: string; label: string }> = []
@@ -278,7 +278,7 @@ export function NewSessionComposerSelectors({
   })
   const localBranches = branchQuery.data || []
   const checkoutBranchMutation = useMutation({
-    mutationFn: async (payload: NewSessionComposerBranchCheckoutPayload) =>
+    mutationFn: async (payload: NewAgentComposerBranchCheckoutPayload) =>
       await fetchJson<GitActionResponse>(
         buildRequestUrl("/api/git-checkout", {
           machineId,
@@ -348,7 +348,7 @@ export function NewSessionComposerSelectors({
             <Button
               type="button"
               variant="ghost"
-              aria-label="Select new session directory"
+              aria-label="Select new agent directory"
             />
           }
         >
@@ -366,7 +366,7 @@ export function NewSessionComposerSelectors({
             {directoryMenuOptions.map((option) => (
               <DropdownMenuItem
                 key={option.path}
-                onClick={() => onCreateSession(option.path)}
+                onClick={() => onCreateAgent(option.path)}
               >
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="text-xs text-muted-foreground">
@@ -387,7 +387,7 @@ export function NewSessionComposerSelectors({
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span>Add directory…</span>
                 <span className="truncate text-xs text-muted-foreground">
-                  Search or paste a path for this new session.
+                  Search or paste a path for this new agent.
                 </span>
               </div>
             </DropdownMenuItem>
@@ -479,7 +479,7 @@ export function NewSessionComposerSelectors({
       ) : null}
 
       {gitStatus ? (
-        <NewSessionWorktreeToggle
+        <NewAgentWorktreeToggle
           cwd={selectedDirectory}
           viewerContextId={viewerContextId}
         />
@@ -502,7 +502,7 @@ export function NewSessionComposerSelectors({
             <DialogTitle>Create branch</DialogTitle>
             <DialogDescription>
               Create a branch in {formatFolderName(selectedDirectory)} and
-              switch to it for the new session.
+              switch to it for the new agent.
             </DialogDescription>
           </DialogHeader>
           <form className="grid gap-4" action={createBranch}>
@@ -544,7 +544,7 @@ export const AppShellComposerController = React.memo(
     contextUsageStore,
     displaySettingsStore,
     fileInputRef,
-    sessionStore,
+    agentStore,
     store,
     topContent,
   }: {
@@ -553,7 +553,7 @@ export const AppShellComposerController = React.memo(
     contextUsageStore: ComposerContextUsageStore
     displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
     fileInputRef: React.RefObject<HTMLInputElement | null>
-    sessionStore: PicoStore<SessionState>
+    agentStore: PicoStore<AgentState>
     store: PicoStore<AppShellComposerSnapshot>
     topContent?: React.ReactNode
   }) {
@@ -589,7 +589,7 @@ export const AppShellComposerController = React.memo(
     )
     const onAbort = useStableEvent(() => {
       if (snapshotRef.current.disabled) return
-      void actionsRef.current.abortSession()
+      void actionsRef.current.abortAgent()
     })
     const onSavePendingQueue = useStableEvent(
       (
@@ -636,7 +636,7 @@ export const AppShellComposerController = React.memo(
         buildRequestUrl("/api/path-completions", {
           machineId,
           contextId: currentSnapshot.viewerContextId,
-          sessionId: currentSnapshot.activeSessionId,
+          agentId: currentSnapshot.activeAgentId,
         }),
         {
           method: "POST",
@@ -655,7 +655,7 @@ export const AppShellComposerController = React.memo(
           buildRequestUrl("/api/file-completions", {
             machineId,
             contextId: currentSnapshot.viewerContextId,
-            sessionId: currentSnapshot.activeSessionId,
+            agentId: currentSnapshot.activeAgentId,
           }),
           {
             method: "POST",
@@ -670,7 +670,7 @@ export const AppShellComposerController = React.memo(
     return (
       <ComposerPanel
         ref={composerPanelRef}
-        activeSessionId={snapshot.activeSessionId}
+        activeAgentId={snapshot.activeAgentId}
         currentPendingMessages={snapshot.currentPendingMessages}
         composerLineComments={snapshot.composerLineComments}
         composerImages={snapshot.composerImages}
@@ -681,7 +681,7 @@ export const AppShellComposerController = React.memo(
         centerMessages={centerMessages}
         contextUsageStore={contextUsageStore}
         displaySettingsStore={displaySettingsStore}
-        sessionStore={sessionStore}
+        agentStore={agentStore}
         isSubmitting={snapshot.isSubmitting}
         isCompacting={snapshot.isCompacting}
         isStreaming={snapshot.isStreaming}

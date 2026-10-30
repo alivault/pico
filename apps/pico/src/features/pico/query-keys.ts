@@ -1,23 +1,23 @@
-export function picoSessionScopeKey(sessionLike: {
+export function picoAgentScopeKey(agentLike: {
   draft?: boolean
-  sessionFile?: string
-  sessionId?: string
+  agentFile?: string
+  agentId?: string
   cwd?: string
 }) {
-  if (sessionLike.draft) {
-    return `draft:${sessionLike.cwd || ""}`
+  if (agentLike.draft) {
+    return `draft:${agentLike.cwd || ""}`
   }
 
-  return sessionLike.sessionFile || sessionLike.sessionId || ""
+  return agentLike.agentFile || agentLike.agentId || ""
 }
 
 export const picoQueryKeys = {
   piPerformance: (viewerContextId: string) =>
     ["pico", "pi-performance", viewerContextId] as const,
-  archivedSessions: (viewerContextId: string) =>
-    ["pico", "archived-sessions", viewerContextId] as const,
-  directorySessionsIndex: (viewerContextId: string, directory: string) =>
-    ["pico", "directory-sessions-index", viewerContextId, directory] as const,
+  archivedAgents: (viewerContextId: string) =>
+    ["pico", "archived-agents", viewerContextId] as const,
+  directoryAgentsIndex: (viewerContextId: string, directory: string) =>
+    ["pico", "directory-agents-index", viewerContextId, directory] as const,
   gitStatus: (viewerContextId: string, cwd: string) =>
     ["pico", "git-status", viewerContextId, cwd] as const,
   gitChanges: (viewerContextId: string, cwd: string) =>
@@ -77,14 +77,10 @@ export const picoQueryKeys = {
     ["pico", "project-file-tree", viewerContextId, cwd] as const,
   projectFileRead: (viewerContextId: string, cwd: string, path: string) =>
     ["pico", "project-file-read", viewerContextId, cwd, path] as const,
-  sessionTree: (viewerContextId: string, sessionScopeKey: string) =>
-    ["pico", "session-tree", viewerContextId, sessionScopeKey] as const,
-  forkableMessages: (viewerContextId: string, sessionScopeKey: string) =>
-    ["pico", "forkable-messages", viewerContextId, sessionScopeKey] as const,
-  providerUsage: (
-    viewerContextId: string,
-    sessionId: string,
-    provider: string
-  ) =>
-    ["pico", "provider-usage", viewerContextId, sessionId, provider] as const,
+  agentTree: (viewerContextId: string, agentScopeKey: string) =>
+    ["pico", "agent-tree", viewerContextId, agentScopeKey] as const,
+  forkableMessages: (viewerContextId: string, agentScopeKey: string) =>
+    ["pico", "forkable-messages", viewerContextId, agentScopeKey] as const,
+  providerUsage: (viewerContextId: string, agentId: string, provider: string) =>
+    ["pico", "provider-usage", viewerContextId, agentId, provider] as const,
 } as const

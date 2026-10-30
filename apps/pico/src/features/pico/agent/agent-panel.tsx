@@ -15,9 +15,9 @@ import {
 } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 import {
-  useSessionExtensions,
-  type SessionExtensionState,
-} from "@/features/pico/agent/session-extensions"
+  useAgentExtensions,
+  type AgentExtensionState,
+} from "@/features/pico/agent/agent-extensions"
 import {
   AGENT_SECTIONS_OPEN_STORAGE_KEY,
   safeLocalStorageGetItem,
@@ -25,16 +25,16 @@ import {
 } from "@/lib/pico/storage"
 
 /**
- * The Agent panel: what the agent of the selected session keeps besides its
+ * The Agent panel: what the selected agent keeps besides its
  * transcript. Each feature registers a section that reads its part of the
- * session's extension state.
+ * agent's extension state.
  */
 export type AgentSectionProps = {
-  state: SessionExtensionState
+  state: AgentExtensionState
   viewerContextId: string
-  sessionId: string
+  agentId: string
   cwd?: string
-  /** Open a file of the session folder in the Files tab. */
+  /** Open a file of the agent folder in the Files tab. */
   onOpenFile?: (path: string) => void
 }
 
@@ -46,11 +46,11 @@ export type AgentSection = {
   /** Whether the section starts open. The user's choice is remembered. */
   defaultOpen?: boolean
   /** Whether the section has something to show. */
-  visible(state: SessionExtensionState): boolean
+  visible(state: AgentExtensionState): boolean
   /** Whether the agent has live work here, such as a running job. */
-  busy?(state: SessionExtensionState): boolean
+  busy?(state: AgentExtensionState): boolean
   /** A short count or status next to the title, such as "2 of 5 done". */
-  summary?(state: SessionExtensionState): string | undefined
+  summary?(state: AgentExtensionState): string | undefined
   /** Small controls at the right of the header, such as an add button. */
   Actions?: React.ComponentType<AgentSectionProps>
   Component: React.ComponentType<AgentSectionProps>
@@ -62,11 +62,11 @@ export function registerAgentSection(section: AgentSection) {
   sections.set(section.key, section)
 }
 
-/** Whether the agent of a session has live work in any section. */
-export function useAgentBusy(viewerContextId: string, sessionId?: string) {
-  const query = useSessionExtensions(viewerContextId, sessionId)
+/** Whether an agent has live work in any section. */
+export function useAgentBusy(viewerContextId: string, agentId?: string) {
+  const query = useAgentExtensions(viewerContextId, agentId)
   const state = query.data
-  if (!state || !sessionId) return false
+  if (!state || !agentId) return false
   for (const section of sections.values()) {
     if (section.visible(state) && section.busy?.(state)) return true
   }
@@ -107,16 +107,16 @@ export function AgentPanel({
   active,
   cwd,
   onOpenFile,
-  sessionId,
+  agentId,
   viewerContextId,
 }: {
   active: boolean
   cwd?: string
   onOpenFile?: (path: string) => void
-  sessionId?: string
+  agentId?: string
   viewerContextId: string
 }) {
-  const query = useSessionExtensions(viewerContextId, sessionId, active)
+  const query = useAgentExtensions(viewerContextId, agentId, active)
   const { isOpen, setOpen } = useOpenSections()
   const state = query.data
   const visible = state
@@ -125,11 +125,11 @@ export function AgentPanel({
         .sort((left, right) => left.order - right.order)
     : []
 
-  if (!sessionId) {
+  if (!agentId) {
     return (
       <AgentPanelEmpty
-        title="No session"
-        text="Start a session to see its plan, jobs, and helpers here."
+        title="No agent"
+        text="Start an agent to see its plan, jobs, and helpers here."
       />
     )
   }
@@ -154,7 +154,7 @@ export function AgentPanel({
     return (
       <AgentPanelEmpty
         title="Nothing here yet"
-        text="The agent's plan, jobs, and child sessions show here when it uses them."
+        text="The agent's plan, jobs, and subagents show here when it uses them."
       />
     )
   }
@@ -162,7 +162,7 @@ export function AgentPanel({
   const props: AgentSectionProps = {
     cwd,
     onOpenFile,
-    sessionId,
+    agentId,
     state,
     viewerContextId,
   }

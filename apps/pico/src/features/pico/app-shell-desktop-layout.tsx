@@ -5,9 +5,9 @@ import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLatestRef, sameStringArray } from "@/features/pico/app-shell-common"
 import {
-  AppShellSessionContent,
-  type AppShellSessionContentProps,
-} from "@/features/pico/app-shell-session-content"
+  AppShellAgentContent,
+  type AppShellAgentContentProps,
+} from "@/features/pico/app-shell-agent-content"
 import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
 import type { AppShellUiState } from "@/features/pico/app-shell-types"
 import { GitTabStatusText } from "@/features/pico/right-sidebar-git-header-actions"
@@ -46,7 +46,7 @@ import {
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
 } from "@/lib/pico"
-import type { SessionState } from "@/lib/pico"
+import type { AgentState } from "@/lib/pico"
 
 const RightSidebar = React.lazy(async () => {
   const module = await import("@/features/pico/right-sidebar")
@@ -72,24 +72,24 @@ function PanelLoadingFallback({ label }: { label: string }) {
   )
 }
 
-function shallowTerminalSession(
-  left: { cwd?: string; sessionId?: string },
-  right: { cwd?: string; sessionId?: string }
+function shallowTerminalAgent(
+  left: { cwd?: string; agentId?: string },
+  right: { cwd?: string; agentId?: string }
 ) {
-  return left.cwd === right.cwd && left.sessionId === right.sessionId
+  return left.cwd === right.cwd && left.agentId === right.agentId
 }
 
 const mobileTabTriggerClassName =
   "h-8 shrink-0 px-3 data-active:bg-muted dark:data-active:bg-muted"
 
 function AppShellTabsList({
-  sessionStore,
+  agentStore,
   viewerContextId,
 }: {
-  sessionStore: PicoStore<SessionState>
+  agentStore: PicoStore<AgentState>
   viewerContextId: string
 }) {
-  const cwd = useSelector(sessionStore, (sessionState) => sessionState.cwd)
+  const cwd = useSelector(agentStore, (agentState) => agentState.cwd)
 
   return (
     <TabsList className="no-scrollbar w-full justify-start gap-2 overflow-x-auto rounded-none border-b border-border/70 bg-background p-2 group-data-horizontal/tabs:h-auto md:hidden">
@@ -121,7 +121,7 @@ const AppShellGitPanelController = React.memo(
     onOpenFile,
     onReorderFiles,
     rightSidebarStore,
-    sessionStore,
+    agentStore,
     viewerContextId,
   }: {
     active: boolean
@@ -136,12 +136,12 @@ const AppShellGitPanelController = React.memo(
     onOpenFile: (path: string, options?: OpenFileViewTabOptions) => void
     onReorderFiles: (paths: Array<string>) => void
     rightSidebarStore: PicoStore<AppShellRightSidebarState>
-    sessionStore: PicoStore<SessionState>
+    agentStore: PicoStore<AgentState>
     viewerContextId: string
   }) {
-    const cwd = useSelector(sessionStore, (sessionState) => sessionState.cwd)
-    const sessionId = useSelector(sessionStore, (sessionState) =>
-      sessionState.draft ? undefined : sessionState.sessionId
+    const cwd = useSelector(agentStore, (agentState) => agentState.cwd)
+    const agentId = useSelector(agentStore, (agentState) =>
+      agentState.draft ? undefined : agentState.agentId
     )
     const activeFilePath = useSelector(
       rightSidebarStore,
@@ -169,7 +169,7 @@ const AppShellGitPanelController = React.memo(
         <RightSidebar
           viewerContextId={viewerContextId}
           cwd={cwd}
-          sessionId={sessionId}
+          agentId={agentId}
           active={active}
           activeFilePath={activeFilePath}
           activeTab={activeTab}
@@ -210,7 +210,7 @@ function AppShellDesktopGitPanel({
   onOpenFile,
   onReorderFiles,
   rightSidebarStore,
-  sessionStore,
+  agentStore,
   viewerContextId,
 }: {
   active: boolean
@@ -225,12 +225,12 @@ function AppShellDesktopGitPanel({
   onOpenFile: (path: string, options?: OpenFileViewTabOptions) => void
   onReorderFiles: (paths: Array<string>) => void
   rightSidebarStore: PicoStore<AppShellRightSidebarState>
-  sessionStore: PicoStore<SessionState>
+  agentStore: PicoStore<AgentState>
   viewerContextId: string
 }) {
-  const cwd = useSelector(sessionStore, (sessionState) => sessionState.cwd)
-  const sessionId = useSelector(sessionStore, (sessionState) =>
-    sessionState.draft ? undefined : sessionState.sessionId
+  const cwd = useSelector(agentStore, (agentState) => agentState.cwd)
+  const agentId = useSelector(agentStore, (agentState) =>
+    agentState.draft ? undefined : agentState.agentId
   )
   const activeFilePath = useSelector(
     rightSidebarStore,
@@ -264,7 +264,7 @@ function AppShellDesktopGitPanel({
         <RightSidebar
           viewerContextId={viewerContextId}
           cwd={cwd}
-          sessionId={sessionId}
+          agentId={agentId}
           active={active}
           activeFilePath={activeFilePath}
           activeTab={activeTab}
@@ -643,7 +643,7 @@ function AppShellDesktopVerticalResizeHandle({
   )
 }
 
-type AppShellTabsControllerProps = AppShellSessionContentProps & {
+type AppShellTabsControllerProps = AppShellAgentContentProps & {
   appUiStore: PicoStore<AppShellUiState>
   diffLineComments: Array<ComposerDiffLineComment>
   gitPanelOpen: boolean
@@ -677,19 +677,19 @@ function useAppShellTabsControllerView({
   contextUsageStore,
   conversationFrameRef,
   conversationItemsStore,
-  defaultNewSessionDirectory,
+  defaultNewAgentDirectory,
   displaySettingsStore,
   fileInputRef,
   gitPanelOpen,
   header,
   terminalPanelOpen,
   isLoadingOlderHistory,
-  isSessionViewLoading,
+  isAgentViewLoading,
   isSubmitting,
   isMobile,
-  newSessionDirectoryOptions,
+  newAgentDirectoryOptions,
   onCancelCompaction,
-  onCreateSession,
+  onCreateAgent,
   onLoadOlderHistory,
   onOpenAddDirectoryDialog,
   onCloseAllFileViewTabs,
@@ -702,7 +702,7 @@ function useAppShellTabsControllerView({
   onReorderFileViewTabs,
   onValueChange,
   rightSidebarStore,
-  sessionStore,
+  agentStore,
   store,
   viewerContextId,
   workingStateStore,
@@ -722,23 +722,20 @@ function useAppShellTabsControllerView({
     if (currentTab === "agent") setMobileAgentMounted(true)
     if (currentTab === "terminal") setMobileTerminalMounted(true)
   }, [currentTab])
-  const isDraftSession = useSelector(
-    sessionStore,
-    (sessionState) => sessionState.draft
-  )
-  const terminalSession = useSelector(
-    sessionStore,
-    (sessionState) => ({
-      cwd: sessionState.cwd,
-      sessionId: sessionState.sessionId,
+  const isDraftAgent = useSelector(agentStore, (agentState) => agentState.draft)
+  const terminalAgent = useSelector(
+    agentStore,
+    (agentState) => ({
+      cwd: agentState.cwd,
+      agentId: agentState.agentId,
     }),
-    { compare: shallowTerminalSession }
+    { compare: shallowTerminalAgent }
   )
-  const agentPaneSessionId = useSelector(sessionStore, (sessionState) =>
-    sessionState.draft ? undefined : sessionState.sessionId
+  const agentPaneAgentId = useSelector(agentStore, (agentState) =>
+    agentState.draft ? undefined : agentState.agentId
   )
-  const showTabsList = isMobile || !isDraftSession || isSessionViewLoading
-  const sessionVisibleClassName =
+  const showTabsList = isMobile || !isDraftAgent || isAgentViewLoading
+  const agentVisibleClassName =
     currentTab === "conversation"
       ? "flex min-h-0 flex-1 flex-col"
       : "hidden min-h-0 flex-1 flex-col md:flex"
@@ -863,7 +860,7 @@ function useAppShellTabsControllerView({
     )
   }, [])
 
-  const sessionPane = (
+  const agentPane = (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {isMobile ? null : (
         <>
@@ -871,26 +868,26 @@ function useAppShellTabsControllerView({
           <MachineConnectionBanner />
         </>
       )}
-      <div className={sessionVisibleClassName}>
-        <AppShellSessionContent
+      <div className={agentVisibleClassName}>
+        <AppShellAgentContent
           actionsRef={actionsRef}
           awaitingFirstTurn={awaitingFirstTurn}
           composerPanelRef={composerPanelRef}
           contextUsageStore={contextUsageStore}
           conversationFrameRef={conversationFrameRef}
           conversationItemsStore={conversationItemsStore}
-          defaultNewSessionDirectory={defaultNewSessionDirectory}
+          defaultNewAgentDirectory={defaultNewAgentDirectory}
           displaySettingsStore={displaySettingsStore}
           fileInputRef={fileInputRef}
           isLoadingOlderHistory={isLoadingOlderHistory}
-          isSessionViewLoading={isSessionViewLoading}
+          isAgentViewLoading={isAgentViewLoading}
           isSubmitting={isSubmitting}
-          newSessionDirectoryOptions={newSessionDirectoryOptions}
+          newAgentDirectoryOptions={newAgentDirectoryOptions}
           onCancelCompaction={onCancelCompaction}
-          onCreateSession={onCreateSession}
+          onCreateAgent={onCreateAgent}
           onLoadOlderHistory={onLoadOlderHistory}
           onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
-          sessionStore={sessionStore}
+          agentStore={agentStore}
           store={store}
           viewerContextId={viewerContextId}
           workingStateStore={workingStateStore}
@@ -903,7 +900,7 @@ function useAppShellTabsControllerView({
             <div className={mobileGitClassName}>
               <AppShellGitPanelController
                 viewerContextId={viewerContextId}
-                sessionStore={sessionStore}
+                agentStore={agentStore}
                 active={currentTab === "git"}
                 diffLineComments={diffLineComments}
                 rightSidebarStore={rightSidebarStore}
@@ -924,8 +921,8 @@ function useAppShellTabsControllerView({
               >
                 <AgentPanel
                   active={currentTab === "agent"}
-                  cwd={terminalSession.cwd}
-                  sessionId={agentPaneSessionId}
+                  cwd={terminalAgent.cwd}
+                  agentId={agentPaneAgentId}
                   viewerContextId={viewerContextId}
                 />
               </React.Suspense>
@@ -938,9 +935,9 @@ function useAppShellTabsControllerView({
               >
                 <TerminalPanel
                   active={currentTab === "terminal"}
-                  cwd={terminalSession.cwd}
+                  cwd={terminalAgent.cwd}
                   onClose={onCloseTerminalPanel}
-                  sessionId={terminalSession.sessionId}
+                  agentId={terminalAgent.agentId}
                   showCloseButton={false}
                   viewerContextId={viewerContextId}
                 />
@@ -1079,20 +1076,20 @@ function useAppShellTabsControllerView({
       className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
     >
       <JobFocusWatcher
-        sessionId={agentPaneSessionId}
+        agentId={agentPaneAgentId}
         viewerContextId={viewerContextId}
       />
       {isMobile ? header : null}
       {showTabsList ? (
         <AppShellTabsList
-          sessionStore={sessionStore}
+          agentStore={agentStore}
           viewerContextId={viewerContextId}
         />
       ) : null}
       {isMobile ? <MachineConnectionBanner /> : null}
 
       {isMobile ? (
-        <div className="flex min-h-0 flex-1 overflow-hidden">{sessionPane}</div>
+        <div className="flex min-h-0 flex-1 overflow-hidden">{agentPane}</div>
       ) : (
         <div
           ref={desktopLayoutRef}
@@ -1115,7 +1112,7 @@ function useAppShellTabsControllerView({
                   : "100%",
               }}
             >
-              {sessionPane}
+              {agentPane}
             </div>
 
             {desktopSideWorkspaceRendered ? (
@@ -1151,7 +1148,7 @@ function useAppShellTabsControllerView({
                       {desktopGitPanelRendered ? (
                         <AppShellDesktopGitPanel
                           viewerContextId={viewerContextId}
-                          sessionStore={sessionStore}
+                          agentStore={agentStore}
                           active={desktopGitPanelOpen}
                           diffLineComments={diffLineComments}
                           rightSidebarStore={rightSidebarStore}
@@ -1200,9 +1197,9 @@ function useAppShellTabsControllerView({
                 >
                   <TerminalPanel
                     active={desktopTerminalOpen}
-                    cwd={terminalSession.cwd}
+                    cwd={terminalAgent.cwd}
                     onClose={onCloseTerminalPanel}
-                    sessionId={terminalSession.sessionId}
+                    agentId={terminalAgent.agentId}
                     viewerContextId={viewerContextId}
                   />
                 </React.Suspense>

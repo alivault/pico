@@ -24,9 +24,9 @@ import {
 import { emitPicoEvent } from "@/features/pico/agent/events"
 import { FADE_UNDER_ACTIONS, REVEAL_ON_HOVER } from "@/features/pico/agent/todo"
 import {
-  postSessionJson,
-  useSessionExtensions,
-} from "@/features/pico/agent/session-extensions"
+  postAgentJson,
+  useAgentExtensions,
+} from "@/features/pico/agent/agent-extensions"
 import {
   errorText,
   IconAction,
@@ -43,7 +43,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
 
-export type ChildSession = {
+export type Subagent = {
   id: string
   title: string
   cwd: string
@@ -55,21 +55,21 @@ export type ChildSession = {
   lastMessageAt?: number
 }
 
-function stopSession(
+function stopAgent(
   machineId: string,
   viewerContextId: string,
-  sessionId: string
+  agentId: string
 ) {
-  void postSessionJson(
+  void postAgentJson(
     machineId,
     viewerContextId,
-    sessionId,
+    agentId,
     "/api/abort",
     {}
   ).catch((error: unknown) => toast.error(errorText(error)))
 }
 
-function ChildStatus({ child }: { child: ChildSession }) {
+function ChildStatus({ child }: { child: Subagent }) {
   if (child.needsInput)
     return (
       <MessageCircleQuestionIcon
@@ -86,7 +86,7 @@ function ChildStatus({ child }: { child: ChildSession }) {
   )
 }
 
-function childStatusText(child: ChildSession, now: number) {
+function childStatusText(child: Subagent, now: number) {
   if (child.needsInput) return "Waiting for your answer"
   if (child.busy) return "Working"
   return child.lastMessageAt
@@ -99,7 +99,7 @@ function ChildRow({
   now,
   viewerContextId,
 }: {
-  child: ChildSession
+  child: Subagent
   now: number
   viewerContextId: string
 }) {
@@ -113,9 +113,7 @@ function ChildRow({
         type="button"
         aria-label={`Open ${child.title}`}
         className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-1.5 py-1.5 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-        onClick={() =>
-          emitPicoEvent("pico:open-session", { sessionId: child.id })
-        }
+        onClick={() => emitPicoEvent("pico:open-agent", { agentId: child.id })}
       >
         <span className="mt-1 flex size-4 shrink-0 items-center justify-center">
           <ChildStatus child={child} />
@@ -151,10 +149,10 @@ function ChildRow({
           )}
         >
           <IconAction
-            label="Stop the child session"
+            label="Stop the subagent"
             icon={<SquareIcon />}
             tone="destructive"
-            onClick={() => stopSession(machineId, viewerContextId, child.id)}
+            onClick={() => stopAgent(machineId, viewerContextId, child.id)}
           />
         </ItemActions>
       ) : null}
@@ -163,7 +161,7 @@ function ChildRow({
 }
 
 function childrenFrom(state: Record<string, unknown>) {
-  return (state.children as Array<ChildSession> | undefined) ?? []
+  return (state.children as Array<Subagent> | undefined) ?? []
 }
 
 function ChildrenSection({ state, viewerContextId }: AgentSectionProps) {
@@ -188,12 +186,12 @@ function ChildrenActions({ state, viewerContextId }: AgentSectionProps) {
   if (busy.length < 2) return null
   return (
     <IconAction
-      label={`Stop all ${busy.length} child sessions`}
+      label={`Stop all ${busy.length} subagents`}
       icon={<SquareIcon />}
       tone="destructive"
       onClick={() => {
         for (const child of busy)
-          stopSession(machineId, viewerContextId, child.id)
+          stopAgent(machineId, viewerContextId, child.id)
       }}
     />
   )
@@ -201,7 +199,7 @@ function ChildrenActions({ state, viewerContextId }: AgentSectionProps) {
 
 registerAgentSection({
   key: "children",
-  title: "Child sessions",
+  title: "Subagents",
   order: 40,
   summary(state) {
     const children = childrenFrom(state)
@@ -217,25 +215,25 @@ registerAgentSection({
 })
 
 type SpawnDetails = {
-  sessionId: string
+  agentId: string
   title?: string
   status?: "running" | "done"
   worktree?: { branch: string; path: string }
 }
 
 function SpawnCard({ block }: ToolRendererProps) {
-  const { viewerContextId, sessionId } = useToolRenderContext()
+  const { viewerContextId, agentId } = useToolRenderContext()
   const details = toolDetails<SpawnDetails>(block)
   const args = toolArgs(block)
-  const query = useSessionExtensions(viewerContextId, sessionId)
-  const live = (query.data?.children as Array<ChildSession> | undefined)?.find(
-    (child) => child.id === details.sessionId
+  const query = useAgentExtensions(viewerContextId, agentId)
+  const live = (query.data?.children as Array<Subagent> | undefined)?.find(
+    (child) => child.id === details.agentId
   )
   const title =
     live?.title ??
     details.title ??
     (typeof args.name === "string" ? args.name : undefined) ??
-    "Child session"
+    "Subagent"
   const goal = typeof args.goal === "string" ? args.goal : ""
   return (
     <div className="space-y-2 rounded-xl border bg-muted/20 p-3 text-sm">
@@ -247,13 +245,13 @@ function SpawnCard({ block }: ToolRendererProps) {
         ) : block.running ? (
           <Spinner size="xs" />
         ) : null}
-        {details.sessionId ? (
+        {details.agentId ? (
           <Button
             size="sm"
             variant="outline"
             onClick={() =>
-              emitPicoEvent("pico:open-session", {
-                sessionId: details.sessionId!,
+              emitPicoEvent("pico:open-agent", {
+                agentId: details.agentId!,
               })
             }
           >
@@ -278,9 +276,9 @@ function SpawnCard({ block }: ToolRendererProps) {
   )
 }
 
-registerToolRenderer("spawn_session", { Card: SpawnCard })
+registerToolRenderer("spawn_agent", { Card: SpawnCard })
 
-registerToolRenderer("sessions", {
+registerToolRenderer("agents", {
   summary(block) {
     const args = toolArgs(block)
     const ids = Array.isArray(args.ids)
@@ -300,12 +298,12 @@ registerToolRenderer("sessions", {
   },
 })
 
-// send_to_session, and the old session tools in earlier transcripts.
+// send_to_agent, and the old agent tools in earlier transcripts.
 for (const name of [
-  "send_to_session",
-  "read_session",
-  "stop_session",
-  "wait_for_sessions",
+  "send_to_agent",
+  "read_agent",
+  "stop_agent",
+  "wait_for_agents",
 ]) {
   registerToolRenderer(name, {
     summary(block) {

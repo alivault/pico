@@ -17,11 +17,11 @@ import {
 } from "@/features/pico/keyboard-shortcuts"
 import type { ForkMessage } from "@/features/pico/app-shell-dialog-types"
 import type {
-  DeleteOldDirectorySessionsResponse,
-  ForkSessionResponse,
+  DeleteOldDirectoryAgentsResponse,
+  ForkAgentResponse,
   ForkableMessagesResponse,
-  GenerateSessionNameResponse,
-  SessionListEntry,
+  GenerateAgentNameResponse,
+  AgentListEntry,
 } from "@/lib/pico/api"
 import { Button } from "@/components/ui/button"
 import {
@@ -59,40 +59,37 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { useMachineId } from "@/lib/pico/machine-context"
 
 type ForkableMessagesData = Extract<ForkableMessagesResponse, { ok: true }>
-type DeleteOldDirectorySessionsData = Extract<
-  DeleteOldDirectorySessionsResponse,
+type DeleteOldDirectoryAgentsData = Extract<
+  DeleteOldDirectoryAgentsResponse,
   { ok: true }
 >
-type GenerateSessionNameData = Extract<
-  GenerateSessionNameResponse,
-  { ok: true }
->
+type GenerateAgentNameData = Extract<GenerateAgentNameResponse, { ok: true }>
 
 function FooterKbd({ children }: { children: React.ReactNode }) {
   return <Kbd>{children}</Kbd>
 }
 
-type RenameSessionDialogProps = {
+type RenameAgentDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   renameValue: string
   generatingName: boolean
   canGenerateName: boolean
   onRenameValueChange: (value: string) => void
-  onGenerateSessionName: () => void
-  onRenameSession: () => void
+  onGenerateAgentName: () => void
+  onRenameAgent: () => void
 }
 
-function RenameSessionDialog({
+function RenameAgentDialog({
   open,
   onOpenChange,
   renameValue,
   generatingName,
   canGenerateName,
   onRenameValueChange,
-  onGenerateSessionName,
-  onRenameSession,
-}: RenameSessionDialogProps) {
+  onGenerateAgentName,
+  onRenameAgent,
+}: RenameAgentDialogProps) {
   const isMobile = useIsMobile()
   const renameInputRef = React.useRef<HTMLInputElement>(null)
 
@@ -124,15 +121,15 @@ function RenameSessionDialog({
         if (matchesShortcutEvent(event.nativeEvent, appShortcut("G"))) {
           event.preventDefault()
           event.stopPropagation()
-          onGenerateSessionName()
+          onGenerateAgentName()
           return
         }
         if (event.key !== "Enter" || event.nativeEvent.isComposing) return
         event.preventDefault()
         event.stopPropagation()
-        onRenameSession()
+        onRenameAgent()
       }}
-      placeholder="Session name"
+      placeholder="Agent name"
       className="min-w-0 flex-1"
     />
   )
@@ -140,7 +137,7 @@ function RenameSessionDialog({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">Rename session</div>
+          <div className="truncate text-sm font-medium">Rename agent</div>
           <div className="truncate text-xs text-muted-foreground">
             Update the display name shown in the sidebar.
           </div>
@@ -152,12 +149,12 @@ function RenameSessionDialog({
           <ShortcutButton
             kbd={formatShortcutLabel(appShortcut("G"))}
             disabled={generatingName || !canGenerateName}
-            onClick={onGenerateSessionName}
+            onClick={onGenerateAgentName}
           >
             {generatingName ? <Spinner /> : <WandSparklesIcon />}
             Generate
           </ShortcutButton>
-          <ShortcutButton kbd="Enter" onClick={onRenameSession}>
+          <ShortcutButton kbd="Enter" onClick={onRenameAgent}>
             Save
           </ShortcutButton>
           <ShortcutButton kbd="Esc" onClick={() => onOpenChange(false)}>
@@ -173,7 +170,7 @@ function RenameSessionDialog({
       <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
         <DrawerContent className="max-h-[90svh] overflow-hidden">
           <DrawerHeader>
-            <DrawerTitle>Rename session</DrawerTitle>
+            <DrawerTitle>Rename agent</DrawerTitle>
             <DrawerDescription>
               Update the display name shown in the sidebar.
             </DrawerDescription>
@@ -185,7 +182,7 @@ function RenameSessionDialog({
             <Button
               variant="outline"
               disabled={generatingName || !canGenerateName}
-              onClick={onGenerateSessionName}
+              onClick={onGenerateAgentName}
             >
               {generatingName ? <Spinner /> : <WandSparklesIcon />}
               Generate
@@ -193,7 +190,7 @@ function RenameSessionDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button onClick={onRenameSession}>Save</Button>
+            <Button onClick={onRenameAgent}>Save</Button>
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
@@ -204,7 +201,7 @@ function RenameSessionDialog({
     <CommandDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Rename session"
+      title="Rename agent"
       description="Update the display name shown in the sidebar."
       className="sm:max-w-md"
       initialFocus
@@ -214,33 +211,33 @@ function RenameSessionDialog({
   )
 }
 
-export type RenameSessionDialogHandle = {
+export type RenameAgentDialogHandle = {
   open: (target: {
     path: string
     title: string
     hasGeneratedName?: boolean
   }) => void
-  openForEntry: (entry: SessionListEntry) => void
+  openForEntry: (entry: AgentListEntry) => void
   close: () => void
   isOpen: () => boolean
 }
 
-type RenameSessionDialogControllerProps = {
-  ref?: React.Ref<RenameSessionDialogHandle>
+type RenameAgentDialogControllerProps = {
+  ref?: React.Ref<RenameAgentDialogHandle>
   openStateRef?: React.RefObject<boolean>
   viewerContextId: string
-  onRenameSession: (
+  onRenameAgent: (
     path: string,
     name: string
   ) => Promise<boolean> | boolean | void
 }
 
-export function RenameSessionDialogController({
+export function RenameAgentDialogController({
   ref,
   openStateRef,
   viewerContextId,
-  onRenameSession,
-}: RenameSessionDialogControllerProps) {
+  onRenameAgent,
+}: RenameAgentDialogControllerProps) {
   const machineId = useMachineId()
   const [open, setOpen] = React.useState(false)
   const [renameValue, setRenameValue] = React.useState("")
@@ -271,7 +268,7 @@ export function RenameSessionDialogController({
     setOpenState(true)
   }
 
-  const generateSessionName = async () => {
+  const generateAgentName = async () => {
     if (
       !viewerContextId ||
       !targetPathRef.current ||
@@ -283,8 +280,8 @@ export function RenameSessionDialogController({
 
     setIsGeneratingName(true)
     try {
-      const response = await fetchJson<GenerateSessionNameData>(
-        buildRequestUrl("/api/session/name", {
+      const response = await fetchJson<GenerateAgentNameData>(
+        buildRequestUrl("/api/agent/name", {
           machineId,
           contextId: viewerContextId,
         }),
@@ -297,15 +294,13 @@ export function RenameSessionDialogController({
       setRenameValue(response.name)
       setCanGenerateName(false)
       if (response.source === "heuristic" && response.reason) {
-        toast.info("Using heuristic session name", {
+        toast.info("Using heuristic agent name", {
           description: response.reason,
         })
       }
     } catch (error) {
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to generate session name"
+        error instanceof Error ? error.message : "Failed to generate agent name"
       )
     } finally {
       setIsGeneratingName(false)
@@ -313,7 +308,7 @@ export function RenameSessionDialogController({
   }
 
   const submitRename = async () => {
-    const success = await onRenameSession(targetPathRef.current, renameValue)
+    const success = await onRenameAgent(targetPathRef.current, renameValue)
     if (success === false) return
 
     setOpenState(false)
@@ -340,7 +335,7 @@ export function RenameSessionDialogController({
   )
 
   return (
-    <RenameSessionDialog
+    <RenameAgentDialog
       open={open}
       onOpenChange={(nextOpen) => {
         setOpenState(nextOpen)
@@ -351,37 +346,37 @@ export function RenameSessionDialogController({
         canGenerateName && Boolean(viewerContextId && targetPathRef.current)
       }
       onRenameValueChange={setRenameValue}
-      onGenerateSessionName={() => {
-        void generateSessionName()
+      onGenerateAgentName={() => {
+        void generateAgentName()
       }}
-      onRenameSession={() => {
+      onRenameAgent={() => {
         void submitRename()
       }}
     />
   )
 }
 
-type DeleteSessionsDialogProps = {
+type DeleteAgentsDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   title: string
   description: string
-  targets: Array<SessionListEntry>
-  onDeleteSession: () => void
+  targets: Array<AgentListEntry>
+  onDeleteAgent: () => void
   removeWorktree: boolean
   onRemoveWorktreeChange: (remove: boolean) => void
 }
 
-function DeleteSessionsDialog({
+function DeleteAgentsDialog({
   open,
   onOpenChange,
   title,
   description,
   targets,
-  onDeleteSession,
+  onDeleteAgent,
   removeWorktree,
   onRemoveWorktreeChange,
-}: DeleteSessionsDialogProps) {
+}: DeleteAgentsDialogProps) {
   const worktreeTargets = targets.filter((target) => target.worktreeBranch)
   const isMobile = useIsMobile()
   const deletePanelRef = React.useRef<HTMLDivElement>(null)
@@ -413,14 +408,14 @@ function DeleteSessionsDialog({
       if (event.target instanceof HTMLButtonElement) return
       event.preventDefault()
       event.stopPropagation()
-      onDeleteSession()
+      onDeleteAgent()
     }
 
     window.addEventListener("keydown", handleDeleteKeyDown, true)
     return () => {
       window.removeEventListener("keydown", handleDeleteKeyDown, true)
     }
-  }, [isMobile, onDeleteSession, onOpenChange, open])
+  }, [isMobile, onDeleteAgent, onOpenChange, open])
 
   const previewTargets = targets.slice(0, 8)
   const remainingTargetCount = Math.max(
@@ -444,7 +439,7 @@ function DeleteSessionsDialog({
         if (event.target instanceof HTMLButtonElement) return
         event.preventDefault()
         event.stopPropagation()
-        onDeleteSession()
+        onDeleteAgent()
       }}
     >
       <div className="border-b border-border/70 px-3 py-2">
@@ -480,7 +475,7 @@ function DeleteSessionsDialog({
           <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border bg-muted/30 p-2 text-sm">
             {previewTargets.map((target) => (
               <div key={target.path || target.id} className="truncate">
-                {target.title || "New session"}
+                {target.title || "New agent"}
               </div>
             ))}
             {remainingTargetCount > 0 ? (
@@ -493,7 +488,7 @@ function DeleteSessionsDialog({
       </div>
       {isMobile ? null : (
         <ShortcutFooter>
-          <ShortcutButton kbd="Enter" onClick={onDeleteSession}>
+          <ShortcutButton kbd="Enter" onClick={onDeleteAgent}>
             Archive
           </ShortcutButton>
           <ShortcutButton kbd="Esc" onClick={() => onOpenChange(false)}>
@@ -519,7 +514,7 @@ function DeleteSessionsDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={onDeleteSession}>
+            <Button variant="destructive" onClick={onDeleteAgent}>
               Archive
             </Button>
           </DialogFooter>
@@ -542,18 +537,18 @@ function DeleteSessionsDialog({
   )
 }
 
-export type DeleteSessionsDialogHandle = {
-  open: (targets: Array<SessionListEntry>) => void
+export type DeleteAgentsDialogHandle = {
+  open: (targets: Array<AgentListEntry>) => void
   close: () => void
   isOpen: () => boolean
 }
 
-type DeleteOldDirectorySessionsDialogProps = {
+type DeleteOldDirectoryAgentsDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   directory: string
   daysValue: string
-  preview: DeleteOldDirectorySessionsData | null
+  preview: DeleteOldDirectoryAgentsData | null
   previewLoading: boolean
   deleteLoading: boolean
   onDaysValueChange: (value: string) => void
@@ -561,7 +556,7 @@ type DeleteOldDirectorySessionsDialogProps = {
   onDelete: () => void
 }
 
-function DeleteOldDirectorySessionsDialog({
+function DeleteOldDirectoryAgentsDialog({
   open,
   onOpenChange,
   directory,
@@ -572,17 +567,17 @@ function DeleteOldDirectorySessionsDialog({
   onDaysValueChange,
   onPreview,
   onDelete,
-}: DeleteOldDirectorySessionsDialogProps) {
+}: DeleteOldDirectoryAgentsDialogProps) {
   const isMobile = useIsMobile()
-  const matchCount = preview?.matchingSessions.length ?? 0
+  const matchCount = preview?.matchingAgents.length ?? 0
   const canDelete = Boolean(preview) && matchCount > 0 && !deleteLoading
   const daysInput = (
     <div className="space-y-2">
-      <label className="text-sm font-medium" htmlFor="old-session-days">
+      <label className="text-sm font-medium" htmlFor="old-agent-days">
         Older than days
       </label>
       <Input
-        id="old-session-days"
+        id="old-agent-days"
         inputMode="numeric"
         value={daysValue}
         onChange={(event) => onDaysValueChange(event.target.value)}
@@ -595,19 +590,19 @@ function DeleteOldDirectorySessionsDialog({
       {matchCount > 0 ? (
         <div className="space-y-2">
           <p className="font-medium">
-            {matchCount} session{matchCount === 1 ? "" : "s"} will be archived.
+            {matchCount} agent{matchCount === 1 ? "" : "s"} will be archived.
           </p>
           <div className="max-h-48 space-y-1 overflow-y-auto text-muted-foreground">
-            {preview.matchingSessions.slice(0, 20).map((session) => (
-              <div key={session.path || session.id} className="truncate">
-                {session.title}
+            {preview.matchingAgents.slice(0, 20).map((agent) => (
+              <div key={agent.path || agent.id} className="truncate">
+                {agent.title}
               </div>
             ))}
             {matchCount > 20 ? <div>…and {matchCount - 20} more</div> : null}
           </div>
         </div>
       ) : (
-        <p className="text-muted-foreground">No old sessions found.</p>
+        <p className="text-muted-foreground">No old agents found.</p>
       )}
     </div>
   ) : null
@@ -643,9 +638,9 @@ function DeleteOldDirectorySessionsDialog({
       <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
         <DrawerContent>
           <DrawerHeader>
-            <DrawerTitle>Archive old sessions</DrawerTitle>
+            <DrawerTitle>Archive old agents</DrawerTitle>
             <DrawerDescription>
-              Preview and archive inactive sessions in this directory.
+              Preview and archive inactive agents in this directory.
             </DrawerDescription>
           </DrawerHeader>
           <div className="px-4 pb-2">{body}</div>
@@ -661,9 +656,9 @@ function DeleteOldDirectorySessionsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Archive old sessions</DialogTitle>
+          <DialogTitle>Archive old agents</DialogTitle>
           <DialogDescription>
-            Preview and archive inactive sessions in this directory.
+            Preview and archive inactive agents in this directory.
           </DialogDescription>
         </DialogHeader>
         {body}
@@ -673,30 +668,30 @@ function DeleteOldDirectorySessionsDialog({
   )
 }
 
-export type DeleteOldDirectorySessionsDialogHandle = {
+export type DeleteOldDirectoryAgentsDialogHandle = {
   open: (directory: string) => void
   close: () => void
   isOpen: () => boolean
 }
 
-type DeleteOldDirectorySessionsDialogControllerProps = {
-  ref?: React.Ref<DeleteOldDirectorySessionsDialogHandle>
+type DeleteOldDirectoryAgentsDialogControllerProps = {
+  ref?: React.Ref<DeleteOldDirectoryAgentsDialogHandle>
   openStateRef?: React.RefObject<boolean>
   viewerContextId: string
 }
 
-export function DeleteOldDirectorySessionsDialogController({
+export function DeleteOldDirectoryAgentsDialogController({
   ref,
   openStateRef,
   viewerContextId,
-}: DeleteOldDirectorySessionsDialogControllerProps) {
+}: DeleteOldDirectoryAgentsDialogControllerProps) {
   const machineId = useMachineId()
   const queryClient = useQueryClient()
   const [open, setOpen] = React.useState(false)
   const [directory, setDirectory] = React.useState("")
   const [daysValue, setDaysValue] = React.useState("30")
   const [preview, setPreview] =
-    React.useState<DeleteOldDirectorySessionsData | null>(null)
+    React.useState<DeleteOldDirectoryAgentsData | null>(null)
   const openRef = React.useRef(open)
 
   const setOpenState = (nextOpen: boolean) => {
@@ -720,8 +715,8 @@ export function DeleteOldDirectorySessionsDialogController({
 
   const cleanupMutation = useMutation({
     mutationFn: async (dryRun: boolean) => {
-      return await fetchJson<DeleteOldDirectorySessionsData>(
-        buildRequestUrl("/api/directory-sessions/cleanup", {
+      return await fetchJson<DeleteOldDirectoryAgentsData>(
+        buildRequestUrl("/api/project-agents/cleanup", {
           machineId,
           contextId: viewerContextId,
         }),
@@ -739,7 +734,7 @@ export function DeleteOldDirectorySessionsDialogController({
     onSuccess: async (_response, dryRun) => {
       if (dryRun) return
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.directorySessionsIndex(
+        queryKey: picoQueryKeys.directoryAgentsIndex(
           viewerContextId,
           directory
         ),
@@ -752,7 +747,7 @@ export function DeleteOldDirectorySessionsDialogController({
       setPreview(await cleanupMutation.mutateAsync(true))
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to preview sessions"
+        error instanceof Error ? error.message : "Failed to preview agents"
       )
     }
   }
@@ -762,20 +757,20 @@ export function DeleteOldDirectorySessionsDialogController({
       const result = await cleanupMutation.mutateAsync(false)
       setPreview(result)
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.directorySessionsIndex(
+        queryKey: picoQueryKeys.directoryAgentsIndex(
           viewerContextId,
           directory
         ),
       })
       toast.success(
-        `Archived ${result.deletedSessionIds.length} old session${
-          result.deletedSessionIds.length === 1 ? "" : "s"
+        `Archived ${result.deletedAgentIds.length} old agent${
+          result.deletedAgentIds.length === 1 ? "" : "s"
         }`
       )
       setOpenState(false)
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to archive sessions"
+        error instanceof Error ? error.message : "Failed to archive agents"
       )
     }
   }
@@ -802,7 +797,7 @@ export function DeleteOldDirectorySessionsDialogController({
   )
 
   return (
-    <DeleteOldDirectorySessionsDialog
+    <DeleteOldDirectoryAgentsDialog
       open={open}
       onOpenChange={setOpenState}
       directory={directory}
@@ -824,17 +819,17 @@ export function DeleteOldDirectorySessionsDialogController({
   )
 }
 
-type DeleteSessionsDialogControllerProps = {
-  ref?: React.Ref<DeleteSessionsDialogHandle>
+type DeleteAgentsDialogControllerProps = {
+  ref?: React.Ref<DeleteAgentsDialogHandle>
   openStateRef?: React.RefObject<boolean>
-  onDeleteSession: (
-    targets: Array<SessionListEntry>,
+  onDeleteAgent: (
+    targets: Array<AgentListEntry>,
     options?: { removeWorktree?: boolean }
   ) => Promise<boolean> | boolean | void
 }
 
-function normalizeDeleteTargets(targets: Array<SessionListEntry>) {
-  const nextTargets: Array<SessionListEntry> = []
+function normalizeDeleteTargets(targets: Array<AgentListEntry>) {
+  const nextTargets: Array<AgentListEntry> = []
   const seenKeys = new Set<string>()
 
   for (const target of targets) {
@@ -848,13 +843,13 @@ function normalizeDeleteTargets(targets: Array<SessionListEntry>) {
   return nextTargets
 }
 
-export function DeleteSessionsDialogController({
+export function DeleteAgentsDialogController({
   ref,
   openStateRef,
-  onDeleteSession,
-}: DeleteSessionsDialogControllerProps) {
+  onDeleteAgent,
+}: DeleteAgentsDialogControllerProps) {
   const [open, setOpen] = React.useState(false)
-  const [targets, setTargets] = React.useState<Array<SessionListEntry>>([])
+  const [targets, setTargets] = React.useState<Array<AgentListEntry>>([])
   const [removeWorktree, setRemoveWorktree] = React.useState(false)
   const openRef = React.useRef(open)
 
@@ -870,7 +865,7 @@ export function DeleteSessionsDialogController({
     }
   }
 
-  const openTargets = (nextTargets: Array<SessionListEntry>) => {
+  const openTargets = (nextTargets: Array<AgentListEntry>) => {
     const normalizedTargets = normalizeDeleteTargets(nextTargets)
     if (normalizedTargets.length === 0) return
 
@@ -879,7 +874,7 @@ export function DeleteSessionsDialogController({
   }
 
   const submitDelete = async () => {
-    const success = await onDeleteSession(targets, { removeWorktree })
+    const success = await onDeleteAgent(targets, { removeWorktree })
     if (success === false) return
 
     setOpenState(false)
@@ -897,14 +892,14 @@ export function DeleteSessionsDialogController({
     [targets]
   )
 
-  const title = targets.length === 1 ? "Archive session" : "Archive sessions"
+  const title = targets.length === 1 ? "Archive agent" : "Archive agents"
   const description =
     targets.length === 1
-      ? `Archive "${targets[0]?.title || "New session"}"? (History is kept.)`
-      : `Archive ${targets.length} selected sessions? (History is kept.)`
+      ? `Archive "${targets[0]?.title || "New agent"}"? (History is kept.)`
+      : `Archive ${targets.length} selected agents? (History is kept.)`
 
   return (
-    <DeleteSessionsDialog
+    <DeleteAgentsDialog
       open={open}
       onOpenChange={setOpenState}
       title={title}
@@ -912,14 +907,14 @@ export function DeleteSessionsDialogController({
       targets={targets}
       removeWorktree={removeWorktree}
       onRemoveWorktreeChange={setRemoveWorktree}
-      onDeleteSession={() => {
+      onDeleteAgent={() => {
         void submitDelete()
       }}
     />
   )
 }
 
-type ForkSessionDialogProps = {
+type ForkAgentDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   forkLoading: boolean
@@ -927,13 +922,13 @@ type ForkSessionDialogProps = {
   onForkFromMessage: (entryId: string) => void
 }
 
-function ForkSessionDialog({
+function ForkAgentDialog({
   open,
   onOpenChange,
   forkLoading,
   forkMessages,
   onForkFromMessage,
-}: ForkSessionDialogProps) {
+}: ForkAgentDialogProps) {
   const [forkQuery, setForkQuery] = React.useState("")
   const isMobile = useIsMobile()
 
@@ -1006,7 +1001,7 @@ function ForkSessionDialog({
       <Drawer open={open} onOpenChange={onOpenChange}>
         <DrawerContent className="max-h-[90svh] overflow-hidden">
           <DrawerHeader>
-            <DrawerTitle>Fork session</DrawerTitle>
+            <DrawerTitle>Fork conversation</DrawerTitle>
             <DrawerDescription>
               Search earlier user prompts and branch from a specific point.
             </DrawerDescription>
@@ -1023,7 +1018,7 @@ function ForkSessionDialog({
     <CommandDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Fork session"
+      title="Fork conversation"
       description="Search earlier user prompts and branch from a specific point."
       className="sm:max-w-2xl"
       initialFocus
@@ -1032,34 +1027,34 @@ function ForkSessionDialog({
     </CommandDialog>
   )
 }
-export type ForkSessionDialogHandle = {
+export type ForkAgentDialogHandle = {
   open: () => Promise<void> | void
   close: () => void
   isOpen: () => boolean
 }
 
-type ForkSessionDialogControllerProps = {
-  ref?: React.Ref<ForkSessionDialogHandle>
+type ForkAgentDialogControllerProps = {
+  ref?: React.Ref<ForkAgentDialogHandle>
   openStateRef?: React.RefObject<boolean>
   viewerContextId: string
-  sessionScopeKey: string
-  sessionId?: string
+  agentScopeKey: string
+  agentId?: string
 }
 
-export function ForkSessionDialogController({
+export function ForkAgentDialogController({
   ref,
   openStateRef,
   viewerContextId,
-  sessionScopeKey,
-  sessionId,
-}: ForkSessionDialogControllerProps) {
+  agentScopeKey,
+  agentId,
+}: ForkAgentDialogControllerProps) {
   const machineId = useMachineId()
   const [open, setOpen] = React.useState(false)
   const openRef = React.useRef(open)
   const queryClient = useQueryClient()
   const queryKey = picoQueryKeys.forkableMessages(
     viewerContextId,
-    sessionScopeKey
+    agentScopeKey
   )
 
   const setOpenState = (nextOpen: boolean) => {
@@ -1074,15 +1069,15 @@ export function ForkSessionDialogController({
     queryKey,
     queryFn: () =>
       fetchJson<ForkableMessagesData>(
-        buildRequestUrl("/api/session/fork", {
+        buildRequestUrl("/api/agent/fork", {
           machineId,
           contextId: viewerContextId,
-          sessionId,
+          agentId,
         })
       ),
     staleTime: 0,
     gcTime: 1000 * 60 * 10,
-    enabled: Boolean(viewerContextId && open && sessionScopeKey),
+    enabled: Boolean(viewerContextId && open && agentScopeKey),
   })
 
   const forkFromMessageMutation = useMutation({
@@ -1091,11 +1086,11 @@ export function ForkSessionDialogController({
         throw new Error("Viewer context unavailable")
       }
 
-      return await fetchJson<ForkSessionResponse>(
-        buildRequestUrl("/api/session/fork", {
+      return await fetchJson<ForkAgentResponse>(
+        buildRequestUrl("/api/agent/fork", {
           machineId,
           contextId: viewerContextId,
-          sessionId,
+          agentId,
         }),
         {
           method: "POST",
@@ -1130,10 +1125,12 @@ export function ForkSessionDialogController({
     try {
       await forkFromMessageMutation.mutateAsync(entryId)
       setOpenState(false)
-      toast.success("Forked session")
+      toast.success("Forked the conversation")
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to fork session"
+        error instanceof Error
+          ? error.message
+          : "Failed to fork the conversation"
       )
     }
   }
@@ -1167,7 +1164,7 @@ export function ForkSessionDialogController({
   )
 
   return (
-    <ForkSessionDialog
+    <ForkAgentDialog
       open={open}
       onOpenChange={setOpenState}
       forkLoading={forkLoading}

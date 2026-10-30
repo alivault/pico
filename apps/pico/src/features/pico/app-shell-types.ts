@@ -1,40 +1,37 @@
-import type { DesktopNotificationPermission } from "@/features/pico/session-done-notifications"
-import type { SessionDoneEvent, SessionListEntry } from "@/lib/pico/api"
+import type { DesktopNotificationPermission } from "@/features/pico/agent-done-notifications"
+import type { AgentDoneEvent, AgentListEntry } from "@/lib/pico/api"
 
-export type SelectSessionNavigationOptions = {
+export type SelectAgentNavigationOptions = {
   replace?: boolean
-  sessionPath?: string
+  agentPath?: string
 }
 
-export type CreateSessionOptions = {
+export type CreateAgentOptions = {
   closeMobileSidebar?: boolean
 }
 
-export type AppShellSessionWorkspaceHandle = {
-  createSession: (
+export type AppShellAgentWorkspaceHandle = {
+  createAgent: (
     cwdOverride?: string,
-    options?: CreateSessionOptions
+    options?: CreateAgentOptions
   ) => Promise<void>
   openAddDirectoryDialog: () => void
   openCommandPalette: () => void
-  openDeleteDialog: (targets: Array<SessionListEntry>) => void
-  openDeleteOldDirectorySessionsDialog: (directory: string) => void
-  moveSessionToDirectory: (
-    entry: SessionListEntry,
+  openDeleteDialog: (targets: Array<AgentListEntry>) => void
+  openDeleteOldDirectoryAgentsDialog: (directory: string) => void
+  moveAgentToDirectory: (
+    entry: AgentListEntry,
     directory: string
   ) => Promise<boolean>
-  openMoveSessionDirectoryDialogForEntry: (entry: SessionListEntry) => void
-  openRenameDialogForEntry: (entry: SessionListEntry) => void
-  openSessionsDialog: () => void
+  openMoveAgentDirectoryDialogForEntry: (entry: AgentListEntry) => void
+  openRenameDialogForEntry: (entry: AgentListEntry) => void
+  openAgentsDialog: () => void
   openSettingsDialog: () => void
-  setSessionUnread: (
-    entry: SessionListEntry,
-    unread: boolean
-  ) => Promise<boolean>
-  markSessionsRead: (entries: Array<SessionListEntry>) => Promise<boolean>
-  selectSession: (
-    nextSessionId?: string,
-    options?: SelectSessionNavigationOptions
+  setAgentUnread: (entry: AgentListEntry, unread: boolean) => Promise<boolean>
+  markAgentsRead: (entries: Array<AgentListEntry>) => Promise<boolean>
+  selectAgent: (
+    nextAgentId?: string,
+    options?: SelectAgentNavigationOptions
   ) => void
 }
 
@@ -42,8 +39,8 @@ export type AppShellUiState = {
   currentTab: string
   gitPanelOpen: boolean
   terminalPanelOpen: boolean
-  initialLoadingSessionId: string | null
-  loadingSessionId: string | null
+  initialLoadingAgentId: string | null
+  loadingAgentId: string | null
 }
 
 export type AppShellDisplaySettingsState = {
@@ -54,12 +51,12 @@ export type AppShellDisplaySettingsState = {
 
 export type AppShellNotificationState = {
   desktopNotificationPermission: DesktopNotificationPermission
-  sessionDoneDesktopNotificationsEnabled: boolean
-  sessionDoneEvents: Array<SessionDoneEvent>
-  sessionDoneSoundEnabled: boolean
+  agentDoneDesktopNotificationsEnabled: boolean
+  agentDoneEvents: Array<AgentDoneEvent>
+  agentDoneSoundEnabled: boolean
 }
 
 export type AppShellDraftFlowState = {
-  draftSessionLoadingOwnerKey: string | null
+  draftAgentLoadingOwnerKey: string | null
   storedDraftDirectory: string
 }

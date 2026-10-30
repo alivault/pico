@@ -8,7 +8,7 @@ import {
 } from "@/features/pico/agent/agent-panel"
 import { TextDialog } from "@/features/pico/agent/shared"
 
-/** The context files (AGENTS.md) that the agent of the session loads. */
+/** The context files (AGENTS.md) that the agent loads. */
 type Instructions = { cwd: string; files: Array<{ path: string }> }
 
 function instructionsOf(state: Record<string, unknown>) {
@@ -16,13 +16,13 @@ function instructionsOf(state: Record<string, unknown>) {
   return value && Array.isArray(value.files) ? value : undefined
 }
 
-/** The path from the session folder, for a file inside it. */
+/** The path from the agent folder, for a file inside it. */
 function relativePath(path: string, cwd: string) {
   const root = cwd.replace(/\/+$/, "")
   return path.startsWith(`${root}/`) ? path.slice(root.length + 1) : undefined
 }
 
-/** A short label: the path from the session folder, or the full path. */
+/** A short label: the path from the agent folder, or the full path. */
 function labelOf(path: string, cwd: string) {
   const relative = relativePath(path, cwd)
   if (relative) return relative
@@ -31,7 +31,7 @@ function labelOf(path: string, cwd: string) {
 
 function InstructionsSection({
   onOpenFile,
-  sessionId,
+  agentId,
   state,
   viewerContextId,
 }: AgentSectionProps) {
@@ -49,7 +49,7 @@ function InstructionsSection({
                 aria-label={`Show ${path}`}
                 className="flex h-7 w-full min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-sm outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50"
                 onClick={() => {
-                  // The file viewer reads only files in the session folder.
+                  // The file viewer reads only files in the agent folder.
                   const relative = relativePath(path, instructions.cwd)
                   if (relative && onOpenFile) onOpenFile(relative)
                   else setOpen(path)
@@ -74,9 +74,9 @@ function InstructionsSection({
             if (!next) setOpen(null)
           }}
           title={labelOf(open, instructions.cwd)}
-          path="/api/session/instructions"
+          path="/api/agent/instructions"
           searchParams={{ path: open }}
-          sessionId={sessionId}
+          agentId={agentId}
           viewerContextId={viewerContextId}
           scrollToEnd={false}
           markdown

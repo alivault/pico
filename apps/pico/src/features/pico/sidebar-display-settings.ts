@@ -4,21 +4,22 @@ import {
   safeLocalStorageSetItem,
 } from "@/lib/pico/storage"
 
-export const SHOW_SESSION_PREVIEWS_STORAGE_KEY = "pico-sidebar-session-previews"
+// Stored name: do not change.
+export const SHOW_AGENT_PREVIEWS_STORAGE_KEY = "pico-sidebar-session-previews"
 
 const listeners = new Set<() => void>()
 
-function readShowSessionPreviews() {
-  return safeLocalStorageGetItem(SHOW_SESSION_PREVIEWS_STORAGE_KEY) === "1"
+function readShowAgentPreviews() {
+  return safeLocalStorageGetItem(SHOW_AGENT_PREVIEWS_STORAGE_KEY) === "1"
 }
 
-let showSessionPreviews: boolean | undefined
+let showAgentPreviews: boolean | undefined
 
-function getShowSessionPreviews() {
-  if (showSessionPreviews === undefined) {
-    showSessionPreviews = readShowSessionPreviews()
+function getShowAgentPreviews() {
+  if (showAgentPreviews === undefined) {
+    showAgentPreviews = readShowAgentPreviews()
   }
-  return showSessionPreviews
+  return showAgentPreviews
 }
 
 function notify() {
@@ -26,8 +27,8 @@ function notify() {
 }
 
 function onStorage(event: StorageEvent) {
-  if (event.key !== SHOW_SESSION_PREVIEWS_STORAGE_KEY) return
-  showSessionPreviews = readShowSessionPreviews()
+  if (event.key !== SHOW_AGENT_PREVIEWS_STORAGE_KEY) return
+  showAgentPreviews = readShowAgentPreviews()
   notify()
 }
 
@@ -40,20 +41,17 @@ function subscribe(listener: () => void) {
   }
 }
 
-/** Show the last message preview line under each sidebar session. Off by default. */
-export function useShowSessionPreviews() {
+/** Show the last message preview line under each sidebar agent. Off by default. */
+export function useShowAgentPreviews() {
   return React.useSyncExternalStore(
     subscribe,
-    getShowSessionPreviews,
+    getShowAgentPreviews,
     () => false
   )
 }
 
-export function setShowSessionPreviews(enabled: boolean) {
-  showSessionPreviews = enabled
-  safeLocalStorageSetItem(
-    SHOW_SESSION_PREVIEWS_STORAGE_KEY,
-    enabled ? "1" : "0"
-  )
+export function setShowAgentPreviews(enabled: boolean) {
+  showAgentPreviews = enabled
+  safeLocalStorageSetItem(SHOW_AGENT_PREVIEWS_STORAGE_KEY, enabled ? "1" : "0")
   notify()
 }

@@ -43,8 +43,8 @@ import {
 } from "@/components/ui/context-menu"
 import {
   jobPrompt,
-  useSessionJobs,
-  type SessionJob,
+  useAgentJobs,
+  type AgentJob,
 } from "@/features/pico/agent/job-state"
 import {
   Dialog,
@@ -89,8 +89,8 @@ type TerminalTab = {
   name?: string
   status: TerminalStatus
   terminalId: string | null
-  /** The job of a job tab, from the session's state (not stored). */
-  job?: SessionJob | undefined
+  /** The job of a job tab, from the agent's state (not stored). */
+  job?: AgentJob | undefined
 }
 
 /** A successful job tab closes this long after the user saw it finish. */
@@ -142,7 +142,7 @@ type TerminalPanelProps = {
   className?: string
   cwd?: string | undefined
   onClose?: (() => void) | undefined
-  sessionId?: string | undefined
+  agentId?: string | undefined
   showCloseButton?: boolean | undefined
   viewerContextId: string
 }
@@ -157,7 +157,7 @@ type TerminalTabPaneProps = {
     info: TerminalInfo
   ) => void
   selected: boolean
-  sessionId?: string | undefined
+  agentId?: string | undefined
   tabId: string
   viewerContextId: string
 }
@@ -566,7 +566,7 @@ export function TerminalTabPane({
   onStatusChange,
   onTerminalIdChange,
   selected,
-  sessionId,
+  agentId,
   tabId,
   viewerContextId,
 }: TerminalTabPaneProps) {
@@ -628,8 +628,8 @@ export function TerminalTabPane({
     // or client on the same terminal never makes this one's input a duplicate.
     const viewerId = createTerminalTabId()
 
-    const requestOptions = sessionId
-      ? { machineId, contextId: viewerContextId, sessionId }
+    const requestOptions = agentId
+      ? { machineId, contextId: viewerContextId, agentId }
       : { machineId, contextId: viewerContextId }
 
     const publishStatus = (nextStatus: TerminalStatus) => {
@@ -983,7 +983,7 @@ export function TerminalTabPane({
       terminalIdRef.current = null
       fitAndResizeRef.current = () => {}
     }
-  }, [cwd, sessionId, tabId, viewerContextId])
+  }, [cwd, agentId, tabId, viewerContextId])
 
   React.useEffect(() => {
     const applyTheme = () => {
@@ -1185,21 +1185,21 @@ export function TerminalPanel({
   className,
   cwd,
   onClose,
-  sessionId,
+  agentId,
   showCloseButton = true,
   viewerContextId,
 }: TerminalPanelProps) {
   const machineId = useMachineId()
   const normalizedCwd = cwd?.trim() || ""
-  const scopeKey = `${viewerContextId}:${sessionId ?? "no-session"}:${normalizedCwd}`
+  const scopeKey = `${viewerContextId}:${agentId ?? "no-agent"}:${normalizedCwd}`
   const [tabsState, setTabsState] = React.useState<TerminalTabsState>(() =>
     createTerminalTabsState(machineId, scopeKey)
   )
   const [statusDialogTabId, setStatusDialogTabId] = React.useState<
     string | null
   >(null)
-  const sessionJobs = useSessionJobs(viewerContextId, sessionId)
-  const jobsById = new Map(sessionJobs.jobs.map((job) => [job.id, job]))
+  const agentJobs = useAgentJobs(viewerContextId, agentId)
+  const jobsById = new Map(agentJobs.jobs.map((job) => [job.id, job]))
   const tabs = (tabsState.scopeKey === scopeKey ? tabsState.tabs : []).map(
     (tab) => {
       const jobId = tabJobId(tab)
@@ -1254,8 +1254,8 @@ export function TerminalPanel({
     ? tabs.indexOf(statusDialogTab)
     : 0
 
-  const requestOptions = sessionId
-    ? { machineId, contextId: viewerContextId, sessionId }
+  const requestOptions = agentId
+    ? { machineId, contextId: viewerContextId, agentId }
     : { machineId, contextId: viewerContextId }
 
   const addTerminalTab = () => {
@@ -1310,7 +1310,7 @@ export function TerminalPanel({
   // A focus request (the terminal tool's focus action) shows its job's tab while it is open, also
   // when the panel mounts after the request.
   const shownFocus = React.useRef(new Set<string>())
-  const focusKey = sessionJobs.jobs
+  const focusKey = agentJobs.jobs
     .filter((job) => job.status === "running" && job.focus && !job.focus.inline)
     .map((job) => `${job.id}@${job.focus?.at}`)
     .join(" ")
@@ -1386,7 +1386,7 @@ export function TerminalPanel({
     if (tabs.length === 1 && tabs[0]?.id === tabId) onClose?.()
     closeTerminalTab(tabId)
   })
-  const goneJobTabs = sessionJobs.loaded
+  const goneJobTabs = agentJobs.loaded
     ? tabs
         .filter((tab) => isJobTab(tab) && jobTabGone(tab))
         .map((tab) => tab.id)
@@ -1626,7 +1626,7 @@ export function TerminalPanel({
                   onStatusChange={updateTabStatus}
                   onTerminalIdChange={updateTabTerminalId}
                   selected={selected}
-                  sessionId={sessionId}
+                  agentId={agentId}
                   tabId={tab.id}
                   viewerContextId={viewerContextId}
                 />
@@ -1644,7 +1644,7 @@ export function TerminalPanel({
         )
       ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center p-6 text-sm text-muted-foreground">
-          Open a session before starting a terminal.
+          Open an agent before starting a terminal.
         </div>
       )}
     </section>

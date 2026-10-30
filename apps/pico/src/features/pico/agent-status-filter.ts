@@ -1,25 +1,25 @@
 import * as React from "react"
 
-import type { SessionListEntry } from "@/lib/pico/api"
+import type { AgentListEntry } from "@/lib/pico/api"
 
 /**
- * A filter of the sidebar sessions by their state. A click on a count in a
+ * A filter of the sidebar agents by their state. A click on a count in a
  * machine heading turns its state on or off; more than one state can be on.
- * It is window state for each machine, so the heading and the sessions of the
+ * It is window state for each machine, so the heading and the agents of the
  * machine use it.
  */
-export type SessionStatusFilter = "working" | "waiting" | "done"
+export type AgentStatusFilter = "working" | "waiting" | "done"
 
 /** The states that are on, in a fixed order. Never empty. */
-export type SessionStatusFilters = ReadonlyArray<SessionStatusFilter>
+export type AgentStatusFilters = ReadonlyArray<AgentStatusFilter>
 
-const FILTER_ORDER: ReadonlyArray<SessionStatusFilter> = [
+const FILTER_ORDER: ReadonlyArray<AgentStatusFilter> = [
   "waiting",
   "working",
   "done",
 ]
 
-let snapshot: Record<string, SessionStatusFilters> = {}
+let snapshot: Record<string, AgentStatusFilters> = {}
 const listeners = new Set<() => void>()
 
 function subscribe(listener: () => void) {
@@ -33,9 +33,9 @@ function subscribe(listener: () => void) {
  * Turns `filter` on or off in `current`. Returns null when no state is on.
  */
 export function toggleStatusFilter(
-  current: SessionStatusFilters | null,
-  filter: SessionStatusFilter
-): SessionStatusFilters | null {
+  current: AgentStatusFilters | null,
+  filter: AgentStatusFilter
+): AgentStatusFilters | null {
   const on = new Set(current ?? [])
   if (on.has(filter)) on.delete(filter)
   else on.add(filter)
@@ -43,9 +43,9 @@ export function toggleStatusFilter(
   return next.length > 0 ? next : null
 }
 
-export function setSessionStatusFilter(
+export function setAgentStatusFilter(
   machineId: string,
-  filters: SessionStatusFilters | null
+  filters: AgentStatusFilters | null
 ) {
   const current = snapshot[machineId] ?? null
   if (current === filters) return
@@ -57,18 +57,18 @@ export function setSessionStatusFilter(
   for (const listener of listeners) listener()
 }
 
-export function toggleSessionStatusFilter(
+export function toggleAgentStatusFilter(
   machineId: string,
-  filter: SessionStatusFilter
+  filter: AgentStatusFilter
 ) {
-  setSessionStatusFilter(
+  setAgentStatusFilter(
     machineId,
     toggleStatusFilter(snapshot[machineId] ?? null, filter)
   )
 }
 
 /** The states that are on for the machine, or null when there is no filter. */
-export function useSessionStatusFilter(machineId: string) {
+export function useAgentStatusFilter(machineId: string) {
   return React.useSyncExternalStore(
     subscribe,
     () => snapshot[machineId] ?? null,
@@ -77,12 +77,12 @@ export function useSessionStatusFilter(machineId: string) {
 }
 
 /** The same rules as the counts in the machine heading. */
-export function sessionMatchesStatusFilter(
-  entry: SessionListEntry,
-  filter: SessionStatusFilter | SessionStatusFilters
+export function agentMatchesStatusFilter(
+  entry: AgentListEntry,
+  filter: AgentStatusFilter | AgentStatusFilters
 ): boolean {
   if (typeof filter !== "string")
-    return filter.some((item) => sessionMatchesStatusFilter(entry, item))
+    return filter.some((item) => agentMatchesStatusFilter(entry, item))
   switch (filter) {
     case "working":
       return Boolean((entry.streaming || entry.waiting) && !entry.needsInput)
@@ -96,24 +96,24 @@ export function sessionMatchesStatusFilter(
 }
 
 /**
- * Keeps only the sessions with a state of the filter, and only the
- * directories that still have sessions outside the pinned group.
+ * Keeps only the agents with a state of the filter, and only the
+ * directories that still have agents outside the pinned group.
  */
-export function filterDirectorySessionsByStatus(
+export function filterDirectoryAgentsByStatus(
   directories: Array<string>,
-  sessionsByDirectory: Record<string, Array<SessionListEntry>>,
-  filter: SessionStatusFilter | SessionStatusFilters,
-  isPinned: (entry: SessionListEntry) => boolean
+  agentsByDirectory: Record<string, Array<AgentListEntry>>,
+  filter: AgentStatusFilter | AgentStatusFilters,
+  isPinned: (entry: AgentListEntry) => boolean
 ) {
   const visibleDirectories: Array<string> = []
-  const filteredSessions: Record<string, Array<SessionListEntry>> = {}
+  const filteredAgents: Record<string, Array<AgentListEntry>> = {}
   for (const directory of directories) {
-    const sessions = (sessionsByDirectory[directory] ?? []).filter((entry) =>
-      sessionMatchesStatusFilter(entry, filter)
+    const agents = (agentsByDirectory[directory] ?? []).filter((entry) =>
+      agentMatchesStatusFilter(entry, filter)
     )
-    filteredSessions[directory] = sessions
-    if (sessions.some((entry) => !isPinned(entry)))
+    filteredAgents[directory] = agents
+    if (agents.some((entry) => !isPinned(entry)))
       visibleDirectories.push(directory)
   }
-  return { visibleDirectories, filteredSessions }
+  return { visibleDirectories, filteredAgents }
 }

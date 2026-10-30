@@ -1,7 +1,7 @@
 import * as React from "react"
 import { CheckIcon, ChevronDownIcon } from "lucide-react"
 
-import type { ModelOption, SessionState } from "@/lib/pico"
+import type { ModelOption, AgentState } from "@/lib/pico"
 
 import { Button } from "@/components/ui/button"
 import { TitleTooltip } from "@/components/ui/tooltip"
@@ -74,7 +74,7 @@ function withoutPrefix(name: string, prefix: string) {
   return prefix && name.startsWith(prefix) ? name.slice(prefix.length) : name
 }
 
-type ComposerPickerSessionStore = PicoStore<SessionState>
+type ComposerPickerAgentStore = PicoStore<AgentState>
 
 type ModelPickerState = {
   availableModels: Array<ModelOption>
@@ -87,7 +87,7 @@ type ThinkingPickerState = {
 }
 
 type ComposerPickersProps = {
-  activeSessionId?: string
+  activeAgentId?: string
   modelPickerOpen: boolean
   onModelPickerOpenChange: (open: boolean) => void
   thinkingPickerOpen: boolean
@@ -95,7 +95,7 @@ type ComposerPickersProps = {
   modelQuery: string
   onModelQueryChange: (value: string) => void
   contextUsageStore: ComposerContextUsageStore
-  sessionStore: ComposerPickerSessionStore
+  agentStore: ComposerPickerAgentStore
   disabled?: boolean
   viewerContextId: string
   onSelectModel: (value: string) => void
@@ -118,7 +118,7 @@ function sameThinkingPickerState(
   )
 }
 
-function useModelPickerState(store: ComposerPickerSessionStore) {
+function useModelPickerState(store: ComposerPickerAgentStore) {
   return useSelector(
     store,
     (source) => ({
@@ -129,7 +129,7 @@ function useModelPickerState(store: ComposerPickerSessionStore) {
   )
 }
 
-function useThinkingPickerState(store: ComposerPickerSessionStore) {
+function useThinkingPickerState(store: ComposerPickerAgentStore) {
   return useSelector(
     store,
     (source) => ({
@@ -147,7 +147,7 @@ const ComposerModelPicker = React.memo(function ComposerModelPicker({
   onOpenChange,
   onSelectModel,
   open,
-  sessionStore,
+  agentStore,
 }: {
   disabled: boolean
   modelQuery: string
@@ -155,9 +155,9 @@ const ComposerModelPicker = React.memo(function ComposerModelPicker({
   onOpenChange: (open: boolean) => void
   onSelectModel: (value: string) => void
   open: boolean
-  sessionStore: ComposerPickerSessionStore
+  agentStore: ComposerPickerAgentStore
 }) {
-  const { availableModels, model } = useModelPickerState(sessionStore)
+  const { availableModels, model } = useModelPickerState(agentStore)
   const filteredModels = (() => {
     const normalizedQuery = modelQuery.trim().toLowerCase()
     const modelOptions =
@@ -275,26 +275,26 @@ const ComposerModelPicker = React.memo(function ComposerModelPicker({
 
 const ComposerContextUsageIndicatorHost = React.memo(
   function ComposerContextUsageIndicatorHost({
-    activeSessionId,
+    activeAgentId,
     contextUsageStore,
     disabled,
-    sessionStore,
+    agentStore,
     viewerContextId,
   }: {
-    activeSessionId?: string
+    activeAgentId?: string
     contextUsageStore: ComposerContextUsageStore
     disabled: boolean
-    sessionStore: ComposerPickerSessionStore
+    agentStore: ComposerPickerAgentStore
     viewerContextId: string
   }) {
     const modelProvider = useSelector(
-      sessionStore,
-      (sessionState) => sessionState.model?.provider
+      agentStore,
+      (agentState) => agentState.model?.provider
     )
 
     return (
       <ComposerContextUsageIndicator
-        activeSessionId={activeSessionId}
+        activeAgentId={activeAgentId}
         contextUsageStore={contextUsageStore}
         disabled={disabled}
         modelProvider={modelProvider}
@@ -309,16 +309,16 @@ const ComposerThinkingPicker = React.memo(function ComposerThinkingPicker({
   onOpenChange,
   onSelectThinkingLevel,
   open,
-  sessionStore,
+  agentStore,
 }: {
   disabled: boolean
   onOpenChange: (open: boolean) => void
   onSelectThinkingLevel: (level: string) => void
   open: boolean
-  sessionStore: ComposerPickerSessionStore
+  agentStore: ComposerPickerAgentStore
 }) {
   const { availableThinkingLevels, thinkingLevel } =
-    useThinkingPickerState(sessionStore)
+    useThinkingPickerState(agentStore)
 
   const currentThinkingLabel = thinkingLabel(thinkingLevel)
 
@@ -367,29 +367,29 @@ const ComposerThinkingPicker = React.memo(function ComposerThinkingPicker({
   )
 })
 
-/** The tool profile of a running session. A draft has its own picker. */
-function SessionProfilePicker({
-  sessionStore,
+/** The tool profile of a running agent. A draft has its own picker. */
+function AgentProfilePicker({
+  agentStore,
   viewerContextId,
 }: {
-  sessionStore: ComposerPickerSessionStore
+  agentStore: ComposerPickerAgentStore
   viewerContextId: string
 }) {
-  const draft = useSelector(sessionStore, (state) => state.draft)
-  const sessionId = useSelector(sessionStore, (state) => state.sessionId)
-  const cwd = useSelector(sessionStore, (state) => state.cwd)
-  if (draft || !sessionId) return null
+  const draft = useSelector(agentStore, (state) => state.draft)
+  const agentId = useSelector(agentStore, (state) => state.agentId)
+  const cwd = useSelector(agentStore, (state) => state.cwd)
+  if (draft || !agentId) return null
   return (
     <ProfilePicker
       cwd={cwd}
-      sessionId={sessionId}
+      agentId={agentId}
       viewerContextId={viewerContextId}
     />
   )
 }
 
 export const ComposerPickers = React.memo(function ComposerPickers({
-  activeSessionId,
+  activeAgentId,
   modelPickerOpen,
   onModelPickerOpenChange,
   thinkingPickerOpen,
@@ -397,7 +397,7 @@ export const ComposerPickers = React.memo(function ComposerPickers({
   modelQuery,
   onModelQueryChange,
   contextUsageStore,
-  sessionStore,
+  agentStore,
   disabled = false,
   viewerContextId,
   onSelectModel,
@@ -423,7 +423,7 @@ export const ComposerPickers = React.memo(function ComposerPickers({
           onOpenChange={handleModelPickerOpenChange}
           onSelectModel={onSelectModel}
           open={modelPickerOpen}
-          sessionStore={sessionStore}
+          agentStore={agentStore}
         />
 
         <ComposerThinkingPicker
@@ -431,23 +431,23 @@ export const ComposerPickers = React.memo(function ComposerPickers({
           onOpenChange={handleThinkingPickerOpenChange}
           onSelectThinkingLevel={onSelectThinkingLevel}
           open={thinkingPickerOpen}
-          sessionStore={sessionStore}
+          agentStore={agentStore}
         />
 
-        {/* On mobile, the session menu has the tool profile. */}
+        {/* On mobile, the agent menu has the tool profile. */}
         <div className="hidden md:contents">
-          <SessionProfilePicker
-            sessionStore={sessionStore}
+          <AgentProfilePicker
+            agentStore={agentStore}
             viewerContextId={viewerContextId}
           />
         </div>
       </div>
 
       <ComposerContextUsageIndicatorHost
-        activeSessionId={activeSessionId}
+        activeAgentId={activeAgentId}
         contextUsageStore={contextUsageStore}
         disabled={disabled}
-        sessionStore={sessionStore}
+        agentStore={agentStore}
         viewerContextId={viewerContextId}
       />
     </div>

@@ -23,15 +23,15 @@ import {
   insertQueueRow,
   isQueueRowChanged,
   laneRows,
-  mergeQueueSession,
+  mergeQueueAgent,
   mostRecentQueueKey,
   moveQueueRow,
   queueRowsFromMessages,
-  queueSessionSavePlan,
+  queueAgentSavePlan,
   type PendingQueueMessage,
   type PendingQueueSaveRow,
   type QueueEditRow,
-  type QueueEditSession,
+  type QueueEditAgent,
   type QueueLane,
 } from "@/features/pico/pending-queue"
 
@@ -56,7 +56,7 @@ type ComposerPendingMessagesProps = {
   ) => void
   /**
    * Hold the queue while the user edits it. Resolves a function that resumes
-   * the held session, or null when the queue must stay paused.
+   * the held agent, or null when the queue must stay paused.
    */
   onHoldPendingQueue: () => Promise<(() => void) | null>
   onStartPendingQueue: () => void
@@ -133,11 +133,11 @@ export const ComposerPendingMessages = React.memo(
     onExitEditing,
     ref,
   }: ComposerPendingMessagesProps) {
-    const [session, setSession] = React.useState<QueueEditSession | null>(null)
-    // The hold of the open session: resolves the resume of the held session.
+    const [agent, setAgent] = React.useState<QueueEditAgent | null>(null)
+    // The hold of the open agent: resolves the resume of the held agent.
     const holdRef = React.useRef<Promise<(() => void) | null> | null>(null)
     const [heldForEdit, setHeldForEdit] = React.useState(false)
-    const editing = session !== null
+    const editing = agent !== null
     const editorRef = React.useRef<HTMLTextAreaElement | null>(null)
     // A move to the other lane mounts a new editor. Keep the focus and caret.
     const attachEditor = React.useCallback(
@@ -155,21 +155,21 @@ export const ComposerPendingMessages = React.memo(
       },
       []
     )
-    const sessionRef = React.useRef(session)
+    const agentRef = React.useRef(agent)
     React.useLayoutEffect(() => {
-      sessionRef.current = session
-    }, [session])
+      agentRef.current = agent
+    }, [agent])
 
-    // Keep an open session in step with prompts that were sent or queued.
+    // Keep an open agent in step with prompts that were sent or queued.
     React.useEffect(() => {
-      setSession((current) => {
+      setAgent((current) => {
         if (!current) return current
-        const next = mergeQueueSession(current, currentPendingMessages)
+        const next = mergeQueueAgent(current, currentPendingMessages)
         return next.rows.length === 0 ? null : next
       })
     }, [currentPendingMessages])
 
-    // Hold the queue while a session is open, so that the agent does not get
+    // Hold the queue while an agent is open, so that the agent does not get
     // a prompt with old text. Only server prompts can be held.
     React.useEffect(() => {
       if (!editing || holdRef.current) return
@@ -185,7 +185,7 @@ export const ComposerPendingMessages = React.memo(
       })
     }, [currentPendingMessages, editing, onHoldPendingQueue])
 
-    /** End the hold of the session; `finish` gets the resume, if any. */
+    /** End the hold of the agent; `finish` gets the resume, if any. */
     const releaseHold = React.useCallback(
       (finish: (resume: (() => void) | null) => void) => {
         const hold = holdRef.current ?? Promise.resolve(null)
@@ -196,14 +196,14 @@ export const ComposerPendingMessages = React.memo(
       []
     )
 
-    // A session can close by itself, when all its prompts were sent.
+    // An agent can close by itself, when all its prompts were sent.
     React.useEffect(() => {
       if (editing || !holdRef.current) return
       releaseHold((resume) => resume?.())
     }, [editing, releaseHold])
 
-    // The panel unmounts on a switch to another session. Resume the held
-    // session; the resume does not depend on the shown session.
+    // The panel unmounts on a switch to another agent. Resume the held
+    // agent; the resume does not depend on the shown agent.
     React.useEffect(
       () => () => {
         const hold = holdRef.current
@@ -213,8 +213,8 @@ export const ComposerPendingMessages = React.memo(
       []
     )
 
-    const selectedKey = session?.selectedKey
-    const caret = session?.caret
+    const selectedKey = agent?.selectedKey
+    const caret = agent?.caret
     React.useLayoutEffect(() => {
       const editor = editorRef.current
       if (!editor || !selectedKey) return
@@ -227,7 +227,7 @@ export const ComposerPendingMessages = React.memo(
     const begin = React.useCallback(
       (key: string | undefined) => {
         if (!key) return false
-        setSession({
+        setAgent({
           rows: queueRowsFromMessages(currentPendingMessages),
           selectedKey: key,
           caret: "end",
@@ -238,7 +238,7 @@ export const ComposerPendingMessages = React.memo(
     )
 
     const close = React.useCallback(() => {
-      setSession(null)
+      setAgent(null)
       onExitEditing()
     }, [onExitEditing])
 
@@ -248,10 +248,10 @@ export const ComposerPendingMessages = React.memo(
     }, [close, releaseHold])
 
     const save = React.useCallback(() => {
-      const current = sessionRef.current
+      const current = agentRef.current
       if (!current) return
       const plan = hasQueueChanges(current)
-        ? queueSessionSavePlan(current)
+        ? queueAgentSavePlan(current)
         : undefined
       close()
       releaseHold((resume) => {
@@ -268,7 +268,7 @@ export const ComposerPendingMessages = React.memo(
       () => ({
         beginEditing: () => begin(mostRecentQueueKey(currentPendingMessages)),
         runEmptyEnter: () => {
-          if (sessionRef.current || currentPendingMessages.length === 0) {
+          if (agentRef.current || currentPendingMessages.length === 0) {
             return false
           }
           if (canStartQueue) {
@@ -305,26 +305,26 @@ export const ComposerPendingMessages = React.memo(
       ]
     )
 
-    if (currentPendingMessages.length === 0 && !session) return null
+    if (currentPendingMessages.length === 0 && !agent) return null
 
-    const rows = session?.rows ?? queueRowsFromMessages(currentPendingMessages)
-    const unsaved = session ? hasQueueChanges(session) : false
-    const selectedRow = session
-      ? rows.find((row) => row.key === session.selectedKey)
+    const rows = agent?.rows ?? queueRowsFromMessages(currentPendingMessages)
+    const unsaved = agent ? hasQueueChanges(agent) : false
+    const selectedRow = agent
+      ? rows.find((row) => row.key === agent.selectedKey)
       : undefined
 
-    const updateSession = (
-      update: (current: QueueEditSession) => QueueEditSession | null
+    const updateAgent = (
+      update: (current: QueueEditAgent) => QueueEditAgent | null
     ) => {
-      setSession((current) => (current ? update(current) : current))
+      setAgent((current) => (current ? update(current) : current))
     }
 
     const select = (key: string, nextCaret: "start" | "end") => {
-      if (!session) {
+      if (!agent) {
         begin(key)
         return
       }
-      updateSession((current) => ({
+      updateAgent((current) => ({
         ...current,
         selectedKey: key,
         caret: nextCaret,
@@ -332,8 +332,8 @@ export const ComposerPendingMessages = React.memo(
     }
 
     const selectAdjacent = (direction: -1 | 1) => {
-      if (!session) return false
-      const index = rows.findIndex((row) => row.key === session.selectedKey)
+      if (!agent) return false
+      const index = rows.findIndex((row) => row.key === agent.selectedKey)
       const target = rows[index + direction]
       if (!target) return false
       select(target.key, direction === -1 ? "end" : "start")
@@ -341,14 +341,14 @@ export const ComposerPendingMessages = React.memo(
     }
 
     const move = (key: string, direction: -1 | 1) => {
-      updateSession((current) => {
+      updateAgent((current) => {
         const next = moveQueueRow(current.rows, key, direction)
         return next ? { ...current, rows: next, selectedKey: key } : current
       })
     }
 
     const insert = (key: string, direction: -1 | 1) => {
-      updateSession((current) => {
+      updateAgent((current) => {
         const next = insertQueueRow(current.rows, key, direction)
         return next
           ? { rows: next.rows, selectedKey: next.key, caret: "end" }
@@ -357,22 +357,22 @@ export const ComposerPendingMessages = React.memo(
     }
 
     const append = (lane: QueueLane) => {
-      if (!session) {
+      if (!agent) {
         const next = appendQueueRow(
           queueRowsFromMessages(currentPendingMessages),
           lane
         )
-        setSession({ rows: next.rows, selectedKey: next.key, caret: "end" })
+        setAgent({ rows: next.rows, selectedKey: next.key, caret: "end" })
         return
       }
-      updateSession((current) => {
+      updateAgent((current) => {
         const next = appendQueueRow(current.rows, lane)
         return { rows: next.rows, selectedKey: next.key, caret: "end" }
       })
     }
 
     const toggleRemove = (key: string) => {
-      updateSession((current) => ({
+      updateAgent((current) => ({
         ...current,
         rows: current.rows.map((row) =>
           row.key === key ? { ...row, removed: !row.removed } : row
@@ -381,7 +381,7 @@ export const ComposerPendingMessages = React.memo(
     }
 
     const setText = (key: string, text: string) => {
-      updateSession((current) => ({
+      updateAgent((current) => ({
         ...current,
         rows: current.rows.map((row) =>
           row.key === key ? { ...row, text } : row
@@ -393,7 +393,7 @@ export const ComposerPendingMessages = React.memo(
       key: string,
       update: (images: QueueEditRow["images"]) => QueueEditRow["images"]
     ) => {
-      updateSession((current) => ({
+      updateAgent((current) => ({
         ...current,
         rows: current.rows.map((row) => {
           if (row.key !== key) return row
@@ -489,12 +489,12 @@ export const ComposerPendingMessages = React.memo(
     return (
       <div
         className="flex max-h-[min(45vh,420px)] flex-col gap-1.5"
-        data-queue-editing={session ? "true" : undefined}
+        data-queue-editing={agent ? "true" : undefined}
       >
         <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
           {LANES.map((lane) => {
             const items = laneRows(rows, lane.lane)
-            if (items.length === 0 && !session) return null
+            if (items.length === 0 && !agent) return null
 
             return (
               <section
@@ -513,7 +513,7 @@ export const ComposerPendingMessages = React.memo(
                     {items.length} · {lane.hint}
                   </span>
                   <span className="ml-auto flex items-center gap-1">
-                    {!session && lane.lane === firstLane ? (
+                    {!agent && lane.lane === firstLane ? (
                       <span className="hidden items-center gap-1 text-muted-foreground md:inline-flex">
                         <Kbd>Alt+Q</Kbd> edit
                       </span>
@@ -530,7 +530,7 @@ export const ComposerPendingMessages = React.memo(
                         </Button>
                       </>
                     ) : null}
-                    {session ? (
+                    {agent ? (
                       <Button
                         size="icon-xs"
                         variant="ghost"
@@ -551,13 +551,13 @@ export const ComposerPendingMessages = React.memo(
                 ) : (
                   <ol className="flex flex-col gap-0.5">
                     {items.map((row, index) => {
-                      const selected = row.key === session?.selectedKey
+                      const selected = row.key === agent?.selectedKey
                       const icon = rowIcon(row, index, lane, {
                         selected,
                         paused,
                         held: heldForEdit,
                       })
-                      const changed = session ? isQueueRowChanged(row) : false
+                      const changed = agent ? isQueueRowChanged(row) : false
 
                       return (
                         <li
@@ -723,7 +723,7 @@ export const ComposerPendingMessages = React.memo(
           })}
         </div>
 
-        {session ? (
+        {agent ? (
           <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-muted-foreground">
             <span className="hidden flex-wrap items-center gap-x-3 gap-y-1 md:flex">
               <span className="inline-flex items-center gap-1">

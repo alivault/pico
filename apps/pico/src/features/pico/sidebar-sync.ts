@@ -1,6 +1,6 @@
 /**
  * Sync the sidebar layout across devices: the added directories in order, the
- * pinned sessions, and the collapsed directories. Each machine's server keeps
+ * pinned agents, and the collapsed directories. Each machine's server keeps
  * the shared copy of that machine. Local storage stays the copy that the UI
  * reads, so the sidebar shows at once when the page opens.
  *
@@ -17,12 +17,12 @@ import { emitPicoEvent } from "@/features/pico/agent/events"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import {
   COLLAPSED_DIRECTORIES_STORAGE_KEY,
-  PINNED_SESSIONS_STORAGE_KEY,
+  PINNED_AGENTS_STORAGE_KEY,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
   machineLocalStorageGetItem,
   machineLocalStorageSetItem,
   readStoredCollapsedDirectories,
-  readStoredPinnedSessionKeys,
+  readStoredPinnedAgentKeys,
   readStoredSidebarDirectories,
 } from "@/lib/pico"
 import type { SidebarStateEvent, SidebarStateSnapshot } from "@/lib/pico/api"
@@ -30,18 +30,18 @@ import { setLocalStorageWriteListener } from "@/lib/pico/storage"
 
 export type SidebarSyncField =
   | "directories"
-  | "pinnedSessionKeys"
+  | "pinnedAgentKeys"
   | "collapsedDirectories"
 
 const FIELD_BY_KEY: Record<string, SidebarSyncField> = {
   [SIDEBAR_DIRECTORIES_STORAGE_KEY]: "directories",
-  [PINNED_SESSIONS_STORAGE_KEY]: "pinnedSessionKeys",
+  [PINNED_AGENTS_STORAGE_KEY]: "pinnedAgentKeys",
   [COLLAPSED_DIRECTORIES_STORAGE_KEY]: "collapsedDirectories",
 }
 
 const KEY_BY_FIELD: Record<SidebarSyncField, string> = {
   directories: SIDEBAR_DIRECTORIES_STORAGE_KEY,
-  pinnedSessionKeys: PINNED_SESSIONS_STORAGE_KEY,
+  pinnedAgentKeys: PINNED_AGENTS_STORAGE_KEY,
   collapsedDirectories: COLLAPSED_DIRECTORIES_STORAGE_KEY,
 }
 
@@ -86,15 +86,15 @@ class MachineSidebarSync {
   #readLocal(field: SidebarSyncField) {
     if (field === "directories")
       return readStoredSidebarDirectories(this.machineId).directories
-    if (field === "pinnedSessionKeys")
-      return readStoredPinnedSessionKeys(this.machineId)
+    if (field === "pinnedAgentKeys")
+      return readStoredPinnedAgentKeys(this.machineId)
     return readStoredCollapsedDirectories(this.machineId)
   }
 
   #readAllLocal() {
     return {
       directories: this.#readLocal("directories"),
-      pinnedSessionKeys: this.#readLocal("pinnedSessionKeys"),
+      pinnedAgentKeys: this.#readLocal("pinnedAgentKeys"),
       collapsedDirectories: this.#readLocal("collapsedDirectories"),
     }
   }

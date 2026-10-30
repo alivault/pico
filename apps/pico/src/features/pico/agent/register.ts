@@ -4,7 +4,7 @@
  */
 import "@/features/pico/agent/ask"
 import "@/features/pico/agent/browser"
-import "@/features/pico/agent/children"
+import "@/features/pico/agent/subagents"
 import "@/features/pico/agent/dev-tools"
 import "@/features/pico/agent/instructions"
 import "@/features/pico/agent/jobs"

@@ -110,14 +110,14 @@ export function errorText(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
-/** A dialog that shows text from a session route, with a refresh button. */
+/** A dialog that shows text from an agent route, with a refresh button. */
 export function TextDialog({
   open,
   onOpenChange,
   title,
   path,
   searchParams,
-  sessionId,
+  agentId,
   viewerContextId,
   refreshMs,
   scrollToEnd = true,
@@ -128,7 +128,7 @@ export function TextDialog({
   title: string
   path: string
   searchParams: Record<string, string | number>
-  sessionId: string
+  agentId: string
   viewerContextId: string
   refreshMs?: number
   /** Show the end of the text first, as for a log. */
@@ -142,7 +142,7 @@ export function TextDialog({
       "pico",
       "text-dialog",
       viewerContextId,
-      sessionId,
+      agentId,
       path,
       searchParams,
     ],
@@ -151,7 +151,7 @@ export function TextDialog({
         buildRequestUrl(path, {
           machineId,
           contextId: viewerContextId,
-          sessionId,
+          agentId,
           searchParams,
         })
       ),

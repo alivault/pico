@@ -24,10 +24,10 @@ import { Input } from "@/components/ui/input"
 import { errorText } from "@/features/pico/agent/shared"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { viewerContextIdForSummaries } from "@/features/pico/machine-store"
-import type { SessionListEntry } from "@/lib/pico/api"
+import type { AgentListEntry } from "@/lib/pico/api"
 
 /**
- * Rename and archive for the sessions of another machine in the sidebar.
+ * Rename and archive for the agents of another machine in the sidebar.
  * The requests go to that machine. The hub then sends a new summary of the
  * machine, which updates its sidebar group.
  */
@@ -58,8 +58,8 @@ export function OtherMachineRenameDialog({
 }: {
   machineId: string
   machineLabel: string
-  /** The session to rename; the dialog is open while it is set. */
-  entry: SessionListEntry | undefined
+  /** The agent to rename; the dialog is open while it is set. */
+  entry: AgentListEntry | undefined
   onOpenChange: (open: boolean) => void
 }) {
   const [name, setName] = React.useState("")
@@ -75,13 +75,13 @@ export function OtherMachineRenameDialog({
     if (!entry?.path || !nextName || saving) return
     setSaving(true)
     try {
-      await postToMachine(machineId, "/api/session/rename", {
+      await postToMachine(machineId, "/api/agent/rename", {
         path: entry.path,
         name: nextName,
       })
       onOpenChange(false)
     } catch (error) {
-      toast.error(`Failed to rename the session: ${errorText(error)}`)
+      toast.error(`Failed to rename the agent: ${errorText(error)}`)
     } finally {
       setSaving(false)
     }
@@ -91,9 +91,9 @@ export function OtherMachineRenameDialog({
     <Dialog open={Boolean(entry)} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Rename session</DialogTitle>
+          <DialogTitle>Rename agent</DialogTitle>
           <DialogDescription>
-            Update the name of this session on {machineLabel}.
+            Update the name of this agent on {machineLabel}.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -104,7 +104,7 @@ export function OtherMachineRenameDialog({
           }}
         >
           <Input
-            aria-label="Session name"
+            aria-label="Agent name"
             value={name}
             onChange={(event) => setName(event.target.value)}
             disabled={saving}
@@ -136,8 +136,8 @@ export function OtherMachineArchiveDialog({
 }: {
   machineId: string
   machineLabel: string
-  /** The session to archive; the dialog is open while it is set. */
-  entry: SessionListEntry | undefined
+  /** The agent to archive; the dialog is open while it is set. */
+  entry: AgentListEntry | undefined
   onOpenChange: (open: boolean) => void
 }) {
   const [archiving, setArchiving] = React.useState(false)
@@ -146,12 +146,12 @@ export function OtherMachineArchiveDialog({
     if (!entry?.path || archiving) return
     setArchiving(true)
     try {
-      await postToMachine(machineId, "/api/sessions/delete", {
+      await postToMachine(machineId, "/api/agents/delete", {
         paths: [entry.path],
       })
       onOpenChange(false)
     } catch (error) {
-      toast.error(`Failed to archive the session: ${errorText(error)}`)
+      toast.error(`Failed to archive the agent: ${errorText(error)}`)
     } finally {
       setArchiving(false)
     }
@@ -161,10 +161,10 @@ export function OtherMachineArchiveDialog({
     <AlertDialog open={Boolean(entry)} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Archive session?</AlertDialogTitle>
+          <AlertDialogTitle>Archive agent?</AlertDialogTitle>
           <AlertDialogDescription>
             Archive “{entry?.title}” on {machineLabel}. Its history is kept, and
-            you can restore it from Archived sessions on that machine.
+            you can restore it from Archived agents on that machine.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

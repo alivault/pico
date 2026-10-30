@@ -7,11 +7,11 @@ import {
 import { toast } from "@/lib/pico/toast"
 
 import type {
-  DirectorySessionsIndexesResponse,
-  DirectorySessionsIndexSnapshot,
-  GenerateSessionNameResponse,
-  SessionListEntry,
-  SessionStatusEvent,
+  DirectoryAgentsIndexesResponse,
+  DirectoryAgentsIndexSnapshot,
+  GenerateAgentNameResponse,
+  AgentListEntry,
+  AgentStatusEvent,
 } from "@/lib/pico/api"
 
 import {
@@ -45,55 +45,49 @@ import {
 import {
   useMachines,
   type MachineInfo,
-  type MachineSessionSummary,
+  type MachineAgentSummary,
 } from "@/features/pico/machine-store"
-import {
-  isMachineSessionUnread,
-  MachineStateDot,
-} from "@/features/pico/machines"
+import { isMachineAgentUnread, MachineStateDot } from "@/features/pico/machines"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { sessionListEntryKey } from "@/lib/pico"
-import { openSession } from "@/lib/pico/machine"
+import { agentListEntryKey } from "@/lib/pico"
+import { openAgent } from "@/lib/pico/machine"
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
 
-type SessionsDialogScope = "current" | "all"
-type SessionsDialogStage = "browse" | "rename" | "delete"
+type AgentsDialogScope = "current" | "all"
+type AgentsDialogStage = "browse" | "rename" | "delete"
 
-type GenerateSessionNameData = Extract<
-  GenerateSessionNameResponse,
-  { ok: true }
->
+type GenerateAgentNameData = Extract<GenerateAgentNameResponse, { ok: true }>
 
-type SessionStatusByKey = Record<string, Omit<SessionStatusEvent, "type">>
+type AgentStatusByKey = Record<string, Omit<AgentStatusEvent, "type">>
 
-type SelectSessionOptions = {
+type SelectAgentOptions = {
   replace?: boolean
-  sessionPath?: string
+  agentPath?: string
 }
 
-type AppShellSessionsDialogProps = {
+type AppShellAgentsDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   viewerContextId: string
   currentDirectory: string
   knownDirectories: Array<string>
-  directorySessionsByPath: Record<string, Array<SessionListEntry>>
-  sessionStatusByKey: SessionStatusByKey
-  activeSessionId?: string
-  activeSessionPath?: string
-  onSelectSession: (sessionId?: string, options?: SelectSessionOptions) => void
-  onRenameSession: (
+  directoryAgentsByPath: Record<string, Array<AgentListEntry>>
+  agentStatusByKey: AgentStatusByKey
+  activeAgentId?: string
+  activeAgentPath?: string
+  onSelectAgent: (agentId?: string, options?: SelectAgentOptions) => void
+  onRenameAgent: (
     path: string,
     name: string
   ) => Promise<boolean> | boolean | void
-  onDeleteSession: (
-    targets: Array<SessionListEntry>
+  onDeleteAgent: (
+    targets: Array<AgentListEntry>
   ) => Promise<boolean> | boolean | void
   onError?: (error: unknown) => void
 }
 
-export type AppShellSessionsDialogHandle = {
+export type AppShellAgentsDialogHandle = {
   open: () => void
   close: () => void
   isOpen: () => boolean
@@ -105,18 +99,18 @@ function tildePath(value: string) {
     .replace(/^\/home\/[^/]+(?=\/|$)/, "~")
 }
 
-type OtherMachineSessionItem = {
+type OtherMachineAgentItem = {
   key: string
   machine: MachineInfo
-  session: MachineSessionSummary
+  agent: MachineAgentSummary
 }
 
 /**
- * The sessions of the other machines of the hub, from their summaries, newest
- * first. The summaries hold the sessions of each machine (up to 200), so the
+ * The agents of the other machines of the hub, from their summaries, newest
+ * first. The summaries hold the agents of each machine (up to 200), so the
  * search covers all machines without a request to each one.
  */
-function otherMachineSessionGroups(
+function otherMachineAgentGroups(
   machines: Array<MachineInfo>,
   activeId: string
 ) {
@@ -124,16 +118,16 @@ function otherMachineSessionGroups(
     .filter((machine) => machine.id !== activeId)
     .map((machine) => ({
       machine,
-      items: (machine.summary?.sessions ?? [])
+      items: (machine.summary?.agents ?? [])
         .toSorted(
           (left, right) =>
             (right.lastMessageAt ?? 0) - (left.lastMessageAt ?? 0)
         )
         .map(
-          (session): OtherMachineSessionItem => ({
-            key: `machine:${machine.id}:${session.id}`,
+          (agent): OtherMachineAgentItem => ({
+            key: `machine:${machine.id}:${agent.id}`,
             machine,
-            session,
+            agent,
           })
         ),
     }))
@@ -169,7 +163,7 @@ function normalizeDirectories(directories: Array<string>) {
   return normalized
 }
 
-function formatSessionTime(value?: string, now = Date.now()) {
+function formatAgentTime(value?: string, now = Date.now()) {
   if (!value) return ""
 
   const timestamp = new Date(value).getTime()
@@ -201,7 +195,7 @@ function formatSessionTime(value?: string, now = Date.now()) {
   return `${Math.max(1, years)}y ${suffix}`
 }
 
-function sessionActivityTime(entry: SessionListEntry) {
+function agentActivityTime(entry: AgentListEntry) {
   const timestamp = entry.lastUserMessageAt || entry.modified
   if (!timestamp) return 0
 
@@ -209,9 +203,9 @@ function sessionActivityTime(entry: SessionListEntry) {
   return Number.isNaN(time) ? 0 : time
 }
 
-function sessionStatusForEntry(
-  entry: SessionListEntry,
-  statuses: SessionStatusByKey
+function agentStatusForEntry(
+  entry: AgentListEntry,
+  statuses: AgentStatusByKey
 ) {
   const pathKey = entry.path ? `path:${entry.path}` : ""
   const idKey = entry.id ? `id:${entry.id}` : ""
@@ -222,11 +216,11 @@ function sessionStatusForEntry(
   )
 }
 
-function applyLocalSessionName(
-  entry: SessionListEntry,
-  localSessionNames: Record<string, string>
+function applyLocalAgentName(
+  entry: AgentListEntry,
+  localAgentNames: Record<string, string>
 ) {
-  const localName = entry.path ? localSessionNames[entry.path] : undefined
+  const localName = entry.path ? localAgentNames[entry.path] : undefined
   if (!localName || entry.title === localName) return entry
 
   return {
@@ -236,9 +230,9 @@ function applyLocalSessionName(
   }
 }
 
-function applySessionStatus(
-  entry: SessionListEntry,
-  status: Omit<SessionStatusEvent, "type"> | undefined
+function applyAgentStatus(
+  entry: AgentListEntry,
+  status: Omit<AgentStatusEvent, "type"> | undefined
 ) {
   if (!status) return entry
 
@@ -277,14 +271,14 @@ function startsWord(text: string, word: string) {
 }
 
 /**
- * How well a session matches the search words: 0 for no match. Each word must
+ * How well an agent matches the search words: 0 for no match. Each word must
  * be in the title, a folder, or the machine name. A word in the title counts
  * more than in a folder, and the start of a word counts more than its middle.
- * The whole query in the title counts extra. The session file path is not
+ * The whole query in the title counts extra. The agent file path is not
  * searched: it holds the home folder and random IDs, which match almost any
  * query.
  */
-function sessionMatchScore(
+function agentMatchScore(
   words: Array<string>,
   fields: { title: string; folders: Array<string>; machine?: string }
 ) {
@@ -319,24 +313,24 @@ function rankMatches<T>(
     .map((entry) => entry.item)
 }
 
-function isActiveSession(
-  entry: SessionListEntry,
-  activeSessionId?: string,
-  activeSessionPath?: string
+function isActiveAgent(
+  entry: AgentListEntry,
+  activeAgentId?: string,
+  activeAgentPath?: string
 ) {
   return Boolean(
-    (entry.id && activeSessionId && entry.id === activeSessionId) ||
-    (entry.path && activeSessionPath && entry.path === activeSessionPath)
+    (entry.id && activeAgentId && entry.id === activeAgentId) ||
+    (entry.path && activeAgentPath && entry.path === activeAgentPath)
   )
 }
 
-function fetchDirectorySessionsIndexes(
+function fetchDirectoryAgentsIndexes(
   machineId: string,
   viewerContextId: string,
   directories: Array<string>
 ) {
-  return fetchJson<DirectorySessionsIndexesResponse>(
-    buildRequestUrl("/api/directory-sessions-indexes", {
+  return fetchJson<DirectoryAgentsIndexesResponse>(
+    buildRequestUrl("/api/project-agents-indexes", {
       machineId,
       contextId: viewerContextId,
       searchParams: {
@@ -350,22 +344,22 @@ function FooterKbd({ children }: { children: React.ReactNode }) {
   return <Kbd>{children}</Kbd>
 }
 
-type SessionsDialogState = {
+type AgentsDialogState = {
   query: string
-  scope: SessionsDialogScope
-  stage: SessionsDialogStage
-  selectedSessionKey: string
+  scope: AgentsDialogScope
+  stage: AgentsDialogStage
+  selectedAgentKey: string
   renameValue: string
-  localSessionNames: Record<string, string>
-  loadedSessionsByPath: Record<string, Array<SessionListEntry>>
+  localAgentNames: Record<string, string>
+  loadedAgentsByPath: Record<string, Array<AgentListEntry>>
   loadingByPath: Record<string, boolean>
 }
 
-type SessionsDialogAction =
+type AgentsDialogAction =
   | { type: "closed" }
   | { type: "queryChanged"; query: string }
   | { type: "scopeToggled" }
-  | { type: "selectedSessionChanged"; key: string }
+  | { type: "selectedAgentChanged"; key: string }
   | { type: "browseRequested" }
   | { type: "renameRequested"; value: string }
   | { type: "renameValueChanged"; value: string }
@@ -376,25 +370,25 @@ type SessionsDialogAction =
   | {
       type: "directoriesLoadingFinished"
       directories: Array<string>
-      directoryIndexes?: Record<string, DirectorySessionsIndexSnapshot>
+      directoryIndexes?: Record<string, DirectoryAgentsIndexSnapshot>
     }
   | { type: "visibleSelectionChanged"; key: string }
 
-const initialSessionsDialogState: SessionsDialogState = {
+const initialAgentsDialogState: AgentsDialogState = {
   query: "",
   scope: "current",
   stage: "browse",
-  selectedSessionKey: "",
+  selectedAgentKey: "",
   renameValue: "",
-  localSessionNames: {},
-  loadedSessionsByPath: {},
+  localAgentNames: {},
+  loadedAgentsByPath: {},
   loadingByPath: {},
 }
 
-function sessionsDialogReducer(
-  state: SessionsDialogState,
-  action: SessionsDialogAction
-): SessionsDialogState {
+function agentsDialogReducer(
+  state: AgentsDialogState,
+  action: AgentsDialogAction
+): AgentsDialogState {
   switch (action.type) {
     case "closed":
       if (
@@ -417,16 +411,16 @@ function sessionsDialogReducer(
       // A new query selects its best match (see the selection effect).
       return state.query === action.query
         ? state
-        : { ...state, query: action.query, selectedSessionKey: "" }
+        : { ...state, query: action.query, selectedAgentKey: "" }
     case "scopeToggled":
       return {
         ...state,
         scope: state.scope === "current" ? "all" : "current",
       }
-    case "selectedSessionChanged":
-      return state.selectedSessionKey === action.key
+    case "selectedAgentChanged":
+      return state.selectedAgentKey === action.key
         ? state
-        : { ...state, selectedSessionKey: action.key }
+        : { ...state, selectedAgentKey: action.key }
     case "browseRequested":
       return state.stage === "browse" ? state : { ...state, stage: "browse" }
     case "renameRequested":
@@ -442,8 +436,8 @@ function sessionsDialogReducer(
     case "renameSaved":
       return {
         ...state,
-        localSessionNames: {
-          ...state.localSessionNames,
+        localAgentNames: {
+          ...state.localAgentNames,
           [action.path]: action.name,
         },
         stage: "browse",
@@ -451,37 +445,34 @@ function sessionsDialogReducer(
     case "deleteRequested":
       return state.stage === "delete" ? state : { ...state, stage: "delete" }
     case "deleteSaved": {
-      const loadedSessionsByPath: Record<string, Array<SessionListEntry>> = {}
-      let sessionsChanged = false
+      const loadedAgentsByPath: Record<string, Array<AgentListEntry>> = {}
+      let agentsChanged = false
 
-      for (const [directory, sessions] of Object.entries(
-        state.loadedSessionsByPath
+      for (const [directory, agents] of Object.entries(
+        state.loadedAgentsByPath
       )) {
-        const filteredSessions = sessions.filter(
+        const filteredAgents = agents.filter(
           (entry) => entry.path !== action.path
         )
-        loadedSessionsByPath[directory] = filteredSessions
-        if (filteredSessions.length !== sessions.length) sessionsChanged = true
+        loadedAgentsByPath[directory] = filteredAgents
+        if (filteredAgents.length !== agents.length) agentsChanged = true
       }
 
-      let localSessionNames = state.localSessionNames
+      let localAgentNames = state.localAgentNames
       if (
-        Object.prototype.hasOwnProperty.call(
-          state.localSessionNames,
-          action.path
-        )
+        Object.prototype.hasOwnProperty.call(state.localAgentNames, action.path)
       ) {
-        localSessionNames = { ...state.localSessionNames }
-        delete localSessionNames[action.path]
+        localAgentNames = { ...state.localAgentNames }
+        delete localAgentNames[action.path]
       }
 
       return {
         ...state,
-        loadedSessionsByPath: sessionsChanged
-          ? loadedSessionsByPath
-          : state.loadedSessionsByPath,
-        localSessionNames,
-        selectedSessionKey: "",
+        loadedAgentsByPath: agentsChanged
+          ? loadedAgentsByPath
+          : state.loadedAgentsByPath,
+        localAgentNames,
+        selectedAgentKey: "",
         stage: "browse",
       }
     }
@@ -507,32 +498,29 @@ function sessionsDialogReducer(
         loadingChanged = true
       }
 
-      let loadedSessionsByPath = state.loadedSessionsByPath
+      let loadedAgentsByPath = state.loadedAgentsByPath
       if (action.directoryIndexes) {
-        loadedSessionsByPath = { ...state.loadedSessionsByPath }
+        loadedAgentsByPath = { ...state.loadedAgentsByPath }
         for (const directory of action.directories) {
-          loadedSessionsByPath[directory] =
-            action.directoryIndexes[directory]?.sessions || []
+          loadedAgentsByPath[directory] =
+            action.directoryIndexes[directory]?.agents || []
         }
       }
 
-      if (
-        !loadingChanged &&
-        loadedSessionsByPath === state.loadedSessionsByPath
-      ) {
+      if (!loadingChanged && loadedAgentsByPath === state.loadedAgentsByPath) {
         return state
       }
 
       return {
         ...state,
         loadingByPath: loadingChanged ? loadingByPath : state.loadingByPath,
-        loadedSessionsByPath,
+        loadedAgentsByPath,
       }
     }
     case "visibleSelectionChanged": {
       const renameValue = state.stage === "browse" ? state.renameValue : ""
       if (
-        state.selectedSessionKey === action.key &&
+        state.selectedAgentKey === action.key &&
         state.stage === "browse" &&
         state.renameValue === renameValue
       ) {
@@ -541,7 +529,7 @@ function sessionsDialogReducer(
 
       return {
         ...state,
-        selectedSessionKey: action.key,
+        selectedAgentKey: action.key,
         stage: "browse",
         renameValue,
       }
@@ -551,129 +539,126 @@ function sessionsDialogReducer(
   }
 }
 
-function AppShellSessionsDialog(props: AppShellSessionsDialogProps) {
-  return useAppShellSessionsDialogView(props)
+function AppShellAgentsDialog(props: AppShellAgentsDialogProps) {
+  return useAppShellAgentsDialogView(props)
 }
 
-function useAppShellSessionsDialogView({
+function useAppShellAgentsDialogView({
   open,
   onOpenChange,
   viewerContextId,
   currentDirectory,
   knownDirectories,
-  directorySessionsByPath,
-  sessionStatusByKey,
-  activeSessionId,
-  activeSessionPath,
-  onSelectSession,
-  onRenameSession,
-  onDeleteSession,
+  directoryAgentsByPath,
+  agentStatusByKey,
+  activeAgentId,
+  activeAgentPath,
+  onSelectAgent,
+  onRenameAgent,
+  onDeleteAgent,
   onError,
-}: AppShellSessionsDialogProps) {
+}: AppShellAgentsDialogProps) {
   const machineId = useMachineId()
   const isMobile = useIsMobile()
   const [isGeneratingName, setIsGeneratingName] = React.useState(false)
   const [generatedNamePath, setGeneratedNamePath] = React.useState("")
   const [state, dispatch] = React.useReducer(
-    sessionsDialogReducer,
-    initialSessionsDialogState
+    agentsDialogReducer,
+    initialAgentsDialogState
   )
   const {
     query,
     scope,
     stage,
-    selectedSessionKey,
+    selectedAgentKey,
     renameValue,
-    localSessionNames,
-    loadedSessionsByPath,
+    localAgentNames,
+    loadedAgentsByPath,
     loadingByPath,
   } = state
   const normalizedCurrentDirectory = currentDirectory.trim()
   const allDirectories = normalizeDirectories([
     normalizedCurrentDirectory,
     ...knownDirectories,
-    ...Object.keys(directorySessionsByPath),
+    ...Object.keys(directoryAgentsByPath),
   ])
   const currentDirectories = normalizedCurrentDirectory
     ? [normalizedCurrentDirectory]
     : allDirectories.slice(0, 1)
   const scopedDirectories =
     scope === "all" ? allDirectories : currentDirectories
-  const mergedSessionsByPath: Record<string, Array<SessionListEntry>> = {
-    ...loadedSessionsByPath,
-    ...directorySessionsByPath,
+  const mergedAgentsByPath: Record<string, Array<AgentListEntry>> = {
+    ...loadedAgentsByPath,
+    ...directoryAgentsByPath,
   }
   const visibleGroups = scopedDirectories.map((directory) => {
-    const sessions = (mergedSessionsByPath[directory] || []).map((entry) =>
-      applyLocalSessionName(
-        applySessionStatus(
-          entry,
-          sessionStatusForEntry(entry, sessionStatusByKey)
-        ),
-        localSessionNames
+    const agents = (mergedAgentsByPath[directory] || []).map((entry) =>
+      applyLocalAgentName(
+        applyAgentStatus(entry, agentStatusForEntry(entry, agentStatusByKey)),
+        localAgentNames
       )
     )
 
     return {
       directory,
-      sessions,
+      agents,
       loading: Boolean(loadingByPath[directory]),
     }
   })
-  const flatSessions = visibleGroups.flatMap((group) =>
-    group.sessions.map((entry) => ({
+  const flatAgents = visibleGroups.flatMap((group) =>
+    group.agents.map((entry) => ({
       directory: group.directory,
       entry,
-      key: sessionListEntryKey(entry),
+      key: agentListEntryKey(entry),
     }))
   )
   const words = searchWords(query)
-  const sortedSessionItems = rankMatches(
-    flatSessions,
+  const sortedAgentItems = rankMatches(
+    flatAgents,
     ({ entry, directory }) =>
-      sessionMatchScore(words, {
+      agentMatchScore(words, {
         title: entry.title,
         folders: [tildePath(entry.cwd || ""), tildePath(directory)],
       }),
-    ({ entry }) => sessionActivityTime(entry)
+    ({ entry }) => agentActivityTime(entry)
   )
-  // With more machines, "All sessions" also shows the other machines.
+  // With more machines, "All agents" also shows the other machines.
   const { machines } = useMachines()
   const activeId = machineId
   const activeMachine = machines.find((machine) => machine.id === activeId)
   const showMachines = scope === "all" && machines.length > 1 && activeMachine
   const otherMachineGroups = (
-    showMachines ? otherMachineSessionGroups(machines, activeId) : []
+    showMachines ? otherMachineAgentGroups(machines, activeId) : []
   ).map((group) => ({
     ...group,
     items: rankMatches(
       group.items,
-      ({ session, machine }) =>
-        sessionMatchScore(words, {
-          title: session.title,
-          folders: [tildePath(session.cwd), tildePath(session.directory)],
+      ({ agent, machine }) =>
+        agentMatchScore(words, {
+          title: agent.title,
+          folders: [tildePath(agent.cwd), tildePath(agent.directory)],
           machine: machine.label,
         }),
-      ({ session }) => session.lastMessageAt ?? 0
+      ({ agent }) => agent.lastMessageAt ?? 0
     ),
   }))
   // The order of the list: the machines in sidebar order, each one ranked.
-  const visibleSessionKeys = (
+  const visibleAgentKeys = (
     showMachines ? machines : [{ id: activeId }]
   ).flatMap((machine) =>
     machine.id === activeId
-      ? sortedSessionItems.map((session) => session.key)
+      ? sortedAgentItems.map((agent) => agent.key)
       : (otherMachineGroups
           .find((group) => group.machine.id === machine.id)
           ?.items.map((item) => item.key) ?? [])
   )
-  const selectedSession = selectedSessionKey
-    ? flatSessions.find((session) => session.key === selectedSessionKey)?.entry
+  const selectedAgent = selectedAgentKey
+    ? flatAgents.find((agent) => agent.key === selectedAgentKey)?.entry
     : undefined
-  const canGenerateSelectedSessionName = Boolean(
-    selectedSession?.path &&
-    !selectedSession.name?.trim() &&
-    generatedNamePath !== selectedSession.path
+  const canGenerateSelectedAgentName = Boolean(
+    selectedAgent?.path &&
+    !selectedAgent.name?.trim() &&
+    generatedNamePath !== selectedAgent.path
   )
   const loading = visibleGroups.some((group) => group.loading)
   const browseInputRef = React.useRef<HTMLInputElement | null>(null)
@@ -695,10 +680,7 @@ function useAppShellSessionsDialogView({
 
     const missingDirectories = scopedDirectories.filter(
       (directory) =>
-        !Object.prototype.hasOwnProperty.call(
-          mergedSessionsByPath,
-          directory
-        ) &&
+        !Object.prototype.hasOwnProperty.call(mergedAgentsByPath, directory) &&
         !loadingByPath[directory] &&
         !failedDirectoriesRef.current.has(directory)
     )
@@ -710,7 +692,7 @@ function useAppShellSessionsDialogView({
       directories: missingDirectories,
     })
 
-    void fetchDirectorySessionsIndexes(
+    void fetchDirectoryAgentsIndexes(
       machineId,
       viewerContextId,
       missingDirectories
@@ -734,7 +716,7 @@ function useAppShellSessionsDialogView({
       })
   }, [
     loadingByPath,
-    mergedSessionsByPath,
+    mergedAgentsByPath,
     onError,
     open,
     scopedDirectories,
@@ -744,27 +726,27 @@ function useAppShellSessionsDialogView({
   React.useEffect(() => {
     if (!open) return
 
-    const selectedStillVisible = visibleSessionKeys.includes(selectedSessionKey)
+    const selectedStillVisible = visibleAgentKeys.includes(selectedAgentKey)
     if (selectedStillVisible) return
 
-    // Without a query, select the session of the page; with one, the best
+    // Without a query, select the agent of the page; with one, the best
     // match.
-    const activeSession = words.length
+    const activeAgent = words.length
       ? undefined
-      : flatSessions.find((session) =>
-          isActiveSession(session.entry, activeSessionId, activeSessionPath)
+      : flatAgents.find((agent) =>
+          isActiveAgent(agent.entry, activeAgentId, activeAgentPath)
         )
     dispatch({
       type: "visibleSelectionChanged",
-      key: activeSession?.key || visibleSessionKeys[0] || "",
+      key: activeAgent?.key || visibleAgentKeys[0] || "",
     })
   }, [
-    activeSessionId,
-    activeSessionPath,
-    flatSessions,
+    activeAgentId,
+    activeAgentPath,
+    flatAgents,
     open,
-    selectedSessionKey,
-    visibleSessionKeys,
+    selectedAgentKey,
+    visibleAgentKeys,
     words.length,
   ])
 
@@ -798,45 +780,45 @@ function useAppShellSessionsDialogView({
     dispatch({ type: "scopeToggled" })
   }
 
-  const selectSession = (entry: SessionListEntry) => {
+  const selectAgent = (entry: AgentListEntry) => {
     if (!entry.id) return
     onOpenChange(false)
-    onSelectSession(entry.id, { sessionPath: entry.path })
+    onSelectAgent(entry.id, { agentPath: entry.path })
   }
 
-  /** Open a session of another machine: the page switches machines. */
-  const selectOtherMachineSession = (item: OtherMachineSessionItem) => {
+  /** Open an agent of another machine: the page switches machines. */
+  const selectOtherMachineAgent = (item: OtherMachineAgentItem) => {
     onOpenChange(false)
-    openSession({ machineId: item.machine.id, sessionId: item.session.id })
+    openAgent({ machineId: item.machine.id, agentId: item.agent.id })
   }
 
-  const renameSelectedSession = () => {
-    if (!selectedSession?.path) return
+  const renameSelectedAgent = () => {
+    if (!selectedAgent?.path) return
     setGeneratedNamePath("")
-    dispatch({ type: "renameRequested", value: selectedSession.title })
+    dispatch({ type: "renameRequested", value: selectedAgent.title })
   }
 
-  const saveSelectedSessionRename = async () => {
-    const targetPath = selectedSession?.path
+  const saveSelectedAgentRename = async () => {
+    const targetPath = selectedAgent?.path
     const nextName = renameValue.trim()
     if (!targetPath) return
 
-    const success = await Promise.resolve(onRenameSession(targetPath, nextName))
+    const success = await Promise.resolve(onRenameAgent(targetPath, nextName))
     if (success === false) return
 
     dispatch({ type: "renameSaved", path: targetPath, name: nextName })
   }
 
-  const generateSelectedSessionName = async () => {
-    const targetPath = selectedSession?.path
-    if (!targetPath || isGeneratingName || !canGenerateSelectedSessionName) {
+  const generateSelectedAgentName = async () => {
+    const targetPath = selectedAgent?.path
+    if (!targetPath || isGeneratingName || !canGenerateSelectedAgentName) {
       return
     }
 
     setIsGeneratingName(true)
     try {
-      const response = await fetchJson<GenerateSessionNameData>(
-        buildRequestUrl("/api/session/name", {
+      const response = await fetchJson<GenerateAgentNameData>(
+        buildRequestUrl("/api/agent/name", {
           machineId,
           contextId: viewerContextId,
         }),
@@ -849,7 +831,7 @@ function useAppShellSessionsDialogView({
       dispatch({ type: "renameValueChanged", value: response.name })
       setGeneratedNamePath(targetPath)
       if (response.source === "heuristic" && response.reason) {
-        toast.info("Using heuristic session name", {
+        toast.info("Using heuristic agent name", {
           description: response.reason,
         })
       }
@@ -860,17 +842,17 @@ function useAppShellSessionsDialogView({
     }
   }
 
-  const deleteSelectedSession = () => {
-    if (!selectedSession?.path) return
+  const deleteSelectedAgent = () => {
+    if (!selectedAgent?.path) return
     dispatch({ type: "deleteRequested" })
   }
 
-  const confirmDeleteSelectedSession = async () => {
-    const targetPath = selectedSession?.path
-    if (!selectedSession || !targetPath) return
+  const confirmDeleteSelectedAgent = async () => {
+    const targetPath = selectedAgent?.path
+    if (!selectedAgent || !targetPath) return
 
-    const target: SessionListEntry = { ...selectedSession, path: targetPath }
-    const success = await Promise.resolve(onDeleteSession([target]))
+    const target: AgentListEntry = { ...selectedAgent, path: targetPath }
+    const success = await Promise.resolve(onDeleteAgent([target]))
     if (success === false) return
 
     dispatch({ type: "deleteSaved", path: targetPath })
@@ -891,14 +873,14 @@ function useAppShellSessionsDialogView({
       if (event.target instanceof HTMLButtonElement) return
       event.preventDefault()
       event.stopPropagation()
-      void confirmDeleteSelectedSession()
+      void confirmDeleteSelectedAgent()
     }
 
     window.addEventListener("keydown", handleDeleteKeyDown, true)
     return () => {
       window.removeEventListener("keydown", handleDeleteKeyDown, true)
     }
-  }, [confirmDeleteSelectedSession, open, stage])
+  }, [confirmDeleteSelectedAgent, open, stage])
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     const key = event.key.toLowerCase()
@@ -911,19 +893,19 @@ function useAppShellSessionsDialogView({
 
     if (matchesShortcutEvent(event.nativeEvent, appShortcut("R"))) {
       event.preventDefault()
-      renameSelectedSession()
+      renameSelectedAgent()
       return
     }
 
     if (matchesShortcutEvent(event.nativeEvent, appShortcut("D"))) {
       event.preventDefault()
-      deleteSelectedSession()
+      deleteSelectedAgent()
     }
   }
 
   // A group without matches is hidden, like the groups of other machines.
-  const activeSessionsGroup =
-    sortedSessionItems.length === 0 && !loading ? null : (
+  const activeAgentsGroup =
+    sortedAgentItems.length === 0 && !loading ? null : (
       <CommandGroup
         key={activeId}
         heading={
@@ -933,44 +915,40 @@ function useAppShellSessionsDialogView({
               suffix={loading ? " · loading" : undefined}
             />
           ) : (
-            `${scope === "all" ? "All sessions" : `Current directory: ${tildePath(currentDirectories[0] || "")}`}${loading ? " · loading" : ""}`
+            `${scope === "all" ? "All agents" : `Current directory: ${tildePath(currentDirectories[0] || "")}`}${loading ? " · loading" : ""}`
           )
         }
       >
-        {loading && sortedSessionItems.length === 0 ? (
-          <CommandItem value="loading:sessions" disabled>
+        {loading && sortedAgentItems.length === 0 ? (
+          <CommandItem value="loading:agents" disabled>
             <Spinner className="text-primary" />
-            <span className="text-muted-foreground">Loading sessions…</span>
+            <span className="text-muted-foreground">Loading agents…</span>
           </CommandItem>
         ) : null}
-        {sortedSessionItems.map(({ directory, entry }) => {
-          const entryKey = sessionListEntryKey(entry)
+        {sortedAgentItems.map(({ directory, entry }) => {
+          const entryKey = agentListEntryKey(entry)
           const timestamp = entry.lastUserMessageAt || entry.modified
-          const sessionTime = formatSessionTime(timestamp)
-          const active = isActiveSession(
-            entry,
-            activeSessionId,
-            activeSessionPath
-          )
+          const agentTime = formatAgentTime(timestamp)
+          const active = isActiveAgent(entry, activeAgentId, activeAgentPath)
           const showUnread = Boolean(entry.unread) && !entry.streaming
 
           return (
             <CommandItem
               key={entryKey}
               value={entryKey}
-              onSelect={() => selectSession(entry)}
+              onSelect={() => selectAgent(entry)}
               className="items-start py-2"
             >
               <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
                 {entry.streaming ? (
                   <Spinner
                     className="text-primary"
-                    aria-label="Session streaming"
+                    aria-label="Agent working"
                   />
                 ) : showUnread ? (
                   <span
                     className="size-2 rounded-full bg-primary"
-                    aria-label="Session done"
+                    aria-label="Agent done"
                   />
                 ) : null}
               </span>
@@ -981,9 +959,9 @@ function useAppShellSessionsDialogView({
                 </span>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
-                {sessionTime ? (
+                {agentTime ? (
                   <span className="truncate text-[11px] text-muted-foreground/70">
-                    {sessionTime}
+                    {agentTime}
                   </span>
                 ) : null}
                 <CommandShortcut
@@ -1013,45 +991,45 @@ function useAppShellSessionsDialogView({
         className={cn(machine.state !== "online" && "opacity-60")}
       >
         {group.items.map((item) => {
-          const { session } = item
-          const sessionTime = session.lastMessageAt
-            ? formatSessionTime(new Date(session.lastMessageAt).toISOString())
+          const { agent } = item
+          const agentTime = agent.lastMessageAt
+            ? formatAgentTime(new Date(agent.lastMessageAt).toISOString())
             : ""
-          const directory = session.directory || session.cwd
+          const directory = agent.directory || agent.cwd
           return (
             <CommandItem
               key={item.key}
               value={item.key}
-              onSelect={() => selectOtherMachineSession(item)}
+              onSelect={() => selectOtherMachineAgent(item)}
               className="items-start py-2"
             >
               <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
-                {session.needsInput ? (
+                {agent.needsInput ? (
                   <MessageCircleQuestionIcon
                     className="size-3.5 text-amber-500"
                     aria-label="The agent waits for your answer"
                   />
-                ) : session.busy ? (
+                ) : agent.busy ? (
                   <Spinner
                     className="text-primary"
-                    aria-label="Session streaming"
+                    aria-label="Agent working"
                   />
-                ) : isMachineSessionUnread(session) ? (
+                ) : isMachineAgentUnread(agent) ? (
                   <span
                     className="size-2 rounded-full bg-primary"
-                    aria-label="Session done"
+                    aria-label="Agent done"
                   />
                 ) : null}
               </span>
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate font-medium">{session.title}</span>
+                <span className="truncate font-medium">{agent.title}</span>
                 <span className="line-clamp-1 text-xs text-muted-foreground">
-                  {tildePath(session.cwd || directory)}
+                  {tildePath(agent.cwd || directory)}
                 </span>
               </div>
-              {sessionTime ? (
+              {agentTime ? (
                 <span className="shrink-0 truncate text-[11px] text-muted-foreground/70">
-                  {sessionTime}
+                  {agentTime}
                 </span>
               ) : null}
             </CommandItem>
@@ -1061,15 +1039,15 @@ function useAppShellSessionsDialogView({
     )
   }
 
-  const sessionsBrowseBody = (
+  const agentsBrowseBody = (
     <Command
-      // `sessionMatchScore` filters and ranks the sessions. The fuzzy filter
+      // `agentMatchScore` filters and ranks the agents. The fuzzy filter
       // of cmdk matched letters spread over long paths.
       shouldFilter={false}
       loop
-      value={selectedSessionKey}
+      value={selectedAgentKey}
       onValueChange={(key) => {
-        dispatch({ type: "selectedSessionChanged", key })
+        dispatch({ type: "selectedAgentChanged", key })
       }}
       onKeyDown={handleKeyDown}
       className="min-h-0 flex-1"
@@ -1080,22 +1058,20 @@ function useAppShellSessionsDialogView({
         onValueChange={(nextQuery) => {
           dispatch({ type: "queryChanged", query: nextQuery })
         }}
-        placeholder={
-          scope === "all" ? "Search all sessions" : "Search sessions"
-        }
+        placeholder={scope === "all" ? "Search all agents" : "Search agents"}
         className="text-base md:text-sm"
       />
       <CommandList className="max-h-none min-h-0 flex-1 md:max-h-[min(70vh,32rem)]">
         <CommandEmpty>
-          {loading ? "Loading sessions…" : "No sessions found."}
+          {loading ? "Loading agents…" : "No agents found."}
         </CommandEmpty>
         {showMachines
           ? machines.map((machine) =>
               machine.id === activeId
-                ? activeSessionsGroup
+                ? activeAgentsGroup
                 : otherMachineGroupElement(machine)
             )
-          : activeSessionsGroup}
+          : activeAgentsGroup}
       </CommandList>
       {!isMobile ? (
         <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">
@@ -1105,7 +1081,7 @@ function useAppShellSessionsDialogView({
               ? "Current directory"
               : machines.length > 1
                 ? "All machines"
-                : "All sessions"}
+                : "All agents"}
           </span>
           <span className="inline-flex items-center gap-1">
             <FooterKbd>Enter</FooterKbd> Switch
@@ -1126,7 +1102,7 @@ function useAppShellSessionsDialogView({
     </Command>
   )
 
-  const sessionsRenameBody = (
+  const agentsRenameBody = (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
         <Button
@@ -1136,23 +1112,23 @@ function useAppShellSessionsDialogView({
           onClick={() => {
             dispatch({ type: "browseRequested" })
           }}
-          aria-label="Back to sessions"
+          aria-label="Back to agents"
         >
           <ArrowLeftIcon />
         </Button>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">Rename session</div>
+          <div className="truncate text-sm font-medium">Rename agent</div>
           <div className="truncate text-xs text-muted-foreground">
-            {selectedSession?.title || "Selected session"}
+            {selectedAgent?.title || "Selected agent"}
           </div>
         </div>
         {isMobile ? (
           <Button
             type="button"
             variant="ghost"
-            disabled={isGeneratingName || !canGenerateSelectedSessionName}
+            disabled={isGeneratingName || !canGenerateSelectedAgentName}
             onClick={() => {
-              void generateSelectedSessionName()
+              void generateSelectedAgentName()
             }}
           >
             {isGeneratingName ? <Spinner /> : <WandSparklesIcon />}
@@ -1179,15 +1155,15 @@ function useAppShellSessionsDialogView({
             if (matchesShortcutEvent(event.nativeEvent, appShortcut("G"))) {
               event.preventDefault()
               event.stopPropagation()
-              void generateSelectedSessionName()
+              void generateSelectedAgentName()
               return
             }
             if (event.key !== "Enter" || event.nativeEvent.isComposing) return
             event.preventDefault()
             event.stopPropagation()
-            void saveSelectedSessionRename()
+            void saveSelectedAgentRename()
           }}
-          placeholder="Session name"
+          placeholder="Agent name"
           className="min-w-0 flex-1"
         />
       </div>
@@ -1195,9 +1171,9 @@ function useAppShellSessionsDialogView({
         <ShortcutFooter>
           <ShortcutButton
             kbd={formatShortcutLabel(appShortcut("G"))}
-            disabled={isGeneratingName || !canGenerateSelectedSessionName}
+            disabled={isGeneratingName || !canGenerateSelectedAgentName}
             onClick={() => {
-              void generateSelectedSessionName()
+              void generateSelectedAgentName()
             }}
           >
             {isGeneratingName ? <Spinner /> : <WandSparklesIcon />}
@@ -1206,7 +1182,7 @@ function useAppShellSessionsDialogView({
           <ShortcutButton
             kbd="Enter"
             onClick={() => {
-              void saveSelectedSessionRename()
+              void saveSelectedAgentRename()
             }}
           >
             Save
@@ -1224,7 +1200,7 @@ function useAppShellSessionsDialogView({
     </div>
   )
 
-  const sessionsDeleteBody = (
+  const agentsDeleteBody = (
     <div
       ref={deletePanelRef}
       role="presentation"
@@ -1241,7 +1217,7 @@ function useAppShellSessionsDialogView({
         if (event.target instanceof HTMLButtonElement) return
         event.preventDefault()
         event.stopPropagation()
-        void confirmDeleteSelectedSession()
+        void confirmDeleteSelectedAgent()
       }}
     >
       <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
@@ -1252,21 +1228,20 @@ function useAppShellSessionsDialogView({
           onClick={() => {
             dispatch({ type: "browseRequested" })
           }}
-          aria-label="Back to sessions"
+          aria-label="Back to agents"
         >
           <ArrowLeftIcon />
         </Button>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">Archive session</div>
+          <div className="truncate text-sm font-medium">Archive agent</div>
           <div className="truncate text-xs text-muted-foreground">
-            {selectedSession?.title || "Selected session"}
+            {selectedAgent?.title || "Selected agent"}
           </div>
         </div>
       </div>
       <div className="flex min-h-0 flex-1 items-center p-3">
         <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
-          Archive "{selectedSession?.title || "New session"}"? (History is
-          kept.)
+          Archive "{selectedAgent?.title || "New agent"}"? (History is kept.)
         </p>
       </div>
       {isMobile ? null : (
@@ -1274,7 +1249,7 @@ function useAppShellSessionsDialogView({
           <ShortcutButton
             kbd="Enter"
             onClick={() => {
-              void confirmDeleteSelectedSession()
+              void confirmDeleteSelectedAgent()
             }}
           >
             Archive
@@ -1292,23 +1267,23 @@ function useAppShellSessionsDialogView({
     </div>
   )
 
-  const sessionsCommandBody =
+  const agentsCommandBody =
     stage === "rename"
-      ? sessionsRenameBody
+      ? agentsRenameBody
       : stage === "delete"
-        ? sessionsDeleteBody
-        : sessionsBrowseBody
+        ? agentsDeleteBody
+        : agentsBrowseBody
 
   if (isMobile) {
     return (
       <Drawer open={open} onOpenChange={onOpenChange}>
         <DrawerContent className="max-h-[90svh] overflow-hidden">
           <DrawerHeader>
-            <DrawerTitle>Sessions</DrawerTitle>
-            <DrawerDescription>Search and switch sessions.</DrawerDescription>
+            <DrawerTitle>Agents</DrawerTitle>
+            <DrawerDescription>Search and switch agents.</DrawerDescription>
           </DrawerHeader>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
-            {sessionsCommandBody}
+            {agentsCommandBody}
           </div>
         </DrawerContent>
       </Drawer>
@@ -1319,29 +1294,29 @@ function useAppShellSessionsDialogView({
     <CommandDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Sessions"
-      description="Search and switch sessions. Press Tab to toggle current directory and all sessions."
+      title="Agents"
+      description="Search and switch agents. Press Tab to toggle current directory and all agents."
       className="sm:max-w-2xl"
       initialFocus
     >
-      {sessionsCommandBody}
+      {agentsCommandBody}
     </CommandDialog>
   )
 }
 
-type AppShellSessionsDialogControllerProps = Omit<
-  AppShellSessionsDialogProps,
+type AppShellAgentsDialogControllerProps = Omit<
+  AppShellAgentsDialogProps,
   "open" | "onOpenChange"
 > & {
-  ref?: React.Ref<AppShellSessionsDialogHandle>
+  ref?: React.Ref<AppShellAgentsDialogHandle>
   openStateRef?: React.RefObject<boolean>
 }
 
-export function AppShellSessionsDialogController({
+export function AppShellAgentsDialogController({
   ref,
   openStateRef,
   ...props
-}: AppShellSessionsDialogControllerProps) {
+}: AppShellAgentsDialogControllerProps) {
   const [open, setOpen] = React.useState(false)
   const openRef = React.useRef(open)
 
@@ -1368,10 +1343,6 @@ export function AppShellSessionsDialogController({
   )
 
   return (
-    <AppShellSessionsDialog
-      open={open}
-      onOpenChange={setOpenState}
-      {...props}
-    />
+    <AppShellAgentsDialog open={open} onOpenChange={setOpenState} {...props} />
   )
 }

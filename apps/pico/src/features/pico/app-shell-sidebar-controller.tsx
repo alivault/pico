@@ -6,69 +6,67 @@ import {
   sameStringArray,
 } from "@/features/pico/app-shell-common"
 import {
-  clearUnreadForActiveSidebarSession,
-  fetchDirectorySessionsIndexes,
-  getRenderedSidebarSessionKeys,
-  isOptimisticSidebarSessionEntry,
+  clearUnreadForActiveSidebarAgent,
+  fetchDirectoryAgentsIndexes,
+  getRenderedSidebarAgentKeys,
+  isOptimisticSidebarAgentEntry,
   mergeDirectoryIndexData,
   mergeDirectoryIndexDataPreservingOptimistic,
-  mergeSidebarSessionStatusMap,
+  mergeSidebarAgentStatusMap,
   sameDirectoryIndexDataRecord,
-  sameSessionEntryRecord,
+  sameAgentEntryRecord,
   updateDirectoryIndexLoadingState,
   useAppShellSidebarValue,
   type AppShellSidebarStore,
-  type DirectorySessionsIndexData,
+  type DirectoryAgentsIndexData,
 } from "@/features/pico/app-shell-sidebar-store"
-import type { AppShellSessionWorkspaceHandle } from "@/features/pico/app-shell-types"
+import type { AppShellAgentWorkspaceHandle } from "@/features/pico/app-shell-types"
+import { AppSidebar, createDirectoryAgentsStore } from "@/features/pico/sidebar"
 import {
-  AppSidebar,
-  createDirectorySessionsStore,
-} from "@/features/pico/sidebar"
-import {
-  normalizeSessionSelectionKeys,
+  normalizeAgentSelectionKeys,
   normalizeStoredDirectoryList,
-  PINNED_SESSIONS_STORAGE_KEY,
+  PINNED_AGENTS_STORAGE_KEY,
   machineLocalStorageSetItem,
-  sessionListEntryKey,
+  agentListEntryKey,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
 } from "@/lib/pico"
-import type { SessionListEntry } from "@/lib/pico/api"
-import { ArchivedSessionsDialog } from "@/features/pico/archived-sessions-dialog"
+import type { AgentListEntry } from "@/lib/pico/api"
+import { ArchivedAgentsDialog } from "@/features/pico/archived-agents-dialog"
 import { useMachineId } from "@/lib/pico/machine-context"
 import { onServerReconnect } from "@/lib/pico/server-connection"
 import {
-  filterDirectorySessionsByStatus,
-  sessionMatchesStatusFilter,
-  useSessionStatusFilter,
-} from "@/features/pico/session-status-filter"
+  filterDirectoryAgentsByStatus,
+  agentMatchesStatusFilter,
+  useAgentStatusFilter,
+} from "@/features/pico/agent-status-filter"
 
-const PINNED_SESSION_STORE_DIRECTORY = "__pico_pinned_sessions__"
+// Stored name: do not change.
+const PINNED_AGENT_STORE_DIRECTORY = "__pico_pinned_sessions__"
 
-function findSidebarSessionSelectionKey(
-  entriesByKey: Map<string, SessionListEntry>,
-  sessionLike: {
-    sessionId?: string | undefined
-    sessionPath?: string | undefined
+function findSidebarAgentSelectionKey(
+  entriesByKey: Map<string, AgentListEntry>,
+  agentLike: {
+    agentId?: string | undefined
+    agentPath?: string | undefined
   }
 ) {
-  const sessionPath = sessionLike.sessionPath?.trim() || ""
-  const sessionId = sessionLike.sessionId?.trim() || ""
+  const agentPath = agentLike.agentPath?.trim() || ""
+  const agentId = agentLike.agentId?.trim() || ""
 
-  if (sessionPath) {
-    const pathKey = sessionListEntryKey({ path: sessionPath })
+  if (agentPath) {
+    const pathKey = agentListEntryKey({ path: agentPath })
     if (entriesByKey.has(pathKey)) return pathKey
   }
 
-  if (sessionId) {
-    const idKey = sessionListEntryKey({ id: sessionId })
+  if (agentId) {
+    const idKey = agentListEntryKey({ id: agentId })
     if (entriesByKey.has(idKey)) return idKey
   }
 
   for (const [key, entry] of entriesByKey) {
     if (
-      (sessionPath && entry.path === sessionPath) ||
-      (sessionId && entry.id === sessionId)
+      (agentPath && entry.path === agentPath) ||
+      (agentId && entry.id === agentId)
     ) {
       return key
     }
@@ -80,7 +78,7 @@ function findSidebarSessionSelectionKey(
 type AppShellSidebarControllerProps = {
   viewerContextId: string
   sidebarStore: AppShellSidebarStore
-  sessionWorkspaceRef: React.RefObject<AppShellSessionWorkspaceHandle | null>
+  agentWorkspaceRef: React.RefObject<AppShellAgentWorkspaceHandle | null>
 }
 
 export function AppShellSidebarController(
@@ -92,12 +90,12 @@ export function AppShellSidebarController(
 function useAppShellSidebarControllerView({
   viewerContextId,
   sidebarStore,
-  sessionWorkspaceRef,
+  agentWorkspaceRef,
 }: AppShellSidebarControllerProps) {
   const machineId = useMachineId()
-  const [archivedSessionsOpen, setArchivedSessionsOpen] = React.useState(false)
-  const [directorySessionsStore] = React.useState(() =>
-    createDirectorySessionsStore({}, {})
+  const [archivedAgentsOpen, setArchivedAgentsOpen] = React.useState(false)
+  const [directoryAgentsStore] = React.useState(() =>
+    createDirectoryAgentsStore({}, {})
   )
   const baseSidebarDirectories = useAppShellSidebarValue(
     sidebarStore,
@@ -113,65 +111,64 @@ function useAppShellSidebarControllerView({
     sidebarStore,
     (snapshot) => snapshot.derived.emptySidebarStateText
   )
-  const searchedDirectorySessions = useAppShellSidebarValue(
+  const searchedDirectoryAgents = useAppShellSidebarValue(
     sidebarStore,
-    (snapshot) => snapshot.derived.filteredDirectorySessions,
-    sameSessionEntryRecord
+    (snapshot) => snapshot.derived.filteredDirectoryAgents,
+    sameAgentEntryRecord
   )
-  const allPinnedSidebarSessions = useAppShellSidebarValue(
+  const allPinnedSidebarAgents = useAppShellSidebarValue(
     sidebarStore,
-    (snapshot) => snapshot.derived.pinnedSidebarSessions
+    (snapshot) => snapshot.derived.pinnedSidebarAgents
   )
   const searchedDirectories = useAppShellSidebarValue(
     sidebarStore,
     (snapshot) => snapshot.derived.visibleDirectories,
     sameStringArray
   )
-  // A click on a count in the machine heading shows only the sessions with
+  // A click on a count in the machine heading shows only the agents with
   // that state.
-  const statusFilter = useSessionStatusFilter(machineId)
-  const pinnedSidebarSessions = React.useMemo(
+  const statusFilter = useAgentStatusFilter(machineId)
+  const pinnedSidebarAgents = React.useMemo(
     () =>
       statusFilter
-        ? allPinnedSidebarSessions.filter((entry) =>
-            sessionMatchesStatusFilter(entry, statusFilter)
+        ? allPinnedSidebarAgents.filter((entry) =>
+            agentMatchesStatusFilter(entry, statusFilter)
           )
-        : allPinnedSidebarSessions,
-    [allPinnedSidebarSessions, statusFilter]
+        : allPinnedSidebarAgents,
+    [allPinnedSidebarAgents, statusFilter]
   )
-  const { visibleDirectories, filteredDirectorySessions } =
-    React.useMemo(() => {
-      if (!statusFilter)
-        return {
-          visibleDirectories: searchedDirectories,
-          filteredDirectorySessions: searchedDirectorySessions,
-        }
-      const pinnedKeys = new Set(
-        allPinnedSidebarSessions.map((entry) => sessionListEntryKey(entry))
-      )
-      const filtered = filterDirectorySessionsByStatus(
-        searchedDirectories,
-        searchedDirectorySessions,
-        statusFilter,
-        (entry) => pinnedKeys.has(sessionListEntryKey(entry))
-      )
+  const { visibleDirectories, filteredDirectoryAgents } = React.useMemo(() => {
+    if (!statusFilter)
       return {
-        visibleDirectories: filtered.visibleDirectories,
-        filteredDirectorySessions: filtered.filteredSessions,
+        visibleDirectories: searchedDirectories,
+        filteredDirectoryAgents: searchedDirectoryAgents,
       }
-    }, [
-      allPinnedSidebarSessions,
+    const pinnedKeys = new Set(
+      allPinnedSidebarAgents.map((entry) => agentListEntryKey(entry))
+    )
+    const filtered = filterDirectoryAgentsByStatus(
       searchedDirectories,
-      searchedDirectorySessions,
+      searchedDirectoryAgents,
       statusFilter,
-    ])
-  const pinnedSidebarSessionKeys = pinnedSidebarSessions.flatMap((entry) => {
-    const key = sessionListEntryKey(entry)
+      (entry) => pinnedKeys.has(agentListEntryKey(entry))
+    )
+    return {
+      visibleDirectories: filtered.visibleDirectories,
+      filteredDirectoryAgents: filtered.filteredAgents,
+    }
+  }, [
+    allPinnedSidebarAgents,
+    searchedDirectories,
+    searchedDirectoryAgents,
+    statusFilter,
+  ])
+  const pinnedSidebarAgentKeys = pinnedSidebarAgents.flatMap((entry) => {
+    const key = agentListEntryKey(entry)
     return key ? [key] : []
   })
-  const sidebarSessionEntriesByKey = useAppShellSidebarValue(
+  const sidebarAgentEntriesByKey = useAppShellSidebarValue(
     sidebarStore,
-    (snapshot) => snapshot.derived.sidebarSessionEntriesByKey,
+    (snapshot) => snapshot.derived.sidebarAgentEntriesByKey,
     sameMapEntries
   )
   const directoryIndexDataByPath = useAppShellSidebarValue(
@@ -182,73 +179,69 @@ function useAppShellSidebarControllerView({
     sidebarStore,
     (snapshot) => snapshot.state.directoryIndexLoading
   )
-  const selectedSidebarSessionKeys = useAppShellSidebarValue(
+  const selectedSidebarAgentKeys = useAppShellSidebarValue(
     sidebarStore,
-    (snapshot) => snapshot.state.selectedSidebarSessionKeys,
+    (snapshot) => snapshot.state.selectedSidebarAgentKeys,
     sameStringArray
   )
-  const sidebarSessionsEventSnapshot = useAppShellSidebarValue(
+  const sidebarAgentsEventSnapshot = useAppShellSidebarValue(
     sidebarStore,
     (snapshot) => {
-      const event = snapshot.state.sessionsEvent
-      const activeSessionId = snapshot.state.activeSidebarSessionId
-      const activeSessionKey = snapshot.state.activeSidebarSessionKey
-      const activeSessionPath = snapshot.state.activeSidebarSessionPath
-      const statuses = snapshot.state.sidebarSessionStatusByKey
+      const event = snapshot.state.agentsEvent
+      const activeAgentId = snapshot.state.activeSidebarAgentId
+      const activeAgentKey = snapshot.state.activeSidebarAgentKey
+      const activeAgentPath = snapshot.state.activeSidebarAgentPath
+      const statuses = snapshot.state.sidebarAgentStatusByKey
       const status =
-        (activeSessionPath
-          ? statuses[`path:${activeSessionPath}`]
-          : undefined) ||
-        (activeSessionId ? statuses[`id:${activeSessionId}`] : undefined) ||
-        (activeSessionKey ? statuses[`key:${activeSessionKey}`] : undefined)
+        (activeAgentPath ? statuses[`path:${activeAgentPath}`] : undefined) ||
+        (activeAgentId ? statuses[`id:${activeAgentId}`] : undefined) ||
+        (activeAgentKey ? statuses[`key:${activeAgentKey}`] : undefined)
 
       return {
         event,
-        activeSessionId,
-        activeSessionKey,
-        activeSessionPath,
+        activeAgentId,
+        activeAgentKey,
+        activeAgentPath,
         activeStreaming: Boolean(status?.streaming),
       }
     },
     (left, right) =>
-      left.activeSessionId === right.activeSessionId &&
-      left.activeSessionKey === right.activeSessionKey &&
-      left.activeSessionPath === right.activeSessionPath &&
+      left.activeAgentId === right.activeAgentId &&
+      left.activeAgentKey === right.activeAgentKey &&
+      left.activeAgentPath === right.activeAgentPath &&
       left.activeStreaming === right.activeStreaming &&
-      left.event?.activeSessionId === right.event?.activeSessionId &&
-      left.event?.activeSessionKey === right.event?.activeSessionKey &&
-      left.event?.activeSessionPath === right.event?.activeSessionPath &&
+      left.event?.activeAgentId === right.event?.activeAgentId &&
+      left.event?.activeAgentKey === right.event?.activeAgentKey &&
+      left.event?.activeAgentPath === right.event?.activeAgentPath &&
       sameStringArray(
         left.event?.directories || [],
         right.event?.directories || []
       )
   )
-  const sessionsEvent = useAppShellSidebarValue(
+  const agentsEvent = useAppShellSidebarValue(
     sidebarStore,
-    (snapshot) => snapshot.state.sessionsEvent
+    (snapshot) => snapshot.state.agentsEvent
   )
-  const activeSidebarSessionId = sidebarSessionsEventSnapshot.activeSessionId
-  const activeSidebarSessionKey = sidebarSessionsEventSnapshot.activeSessionKey
-  const activeSidebarSessionPath =
-    sidebarSessionsEventSnapshot.activeSessionPath
-  const activeSidebarSessionStreaming =
-    sidebarSessionsEventSnapshot.activeStreaming
-  const matchingSessionCount = visibleDirectories.reduce(
+  const activeSidebarAgentId = sidebarAgentsEventSnapshot.activeAgentId
+  const activeSidebarAgentKey = sidebarAgentsEventSnapshot.activeAgentKey
+  const activeSidebarAgentPath = sidebarAgentsEventSnapshot.activeAgentPath
+  const activeSidebarAgentStreaming = sidebarAgentsEventSnapshot.activeStreaming
+  const matchingAgentCount = visibleDirectories.reduce(
     (total, directory) =>
-      total + (filteredDirectorySessions[directory]?.length ?? 0),
+      total + (filteredDirectoryAgents[directory]?.length ?? 0),
     0
   )
-  const sessionSearch = useAppShellSidebarValue(
+  const agentSearch = useAppShellSidebarValue(
     sidebarStore,
-    (snapshot) => snapshot.state.sessionSearch
+    (snapshot) => snapshot.state.agentSearch
   )
   const sidebarDeferredDirectoryLoadingReady = useAppShellSidebarValue(
     sidebarStore,
     (snapshot) => snapshot.state.sidebarDeferredDirectoryLoadingReady
   )
-  const sidebarSessionSelectionAnchor = useAppShellSidebarValue(
+  const sidebarAgentSelectionAnchor = useAppShellSidebarValue(
     sidebarStore,
-    (snapshot) => snapshot.state.sidebarSessionSelectionAnchor
+    (snapshot) => snapshot.state.sidebarAgentSelectionAnchor
   )
   const lastActiveSidebarSelectionSyncRef = React.useRef({
     signature: "",
@@ -273,10 +266,10 @@ function useAppShellSidebarControllerView({
       }),
     []
   )
-  const sidebarDirectorySessionsSnapshotRef = React.useRef<{
-    activeSessionId: string
-    activeSessionKey: string
-    activeSessionPath: string
+  const sidebarDirectoryAgentsSnapshotRef = React.useRef<{
+    activeAgentId: string
+    activeAgentKey: string
+    activeAgentPath: string
     revisions: Record<string, string>
   } | null>(null)
 
@@ -312,20 +305,20 @@ function useAppShellSidebarControllerView({
   }
 
   React.useLayoutEffect(() => {
-    directorySessionsStore.setData(
-      pinnedSidebarSessions.length > 0
+    directoryAgentsStore.setData(
+      pinnedSidebarAgents.length > 0
         ? {
-            ...filteredDirectorySessions,
-            [PINNED_SESSION_STORE_DIRECTORY]: pinnedSidebarSessions,
+            ...filteredDirectoryAgents,
+            [PINNED_AGENT_STORE_DIRECTORY]: pinnedSidebarAgents,
           }
-        : filteredDirectorySessions,
+        : filteredDirectoryAgents,
       directoryIndexLoading
     )
   }, [
     directoryIndexLoading,
-    directorySessionsStore,
-    filteredDirectorySessions,
-    pinnedSidebarSessions,
+    directoryAgentsStore,
+    filteredDirectoryAgents,
+    pinnedSidebarAgents,
   ])
 
   React.useEffect(() => {
@@ -348,7 +341,7 @@ function useAppShellSidebarControllerView({
     const sidebarDirectorySet = new Set(baseSidebarDirectories)
 
     sidebarStore.setDirectoryIndexDataByPath((current) => {
-      const next: Record<string, DirectorySessionsIndexData> = {}
+      const next: Record<string, DirectoryAgentsIndexData> = {}
 
       for (const [directory, payload] of Object.entries(current)) {
         if (!sidebarDirectorySet.has(directory)) continue
@@ -380,9 +373,9 @@ function useAppShellSidebarControllerView({
   }, [baseSidebarDirectories, sidebarStore])
 
   React.useEffect(() => {
-    if (!viewerContextId || !sessionsEvent) return
+    if (!viewerContextId || !agentsEvent) return
 
-    const payloadDirectoryIndexes = sessionsEvent.directoryIndexes || {}
+    const payloadDirectoryIndexes = agentsEvent.directoryIndexes || {}
     const payloadDirectories = Object.keys(payloadDirectoryIndexes)
     const payloadDirectorySet = new Set(payloadDirectories)
 
@@ -393,11 +386,11 @@ function useAppShellSidebarControllerView({
             payloadDirectoryIndexes
           )
         : current.directoryIndexDataByPath
-      const nextDirectoryIndexDataByPath = clearUnreadForActiveSidebarSession(
+      const nextDirectoryIndexDataByPath = clearUnreadForActiveSidebarAgent(
         merged,
         {
-          sessionId: activeSidebarSessionId,
-          sessionPath: activeSidebarSessionPath,
+          agentId: activeSidebarAgentId,
+          agentPath: activeSidebarAgentPath,
         }
       )
       const nextDirectoryIndexLoading = payloadDirectories.length
@@ -428,7 +421,7 @@ function useAppShellSidebarControllerView({
       }
     })
 
-    const previousSnapshot = sidebarDirectorySessionsSnapshotRef.current
+    const previousSnapshot = sidebarDirectoryAgentsSnapshotRef.current
     const nextRevisions: Record<string, string> = {}
     const directoriesToRefresh: Array<string> = []
 
@@ -461,7 +454,7 @@ function useAppShellSidebarControllerView({
         continue
       }
 
-      if (activeSidebarSessionStreaming) {
+      if (activeSidebarAgentStreaming) {
         // Keep the old revision, so the index refreshes when streaming stops.
         nextRevisions[directory] = previousRevision
         continue
@@ -470,10 +463,10 @@ function useAppShellSidebarControllerView({
       directoriesToRefresh.push(directory)
     }
 
-    sidebarDirectorySessionsSnapshotRef.current = {
-      activeSessionId: activeSidebarSessionId,
-      activeSessionKey: activeSidebarSessionKey,
-      activeSessionPath: activeSidebarSessionPath,
+    sidebarDirectoryAgentsSnapshotRef.current = {
+      activeAgentId: activeSidebarAgentId,
+      activeAgentKey: activeSidebarAgentKey,
+      activeAgentPath: activeSidebarAgentPath,
       revisions: nextRevisions,
     }
 
@@ -483,7 +476,7 @@ function useAppShellSidebarControllerView({
 
     const requestId = startDirectoryIndexRequest(directoriesToRefresh)
 
-    void fetchDirectorySessionsIndexes({
+    void fetchDirectoryAgentsIndexes({
       machineId,
       viewerContextId,
       directories: directoriesToRefresh,
@@ -544,65 +537,65 @@ function useAppShellSidebarControllerView({
         toast.error(
           error instanceof Error
             ? error.message
-            : "Failed to load sidebar sessions"
+            : "Failed to load sidebar agents"
         )
       })
   }, [
     baseSidebarDirectories,
     directoryIndexDataByPath,
     directoryIndexLoading,
-    activeSidebarSessionId,
-    activeSidebarSessionKey,
-    activeSidebarSessionPath,
-    activeSidebarSessionStreaming,
+    activeSidebarAgentId,
+    activeSidebarAgentKey,
+    activeSidebarAgentPath,
+    activeSidebarAgentStreaming,
     directoryStateByPath,
-    sessionsEvent,
+    agentsEvent,
     sidebarStore,
     viewerContextId,
   ])
 
   React.useEffect(() => {
     if (
-      !activeSidebarSessionId &&
-      !activeSidebarSessionKey &&
-      !activeSidebarSessionPath
+      !activeSidebarAgentId &&
+      !activeSidebarAgentKey &&
+      !activeSidebarAgentPath
     ) {
       return
     }
 
-    sidebarStore.setSidebarSessionStatusByKey((current) =>
-      mergeSidebarSessionStatusMap(current, {
-        type: "session_status",
-        sessionKey: activeSidebarSessionKey,
-        sessionId: activeSidebarSessionId,
-        sessionPath: activeSidebarSessionPath,
+    sidebarStore.setSidebarAgentStatusByKey((current) =>
+      mergeSidebarAgentStatusMap(current, {
+        type: "agent_status",
+        agentKey: activeSidebarAgentKey,
+        agentId: activeSidebarAgentId,
+        agentPath: activeSidebarAgentPath,
         unread: false,
       })
     )
   }, [
-    activeSidebarSessionId,
-    activeSidebarSessionKey,
-    activeSidebarSessionPath,
+    activeSidebarAgentId,
+    activeSidebarAgentKey,
+    activeSidebarAgentPath,
     sidebarStore,
   ])
 
   React.useEffect(() => {
     const activeSignature = [
-      activeSidebarSessionId,
-      activeSidebarSessionPath,
-      activeSidebarSessionKey,
+      activeSidebarAgentId,
+      activeSidebarAgentPath,
+      activeSidebarAgentKey,
     ].join("\0")
-    let nextKey = findSidebarSessionSelectionKey(sidebarSessionEntriesByKey, {
-      sessionId: activeSidebarSessionId,
-      sessionPath: activeSidebarSessionPath,
+    let nextKey = findSidebarAgentSelectionKey(sidebarAgentEntriesByKey, {
+      agentId: activeSidebarAgentId,
+      agentPath: activeSidebarAgentPath,
     })
 
     if (
       !nextKey &&
-      activeSidebarSessionKey &&
-      sidebarSessionEntriesByKey.has(activeSidebarSessionKey)
+      activeSidebarAgentKey &&
+      sidebarAgentEntriesByKey.has(activeSidebarAgentKey)
     ) {
-      nextKey = activeSidebarSessionKey
+      nextKey = activeSidebarAgentKey
     }
 
     const previous = lastActiveSidebarSelectionSyncRef.current
@@ -614,18 +607,18 @@ function useAppShellSidebarControllerView({
       signature: activeSignature,
       key: nextKey,
     }
-    sidebarStore.setSelectedSidebarSessionKeys((current) => {
+    sidebarStore.setSelectedSidebarAgentKeys((current) => {
       const nextKeys = nextKey ? [nextKey] : []
       return sameStringArray(current, nextKeys) ? current : nextKeys
     })
-    sidebarStore.setSidebarSessionSelectionAnchor((current) =>
+    sidebarStore.setSidebarAgentSelectionAnchor((current) =>
       current === nextKey ? current : nextKey
     )
   }, [
-    activeSidebarSessionId,
-    activeSidebarSessionKey,
-    activeSidebarSessionPath,
-    sidebarSessionEntriesByKey,
+    activeSidebarAgentId,
+    activeSidebarAgentKey,
+    activeSidebarAgentPath,
+    sidebarAgentEntriesByKey,
     sidebarStore,
   ])
 
@@ -652,7 +645,7 @@ function useAppShellSidebarControllerView({
       updateDirectoryIndexLoadingState(current, missingDirectories, true)
     )
 
-    void fetchDirectorySessionsIndexes({
+    void fetchDirectoryAgentsIndexes({
       machineId,
       viewerContextId,
       directories: missingDirectories,
@@ -716,7 +709,7 @@ function useAppShellSidebarControllerView({
         toast.error(
           error instanceof Error
             ? error.message
-            : "Failed to load sidebar sessions"
+            : "Failed to load sidebar agents"
         )
       })
   }, [
@@ -730,17 +723,17 @@ function useAppShellSidebarControllerView({
   ])
 
   React.useEffect(() => {
-    const validKeys = new Set(sidebarSessionEntriesByKey.keys())
+    const validKeys = new Set(sidebarAgentEntriesByKey.keys())
 
-    sidebarStore.setSelectedSidebarSessionKeys((current) => {
+    sidebarStore.setSelectedSidebarAgentKeys((current) => {
       const next = current.filter((key) => validKeys.has(key))
       return next.length === current.length ? current : next
     })
 
-    sidebarStore.setSidebarSessionSelectionAnchor((current) =>
+    sidebarStore.setSidebarAgentSelectionAnchor((current) =>
       current && validKeys.has(current) ? current : ""
     )
-  }, [sidebarSessionEntriesByKey, sidebarStore])
+  }, [sidebarAgentEntriesByKey, sidebarStore])
 
   const reorderSidebarDirectories = (nextDirectories: Array<string>) => {
     const normalizedNext = normalizeStoredDirectoryList(nextDirectories)
@@ -761,19 +754,19 @@ function useAppShellSidebarControllerView({
     })
   }
 
-  const togglePinnedSession = (entry: SessionListEntry) => {
-    const key = sessionListEntryKey(entry)
+  const togglePinnedAgent = (entry: AgentListEntry) => {
+    const key = agentListEntryKey(entry)
     if (!key) return
 
-    sidebarStore.setPinnedSidebarSessionKeys((current) => {
-      const currentKeys = normalizeSessionSelectionKeys(current)
+    sidebarStore.setPinnedSidebarAgentKeys((current) => {
+      const currentKeys = normalizeAgentSelectionKeys(current)
       const nextKeys = currentKeys.includes(key)
         ? currentKeys.filter((currentKey) => currentKey !== key)
         : [key, ...currentKeys]
 
       machineLocalStorageSetItem(
         machineId,
-        PINNED_SESSIONS_STORAGE_KEY,
+        PINNED_AGENTS_STORAGE_KEY,
         JSON.stringify(nextKeys)
       )
       return nextKeys
@@ -781,7 +774,7 @@ function useAppShellSidebarControllerView({
   }
 
   const setSidebarSelection = (nextKeys: Array<string>, anchorKey = "") => {
-    const normalizedKeys = normalizeSessionSelectionKeys(nextKeys)
+    const normalizedKeys = normalizeAgentSelectionKeys(nextKeys)
     const nextAnchor =
       normalizedKeys.length === 0
         ? ""
@@ -789,28 +782,28 @@ function useAppShellSidebarControllerView({
           ? anchorKey
           : (normalizedKeys[normalizedKeys.length - 1] ?? "")
 
-    sidebarStore.setSelectedSidebarSessionKeys((current) =>
+    sidebarStore.setSelectedSidebarAgentKeys((current) =>
       sameStringArray(current, normalizedKeys) ? current : normalizedKeys
     )
-    sidebarStore.setSidebarSessionSelectionAnchor((current) =>
+    sidebarStore.setSidebarAgentSelectionAnchor((current) =>
       current === nextAnchor ? current : nextAnchor
     )
   }
 
-  const selectSidebarSessionRange = (targetKey: string) => {
+  const selectSidebarAgentRange = (targetKey: string) => {
     const normalizedTargetKey = targetKey.trim()
     if (!normalizedTargetKey) return
 
-    const orderedKeys = getRenderedSidebarSessionKeys()
+    const orderedKeys = getRenderedSidebarAgentKeys()
     const targetIndex = orderedKeys.indexOf(normalizedTargetKey)
     if (targetIndex < 0) {
       setSidebarSelection([normalizedTargetKey], normalizedTargetKey)
       return
     }
 
-    const anchorKey = orderedKeys.includes(sidebarSessionSelectionAnchor)
-      ? sidebarSessionSelectionAnchor
-      : (selectedSidebarSessionKeys.find((key) => orderedKeys.includes(key)) ??
+    const anchorKey = orderedKeys.includes(sidebarAgentSelectionAnchor)
+      ? sidebarAgentSelectionAnchor
+      : (selectedSidebarAgentKeys.find((key) => orderedKeys.includes(key)) ??
         normalizedTargetKey)
     const anchorIndex = orderedKeys.indexOf(anchorKey)
     if (anchorIndex < 0) {
@@ -823,47 +816,45 @@ function useAppShellSidebarControllerView({
     setSidebarSelection(orderedKeys.slice(start, end + 1), anchorKey)
   }
 
-  const handleSidebarSessionClick = (
-    entry: SessionListEntry,
+  const handleSidebarAgentClick = (
+    entry: AgentListEntry,
     modifiers: { multiSelectKey: boolean; shiftKey: boolean }
   ) => {
-    const key = sessionListEntryKey(entry)
+    const key = agentListEntryKey(entry)
 
     if (!key) {
       if (entry.id) {
-        sessionWorkspaceRef.current?.selectSession(entry.id, {
-          sessionPath: entry.path,
+        agentWorkspaceRef.current?.selectAgent(entry.id, {
+          agentPath: entry.path,
         })
       }
       return
     }
 
     if (modifiers.shiftKey) {
-      selectSidebarSessionRange(key)
+      selectSidebarAgentRange(key)
       return
     }
 
     if (modifiers.multiSelectKey) {
       setSidebarSelection(
-        selectedSidebarSessionKeys.includes(key)
-          ? selectedSidebarSessionKeys.filter(
-              (currentKey) => currentKey !== key
-            )
-          : [...selectedSidebarSessionKeys, key],
+        selectedSidebarAgentKeys.includes(key)
+          ? selectedSidebarAgentKeys.filter((currentKey) => currentKey !== key)
+          : [...selectedSidebarAgentKeys, key],
         key
       )
       return
     }
 
     setSidebarSelection([key], key)
-    if (entry.id && !isOptimisticSidebarSessionEntry(entry)) {
-      sessionWorkspaceRef.current?.selectSession(entry.id, {
-        sessionPath: entry.path,
+    if (entry.id && !isOptimisticSidebarAgentEntry(entry)) {
+      agentWorkspaceRef.current?.selectAgent(entry.id, {
+        agentPath: entry.path,
       })
     }
   }
 
-  const showRestoredSessionDirectory = (directory: string) => {
+  const showRestoredAgentDirectory = (directory: string) => {
     sidebarStore.setSidebarDirectories((current) => {
       const normalizedCurrent = normalizeStoredDirectoryList(current)
       if (normalizedCurrent.includes(directory)) return current
@@ -883,70 +874,62 @@ function useAppShellSidebarControllerView({
   return (
     <>
       <AppSidebar
-        sessionSearch={sessionSearch}
-        onOpenSessionsDialog={() => {
-          sessionWorkspaceRef.current?.openSessionsDialog()
+        agentSearch={agentSearch}
+        onOpenAgentsDialog={() => {
+          agentWorkspaceRef.current?.openAgentsDialog()
         }}
         visibleDirectories={visibleDirectories}
-        directorySessionsStore={directorySessionsStore}
-        matchingSessionCount={matchingSessionCount}
-        selectedSessionKeys={selectedSidebarSessionKeys}
-        activeSessionId={activeSidebarSessionId || undefined}
-        activeSessionKey={activeSidebarSessionKey || undefined}
-        pinnedSessionKeys={pinnedSidebarSessionKeys}
+        directoryAgentsStore={directoryAgentsStore}
+        matchingAgentCount={matchingAgentCount}
+        selectedAgentKeys={selectedSidebarAgentKeys}
+        activeAgentId={activeSidebarAgentId || undefined}
+        activeAgentKey={activeSidebarAgentKey || undefined}
+        pinnedAgentKeys={pinnedSidebarAgentKeys}
         emptyStateText={
-          statusFilter
-            ? "No sessions with these states."
-            : emptySidebarStateText
+          statusFilter ? "No agents with these states." : emptySidebarStateText
         }
         statusFilterActive={Boolean(statusFilter)}
         onOpenAddDirectoryDialog={() => {
-          sessionWorkspaceRef.current?.openAddDirectoryDialog()
+          agentWorkspaceRef.current?.openAddDirectoryDialog()
         }}
-        onSessionClick={handleSidebarSessionClick}
-        onRenameSession={(entry) => {
-          sessionWorkspaceRef.current?.openRenameDialogForEntry(entry)
+        onAgentClick={handleSidebarAgentClick}
+        onRenameAgent={(entry) => {
+          agentWorkspaceRef.current?.openRenameDialogForEntry(entry)
         }}
-        onDeleteSession={(entry) => {
-          const key = sessionListEntryKey(entry)
-          const { selectedSidebarSessions } =
-            sidebarStore.getWorkspaceSnapshot()
+        onDeleteAgent={(entry) => {
+          const key = agentListEntryKey(entry)
+          const { selectedSidebarAgents } = sidebarStore.getWorkspaceSnapshot()
           const archiveSelection =
-            selectedSidebarSessions.length > 1 &&
-            selectedSidebarSessions.some(
-              (selected) => sessionListEntryKey(selected) === key
+            selectedSidebarAgents.length > 1 &&
+            selectedSidebarAgents.some(
+              (selected) => agentListEntryKey(selected) === key
             )
-          sessionWorkspaceRef.current?.openDeleteDialog(
-            archiveSelection ? selectedSidebarSessions : [entry]
+          agentWorkspaceRef.current?.openDeleteDialog(
+            archiveSelection ? selectedSidebarAgents : [entry]
           )
         }}
-        onSetSessionUnread={(entry, unread) => {
-          void sessionWorkspaceRef.current?.setSessionUnread(entry, unread)
+        onSetAgentUnread={(entry, unread) => {
+          void agentWorkspaceRef.current?.setAgentUnread(entry, unread)
         }}
-        onMoveSession={(entry, directory) => {
-          void sessionWorkspaceRef.current?.moveSessionToDirectory(
-            entry,
-            directory
-          )
+        onMoveAgent={(entry, directory) => {
+          void agentWorkspaceRef.current?.moveAgentToDirectory(entry, directory)
         }}
-        onMoveSessionAnyDirectory={(entry) => {
-          sessionWorkspaceRef.current?.openMoveSessionDirectoryDialogForEntry(
-            entry
-          )
+        onMoveAgentAnyDirectory={(entry) => {
+          agentWorkspaceRef.current?.openMoveAgentDirectoryDialogForEntry(entry)
         }}
-        onTogglePinnedSession={togglePinnedSession}
-        onCreateSessionInDirectory={(directory) => {
-          void sessionWorkspaceRef.current?.createSession(directory, {
+        onTogglePinnedAgent={togglePinnedAgent}
+        onCreateAgentInDirectory={(directory) => {
+          void agentWorkspaceRef.current?.createAgent(directory, {
             closeMobileSidebar: true,
           })
         }}
-        onDeleteOldSessionsInDirectory={(directory) => {
-          sessionWorkspaceRef.current?.openDeleteOldDirectorySessionsDialog(
+        onDeleteOldAgentsInDirectory={(directory) => {
+          agentWorkspaceRef.current?.openDeleteOldDirectoryAgentsDialog(
             directory
           )
         }}
-        onMarkSessionsRead={(entries) => {
-          void sessionWorkspaceRef.current?.markSessionsRead(entries)
+        onMarkAgentsRead={(entries) => {
+          void agentWorkspaceRef.current?.markAgentsRead(entries)
         }}
         onRemoveDirectory={(directory) => {
           sidebarStore.setSidebarDirectories((current) => {
@@ -960,13 +943,13 @@ function useAppShellSidebarControllerView({
           })
         }}
         onReorderDirectories={reorderSidebarDirectories}
-        onOpenArchivedSessions={() => setArchivedSessionsOpen(true)}
+        onOpenArchivedAgents={() => setArchivedAgentsOpen(true)}
       />
-      <ArchivedSessionsDialog
-        open={archivedSessionsOpen}
-        onOpenChange={setArchivedSessionsOpen}
+      <ArchivedAgentsDialog
+        open={archivedAgentsOpen}
+        onOpenChange={setArchivedAgentsOpen}
         viewerContextId={viewerContextId}
-        onRestored={(result) => showRestoredSessionDirectory(result.directory)}
+        onRestored={(result) => showRestoredAgentDirectory(result.directory)}
       />
     </>
   )

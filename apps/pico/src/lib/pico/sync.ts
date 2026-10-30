@@ -5,7 +5,7 @@ import type {
   ConversationImage,
   ConversationItem,
   PromptImage,
-  SessionState,
+  AgentState,
   StateSyncPayload,
   StreamingBehavior,
   ToolBlock,
@@ -126,8 +126,8 @@ function stableJsonValue(value: unknown): string {
 }
 
 export function sameContextUsage(
-  left: SessionState["contextUsage"],
-  right: SessionState["contextUsage"]
+  left: AgentState["contextUsage"],
+  right: AgentState["contextUsage"]
 ) {
   return stableJsonValue(left) === stableJsonValue(right)
 }
@@ -1505,7 +1505,7 @@ export function buildItemsFromSync(
   }
 }
 
-export function createInitialSessionState(): SessionState {
+export function createInitialAgentState(): AgentState {
   return {
     connected: false,
     replaying: false,

@@ -4,14 +4,14 @@ import { isInShownMachineShell } from "@/lib/pico/machine-context"
 
 import { isMacPlatform } from "./keyboard-shortcuts"
 
-// The number of sidebar sessions that Mod+1…9 can open.
-export const SIDEBAR_SESSION_NUMBER_COUNT = 9
+// The number of sidebar agents that Mod+1…9 can open.
+export const SIDEBAR_AGENT_NUMBER_COUNT = 9
 
-// The session rows that the sidebar shows, in sidebar order. Rows in a
+// The agent rows that the sidebar shows, in sidebar order. Rows in a
 // collapsed group are not shown, so they are skipped.
-export function getShownSidebarSessionItems(root: ParentNode = document) {
+export function getShownSidebarAgentItems(root: ParentNode = document) {
   return Array.from(
-    root.querySelectorAll<HTMLElement>("[data-sidebar-session-item]")
+    root.querySelectorAll<HTMLElement>("[data-sidebar-agent-item]")
   ).filter(
     (element) =>
       isInShownMachineShell(element) && element.getClientRects().length > 0
@@ -43,7 +43,7 @@ function clearShowNumbersTimer() {
 
 function updateNumberedItems() {
   setNumberedItems(
-    getShownSidebarSessionItems().slice(0, SIDEBAR_SESSION_NUMBER_COUNT)
+    getShownSidebarAgentItems().slice(0, SIDEBAR_AGENT_NUMBER_COUNT)
   )
 }
 
@@ -65,7 +65,7 @@ function handleModifierKeyEvent(event: KeyboardEvent) {
   }
 
   // While the numbers show, keep them in step with the sidebar. For
-  // example, Mod+3 can open a session that moves the rows.
+  // example, Mod+3 can open an agent that moves the rows.
   if (numbersShown) {
     updateNumberedItems()
     return
@@ -115,10 +115,10 @@ function subscribeNumberedItems(listener: () => void) {
 }
 
 /**
- * The Mod+1…9 number of the session row in `rowRef`, while the app modifier
+ * The Mod+1…9 number of the agent row in `rowRef`, while the app modifier
  * is held. 0 when the modifier is not held or the row has no number.
  */
-export function useSidebarSessionNumber(
+export function useSidebarAgentNumber(
   rowRef: React.RefObject<HTMLElement | null>
 ) {
   return React.useSyncExternalStore(

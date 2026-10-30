@@ -2,14 +2,14 @@ import * as React from "react"
 
 import {
   AppShellComposerController,
-  NewSessionComposerSelectors,
+  NewAgentComposerSelectors,
 } from "@/features/pico/app-shell-composer-controller"
 import type {
   AppShellComposerActions,
   AppShellComposerSnapshot,
 } from "@/features/pico/app-shell-composer-state"
 import {
-  AppShellSessionConversation,
+  AppShellAgentConversation,
   type AppShellConversationFrameHandle,
 } from "@/features/pico/app-shell-conversation"
 import {
@@ -25,7 +25,7 @@ import {
   useSelector,
   type PicoStore,
 } from "@/features/pico/tanstack-store-utils"
-import type { SessionState } from "@/lib/pico"
+import type { AgentState } from "@/lib/pico"
 import { toast } from "@/lib/pico/toast"
 import { useMachineId } from "@/lib/pico/machine-context"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
@@ -37,60 +37,60 @@ import { ToolRenderContext } from "@/features/pico/tool-renderers/registry"
 import { WaitingCardChip } from "@/features/pico/agent/waiting-cards"
 import { TodoProgressChip } from "@/features/pico/agent/todo"
 
-export type AppShellSessionContentProps = {
+export type AppShellAgentContentProps = {
   actionsRef: React.RefObject<AppShellComposerActions>
   awaitingFirstTurn: boolean
   composerPanelRef: React.RefObject<ComposerPanelHandle | null>
   contextUsageStore: ComposerContextUsageStore
   conversationFrameRef: React.RefObject<AppShellConversationFrameHandle | null>
   conversationItemsStore: ConversationItemsStore
-  defaultNewSessionDirectory: string
+  defaultNewAgentDirectory: string
   displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
   fileInputRef: React.RefObject<HTMLInputElement | null>
   isLoadingOlderHistory: boolean
-  isSessionViewLoading: boolean
+  isAgentViewLoading: boolean
   isSubmitting: boolean
-  newSessionDirectoryOptions: Array<{ path: string; label: string }>
+  newAgentDirectoryOptions: Array<{ path: string; label: string }>
   onCancelCompaction: () => void
-  onCreateSession: (cwdOverride?: string) => void
+  onCreateAgent: (cwdOverride?: string) => void
   onLoadOlderHistory: () => Promise<void>
   onOpenAddDirectoryDialog: () => void
-  sessionStore: PicoStore<SessionState>
+  agentStore: PicoStore<AgentState>
   store: PicoStore<AppShellComposerSnapshot>
   viewerContextId: string
   workingStateStore: PicoStore<AppShellWorkingState | null>
 }
 
-export function AppShellSessionContent({
+export function AppShellAgentContent({
   actionsRef,
   awaitingFirstTurn,
   composerPanelRef,
   contextUsageStore,
   conversationFrameRef,
   conversationItemsStore,
-  defaultNewSessionDirectory,
+  defaultNewAgentDirectory,
   displaySettingsStore,
   fileInputRef,
   isLoadingOlderHistory,
-  isSessionViewLoading,
+  isAgentViewLoading,
   isSubmitting,
-  newSessionDirectoryOptions,
+  newAgentDirectoryOptions,
   onCancelCompaction,
-  onCreateSession,
+  onCreateAgent,
   onLoadOlderHistory,
   onOpenAddDirectoryDialog,
-  sessionStore,
+  agentStore,
   store,
   viewerContextId,
   workingStateStore,
-}: AppShellSessionContentProps) {
-  const sessionState = useSelector(
-    sessionStore,
-    (currentSessionState) => ({
-      cwd: currentSessionState.cwd,
-      draft: currentSessionState.draft,
-      sessionId: currentSessionState.sessionId,
-      streaming: currentSessionState.streaming,
+}: AppShellAgentContentProps) {
+  const agentState = useSelector(
+    agentStore,
+    (currentAgentState) => ({
+      cwd: currentAgentState.cwd,
+      draft: currentAgentState.draft,
+      agentId: currentAgentState.agentId,
+      streaming: currentAgentState.streaming,
     }),
     { compare: shallowRecordEqual }
   )
@@ -98,32 +98,27 @@ export function AppShellSessionContent({
   const toolRenderContext = React.useMemo(
     () => ({
       viewerContextId,
-      sessionId: sessionState.draft ? undefined : sessionState.sessionId,
-      cwd: sessionState.cwd,
+      agentId: agentState.draft ? undefined : agentState.agentId,
+      cwd: agentState.cwd,
     }),
-    [
-      sessionState.cwd,
-      sessionState.draft,
-      sessionState.sessionId,
-      viewerContextId,
-    ]
+    [agentState.cwd, agentState.draft, agentState.agentId, viewerContextId]
   )
   const machineId = useMachineId()
-  const editSessionId = toolRenderContext.sessionId
+  const editAgentId = toolRenderContext.agentId
   const userMessageActions = React.useMemo<UserMessageActions>(
     () => ({
-      editDisabled: sessionState.streaming,
-      editUserMessage: editSessionId
+      editDisabled: agentState.streaming,
+      editUserMessage: editAgentId
         ? (entryId) => {
             void (async () => {
               try {
                 // Tree navigation to a user message forks at its parent and
                 // puts its text back in the composer.
                 await fetchJson<{ cancelled?: boolean }>(
-                  buildRequestUrl("/api/session/tree", {
+                  buildRequestUrl("/api/agent/tree", {
                     machineId,
                     contextId: viewerContextId,
-                    sessionId: editSessionId,
+                    agentId: editAgentId,
                   }),
                   {
                     method: "POST",
@@ -145,16 +140,16 @@ export function AppShellSessionContent({
     }),
     [
       composerPanelRef,
-      editSessionId,
+      editAgentId,
       machineId,
-      sessionState.streaming,
+      agentState.streaming,
       viewerContextId,
     ]
   )
-  const showNewSessionComposer =
-    sessionState.draft && !hasMessages && !isSessionViewLoading
+  const showNewAgentComposer =
+    agentState.draft && !hasMessages && !isAgentViewLoading
 
-  if (showNewSessionComposer) {
+  if (showNewAgentComposer) {
     return (
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] items-end justify-items-center overflow-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:place-items-center">
         <AppShellComposerController
@@ -163,14 +158,14 @@ export function AppShellSessionContent({
           contextUsageStore={contextUsageStore}
           displaySettingsStore={displaySettingsStore}
           fileInputRef={fileInputRef}
-          sessionStore={sessionStore}
+          agentStore={agentStore}
           store={store}
           topContent={
-            <NewSessionComposerSelectors
-              cwd={sessionState.cwd}
-              defaultNewSessionDirectory={defaultNewSessionDirectory}
-              directoryOptions={newSessionDirectoryOptions}
-              onCreateSession={onCreateSession}
+            <NewAgentComposerSelectors
+              cwd={agentState.cwd}
+              defaultNewAgentDirectory={defaultNewAgentDirectory}
+              directoryOptions={newAgentDirectoryOptions}
+              onCreateAgent={onCreateAgent}
               onMoveDraftToMachine={(targetMachine, directory) =>
                 actionsRef.current.moveDraftToMachine(targetMachine, directory)
               }
@@ -186,31 +181,31 @@ export function AppShellSessionContent({
   return (
     <ToolRenderContext.Provider value={toolRenderContext}>
       <UserMessageActionsContext.Provider value={userMessageActions}>
-        <AppShellSessionConversation
+        <AppShellAgentConversation
           awaitingFirstTurn={awaitingFirstTurn}
           conversationFrameRef={conversationFrameRef}
           conversationItemsStore={conversationItemsStore}
           displaySettingsStore={displaySettingsStore}
           isLoadingOlderHistory={isLoadingOlderHistory}
-          isSessionViewLoading={isSessionViewLoading}
+          isAgentViewLoading={isAgentViewLoading}
           isSubmitting={isSubmitting}
           onCancelCompaction={onCancelCompaction}
-          onCreateSession={onCreateSession}
+          onCreateAgent={onCreateAgent}
           onLoadOlderHistory={onLoadOlderHistory}
-          sessionStore={sessionStore}
+          agentStore={agentStore}
           viewerContextId={viewerContextId}
           workingStateStore={workingStateStore}
         />
       </UserMessageActionsContext.Provider>
 
-      {toolRenderContext.sessionId ? (
+      {toolRenderContext.agentId ? (
         <div className="flex shrink-0 flex-wrap justify-center gap-x-2 px-4">
           <WaitingCardChip
-            sessionId={toolRenderContext.sessionId}
+            agentId={toolRenderContext.agentId}
             viewerContextId={viewerContextId}
           />
           <TodoProgressChip
-            sessionId={toolRenderContext.sessionId}
+            agentId={toolRenderContext.agentId}
             viewerContextId={viewerContextId}
           />
         </div>
@@ -222,7 +217,7 @@ export function AppShellSessionContent({
         contextUsageStore={contextUsageStore}
         displaySettingsStore={displaySettingsStore}
         fileInputRef={fileInputRef}
-        sessionStore={sessionStore}
+        agentStore={agentStore}
         store={store}
       />
     </ToolRenderContext.Provider>

@@ -256,8 +256,8 @@ type AppShellAddDirectoryDialogProps = {
   currentDirectory?: string
   recentDirectories: Array<string>
   knownDirectories: Array<string>
-  useForNewSession?: boolean
-  useForMoveSession?: boolean
+  useForNewAgent?: boolean
+  useForMoveAgent?: boolean
   onAddDirectoryPath: (path: string) => void
   onRequestPathCompletions?: (prefix: string) => Promise<Array<CompletionItem>>
   onSearchDirectories?: (query: string) => Promise<Array<CompletionItem>>
@@ -276,8 +276,8 @@ function useAppShellAddDirectoryDialogView({
   currentDirectory,
   recentDirectories,
   knownDirectories,
-  useForNewSession = false,
-  useForMoveSession = false,
+  useForNewAgent = false,
+  useForMoveAgent = false,
   onAddDirectoryPath,
   onRequestPathCompletions,
   onSearchDirectories,
@@ -399,31 +399,31 @@ function useAppShellAddDirectoryDialogView({
     hasDirectoryMatches ||
     hasPathCompletionResults ||
     hasDirectorySearchResults
-  const addPathDescription = useForMoveSession
-    ? "Resolve and move this session to this directory."
-    : useForNewSession
-      ? "Add to sidebar and use for this new session."
+  const addPathDescription = useForMoveAgent
+    ? "Resolve and move this agent to this directory."
+    : useForNewAgent
+      ? "Add to sidebar and use for this new agent."
       : "Resolve and add this path to the sidebar."
-  const openedDescription = useForMoveSession
-    ? "Move this session here."
-    : useForNewSession
-      ? "Use for this new session."
+  const openedDescription = useForMoveAgent
+    ? "Move this agent here."
+    : useForNewAgent
+      ? "Use for this new agent."
       : "Expand and show it in the sidebar."
-  const currentDescription = useForMoveSession
-    ? "Move this session to the current Pico working directory."
-    : useForNewSession
-      ? "Use the current Pico working directory for this new session."
+  const currentDescription = useForMoveAgent
+    ? "Move this agent to the current Pico working directory."
+    : useForNewAgent
+      ? "Use the current Pico working directory for this new agent."
       : "Use the current Pico working directory."
-  const addKnownDescription = useForMoveSession
-    ? "Move this session here."
-    : useForNewSession
-      ? "Add to sidebar and use for this new session."
+  const addKnownDescription = useForMoveAgent
+    ? "Move this agent here."
+    : useForNewAgent
+      ? "Add to sidebar and use for this new agent."
       : ""
-  const manualGroupHeading = useForMoveSession ? "Move to path" : "Add path"
-  const manualPathPrefix = useForMoveSession ? "Move to" : "Add"
-  const dialogTitle = useForMoveSession ? "Move session" : "Add directory"
-  const dialogDescription = useForMoveSession
-    ? "Search recent and known directories or paste any path to move this session."
+  const manualGroupHeading = useForMoveAgent ? "Move to path" : "Add path"
+  const manualPathPrefix = useForMoveAgent ? "Move to" : "Add"
+  const dialogTitle = useForMoveAgent ? "Move agent" : "Add directory"
+  const dialogDescription = useForMoveAgent
+    ? "Search recent and known directories or paste any path to move this agent."
     : "Search recent and known directories or add a new path to the sidebar."
 
   React.useEffect(() => {
@@ -872,8 +872,8 @@ type AppShellAddDirectoryDialogControllerProps = {
   currentDirectory?: string
   recentDirectories: Array<string>
   knownDirectories: Array<string>
-  useForNewSession?: boolean
-  useForMoveSession?: boolean
+  useForNewAgent?: boolean
+  useForMoveAgent?: boolean
   onAddDirectoryPath: (
     path: string
   ) => Promise<boolean | string> | boolean | string | void
@@ -888,8 +888,8 @@ export function AppShellAddDirectoryDialogController({
   currentDirectory,
   recentDirectories,
   knownDirectories,
-  useForNewSession,
-  useForMoveSession,
+  useForNewAgent,
+  useForMoveAgent,
   onAddDirectoryPath,
   onRequestPathCompletions,
   onSearchDirectories,
@@ -939,8 +939,8 @@ export function AppShellAddDirectoryDialogController({
       currentDirectory={currentDirectory}
       recentDirectories={recentDirectories}
       knownDirectories={knownDirectories}
-      useForNewSession={useForNewSession}
-      useForMoveSession={useForMoveSession}
+      useForNewAgent={useForNewAgent}
+      useForMoveAgent={useForMoveAgent}
       onAddDirectoryPath={(path) => {
         void addDirectoryPath(path)
       }}

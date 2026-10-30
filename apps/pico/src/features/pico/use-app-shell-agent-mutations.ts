@@ -2,57 +2,57 @@ import * as React from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "@/lib/pico/toast"
 
-import type { SessionState } from "@/lib/pico"
+import type { AgentState } from "@/lib/pico"
 import type {
-  CloneSessionResponse,
-  DeleteSessionsResponse,
-  DirectorySessionsIndexSnapshot,
-  MoveSessionResponse,
+  CloneAgentResponse,
+  DeleteAgentsResponse,
+  DirectoryAgentsIndexSnapshot,
+  MoveAgentResponse,
   ModelResponse,
-  RenameSessionResponse,
-  SessionListEntry,
-  SessionsEvent,
+  RenameAgentResponse,
+  AgentListEntry,
+  AgentsEvent,
   ThinkingResponse,
 } from "@/lib/pico/api"
 
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import {
-  PINNED_SESSIONS_STORAGE_KEY,
+  PINNED_AGENTS_STORAGE_KEY,
   machineLocalStorageSetItem,
-  sessionListEntryKey,
+  agentListEntryKey,
 } from "@/lib/pico"
 import { useMachineId } from "@/lib/pico/machine-context"
-import { sortSidebarSessions } from "@/features/pico/session-order"
+import { sortSidebarAgents } from "@/features/pico/agent-order"
 
-type CloneSessionResponseData = Extract<CloneSessionResponse, { ok: true }>
+type CloneAgentResponseData = Extract<CloneAgentResponse, { ok: true }>
 type ThinkingResponseData = Extract<ThinkingResponse, { ok: true }>
 type ModelResponseData = Extract<ModelResponse, { ok: true }>
-type RenameSessionResponseData = Extract<RenameSessionResponse, { ok: true }>
-type MoveSessionResponseData = Extract<MoveSessionResponse, { ok: true }>
-type DirectoryIndexDataByPath = Record<string, DirectorySessionsIndexSnapshot>
+type RenameAgentResponseData = Extract<RenameAgentResponse, { ok: true }>
+type MoveAgentResponseData = Extract<MoveAgentResponse, { ok: true }>
+type DirectoryIndexDataByPath = Record<string, DirectoryAgentsIndexSnapshot>
 
 type SidebarSelectionSnapshot = {
-  selectedSidebarSessionKeys: Array<string>
-  sidebarSessionSelectionAnchor: string
+  selectedSidebarAgentKeys: Array<string>
+  sidebarAgentSelectionAnchor: string
 }
 
-type SessionMutationTarget = Pick<
-  SessionState,
-  "cwd" | "draft" | "sessionFile" | "sessionId" | "sessionKey"
+type AgentMutationTarget = Pick<
+  AgentState,
+  "cwd" | "draft" | "agentFile" | "agentId" | "agentKey"
 >
 
-function sameSessionMutationTarget(
-  target: SessionMutationTarget,
-  state: SessionState
+function sameAgentMutationTarget(
+  target: AgentMutationTarget,
+  state: AgentState
 ) {
-  if (target.sessionKey || state.sessionKey) {
-    return target.sessionKey === state.sessionKey
+  if (target.agentKey || state.agentKey) {
+    return target.agentKey === state.agentKey
   }
-  if (target.sessionId || state.sessionId) {
-    return target.sessionId === state.sessionId
+  if (target.agentId || state.agentId) {
+    return target.agentId === state.agentId
   }
-  if (target.sessionFile || state.sessionFile) {
-    return target.sessionFile === state.sessionFile
+  if (target.agentFile || state.agentFile) {
+    return target.agentFile === state.agentFile
   }
   return target.cwd === state.cwd && target.draft === state.draft
 }
@@ -76,12 +76,12 @@ export function applyDirectoryIndexRename(
   const next: DirectoryIndexDataByPath = { ...current }
 
   for (const [directory, snapshot] of Object.entries(current)) {
-    let sessionsChanged = false
-    const sessions = snapshot.sessions.map((entry) => {
+    let agentsChanged = false
+    const agents = snapshot.agents.map((entry) => {
       if (entry.path !== targetPath) return entry
       if (entry.name === nextName && entry.title === nextName) return entry
 
-      sessionsChanged = true
+      agentsChanged = true
       changed = true
       return {
         ...entry,
@@ -90,10 +90,10 @@ export function applyDirectoryIndexRename(
       }
     })
 
-    if (sessionsChanged) {
+    if (agentsChanged) {
       next[directory] = {
         ...snapshot,
-        sessions,
+        agents,
       }
     }
   }
@@ -111,36 +111,36 @@ function applyDirectoryIndexDelete(
   const next: DirectoryIndexDataByPath = { ...current }
 
   for (const [directory, snapshot] of Object.entries(current)) {
-    const sessions = snapshot.sessions.filter(
+    const agents = snapshot.agents.filter(
       (entry) => !entry.path || !targetPaths.has(entry.path)
     )
-    const removedCount = snapshot.sessions.length - sessions.length
+    const removedCount = snapshot.agents.length - agents.length
     if (removedCount === 0) continue
 
     changed = true
     next[directory] = {
       ...snapshot,
       totalCount: Math.max(0, snapshot.totalCount - removedCount),
-      sessions,
+      agents,
     }
   }
 
   return changed ? next : current
 }
 
-function sessionEntryMatchesMoveTarget(
-  entry: SessionListEntry,
+function agentEntryMatchesMoveTarget(
+  entry: AgentListEntry,
   options: {
     previousPath: string
     nextPath: string
-    sessionId: string
+    agentId: string
   }
 ) {
   return Boolean(
     (entry.path &&
       (entry.path === options.previousPath ||
         entry.path === options.nextPath)) ||
-    (options.sessionId && entry.id === options.sessionId)
+    (options.agentId && entry.id === options.agentId)
   )
 }
 
@@ -150,7 +150,7 @@ function applyDirectoryIndexMove(
     previousPath: string
     nextPath?: string
     nextCwd: string
-    fallbackEntry: SessionListEntry
+    fallbackEntry: AgentListEntry
   }
 ) {
   const previousPath = options.previousPath.trim()
@@ -158,19 +158,19 @@ function applyDirectoryIndexMove(
   const nextCwd = options.nextCwd.trim()
   if (!previousPath || !nextPath || !nextCwd) return current
 
-  const sessionId = options.fallbackEntry.id || ""
+  const agentId = options.fallbackEntry.id || ""
   let changed = false
-  let movedEntry: SessionListEntry | undefined
+  let movedEntry: AgentListEntry | undefined
   const next: DirectoryIndexDataByPath = { ...current }
 
   for (const [directory, snapshot] of Object.entries(current)) {
     let removedCount = 0
-    const sessions = snapshot.sessions.filter((entry) => {
+    const agents = snapshot.agents.filter((entry) => {
       if (
-        !sessionEntryMatchesMoveTarget(entry, {
+        !agentEntryMatchesMoveTarget(entry, {
           previousPath,
           nextPath,
-          sessionId,
+          agentId,
         })
       ) {
         return true
@@ -187,7 +187,7 @@ function applyDirectoryIndexMove(
     next[directory] = {
       ...snapshot,
       totalCount: Math.max(0, snapshot.totalCount - removedCount),
-      sessions,
+      agents,
     }
   }
 
@@ -199,11 +199,11 @@ function applyDirectoryIndexMove(
     path: nextPath,
     cwd: nextCwd,
   }
-  const alreadyInTarget = targetSnapshot.sessions.some((entry) =>
-    sessionEntryMatchesMoveTarget(entry, {
+  const alreadyInTarget = targetSnapshot.agents.some((entry) =>
+    agentEntryMatchesMoveTarget(entry, {
       previousPath: nextPath,
       nextPath,
-      sessionId: nextEntry.id || sessionId,
+      agentId: nextEntry.id || agentId,
     })
   )
   if (alreadyInTarget) return changed ? next : current
@@ -212,13 +212,13 @@ function applyDirectoryIndexMove(
   next[nextCwd] = {
     ...targetSnapshot,
     totalCount: targetSnapshot.totalCount + 1,
-    sessions: sortSidebarSessions([nextEntry, ...targetSnapshot.sessions]),
+    agents: sortSidebarAgents([nextEntry, ...targetSnapshot.agents]),
   }
 
   return next
 }
 
-function directoriesWithSessionPaths(
+function directoriesWithAgentPaths(
   indexes: DirectoryIndexDataByPath | undefined,
   targetPaths: Set<string>
 ) {
@@ -227,9 +227,7 @@ function directoriesWithSessionPaths(
   const directories: Array<string> = []
   for (const [directory, snapshot] of Object.entries(indexes)) {
     if (
-      snapshot.sessions.some(
-        (entry) => entry.path && targetPaths.has(entry.path)
-      )
+      snapshot.agents.some((entry) => entry.path && targetPaths.has(entry.path))
     ) {
       directories.push(directory)
     }
@@ -271,8 +269,8 @@ function restoreDirectoryIndexesForDirectories(
   return changed ? next : current
 }
 
-export function updateSessionsEventDirectoryIndexes(
-  current: SessionsEvent | null,
+export function updateAgentsEventDirectoryIndexes(
+  current: AgentsEvent | null,
   updater: (indexes: DirectoryIndexDataByPath) => DirectoryIndexDataByPath
 ) {
   if (!current?.directoryIndexes) return current
@@ -290,21 +288,22 @@ function optimisticSelectionAfterDelete(
   selection: SidebarSelectionSnapshot,
   deletedKeys: Set<string>
 ): SidebarSelectionSnapshot {
-  const selectedSidebarSessionKeys =
-    selection.selectedSidebarSessionKeys.filter((key) => !deletedKeys.has(key))
-  const sidebarSessionSelectionAnchor =
-    selection.sidebarSessionSelectionAnchor &&
-    deletedKeys.has(selection.sidebarSessionSelectionAnchor)
+  const selectedSidebarAgentKeys = selection.selectedSidebarAgentKeys.filter(
+    (key) => !deletedKeys.has(key)
+  )
+  const sidebarAgentSelectionAnchor =
+    selection.sidebarAgentSelectionAnchor &&
+    deletedKeys.has(selection.sidebarAgentSelectionAnchor)
       ? ""
-      : selection.sidebarSessionSelectionAnchor
+      : selection.sidebarAgentSelectionAnchor
 
   return {
-    selectedSidebarSessionKeys,
-    sidebarSessionSelectionAnchor,
+    selectedSidebarAgentKeys,
+    sidebarAgentSelectionAnchor,
   }
 }
 
-function replaceSessionKey(
+function replaceAgentKey(
   keys: Array<string>,
   previousKey: string,
   nextKey: string
@@ -325,49 +324,47 @@ function replaceSessionKey(
   return changed ? nextKeys : keys
 }
 
-type UseAppShellSessionMutationsOptions = {
+type UseAppShellAgentMutationsOptions = {
   viewerContextId: string
-  activeSessionId?: string
-  sessionStateRef: React.RefObject<SessionState>
-  setSessionState: React.Dispatch<React.SetStateAction<SessionState>>
+  activeAgentId?: string
+  agentStateRef: React.RefObject<AgentState>
+  setAgentState: React.Dispatch<React.SetStateAction<AgentState>>
   getDirectoryIndexDataByPath: () => DirectoryIndexDataByPath
   setDirectoryIndexDataByPath: React.Dispatch<
     React.SetStateAction<DirectoryIndexDataByPath>
   >
-  getSessionsEvent: () => SessionsEvent | null
-  setSessionsEvent: React.Dispatch<React.SetStateAction<SessionsEvent | null>>
+  getAgentsEvent: () => AgentsEvent | null
+  setAgentsEvent: React.Dispatch<React.SetStateAction<AgentsEvent | null>>
   getSidebarSelection: () => SidebarSelectionSnapshot
-  optimisticallyClearActiveDeletedSession?: (
+  optimisticallyClearActiveDeletedAgent?: (
     targetPath: string
   ) => (() => void) | undefined
-  setSelectedSidebarSessionKeys: React.Dispatch<
+  setSelectedSidebarAgentKeys: React.Dispatch<
     React.SetStateAction<Array<string>>
   >
-  setSidebarSessionSelectionAnchor: React.Dispatch<React.SetStateAction<string>>
-  setPinnedSidebarSessionKeys: React.Dispatch<
-    React.SetStateAction<Array<string>>
-  >
+  setSidebarAgentSelectionAnchor: React.Dispatch<React.SetStateAction<string>>
+  setPinnedSidebarAgentKeys: React.Dispatch<React.SetStateAction<Array<string>>>
   setCompactWorkingState: (running: boolean) => void
   isCompactAbortRequested: () => boolean
 }
 
-export function useAppShellSessionMutations({
+export function useAppShellAgentMutations({
   viewerContextId,
-  activeSessionId,
-  sessionStateRef,
-  setSessionState,
+  activeAgentId,
+  agentStateRef,
+  setAgentState,
   getDirectoryIndexDataByPath,
   setDirectoryIndexDataByPath,
-  getSessionsEvent,
-  setSessionsEvent,
+  getAgentsEvent,
+  setAgentsEvent,
   getSidebarSelection,
-  optimisticallyClearActiveDeletedSession,
-  setSelectedSidebarSessionKeys,
-  setSidebarSessionSelectionAnchor,
-  setPinnedSidebarSessionKeys,
+  optimisticallyClearActiveDeletedAgent,
+  setSelectedSidebarAgentKeys,
+  setSidebarAgentSelectionAnchor,
+  setPinnedSidebarAgentKeys,
   setCompactWorkingState,
   isCompactAbortRequested,
-}: UseAppShellSessionMutationsOptions) {
+}: UseAppShellAgentMutationsOptions) {
   const machineId = useMachineId()
   const queryClient = useQueryClient()
   const modelRequestIdRef = React.useRef(0)
@@ -390,14 +387,14 @@ export function useAppShellSessionMutations({
       const [provider, modelId] = value.split("/")
       if (!provider || !modelId) return
       const requestId = ++modelRequestIdRef.current
-      const targetSession = sessionStateRef.current
+      const targetAgent = agentStateRef.current
       try {
         const response = await fetchJson<ModelResponseData>(
           buildRequestUrl("/api/model", {
             machineId,
             contextId: viewerContextId,
-            sessionId: activeSessionId,
-            searchParams: { sessionKey: targetSession.sessionKey },
+            agentId: activeAgentId,
+            searchParams: { agentKey: targetAgent.agentKey },
           }),
           {
             method: "POST",
@@ -406,12 +403,12 @@ export function useAppShellSessionMutations({
           }
         )
         if (modelRequestIdRef.current !== requestId) return
-        const currentState = sessionStateRef.current
-        if (!sameSessionMutationTarget(targetSession, currentState)) return
+        const currentState = agentStateRef.current
+        if (!sameAgentMutationTarget(targetAgent, currentState)) return
 
-        // A fresh draft's SSE connection may predate its Pi runtime/session ID.
+        // A fresh draft's SSE connection may predate its Pi runtime/agent ID.
         // Publish the acknowledged model even if that scoped event is missed.
-        setSessionState({
+        setAgentState({
           ...currentState,
           model: response.model ?? currentState.model,
           thinkingLevel: response.thinkingLevel ?? currentState.thinkingLevel,
@@ -425,7 +422,7 @@ export function useAppShellSessionMutations({
         )
       }
     },
-    [activeSessionId, viewerContextId, sessionStateRef, setSessionState]
+    [activeAgentId, viewerContextId, agentStateRef, setAgentState]
   )
 
   const setThinkingLevel = React.useCallback(
@@ -434,20 +431,20 @@ export function useAppShellSessionMutations({
 
       const requestId = thinkingLevelRequestIdRef.current + 1
       thinkingLevelRequestIdRef.current = requestId
-      const previousState = sessionStateRef.current
+      const previousState = agentStateRef.current
       const previousLevel = previousState.thinkingLevel
       const previousAvailableThinkingLevels =
         previousState.availableThinkingLevels
-      const targetSession = {
+      const targetAgent = {
         cwd: previousState.cwd,
         draft: previousState.draft,
-        sessionFile: previousState.sessionFile,
-        sessionId: previousState.sessionId,
-        sessionKey: previousState.sessionKey,
-      } satisfies SessionMutationTarget
+        agentFile: previousState.agentFile,
+        agentId: previousState.agentId,
+        agentKey: previousState.agentKey,
+      } satisfies AgentMutationTarget
 
       if (previousLevel !== level) {
-        setSessionState({ ...previousState, thinkingLevel: level })
+        setAgentState({ ...previousState, thinkingLevel: level })
       }
 
       if (thinkingLevelSyncTimerRef.current) {
@@ -462,7 +459,7 @@ export function useAppShellSessionMutations({
               buildRequestUrl("/api/thinking", {
                 machineId,
                 contextId: viewerContextId,
-                sessionId: activeSessionId,
+                agentId: activeAgentId,
               }),
               {
                 method: "POST",
@@ -472,8 +469,8 @@ export function useAppShellSessionMutations({
             )
             if (thinkingLevelRequestIdRef.current !== requestId) return
 
-            const currentState = sessionStateRef.current
-            if (!sameSessionMutationTarget(targetSession, currentState)) {
+            const currentState = agentStateRef.current
+            if (!sameAgentMutationTarget(targetAgent, currentState)) {
               return
             }
 
@@ -490,7 +487,7 @@ export function useAppShellSessionMutations({
               return
             }
 
-            setSessionState({
+            setAgentState({
               ...currentState,
               thinkingLevel: nextLevel,
               availableThinkingLevels: nextAvailableThinkingLevels,
@@ -498,12 +495,12 @@ export function useAppShellSessionMutations({
           } catch (error) {
             if (thinkingLevelRequestIdRef.current !== requestId) return
 
-            const currentState = sessionStateRef.current
+            const currentState = agentStateRef.current
             if (
-              sameSessionMutationTarget(targetSession, currentState) &&
+              sameAgentMutationTarget(targetAgent, currentState) &&
               currentState.thinkingLevel === level
             ) {
-              setSessionState({
+              setAgentState({
                 ...currentState,
                 thinkingLevel: previousLevel,
                 availableThinkingLevels: previousAvailableThinkingLevels,
@@ -518,23 +515,23 @@ export function useAppShellSessionMutations({
         })()
       }, 100)
     },
-    [sessionStateRef, activeSessionId, setSessionState, viewerContextId]
+    [agentStateRef, activeAgentId, setAgentState, viewerContextId]
   )
 
   const cycleThinkingLevel = React.useCallback(
     async (direction: -1 | 1) => {
-      const sessionState = sessionStateRef.current
-      const levels = sessionState.availableThinkingLevels.length
-        ? sessionState.availableThinkingLevels
+      const agentState = agentStateRef.current
+      const levels = agentState.availableThinkingLevels.length
+        ? agentState.availableThinkingLevels
         : ["off"]
-      const currentIndex = levels.indexOf(sessionState.thinkingLevel || "off")
+      const currentIndex = levels.indexOf(agentState.thinkingLevel || "off")
       const safeIndex = currentIndex >= 0 ? currentIndex : 0
       const nextLevel =
         levels[(safeIndex + direction + levels.length) % levels.length] ||
         levels[0]
       await setThinkingLevel(nextLevel)
     },
-    [sessionStateRef, setThinkingLevel]
+    [agentStateRef, setThinkingLevel]
   )
 
   const setThinkingBlocksHidden = React.useCallback(
@@ -545,7 +542,7 @@ export function useAppShellSessionMutations({
           buildRequestUrl("/api/settings/hide-thinking", {
             machineId,
             contextId: viewerContextId,
-            sessionId: activeSessionId,
+            agentId: activeAgentId,
           }),
           {
             method: "POST",
@@ -561,12 +558,12 @@ export function useAppShellSessionMutations({
         )
       }
     },
-    [activeSessionId, viewerContextId]
+    [activeAgentId, viewerContextId]
   )
 
   const toggleHideThinking = React.useCallback(async () => {
-    await setThinkingBlocksHidden(!sessionStateRef.current.hideThinkingBlock)
-  }, [sessionStateRef, setThinkingBlocksHidden])
+    await setThinkingBlocksHidden(!agentStateRef.current.hideThinkingBlock)
+  }, [agentStateRef, setThinkingBlocksHidden])
 
   const runCompact = React.useCallback(async () => {
     if (!viewerContextId) return
@@ -578,7 +575,7 @@ export function useAppShellSessionMutations({
         buildRequestUrl("/api/slash-command", {
           machineId,
           contextId: viewerContextId,
-          sessionId: activeSessionId,
+          agentId: activeAgentId,
         }),
         {
           method: "POST",
@@ -592,14 +589,16 @@ export function useAppShellSessionMutations({
     } catch (error) {
       if (!isCompactAbortRequested()) {
         toast.error(
-          error instanceof Error ? error.message : "Failed to compact session"
+          error instanceof Error
+            ? error.message
+            : "Failed to compact the conversation"
         )
       }
     } finally {
       setCompactWorkingState(false)
     }
   }, [
-    activeSessionId,
+    activeAgentId,
     isCompactAbortRequested,
     setCompactWorkingState,
     viewerContextId,
@@ -608,11 +607,11 @@ export function useAppShellSessionMutations({
   const runClone = React.useCallback(async () => {
     if (!viewerContextId) return
     try {
-      const response = await fetchJson<CloneSessionResponseData>(
-        buildRequestUrl("/api/session/clone", {
+      const response = await fetchJson<CloneAgentResponseData>(
+        buildRequestUrl("/api/agent/clone", {
           machineId,
           contextId: viewerContextId,
-          sessionId: activeSessionId,
+          agentId: activeAgentId,
         }),
         {
           method: "POST",
@@ -620,25 +619,27 @@ export function useAppShellSessionMutations({
         }
       )
       if (response.cancelled) return
-      toast.success("Cloned session")
+      toast.success("Cloned the conversation")
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to clone session"
+        error instanceof Error
+          ? error.message
+          : "Failed to clone the conversation"
       )
     }
-  }, [activeSessionId, viewerContextId])
+  }, [activeAgentId, viewerContextId])
 
-  const renameSessionMutation = useMutation({
+  const renameAgentMutation = useMutation({
     mutationFn: async ({ path, name }: { path: string; name: string }) => {
       if (!viewerContextId) {
         throw new Error("Viewer context unavailable")
       }
 
-      return await fetchJson<RenameSessionResponseData>(
-        buildRequestUrl("/api/session/rename", {
+      return await fetchJson<RenameAgentResponseData>(
+        buildRequestUrl("/api/agent/rename", {
           machineId,
           contextId: viewerContextId,
-          sessionId: activeSessionId,
+          agentId: activeAgentId,
         }),
         {
           method: "POST",
@@ -649,13 +650,13 @@ export function useAppShellSessionMutations({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: ["pico", "directory-sessions-index", viewerContextId],
+        queryKey: ["pico", "directory-agents-index", viewerContextId],
         refetchType: "active",
       })
     },
   })
 
-  const renameSessionPath = React.useCallback(
+  const renameAgentPath = React.useCallback(
     async (targetPath: string | undefined, nextName: string) => {
       if (!viewerContextId || !targetPath) return false
 
@@ -666,22 +667,21 @@ export function useAppShellSessionMutations({
       }
 
       const previousDirectoryIndexDataByPath = getDirectoryIndexDataByPath()
-      const previousSessionsEvent = getSessionsEvent()
+      const previousAgentsEvent = getAgentsEvent()
       const targetPaths = new Set([targetPath])
-      const affectedDirectories = directoriesWithSessionPaths(
+      const affectedDirectories = directoriesWithAgentPaths(
         previousDirectoryIndexDataByPath,
         targetPaths
       )
-      const affectedEventDirectories = directoriesWithSessionPaths(
-        previousSessionsEvent?.directoryIndexes,
+      const affectedEventDirectories = directoriesWithAgentPaths(
+        previousAgentsEvent?.directoryIndexes,
         targetPaths
       )
-      const previousSessionName = sessionStateRef.current.sessionName
-      const activeSessionMatches =
-        sessionStateRef.current.sessionFile === targetPath
+      const previousAgentName = agentStateRef.current.agentName
+      const activeAgentMatches = agentStateRef.current.agentFile === targetPath
 
-      setSessionsEvent((current) =>
-        updateSessionsEventDirectoryIndexes(current, (indexes) =>
+      setAgentsEvent((current) =>
+        updateAgentsEventDirectoryIndexes(current, (indexes) =>
           applyDirectoryIndexRename(indexes, targetPath, optimisticName)
         )
       )
@@ -690,48 +690,48 @@ export function useAppShellSessionMutations({
       )
 
       if (
-        activeSessionMatches &&
-        sessionStateRef.current.sessionName !== optimisticName
+        activeAgentMatches &&
+        agentStateRef.current.agentName !== optimisticName
       ) {
-        setSessionState((current) =>
-          current.sessionFile === targetPath
-            ? { ...current, sessionName: optimisticName }
+        setAgentState((current) =>
+          current.agentFile === targetPath
+            ? { ...current, agentName: optimisticName }
             : current
         )
       }
 
       void (async () => {
         try {
-          const response = await renameSessionMutation.mutateAsync({
+          const response = await renameAgentMutation.mutateAsync({
             path: targetPath,
             name: optimisticName,
           })
           const confirmedName = response.name || optimisticName
 
           if (confirmedName !== optimisticName) {
-            setSessionsEvent((current) =>
-              updateSessionsEventDirectoryIndexes(current, (indexes) =>
+            setAgentsEvent((current) =>
+              updateAgentsEventDirectoryIndexes(current, (indexes) =>
                 applyDirectoryIndexRename(indexes, targetPath, confirmedName)
               )
             )
             setDirectoryIndexDataByPath((current) =>
               applyDirectoryIndexRename(current, targetPath, confirmedName)
             )
-            setSessionState((current) =>
-              current.sessionFile === targetPath &&
-              current.sessionName === optimisticName
-                ? { ...current, sessionName: confirmedName }
+            setAgentState((current) =>
+              current.agentFile === targetPath &&
+              current.agentName === optimisticName
+                ? { ...current, agentName: confirmedName }
                 : current
             )
           }
 
-          toast.success("Renamed session")
+          toast.success("Renamed agent")
         } catch (error) {
-          setSessionsEvent((current) =>
-            updateSessionsEventDirectoryIndexes(current, (indexes) =>
+          setAgentsEvent((current) =>
+            updateAgentsEventDirectoryIndexes(current, (indexes) =>
               restoreDirectoryIndexesForDirectories(
                 indexes,
-                previousSessionsEvent?.directoryIndexes,
+                previousAgentsEvent?.directoryIndexes,
                 affectedEventDirectories
               )
             )
@@ -743,14 +743,14 @@ export function useAppShellSessionMutations({
               affectedDirectories
             )
           )
-          setSessionState((current) =>
-            current.sessionFile === targetPath &&
-            current.sessionName === optimisticName
-              ? { ...current, sessionName: previousSessionName }
+          setAgentState((current) =>
+            current.agentFile === targetPath &&
+            current.agentName === optimisticName
+              ? { ...current, agentName: previousAgentName }
               : current
           )
           toast.error(
-            error instanceof Error ? error.message : "Failed to rename session"
+            error instanceof Error ? error.message : "Failed to rename agent"
           )
         }
       })()
@@ -759,27 +759,27 @@ export function useAppShellSessionMutations({
     },
     [
       getDirectoryIndexDataByPath,
-      getSessionsEvent,
-      renameSessionMutation,
-      sessionStateRef,
+      getAgentsEvent,
+      renameAgentMutation,
+      agentStateRef,
       setDirectoryIndexDataByPath,
-      setSessionState,
-      setSessionsEvent,
+      setAgentState,
+      setAgentsEvent,
       viewerContextId,
     ]
   )
 
-  const moveSessionMutation = useMutation({
+  const moveAgentMutation = useMutation({
     mutationFn: async ({ path, cwd }: { path: string; cwd: string }) => {
       if (!viewerContextId) {
         throw new Error("Viewer context unavailable")
       }
 
-      return await fetchJson<MoveSessionResponseData>(
-        buildRequestUrl("/api/session/move", {
+      return await fetchJson<MoveAgentResponseData>(
+        buildRequestUrl("/api/agent/move", {
           machineId,
           contextId: viewerContextId,
-          sessionId: activeSessionId,
+          agentId: activeAgentId,
         }),
         {
           method: "POST",
@@ -790,14 +790,14 @@ export function useAppShellSessionMutations({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: ["pico", "directory-sessions-index", viewerContextId],
+        queryKey: ["pico", "directory-agents-index", viewerContextId],
         refetchType: "active",
       })
     },
   })
 
-  const moveSessionPath = React.useCallback(
-    async (entry: SessionListEntry, directory: string) => {
+  const moveAgentPath = React.useCallback(
+    async (entry: AgentListEntry, directory: string) => {
       if (!viewerContextId || !entry.path) return false
 
       const nextDirectory = directory.trim()
@@ -809,10 +809,10 @@ export function useAppShellSessionMutations({
 
       const targetPath = entry.path
       const previousDirectoryIndexDataByPath = getDirectoryIndexDataByPath()
-      const previousSessionsEvent = getSessionsEvent()
+      const previousAgentsEvent = getAgentsEvent()
       const targetPaths = new Set([targetPath])
       const affectedDirectories = uniqueDirectories([
-        ...directoriesWithSessionPaths(
+        ...directoriesWithAgentPaths(
           previousDirectoryIndexDataByPath,
           targetPaths
         ),
@@ -821,20 +821,19 @@ export function useAppShellSessionMutations({
           : []),
       ])
       const affectedEventDirectories = uniqueDirectories([
-        ...directoriesWithSessionPaths(
-          previousSessionsEvent?.directoryIndexes,
+        ...directoriesWithAgentPaths(
+          previousAgentsEvent?.directoryIndexes,
           targetPaths
         ),
-        ...(previousSessionsEvent?.directoryIndexes?.[nextDirectory]
+        ...(previousAgentsEvent?.directoryIndexes?.[nextDirectory]
           ? [nextDirectory]
           : []),
       ])
-      const previousSessionCwd = sessionStateRef.current.cwd
-      const activeSessionMatches =
-        sessionStateRef.current.sessionFile === targetPath
+      const previousAgentCwd = agentStateRef.current.cwd
+      const activeAgentMatches = agentStateRef.current.agentFile === targetPath
 
-      setSessionsEvent((current) =>
-        updateSessionsEventDirectoryIndexes(current, (indexes) =>
+      setAgentsEvent((current) =>
+        updateAgentsEventDirectoryIndexes(current, (indexes) =>
           applyDirectoryIndexMove(indexes, {
             previousPath: targetPath,
             nextCwd: nextDirectory,
@@ -849,9 +848,9 @@ export function useAppShellSessionMutations({
           fallbackEntry: entry,
         })
       )
-      if (activeSessionMatches) {
-        setSessionState((current) =>
-          current.sessionFile === targetPath
+      if (activeAgentMatches) {
+        setAgentState((current) =>
+          current.agentFile === targetPath
             ? { ...current, cwd: nextDirectory }
             : current
         )
@@ -859,27 +858,27 @@ export function useAppShellSessionMutations({
 
       void (async () => {
         try {
-          const response = await moveSessionMutation.mutateAsync({
+          const response = await moveAgentMutation.mutateAsync({
             path: targetPath,
             cwd: nextDirectory,
           })
-          const previousKey = sessionListEntryKey({
+          const previousKey = agentListEntryKey({
             path: response.previousPath || targetPath,
           })
-          const nextKey = sessionListEntryKey({
+          const nextKey = agentListEntryKey({
             path: response.path,
-            id: response.sessionId || entry.id,
+            id: response.agentId || entry.id,
           })
 
-          setSessionsEvent((current) =>
-            updateSessionsEventDirectoryIndexes(current, (indexes) =>
+          setAgentsEvent((current) =>
+            updateAgentsEventDirectoryIndexes(current, (indexes) =>
               applyDirectoryIndexMove(indexes, {
                 previousPath: response.previousPath || targetPath,
                 nextPath: response.path,
                 nextCwd: response.cwd,
                 fallbackEntry: {
                   ...entry,
-                  id: response.sessionId || entry.id,
+                  id: response.agentId || entry.id,
                 },
               })
             )
@@ -891,41 +890,41 @@ export function useAppShellSessionMutations({
               nextCwd: response.cwd,
               fallbackEntry: {
                 ...entry,
-                id: response.sessionId || entry.id,
+                id: response.agentId || entry.id,
               },
             })
           )
-          setSelectedSidebarSessionKeys((current) =>
-            replaceSessionKey(current, previousKey, nextKey)
+          setSelectedSidebarAgentKeys((current) =>
+            replaceAgentKey(current, previousKey, nextKey)
           )
-          setSidebarSessionSelectionAnchor((current) =>
+          setSidebarAgentSelectionAnchor((current) =>
             current === previousKey ? nextKey : current
           )
-          setPinnedSidebarSessionKeys((current) => {
-            const next = replaceSessionKey(current, previousKey, nextKey)
+          setPinnedSidebarAgentKeys((current) => {
+            const next = replaceAgentKey(current, previousKey, nextKey)
             if (next !== current) {
               machineLocalStorageSetItem(
                 machineId,
-                PINNED_SESSIONS_STORAGE_KEY,
+                PINNED_AGENTS_STORAGE_KEY,
                 JSON.stringify(next)
               )
             }
             return next
           })
-          setSessionState((current) =>
-            current.sessionFile === response.previousPath ||
-            current.sessionFile === targetPath
-              ? { ...current, cwd: response.cwd, sessionFile: response.path }
+          setAgentState((current) =>
+            current.agentFile === response.previousPath ||
+            current.agentFile === targetPath
+              ? { ...current, cwd: response.cwd, agentFile: response.path }
               : current
           )
 
-          toast.success("Moved session")
+          toast.success("Moved agent")
         } catch (error) {
-          setSessionsEvent((current) =>
-            updateSessionsEventDirectoryIndexes(current, (indexes) =>
+          setAgentsEvent((current) =>
+            updateAgentsEventDirectoryIndexes(current, (indexes) =>
               restoreDirectoryIndexesForDirectories(
                 indexes,
-                previousSessionsEvent?.directoryIndexes,
+                previousAgentsEvent?.directoryIndexes,
                 affectedEventDirectories
               )
             )
@@ -937,13 +936,13 @@ export function useAppShellSessionMutations({
               affectedDirectories
             )
           )
-          setSessionState((current) =>
-            current.sessionFile === targetPath && current.cwd === nextDirectory
-              ? { ...current, cwd: previousSessionCwd }
+          setAgentState((current) =>
+            current.agentFile === targetPath && current.cwd === nextDirectory
+              ? { ...current, cwd: previousAgentCwd }
               : current
           )
           toast.error(
-            error instanceof Error ? error.message : "Failed to move session"
+            error instanceof Error ? error.message : "Failed to move agent"
           )
         }
       })()
@@ -952,20 +951,20 @@ export function useAppShellSessionMutations({
     },
     [
       getDirectoryIndexDataByPath,
-      getSessionsEvent,
-      moveSessionMutation,
-      sessionStateRef,
+      getAgentsEvent,
+      moveAgentMutation,
+      agentStateRef,
       setDirectoryIndexDataByPath,
-      setPinnedSidebarSessionKeys,
-      setSelectedSidebarSessionKeys,
-      setSessionState,
-      setSessionsEvent,
-      setSidebarSessionSelectionAnchor,
+      setPinnedSidebarAgentKeys,
+      setSelectedSidebarAgentKeys,
+      setAgentState,
+      setAgentsEvent,
+      setSidebarAgentSelectionAnchor,
       viewerContextId,
     ]
   )
 
-  const deleteSessionMutation = useMutation({
+  const deleteAgentMutation = useMutation({
     mutationFn: async ({
       paths,
       removeWorktree,
@@ -977,11 +976,11 @@ export function useAppShellSessionMutations({
         throw new Error("Viewer context unavailable")
       }
 
-      await fetchJson<DeleteSessionsResponse>(
-        buildRequestUrl("/api/sessions/delete", {
+      await fetchJson<DeleteAgentsResponse>(
+        buildRequestUrl("/api/agents/delete", {
           machineId,
           contextId: viewerContextId,
-          sessionId: activeSessionId,
+          agentId: activeAgentId,
         }),
         {
           method: "POST",
@@ -992,15 +991,15 @@ export function useAppShellSessionMutations({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: ["pico", "directory-sessions-index", viewerContextId],
+        queryKey: ["pico", "directory-agents-index", viewerContextId],
         refetchType: "active",
       })
     },
   })
 
-  const deleteSessions = React.useCallback(
+  const deleteAgents = React.useCallback(
     (
-      targets: Array<SessionListEntry>,
+      targets: Array<AgentListEntry>,
       options: { removeWorktree?: boolean } = {}
     ) => {
       if (!viewerContextId || targets.length === 0) return false
@@ -1008,11 +1007,11 @@ export function useAppShellSessionMutations({
       const orderedTargets = [
         ...targets.filter(
           (target) =>
-            target.path && target.path !== sessionStateRef.current.sessionFile
+            target.path && target.path !== agentStateRef.current.agentFile
         ),
         ...targets.filter(
           (target) =>
-            target.path && target.path === sessionStateRef.current.sessionFile
+            target.path && target.path === agentStateRef.current.agentFile
         ),
       ]
       const orderedPaths: Array<string> = []
@@ -1027,18 +1026,18 @@ export function useAppShellSessionMutations({
 
       const deletedKeys = new Set(
         orderedTargets.flatMap((target) => {
-          const key = sessionListEntryKey(target)
+          const key = agentListEntryKey(target)
           return key ? [key] : []
         })
       )
       const previousDirectoryIndexDataByPath = getDirectoryIndexDataByPath()
-      const previousSessionsEvent = getSessionsEvent()
-      const affectedDirectories = directoriesWithSessionPaths(
+      const previousAgentsEvent = getAgentsEvent()
+      const affectedDirectories = directoriesWithAgentPaths(
         previousDirectoryIndexDataByPath,
         deletedPathSet
       )
-      const affectedEventDirectories = directoriesWithSessionPaths(
-        previousSessionsEvent?.directoryIndexes,
+      const affectedEventDirectories = directoriesWithAgentPaths(
+        previousAgentsEvent?.directoryIndexes,
         deletedPathSet
       )
       const previousSelection = getSidebarSelection()
@@ -1047,43 +1046,43 @@ export function useAppShellSessionMutations({
         deletedKeys
       )
 
-      setSessionsEvent((current) =>
-        updateSessionsEventDirectoryIndexes(current, (indexes) =>
+      setAgentsEvent((current) =>
+        updateAgentsEventDirectoryIndexes(current, (indexes) =>
           applyDirectoryIndexDelete(indexes, deletedPathSet)
         )
       )
       setDirectoryIndexDataByPath((current) =>
         applyDirectoryIndexDelete(current, deletedPathSet)
       )
-      setSelectedSidebarSessionKeys((current) =>
+      setSelectedSidebarAgentKeys((current) =>
         current.filter((key) => !deletedKeys.has(key))
       )
-      setSidebarSessionSelectionAnchor((current) =>
+      setSidebarAgentSelectionAnchor((current) =>
         current && deletedKeys.has(current) ? "" : current
       )
-      const activeDeletedPath = sessionStateRef.current.sessionFile
-      const rollbackActiveDeletedSession =
+      const activeDeletedPath = agentStateRef.current.agentFile
+      const rollbackActiveDeletedAgent =
         activeDeletedPath && deletedPathSet.has(activeDeletedPath)
-          ? optimisticallyClearActiveDeletedSession?.(activeDeletedPath)
+          ? optimisticallyClearActiveDeletedAgent?.(activeDeletedPath)
           : undefined
 
       void (async () => {
         try {
-          await deleteSessionMutation.mutateAsync({
+          await deleteAgentMutation.mutateAsync({
             paths: orderedPaths,
             removeWorktree: Boolean(options.removeWorktree),
           })
           toast.success(
             orderedPaths.length === 1
-              ? "Archived session"
-              : `Archived ${orderedPaths.length} sessions`
+              ? "Archived agent"
+              : `Archived ${orderedPaths.length} agents`
           )
         } catch (error) {
-          setSessionsEvent((current) =>
-            updateSessionsEventDirectoryIndexes(current, (indexes) =>
+          setAgentsEvent((current) =>
+            updateAgentsEventDirectoryIndexes(current, (indexes) =>
               restoreDirectoryIndexesForDirectories(
                 indexes,
-                previousSessionsEvent?.directoryIndexes,
+                previousAgentsEvent?.directoryIndexes,
                 affectedEventDirectories
               )
             )
@@ -1096,27 +1095,27 @@ export function useAppShellSessionMutations({
             )
           )
 
-          rollbackActiveDeletedSession?.()
+          rollbackActiveDeletedAgent?.()
 
           const currentSelection = getSidebarSelection()
           if (
             sameStringArray(
-              currentSelection.selectedSidebarSessionKeys,
-              optimisticSelection.selectedSidebarSessionKeys
+              currentSelection.selectedSidebarAgentKeys,
+              optimisticSelection.selectedSidebarAgentKeys
             ) &&
-            currentSelection.sidebarSessionSelectionAnchor ===
-              optimisticSelection.sidebarSessionSelectionAnchor
+            currentSelection.sidebarAgentSelectionAnchor ===
+              optimisticSelection.sidebarAgentSelectionAnchor
           ) {
-            setSelectedSidebarSessionKeys(
-              previousSelection.selectedSidebarSessionKeys
+            setSelectedSidebarAgentKeys(
+              previousSelection.selectedSidebarAgentKeys
             )
-            setSidebarSessionSelectionAnchor(
-              previousSelection.sidebarSessionSelectionAnchor
+            setSidebarAgentSelectionAnchor(
+              previousSelection.sidebarAgentSelectionAnchor
             )
           }
 
           toast.error(
-            error instanceof Error ? error.message : "Failed to archive session"
+            error instanceof Error ? error.message : "Failed to archive agent"
           )
         }
       })()
@@ -1124,25 +1123,25 @@ export function useAppShellSessionMutations({
       return true
     },
     [
-      deleteSessionMutation,
+      deleteAgentMutation,
       getDirectoryIndexDataByPath,
-      getSessionsEvent,
+      getAgentsEvent,
       getSidebarSelection,
-      optimisticallyClearActiveDeletedSession,
-      sessionStateRef,
+      optimisticallyClearActiveDeletedAgent,
+      agentStateRef,
       setDirectoryIndexDataByPath,
-      setSelectedSidebarSessionKeys,
-      setSessionsEvent,
-      setSidebarSessionSelectionAnchor,
+      setSelectedSidebarAgentKeys,
+      setAgentsEvent,
+      setSidebarAgentSelectionAnchor,
       viewerContextId,
     ]
   )
 
   return {
     cycleThinkingLevel,
-    deleteSessions,
-    moveSessionPath,
-    renameSessionPath,
+    deleteAgents,
+    moveAgentPath,
+    renameAgentPath,
     runClone,
     runCompact,
     setModel,

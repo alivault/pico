@@ -48,7 +48,7 @@ type AppShellAuthDialogControllerProps = {
   ref?: React.Ref<AppShellAuthDialogHandle>
   openStateRef?: React.RefObject<boolean>
   viewerContextId: string
-  sessionId?: string
+  agentId?: string
 }
 
 function providerKey(provider: AuthProviderOption) {
@@ -223,7 +223,7 @@ function useAppShellAuthDialogControllerView({
   ref,
   openStateRef,
   viewerContextId,
-  sessionId,
+  agentId,
 }: AppShellAuthDialogControllerProps) {
   const machineId = useMachineId()
   const isMobile = useIsMobile()
@@ -267,14 +267,14 @@ function useAppShellAuthDialogControllerView({
   }
 
   const providersQuery = useQuery({
-    queryKey: ["pico", "auth", "providers", viewerContextId, sessionId],
+    queryKey: ["pico", "auth", "providers", viewerContextId, agentId],
     enabled: authDialogOpen && Boolean(viewerContextId),
     queryFn: async () => {
       return await fetchJson<AuthProvidersResponse>(
         buildRequestUrl("/api/auth/providers", {
           machineId,
           contextId: viewerContextId,
-          sessionId,
+          agentId,
         })
       )
     },
@@ -292,7 +292,7 @@ function useAppShellAuthDialogControllerView({
         buildRequestUrl("/api/auth/api-key", {
           machineId,
           contextId: viewerContextId,
-          sessionId,
+          agentId,
         }),
         {
           method: "POST",
@@ -304,7 +304,7 @@ function useAppShellAuthDialogControllerView({
     onSuccess: async (_response, variables) => {
       toast.success(`Saved API key for ${variables.provider}`)
       await queryClient.invalidateQueries({
-        queryKey: ["pico", "auth", "providers", viewerContextId, sessionId],
+        queryKey: ["pico", "auth", "providers", viewerContextId, agentId],
       })
       closeAllDialogs()
     },
@@ -321,7 +321,7 @@ function useAppShellAuthDialogControllerView({
         buildRequestUrl("/api/auth/oauth", {
           machineId,
           contextId: viewerContextId,
-          sessionId,
+          agentId,
         }),
         {
           method: "POST",
@@ -336,7 +336,7 @@ function useAppShellAuthDialogControllerView({
         id: `auth:${variables.provider}`,
       })
       await queryClient.invalidateQueries({
-        queryKey: ["pico", "auth", "providers", viewerContextId, sessionId],
+        queryKey: ["pico", "auth", "providers", viewerContextId, agentId],
       })
       closeAllDialogs()
     },
@@ -357,7 +357,7 @@ function useAppShellAuthDialogControllerView({
         buildRequestUrl("/api/auth/logout", {
           machineId,
           contextId: viewerContextId,
-          sessionId,
+          agentId,
         }),
         {
           method: "POST",
@@ -369,7 +369,7 @@ function useAppShellAuthDialogControllerView({
     onSuccess: async (_response, variables) => {
       toast.success(`Logged out of ${variables.provider}`)
       await queryClient.invalidateQueries({
-        queryKey: ["pico", "auth", "providers", viewerContextId, sessionId],
+        queryKey: ["pico", "auth", "providers", viewerContextId, agentId],
       })
       closeAllDialogs()
     },

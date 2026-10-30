@@ -35,7 +35,7 @@ import {
   SquarePenIcon,
 } from "lucide-react"
 
-import type { SessionListEntry } from "@/lib/pico/api"
+import type { AgentListEntry } from "@/lib/pico/api"
 import { Button } from "@/components/ui/button"
 import {
   Collapsible,
@@ -74,40 +74,37 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { Kbd } from "@/components/ui/kbd"
-import { useShowSessionPreviews } from "@/features/pico/sidebar-display-settings"
+import { useShowAgentPreviews } from "@/features/pico/sidebar-display-settings"
 import { Spinner } from "@/components/ui/spinner"
 import {
   COLLAPSED_DIRECTORIES_STORAGE_KEY,
-  DIRECTORY_SESSION_LOAD_MORE_COUNT,
-  INITIAL_DIRECTORY_SESSION_RENDER_COUNT,
-  PINNED_SESSIONS_STORAGE_KEY,
+  DIRECTORY_AGENT_LOAD_MORE_COUNT,
+  INITIAL_DIRECTORY_AGENT_RENDER_COUNT,
+  PINNED_AGENTS_STORAGE_KEY,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
   readStoredCollapsedDirectories,
-  readStoredPinnedSessionKeys,
+  readStoredPinnedAgentKeys,
   machineLocalStorageSetItem,
-  sessionListEntryKey,
+  agentListEntryKey,
 } from "@/lib/pico"
 import { usePicoEvent } from "@/features/pico/agent/events"
 import {
   isAltChange,
-  isMachineSessionUnread,
+  isMachineAgentUnread,
   useHasMachineGroups,
 } from "@/features/pico/machines"
 import {
   viewerContextIdForSummaries,
   type MachineInfo,
-  type MachineSessionSummary,
+  type MachineAgentSummary,
 } from "@/features/pico/machine-store"
 import {
   OtherMachineArchiveDialog,
   OtherMachineRenameDialog,
-} from "@/features/pico/other-machine-session-dialogs"
+} from "@/features/pico/other-machine-agent-dialogs"
 import { startSidebarSync } from "@/features/pico/sidebar-sync"
-import { useSidebarSessionNumber } from "@/features/pico/sidebar-session-numbers"
-import {
-  openMachine,
-  openSession as openMachineSession,
-} from "@/lib/pico/machine"
+import { useSidebarAgentNumber } from "@/features/pico/sidebar-agent-numbers"
+import { openMachine, openAgent as openMachineAgent } from "@/lib/pico/machine"
 import {
   formatDisplayPath,
   formatFolderName,
@@ -125,15 +122,15 @@ import {
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
 import { useSidebarSlot } from "@/features/pico/sidebar-slots"
-import { sortSidebarSessions } from "@/features/pico/session-order"
+import { sortSidebarAgents } from "@/features/pico/agent-order"
 import {
-  filterDirectorySessionsByStatus,
-  sessionMatchesStatusFilter,
+  filterDirectoryAgentsByStatus,
+  agentMatchesStatusFilter,
   toggleStatusFilter,
-  type SessionStatusFilter,
-  type SessionStatusFilters,
-  useSessionStatusFilter,
-} from "@/features/pico/session-status-filter"
+  type AgentStatusFilter,
+  type AgentStatusFilters,
+  useAgentStatusFilter,
+} from "@/features/pico/agent-status-filter"
 
 const SIDEBAR_LOADING_SPINNER_DELAY_MS = 250
 const SIDEBAR_TIME_MIN_DELAY_MS = 1000
@@ -176,12 +173,12 @@ function DirectoryPathLabel({ path }: { path: string }) {
   )
 }
 
-type SessionClickModifiers = {
+type AgentClickModifiers = {
   multiSelectKey: boolean
   shiftKey: boolean
 }
 
-const EMPTY_DIRECTORY_SESSION_KEYS: Array<string> = []
+const EMPTY_DIRECTORY_AGENT_KEYS: Array<string> = []
 
 // One shared set of window listeners tracks whether Option (Alt) is held.
 let altKeyHeldSnapshot = false
@@ -226,8 +223,9 @@ function useAltKeyHeld() {
     () => false
   )
 }
-const PINNED_SESSION_GROUP_COLLAPSE_KEY = "__pico_pinned_sessions__"
-const DIRECTORIES_SESSION_GROUP_COLLAPSE_KEY = "__pico_directories__"
+// Stored name: do not change.
+const PINNED_AGENT_GROUP_COLLAPSE_KEY = "__pico_pinned_sessions__"
+const DIRECTORIES_AGENT_GROUP_COLLAPSE_KEY = "__pico_directories__"
 
 function isMacPlatform() {
   if (typeof window === "undefined") return false
@@ -243,7 +241,7 @@ function isSidebarMultiSelectModifier(event: {
   return isMacPlatform() ? event.metaKey : event.ctrlKey
 }
 
-function formatSidebarSessionTime(value?: string, now = Date.now()) {
+function formatSidebarAgentTime(value?: string, now = Date.now()) {
   if (!value) return ""
 
   const timestamp = new Date(value).getTime()
@@ -280,7 +278,7 @@ function isValidSidebarTimestamp(value?: string) {
   return !Number.isNaN(new Date(value).getTime())
 }
 
-function getSidebarSessionTimeInterval(ageMs: number) {
+function getSidebarAgentTimeInterval(ageMs: number) {
   const seconds = Math.max(1, Math.floor(ageMs / SIDEBAR_TIME_SECOND_MS))
 
   if (seconds < 60) return SIDEBAR_TIME_SECOND_MS
@@ -303,28 +301,23 @@ function getSidebarSessionTimeInterval(ageMs: number) {
   return SIDEBAR_TIME_YEAR_MS
 }
 
-function getSidebarSessionTimeRefreshDelay(
-  timestamp: number,
-  now = Date.now()
-) {
+function getSidebarAgentTimeRefreshDelay(timestamp: number, now = Date.now()) {
   const diffMs = now - timestamp
   const ageMs = Math.abs(diffMs)
-  const interval = getSidebarSessionTimeInterval(ageMs)
+  const interval = getSidebarAgentTimeInterval(ageMs)
   const remainder = ageMs % interval
   const delay = diffMs >= 0 ? interval - remainder : remainder || interval
 
   return Math.max(SIDEBAR_TIME_MIN_DELAY_MS, delay)
 }
 
-function SidebarSessionTime({
+function SidebarAgentTime({
   value,
   className,
   ...props
 }: { value?: string } & React.ComponentProps<"span">) {
   const timestamp = value ? new Date(value).getTime() : Number.NaN
-  const [label, setLabel] = React.useState(() =>
-    formatSidebarSessionTime(value)
-  )
+  const [label, setLabel] = React.useState(() => formatSidebarAgentTime(value))
 
   React.useEffect(() => {
     if (Number.isNaN(timestamp)) {
@@ -339,12 +332,12 @@ function SidebarSessionTime({
       if (cancelled) return
 
       const now = Date.now()
-      const nextLabel = formatSidebarSessionTime(value, now)
+      const nextLabel = formatSidebarAgentTime(value, now)
       setLabel(nextLabel)
 
       timeoutId = window.setTimeout(
         updateAndSchedule,
-        getSidebarSessionTimeRefreshDelay(timestamp, now)
+        getSidebarAgentTimeRefreshDelay(timestamp, now)
       )
     }
 
@@ -485,35 +478,32 @@ function useDirectoryCollapsed(
 }
 
 type AppSidebarProps = {
-  sessionSearch: string
-  onOpenSessionsDialog: () => void
+  agentSearch: string
+  onOpenAgentsDialog: () => void
   visibleDirectories: Array<string>
-  directorySessionsStore: DirectorySessionsStore
-  matchingSessionCount: number
-  selectedSessionKeys: Array<string>
-  activeSessionId?: string
-  activeSessionKey?: string
-  pinnedSessionKeys: Array<string>
+  directoryAgentsStore: DirectoryAgentsStore
+  matchingAgentCount: number
+  selectedAgentKeys: Array<string>
+  activeAgentId?: string
+  activeAgentKey?: string
+  pinnedAgentKeys: Array<string>
   emptyStateText: string
-  /** The sessions show only one state (a count in the machine heading). */
+  /** The agents show only one state (a count in the machine heading). */
   statusFilterActive?: boolean
   onOpenAddDirectoryDialog: () => void
-  onSessionClick?: (
-    entry: SessionListEntry,
-    modifiers: SessionClickModifiers
-  ) => void
-  onRenameSession?: (entry: SessionListEntry) => void
-  onDeleteSession?: (entry: SessionListEntry) => void
-  onSetSessionUnread?: (entry: SessionListEntry, unread: boolean) => void
-  onMoveSession?: (entry: SessionListEntry, directory: string) => void
-  onMoveSessionAnyDirectory?: (entry: SessionListEntry) => void
-  onTogglePinnedSession?: (entry: SessionListEntry) => void
-  onCreateSessionInDirectory?: (directory: string) => void
-  onDeleteOldSessionsInDirectory?: (directory: string) => void
-  onMarkSessionsRead?: (entries: Array<SessionListEntry>) => void
+  onAgentClick?: (entry: AgentListEntry, modifiers: AgentClickModifiers) => void
+  onRenameAgent?: (entry: AgentListEntry) => void
+  onDeleteAgent?: (entry: AgentListEntry) => void
+  onSetAgentUnread?: (entry: AgentListEntry, unread: boolean) => void
+  onMoveAgent?: (entry: AgentListEntry, directory: string) => void
+  onMoveAgentAnyDirectory?: (entry: AgentListEntry) => void
+  onTogglePinnedAgent?: (entry: AgentListEntry) => void
+  onCreateAgentInDirectory?: (directory: string) => void
+  onDeleteOldAgentsInDirectory?: (directory: string) => void
+  onMarkAgentsRead?: (entries: Array<AgentListEntry>) => void
   onRemoveDirectory?: (directory: string) => void
   onReorderDirectories?: (nextDirectories: Array<string>) => void
-  onOpenArchivedSessions?: () => void
+  onOpenArchivedAgents?: () => void
 }
 
 type SortableDirectoryGroupProps = {
@@ -564,17 +554,17 @@ function SortableDirectoryGroup({
   )
 }
 
-type SelectedSessionKeyStore = PicoStore<ReadonlySet<string>> & {
+type SelectedAgentKeyStore = PicoStore<ReadonlySet<string>> & {
   setKeys: (keys: Array<string>) => void
 }
 
-type ActiveSidebarSessionState = {
-  sessionId: string
-  sessionKey: string
+type ActiveSidebarAgentState = {
+  agentId: string
+  agentKey: string
 }
 
-type ActiveSidebarSessionStore = PicoStore<ActiveSidebarSessionState> & {
-  setActive: (active: { sessionId?: string; sessionKey?: string }) => void
+type ActiveSidebarAgentStore = PicoStore<ActiveSidebarAgentState> & {
+  setActive: (active: { agentId?: string; agentKey?: string }) => void
 }
 
 function sameStringSet(left: ReadonlySet<string>, right: ReadonlySet<string>) {
@@ -587,65 +577,59 @@ function sameStringSet(left: ReadonlySet<string>, right: ReadonlySet<string>) {
   return true
 }
 
-function createSelectedSessionKeyStore(): SelectedSessionKeyStore {
+function createSelectedAgentKeyStore(): SelectedAgentKeyStore {
   const store = createPicoStore<ReadonlySet<string>>(
     new Set(),
     sameStringSet
-  ) as SelectedSessionKeyStore
+  ) as SelectedAgentKeyStore
 
   Object.assign(store, {
     setKeys(keys) {
       setStoreState(store, new Set(keys.filter(Boolean)))
     },
-  } satisfies Omit<
-    SelectedSessionKeyStore,
-    keyof PicoStore<ReadonlySet<string>>
-  >)
+  } satisfies Omit<SelectedAgentKeyStore, keyof PicoStore<ReadonlySet<string>>>)
 
   return store
 }
 
-function normalizeActiveSidebarSessionKey(sessionKey: string | undefined) {
-  const key = sessionKey?.trim() || ""
+function normalizeActiveSidebarAgentKey(agentKey: string | undefined) {
+  const key = agentKey?.trim() || ""
   if (!key) return ""
   if (key.startsWith("path:") || key.startsWith("id:")) return key
   if (key.includes("/") || key.includes("\\")) {
-    return sessionListEntryKey({ path: key })
+    return agentListEntryKey({ path: key })
   }
   return key
 }
 
-function createActiveSidebarSessionStore(): ActiveSidebarSessionStore {
-  const store = createPicoStore<ActiveSidebarSessionState>({
-    sessionId: "",
-    sessionKey: "",
-  }) as ActiveSidebarSessionStore
+function createActiveSidebarAgentStore(): ActiveSidebarAgentStore {
+  const store = createPicoStore<ActiveSidebarAgentState>({
+    agentId: "",
+    agentKey: "",
+  }) as ActiveSidebarAgentStore
 
   Object.assign(store, {
     setActive(active) {
-      const sessionId = active.sessionId || ""
-      const sessionKey = normalizeActiveSidebarSessionKey(active.sessionKey)
+      const agentId = active.agentId || ""
+      const agentKey = normalizeActiveSidebarAgentKey(active.agentKey)
       setStoreState(store, (current) => {
-        if (
-          current.sessionId === sessionId &&
-          current.sessionKey === sessionKey
-        ) {
+        if (current.agentId === agentId && current.agentKey === agentKey) {
           return current
         }
 
-        return { sessionId, sessionKey }
+        return { agentId, agentKey }
       })
     },
   } satisfies Omit<
-    ActiveSidebarSessionStore,
-    keyof PicoStore<ActiveSidebarSessionState>
+    ActiveSidebarAgentStore,
+    keyof PicoStore<ActiveSidebarAgentState>
   >)
 
   return store
 }
 
-function useSidebarSessionSelected(
-  store: SelectedSessionKeyStore,
+function useSidebarAgentSelected(
+  store: SelectedAgentKeyStore,
   entryKey: string
 ) {
   return useSelector(store, (selectedKeys) =>
@@ -653,86 +637,76 @@ function useSidebarSessionSelected(
   )
 }
 
-function useSidebarSessionActive(
-  store: ActiveSidebarSessionStore,
+function useSidebarAgentActive(
+  store: ActiveSidebarAgentStore,
   entryKey: string,
-  sessionId: string | undefined
+  agentId: string | undefined
 ) {
   return useSelector(store, (active) => {
-    if (active.sessionKey && entryKey === active.sessionKey) return true
-    return Boolean(active.sessionId && sessionId === active.sessionId)
+    if (active.agentKey && entryKey === active.agentKey) return true
+    return Boolean(active.agentId && agentId === active.agentId)
   })
 }
 
-type SidebarSessionItemProps = {
+type SidebarAgentItemProps = {
   entryKey: string
   /** The row is in a directory or the pinned group, under its line. */
   inDirectory?: boolean
-  directorySessionsStore: DirectorySessionsStore
-  activeSessionStore: ActiveSidebarSessionStore
-  selectedSessionKeyStore: SelectedSessionKeyStore
+  directoryAgentsStore: DirectoryAgentsStore
+  activeAgentStore: ActiveSidebarAgentStore
+  selectedAgentKeyStore: SelectedAgentKeyStore
   isPinned: boolean
   isMobile: boolean
   overlay: boolean
-  /** False for a session of another machine: it cannot move here. */
-  sessionDraggable?: boolean
+  /** False for an agent of another machine: it cannot move here. */
+  agentDraggable?: boolean
   moveTargetDirectories: Array<string>
   setOpenMobile: (open: boolean) => void
-  onSessionClick?: (
-    entry: SessionListEntry,
-    modifiers: SessionClickModifiers
-  ) => void
-  onRenameSession?: (entry: SessionListEntry) => void
-  onDeleteSession?: (entry: SessionListEntry) => void
-  onSetSessionUnread?: (entry: SessionListEntry, unread: boolean) => void
-  onMoveSession?: (entry: SessionListEntry, directory: string) => void
-  onMoveSessionAnyDirectory?: (entry: SessionListEntry) => void
-  onTogglePinnedSession?: (entry: SessionListEntry) => void
+  onAgentClick?: (entry: AgentListEntry, modifiers: AgentClickModifiers) => void
+  onRenameAgent?: (entry: AgentListEntry) => void
+  onDeleteAgent?: (entry: AgentListEntry) => void
+  onSetAgentUnread?: (entry: AgentListEntry, unread: boolean) => void
+  onMoveAgent?: (entry: AgentListEntry, directory: string) => void
+  onMoveAgentAnyDirectory?: (entry: AgentListEntry) => void
+  onTogglePinnedAgent?: (entry: AgentListEntry) => void
 }
 
-function SidebarSessionItem({
+function SidebarAgentItem({
   entryKey,
   inDirectory = false,
-  directorySessionsStore,
-  activeSessionStore,
-  selectedSessionKeyStore,
+  directoryAgentsStore,
+  activeAgentStore,
+  selectedAgentKeyStore,
   isPinned,
   isMobile,
   overlay,
-  sessionDraggable = true,
+  agentDraggable = true,
   moveTargetDirectories,
   setOpenMobile,
-  onSessionClick,
-  onRenameSession,
-  onDeleteSession,
-  onSetSessionUnread,
-  onMoveSession,
-  onMoveSessionAnyDirectory,
-  onTogglePinnedSession,
-}: SidebarSessionItemProps) {
-  const entry = useDirectorySessionEntry(directorySessionsStore, entryKey)
+  onAgentClick,
+  onRenameAgent,
+  onDeleteAgent,
+  onSetAgentUnread,
+  onMoveAgent,
+  onMoveAgentAnyDirectory,
+  onTogglePinnedAgent,
+}: SidebarAgentItemProps) {
+  const entry = useDirectoryAgentEntry(directoryAgentsStore, entryKey)
   const childDepth = useSelector(
-    directorySessionsStore,
+    directoryAgentsStore,
     (state) => state.depthByKey.get(entryKey) ?? 0
   )
-  // A session in a directory is one level in, under the directory's line.
+  // An agent in a directory is one level in, under the directory's line.
   const nestingDepth = (inDirectory ? 1 : 0) + childDepth
-  const isSelected = useSidebarSessionSelected(
-    selectedSessionKeyStore,
-    entryKey
-  )
-  const isActive = useSidebarSessionActive(
-    activeSessionStore,
-    entryKey,
-    entry?.id
-  )
-  const showSessionPreviews = useShowSessionPreviews()
-  const dragDisabled = !sessionDraggable || isMobile || overlay || !entry?.path
+  const isSelected = useSidebarAgentSelected(selectedAgentKeyStore, entryKey)
+  const isActive = useSidebarAgentActive(activeAgentStore, entryKey, entry?.id)
+  const showAgentPreviews = useShowAgentPreviews()
+  const dragDisabled = !agentDraggable || isMobile || overlay || !entry?.path
   const draggable = useDraggable({
-    id: `session:${entryKey}`,
+    id: `agent:${entryKey}`,
     disabled: dragDisabled,
     data: {
-      type: "session",
+      type: "agent",
       entry,
       entryKey,
       sourceDirectory: entry?.cwd || "",
@@ -749,17 +723,15 @@ function SidebarSessionItem({
   )
   // While the app modifier is held, the row shows its Mod+1…9 number in
   // place of its timestamp.
-  const sessionNumber = useSidebarSessionNumber(rowRef)
-  const sessionNumberLabel =
-    sessionNumber > 0
-      ? formatShortcutLabel(appShortcut(String(sessionNumber)))
-      : ""
+  const agentNumber = useSidebarAgentNumber(rowRef)
+  const agentNumberLabel =
+    agentNumber > 0 ? formatShortcutLabel(appShortcut(String(agentNumber))) : ""
 
   if (!entry) return null
   const timestamp =
     entry.lastMessageAt || entry.modified || entry.lastUserMessageAt
   const hasTimestamp = isValidSidebarTimestamp(timestamp)
-  const lastMessagePreview = showSessionPreviews
+  const lastMessagePreview = showAgentPreviews
     ? entry.lastMessagePreview?.trim() || ""
     : ""
   const pinnedDirectoryLabel = isPinned
@@ -768,50 +740,49 @@ function SidebarSessionItem({
   const exactTimestamp =
     hasTimestamp && timestamp ? new Date(timestamp).toLocaleString() : undefined
   const showUnread = Boolean(entry.unread) && !entry.streaming
-  const isOptimisticSession = Boolean(
+  const isOptimisticAgent = Boolean(
     entry.optimistic || (entry.id?.startsWith("optimistic:") && !entry.path)
   )
   const availableMoveTargetDirectories = moveTargetDirectories.filter(
     (directory) => directory && directory !== entry.cwd
   )
-  const canMoveAnyDirectory = Boolean(entry.path && onMoveSessionAnyDirectory)
+  const canMoveAnyDirectory = Boolean(entry.path && onMoveAgentAnyDirectory)
   const hasMoveTargets =
-    Boolean(entry.path && onMoveSession) &&
+    Boolean(entry.path && onMoveAgent) &&
     availableMoveTargetDirectories.length > 0
   const hasMoveActions = hasMoveTargets || canMoveAnyDirectory
-  const hasSessionActions =
+  const hasAgentActions =
     Boolean(
-      (!isOptimisticSession && onTogglePinnedSession) ||
-      (entry.path &&
-        (onRenameSession || onDeleteSession || onSetSessionUnread)) ||
+      (!isOptimisticAgent && onTogglePinnedAgent) ||
+      (entry.path && (onRenameAgent || onDeleteAgent || onSetAgentUnread)) ||
       hasMoveActions
     ) && !overlay
 
-  const sessionButton = (
+  const agentButton = (
     <SidebarMenuButton
       type="button"
-      data-sidebar-session-item
-      data-session-key={entryKey}
-      data-current-session={isActive ? "" : undefined}
+      data-sidebar-agent-item
+      data-agent-key={entryKey}
+      data-current-agent={isActive ? "" : undefined}
       isActive={isActive || isSelected}
       className={cn(
-        "relative h-auto min-w-0 items-start gap-2 py-2 pr-(--sidebar-item-pad) pl-(--session-text-left)",
+        "relative h-auto min-w-0 items-start gap-2 py-2 pr-(--sidebar-item-pad) pl-(--agent-text-left)",
         (isActive || isSelected) && "text-sidebar-accent-foreground",
         (isActive || isSelected) && nestingDepth === 0 && "bg-sidebar-accent",
         // The hover state uses the whole row (with the trailing controls),
         // so the highlight stays when the pointer is on the timestamp.
         !(isActive || isSelected) &&
-          "group-hover/session:text-sidebar-accent-foreground",
+          "group-hover/agent:text-sidebar-accent-foreground",
         !(isActive || isSelected) &&
           nestingDepth === 0 &&
-          "group-hover/session:bg-sidebar-accent/50",
+          "group-hover/agent:bg-sidebar-accent/50",
         // A child row draws its highlight in an inset layer, so the tree
         // lines stay clear. The click area stays the full row width.
         nestingDepth > 0 &&
           "isolate not-data-active:hover:bg-transparent! active:bg-transparent! not-data-active:data-open:hover:bg-transparent! data-active:bg-transparent!"
       )}
       onClick={(event) => {
-        onSessionClick?.(entry, {
+        onAgentClick?.(entry, {
           multiSelectKey: isSidebarMultiSelectModifier(event),
           shiftKey: event.shiftKey,
         })
@@ -824,16 +795,16 @@ function SidebarSessionItem({
         <span
           aria-hidden="true"
           className={cn(
-            "pointer-events-none absolute inset-y-0 right-0 left-(--session-highlight-start) -z-10 rounded-md",
+            "pointer-events-none absolute inset-y-0 right-0 left-(--agent-highlight-start) -z-10 rounded-md",
             isActive || isSelected
               ? "bg-sidebar-accent"
-              : "bg-transparent group-hover/session:bg-sidebar-accent/50"
+              : "bg-transparent group-hover/agent:bg-sidebar-accent/50"
           )}
         />
       ) : null}
       {entry.needsInput ? (
         <TitleTooltip title="The agent waits for your answer" side="right">
-          <span className={SESSION_STATUS_ICON_CLASS}>
+          <span className={AGENT_STATUS_ICON_CLASS}>
             <MessageCircleQuestionIcon
               className="size-3.5 text-amber-500"
               aria-label="The agent waits for your answer"
@@ -841,12 +812,12 @@ function SidebarSessionItem({
           </span>
         </TitleTooltip>
       ) : entry.streaming ? (
-        <span className={SESSION_STATUS_ICON_CLASS}>
-          <Spinner size="sm" aria-label="Session streaming" />
+        <span className={AGENT_STATUS_ICON_CLASS}>
+          <Spinner size="sm" aria-label="Agent working" />
         </span>
       ) : entry.waiting ? (
         <TitleTooltip title={`Waiting on ${entry.waiting}`} side="right">
-          <span className={SESSION_STATUS_ICON_CLASS}>
+          <span className={AGENT_STATUS_ICON_CLASS}>
             <HourglassIcon
               className="size-3.5 text-muted-foreground"
               aria-label={`Waiting on ${entry.waiting}`}
@@ -854,10 +825,10 @@ function SidebarSessionItem({
           </span>
         </TitleTooltip>
       ) : showUnread ? (
-        <span className={SESSION_STATUS_ICON_CLASS}>
+        <span className={AGENT_STATUS_ICON_CLASS}>
           <span
             className="size-2 rounded-full bg-primary"
-            aria-label="Session done"
+            aria-label="Agent done"
           />
         </span>
       ) : null}
@@ -869,12 +840,12 @@ function SidebarSessionItem({
             </span>
             {/* An invisible copy of the timestamp (or of the number) keeps
                 space for the real one, which sits on top of the row. */}
-            {sessionNumber > 0 && !overlay ? (
+            {agentNumber > 0 && !overlay ? (
               <Kbd aria-hidden="true" className="invisible shrink-0">
-                {sessionNumberLabel}
+                {agentNumberLabel}
               </Kbd>
             ) : hasTimestamp ? (
-              <SidebarSessionTime
+              <SidebarAgentTime
                 aria-hidden="true"
                 value={timestamp}
                 className="invisible shrink-0 text-[11px] font-normal"
@@ -903,10 +874,10 @@ function SidebarSessionItem({
     </SidebarMenuButton>
   )
 
-  const sessionTrailingControls =
-    sessionNumber > 0 && !overlay ? (
+  const agentTrailingControls =
+    agentNumber > 0 && !overlay ? (
       <span className="absolute top-(--sidebar-row-icon-top) right-(--sidebar-item-pad) z-10 flex min-w-4 items-center justify-end">
-        <Kbd>{sessionNumberLabel}</Kbd>
+        <Kbd>{agentNumberLabel}</Kbd>
       </span>
     ) : hasTimestamp ? (
       <span className="absolute top-(--sidebar-row-icon-top) right-(--sidebar-item-pad) z-10 flex min-w-4 items-center justify-end">
@@ -915,7 +886,7 @@ function SidebarSessionItem({
           side="right"
           align="center"
         >
-          <SidebarSessionTime
+          <SidebarAgentTime
             value={timestamp}
             className="shrink-0 text-[11px] font-normal text-sidebar-foreground/50"
           />
@@ -923,25 +894,25 @@ function SidebarSessionItem({
       </span>
     ) : null
 
-  const sessionRow = (
+  const agentRow = (
     <div
       ref={setRowRef}
       className={cn(
-        "group/session relative",
+        "group/agent relative",
         draggable.isDragging && !overlay && "opacity-40"
       )}
       style={
         {
-          ...sessionTreeStyle(nestingDepth),
+          ...agentTreeStyle(nestingDepth),
         } as React.CSSProperties
       }
-      // A row that cannot move (a session of another machine) has no drag
+      // A row that cannot move (an agent of another machine) has no drag
       // attributes: they would mark the row as disabled (`aria-disabled`).
       {...(dragDisabled ? {} : draggable.attributes)}
       {...draggable.listeners}
     >
-      {sessionButton}
-      {/* A child session draws the lines of its parents' levels. Rows of one
+      {agentButton}
+      {/* An subagent draws the lines of its parents' levels. Rows of one
           subtree follow each other, so their lines join into one. */}
       {Array.from({ length: childDepth }, (_, index) => (
         <SidebarTreeLine
@@ -949,24 +920,24 @@ function SidebarSessionItem({
           level={nestingDepth - childDepth + index}
         />
       ))}
-      {sessionTrailingControls}
+      {agentTrailingControls}
     </div>
   )
 
   return (
     <SidebarMenuItem>
-      {hasSessionActions ? (
+      {hasAgentActions ? (
         <ContextMenu>
-          <ContextMenuTrigger render={sessionRow} />
+          <ContextMenuTrigger render={agentRow} />
           <ContextMenuContent className="w-44">
-            {onTogglePinnedSession && !isOptimisticSession ? (
-              <ContextMenuItem onClick={() => onTogglePinnedSession(entry)}>
+            {onTogglePinnedAgent && !isOptimisticAgent ? (
+              <ContextMenuItem onClick={() => onTogglePinnedAgent(entry)}>
                 {isPinned ? "Unpin" : "Pin to sidebar"}
               </ContextMenuItem>
             ) : null}
-            {onSetSessionUnread && entry.path ? (
+            {onSetAgentUnread && entry.path ? (
               <ContextMenuItem
-                onClick={() => onSetSessionUnread(entry, !entry.unread)}
+                onClick={() => onSetAgentUnread(entry, !entry.unread)}
               >
                 {entry.unread ? "Mark as read" : "Mark as unread"}
               </ContextMenuItem>
@@ -978,7 +949,7 @@ function SidebarSessionItem({
                   {availableMoveTargetDirectories.map((directory) => (
                     <ContextMenuItem
                       key={directory}
-                      onClick={() => onMoveSession?.(entry, directory)}
+                      onClick={() => onMoveAgent?.(entry, directory)}
                     >
                       <span className="truncate">
                         {formatDisplayPath(directory)}
@@ -987,7 +958,7 @@ function SidebarSessionItem({
                   ))}
                   {canMoveAnyDirectory ? (
                     <ContextMenuItem
-                      onClick={() => onMoveSessionAnyDirectory?.(entry)}
+                      onClick={() => onMoveAgentAnyDirectory?.(entry)}
                     >
                       Other directory…
                     </ContextMenuItem>
@@ -995,15 +966,15 @@ function SidebarSessionItem({
                 </ContextMenuSubContent>
               </ContextMenuSub>
             ) : null}
-            {onRenameSession && entry.path ? (
-              <ContextMenuItem onClick={() => onRenameSession(entry)}>
+            {onRenameAgent && entry.path ? (
+              <ContextMenuItem onClick={() => onRenameAgent(entry)}>
                 Rename
               </ContextMenuItem>
             ) : null}
-            {onDeleteSession && entry.path ? (
+            {onDeleteAgent && entry.path ? (
               <ContextMenuItem
                 variant="destructive"
-                onClick={() => onDeleteSession(entry)}
+                onClick={() => onDeleteAgent(entry)}
               >
                 Archive
               </ContextMenuItem>
@@ -1011,35 +982,35 @@ function SidebarSessionItem({
           </ContextMenuContent>
         </ContextMenu>
       ) : (
-        sessionRow
+        agentRow
       )}
     </SidebarMenuItem>
   )
 }
 
-type DirectorySessionsSnapshot = {
-  sessionKeys: Array<string>
-  isLoadingSessions: boolean
+type DirectoryAgentsSnapshot = {
+  agentKeys: Array<string>
+  isLoadingAgents: boolean
 }
 
-type DirectorySessionsState = {
-  sessionKeysByDirectory: Record<string, Array<string>>
-  entriesByKey: Map<string, SessionListEntry>
-  /** Nesting depth per child session; see `buildSessionDepths`. */
+type DirectoryAgentsState = {
+  agentKeysByDirectory: Record<string, Array<string>>
+  entriesByKey: Map<string, AgentListEntry>
+  /** Nesting depth per subagent; see `buildAgentDepths`. */
   depthByKey: Map<string, number>
   loadingByDirectory: Record<string, boolean>
 }
 
-export type DirectorySessionsStore = PicoStore<DirectorySessionsState> & {
+export type DirectoryAgentsStore = PicoStore<DirectoryAgentsState> & {
   setData: (
-    sessionsByDirectory: Record<string, Array<SessionListEntry>>,
+    agentsByDirectory: Record<string, Array<AgentListEntry>>,
     loadingByDirectory: Record<string, boolean>
   ) => void
 }
 
-function sameDirectorySessionEntry(
-  left: SessionListEntry | undefined,
-  right: SessionListEntry | undefined
+function sameDirectoryAgentEntry(
+  left: AgentListEntry | undefined,
+  right: AgentListEntry | undefined
 ) {
   if (left === right) return true
   if (!left || !right) return false
@@ -1067,14 +1038,14 @@ function sameDirectorySessionEntry(
   )
 }
 
-function buildDirectorySessionEntryMap(
-  sessionsByDirectory: Record<string, Array<SessionListEntry>>
+function buildDirectoryAgentEntryMap(
+  agentsByDirectory: Record<string, Array<AgentListEntry>>
 ) {
-  const entriesByKey = new Map<string, SessionListEntry>()
+  const entriesByKey = new Map<string, AgentListEntry>()
 
-  for (const sessions of Object.values(sessionsByDirectory)) {
-    for (const entry of sessions) {
-      const entryKey = sessionListEntryKey(entry)
+  for (const agents of Object.values(agentsByDirectory)) {
+    for (const entry of agents) {
+      const entryKey = agentListEntryKey(entry)
       if (!entryKey || entriesByKey.has(entryKey)) continue
       entriesByKey.set(entryKey, entry)
     }
@@ -1083,12 +1054,12 @@ function buildDirectorySessionEntryMap(
   return entriesByKey
 }
 
-/** Sessions with each child session after its parent, in list order. */
-function nestChildSessions(sessions: Array<SessionListEntry>) {
-  const ids = new Set(sessions.flatMap((entry) => (entry.id ? [entry.id] : [])))
-  const childrenOf = new Map<string, Array<SessionListEntry>>()
-  const roots: Array<SessionListEntry> = []
-  for (const entry of sessions) {
+/** Agents with each subagent after its parent, in list order. */
+function nestSubagents(agents: Array<AgentListEntry>) {
+  const ids = new Set(agents.flatMap((entry) => (entry.id ? [entry.id] : [])))
+  const childrenOf = new Map<string, Array<AgentListEntry>>()
+  const roots: Array<AgentListEntry> = []
+  for (const entry of agents) {
     if (entry.parent && entry.parent !== entry.id && ids.has(entry.parent)) {
       const siblings = childrenOf.get(entry.parent) ?? []
       siblings.push(entry)
@@ -1097,47 +1068,45 @@ function nestChildSessions(sessions: Array<SessionListEntry>) {
       roots.push(entry)
     }
   }
-  if (childrenOf.size === 0) return sessions
-  const ordered: Array<SessionListEntry> = []
-  const seen = new Set<SessionListEntry>()
-  const visit = (entry: SessionListEntry) => {
+  if (childrenOf.size === 0) return agents
+  const ordered: Array<AgentListEntry> = []
+  const seen = new Set<AgentListEntry>()
+  const visit = (entry: AgentListEntry) => {
     if (seen.has(entry)) return
     seen.add(entry)
     ordered.push(entry)
     for (const child of childrenOf.get(entry.id ?? "") ?? []) visit(child)
   }
   for (const root of roots) visit(root)
-  for (const entry of sessions) visit(entry)
+  for (const entry of agents) visit(entry)
   return ordered
 }
 
-const MAX_SESSION_NESTING_DEPTH = 4
+const MAX_AGENT_NESTING_DEPTH = 4
 
 /**
- * The nesting depth of each child session, in nested list order: 1 for a
- * child of a top-level session, 2 for its child, and so on. Top-level
- * sessions have no entry.
+ * The nesting depth of each subagent, in nested list order: 1 for a
+ * child of a top-level agent, 2 for its child, and so on. Top-level
+ * agents have no entry.
  */
-function buildSessionDepths(
-  sessionsByDirectory: Record<string, Array<SessionListEntry>>
+function buildAgentDepths(
+  agentsByDirectory: Record<string, Array<AgentListEntry>>
 ) {
   const depthByKey = new Map<string, number>()
 
-  for (const sessions of Object.values(sessionsByDirectory)) {
-    const ids = new Set(
-      sessions.flatMap((entry) => (entry.id ? [entry.id] : []))
-    )
-    const byId = new Map<string, SessionListEntry>()
-    for (const entry of sessions) {
+  for (const agents of Object.values(agentsByDirectory)) {
+    const ids = new Set(agents.flatMap((entry) => (entry.id ? [entry.id] : [])))
+    const byId = new Map<string, AgentListEntry>()
+    for (const entry of agents) {
       if (entry.id && !byId.has(entry.id)) byId.set(entry.id, entry)
     }
-    for (const entry of sessions) {
-      const key = sessionListEntryKey(entry)
+    for (const entry of agents) {
+      const key = agentListEntryKey(entry)
       if (!key || depthByKey.has(key)) continue
       let depth = 0
-      let current: SessionListEntry | undefined = entry
-      const seen = new Set<SessionListEntry>()
-      while (current && depth < MAX_SESSION_NESTING_DEPTH) {
+      let current: AgentListEntry | undefined = entry
+      const seen = new Set<AgentListEntry>()
+      while (current && depth < MAX_AGENT_NESTING_DEPTH) {
         if (seen.has(current)) break
         seen.add(current)
         const parent: string | undefined = current.parent
@@ -1152,38 +1121,38 @@ function buildSessionDepths(
   return depthByKey
 }
 
-/** Status icon slot of a session row, on the sidebar icon column. */
-const SESSION_STATUS_ICON_CLASS =
-  "absolute top-(--sidebar-row-icon-top) left-(--session-slot-left) flex size-(--sidebar-icon) items-center justify-center"
+/** Status icon slot of an agent row, on the sidebar icon column. */
+const AGENT_STATUS_ICON_CLASS =
+  "absolute top-(--sidebar-row-icon-top) left-(--agent-slot-left) flex size-(--sidebar-icon) items-center justify-center"
 
 /**
- * CSS variables for a session row at a nesting depth (1 for a session in a
- * directory, more for child sessions). The row padding, status icon, and
+ * CSS variables for an agent row at a nesting depth (1 for an agent in a
+ * directory, more for subagents). The row padding, status icon, and
  * indented highlight read them.
  *
- *   --session-slot-left        x of the status slot: one gap after the
+ *   --agent-slot-left        x of the status slot: one gap after the
  *                              highlight edge
- *   --session-text-left        x of the title: one gap after the slot
- *   --session-highlight-start  x where the highlight starts: just after the
+ *   --agent-text-left        x of the title: one gap after the slot
+ *   --agent-highlight-start  x where the highlight starts: just after the
  *                              row's innermost line
  */
-function sessionTreeStyle(depth: number) {
+function agentTreeStyle(depth: number) {
   return {
-    "--session-slot-left":
+    "--agent-slot-left":
       depth === 0
-        ? "var(--sidebar-session-gap)"
+        ? "var(--sidebar-agent-gap)"
         : `calc(var(--sidebar-item-pad) + ${depth} * var(--sidebar-tree-step))`,
-    "--session-text-left":
-      "calc(var(--session-slot-left) + var(--sidebar-icon) + var(--sidebar-session-gap))",
-    "--session-highlight-start": `calc(${sessionTreeLineLeft(Math.max(depth - 1, 0))} + 0.25rem)`,
+    "--agent-text-left":
+      "calc(var(--agent-slot-left) + var(--sidebar-icon) + var(--sidebar-agent-gap))",
+    "--agent-highlight-start": `calc(${agentTreeLineLeft(Math.max(depth - 1, 0))} + 0.25rem)`,
   }
 }
 
 /**
  * x of the line at a level: level 0 is under the directory icon, level 1
- * under the status icon of a top-level session, and so on.
+ * under the status icon of a top-level agent, and so on.
  */
-function sessionTreeLineLeft(level: number) {
+function agentTreeLineLeft(level: number) {
   return `calc(var(--sidebar-item-pad) + var(--sidebar-icon) / 2 + ${level} * var(--sidebar-tree-step))`
 }
 
@@ -1193,54 +1162,54 @@ function SidebarTreeLine({ level }: { level: number }) {
     <span
       aria-hidden="true"
       className="pointer-events-none absolute inset-y-0 w-px bg-sidebar-border"
-      style={{ left: sessionTreeLineLeft(level) }}
+      style={{ left: agentTreeLineLeft(level) }}
     />
   )
 }
 
-function buildDirectorySessionKeys(
-  sessionsByDirectory: Record<string, Array<SessionListEntry>>
+function buildDirectoryAgentKeys(
+  agentsByDirectory: Record<string, Array<AgentListEntry>>
 ) {
-  const sessionKeysByDirectory: Record<string, Array<string>> = {}
+  const agentKeysByDirectory: Record<string, Array<string>> = {}
 
-  for (const [directory, sessions] of Object.entries(sessionsByDirectory)) {
-    sessionKeysByDirectory[directory] = nestChildSessions(
-      sortSidebarSessions(sessions)
+  for (const [directory, agents] of Object.entries(agentsByDirectory)) {
+    agentKeysByDirectory[directory] = nestSubagents(
+      sortSidebarAgents(agents)
     ).flatMap((entry) => {
-      const key = sessionListEntryKey(entry)
+      const key = agentListEntryKey(entry)
       return key ? [key] : []
     })
   }
 
-  return sessionKeysByDirectory
+  return agentKeysByDirectory
 }
 
-function sameDirectorySessionsSnapshot(
-  left: DirectorySessionsSnapshot,
-  right: DirectorySessionsSnapshot
+function sameDirectoryAgentsSnapshot(
+  left: DirectoryAgentsSnapshot,
+  right: DirectoryAgentsSnapshot
 ) {
   return (
-    left.isLoadingSessions === right.isLoadingSessions &&
-    directoryOrderEqual(left.sessionKeys, right.sessionKeys)
+    left.isLoadingAgents === right.isLoadingAgents &&
+    directoryOrderEqual(left.agentKeys, right.agentKeys)
   )
 }
 
-function sameDirectorySessionsState(
-  left: DirectorySessionsState,
-  right: DirectorySessionsState
+function sameDirectoryAgentsState(
+  left: DirectoryAgentsState,
+  right: DirectoryAgentsState
 ) {
   const directories = new Set([
-    ...Object.keys(left.sessionKeysByDirectory),
+    ...Object.keys(left.agentKeysByDirectory),
     ...Object.keys(left.loadingByDirectory),
-    ...Object.keys(right.sessionKeysByDirectory),
+    ...Object.keys(right.agentKeysByDirectory),
     ...Object.keys(right.loadingByDirectory),
   ])
 
   for (const directory of directories) {
     if (
       !directoryOrderEqual(
-        left.sessionKeysByDirectory[directory] ?? EMPTY_DIRECTORY_SESSION_KEYS,
-        right.sessionKeysByDirectory[directory] ?? EMPTY_DIRECTORY_SESSION_KEYS
+        left.agentKeysByDirectory[directory] ?? EMPTY_DIRECTORY_AGENT_KEYS,
+        right.agentKeysByDirectory[directory] ?? EMPTY_DIRECTORY_AGENT_KEYS
       ) ||
       Boolean(left.loadingByDirectory[directory]) !==
         Boolean(right.loadingByDirectory[directory])
@@ -1256,7 +1225,7 @@ function sameDirectorySessionsState(
 
   for (const entryKey of entryKeys) {
     if (
-      !sameDirectorySessionEntry(
+      !sameDirectoryAgentEntry(
         left.entriesByKey.get(entryKey),
         right.entriesByKey.get(entryKey)
       )
@@ -1268,105 +1237,88 @@ function sameDirectorySessionsState(
   return true
 }
 
-export function createDirectorySessionsStore(
-  sessionsByDirectory: Record<string, Array<SessionListEntry>>,
+export function createDirectoryAgentsStore(
+  agentsByDirectory: Record<string, Array<AgentListEntry>>,
   loadingByDirectory: Record<string, boolean>
-): DirectorySessionsStore {
-  const store = createPicoStore<DirectorySessionsState>(
+): DirectoryAgentsStore {
+  const store = createPicoStore<DirectoryAgentsState>(
     {
-      sessionKeysByDirectory: buildDirectorySessionKeys(sessionsByDirectory),
-      entriesByKey: buildDirectorySessionEntryMap(sessionsByDirectory),
-      depthByKey: buildSessionDepths(sessionsByDirectory),
+      agentKeysByDirectory: buildDirectoryAgentKeys(agentsByDirectory),
+      entriesByKey: buildDirectoryAgentEntryMap(agentsByDirectory),
+      depthByKey: buildAgentDepths(agentsByDirectory),
       loadingByDirectory,
     },
-    sameDirectorySessionsState
-  ) as DirectorySessionsStore
+    sameDirectoryAgentsState
+  ) as DirectoryAgentsStore
 
   Object.assign(store, {
-    setData(nextSessionsByDirectory, nextLoadingByDirectory) {
+    setData(nextAgentsByDirectory, nextLoadingByDirectory) {
       setStoreState(store, {
-        sessionKeysByDirectory: buildDirectorySessionKeys(
-          nextSessionsByDirectory
-        ),
-        entriesByKey: buildDirectorySessionEntryMap(nextSessionsByDirectory),
-        depthByKey: buildSessionDepths(nextSessionsByDirectory),
+        agentKeysByDirectory: buildDirectoryAgentKeys(nextAgentsByDirectory),
+        entriesByKey: buildDirectoryAgentEntryMap(nextAgentsByDirectory),
+        depthByKey: buildAgentDepths(nextAgentsByDirectory),
         loadingByDirectory: nextLoadingByDirectory,
       })
     },
-  } satisfies Omit<
-    DirectorySessionsStore,
-    keyof PicoStore<DirectorySessionsState>
-  >)
+  } satisfies Omit<DirectoryAgentsStore, keyof PicoStore<DirectoryAgentsState>>)
 
   return store
 }
 
-function useDirectorySessions(
-  store: DirectorySessionsStore,
-  directory: string
-) {
+function useDirectoryAgents(store: DirectoryAgentsStore, directory: string) {
   return useSelector(
     store,
     (state) => ({
-      sessionKeys:
-        state.sessionKeysByDirectory[directory] ?? EMPTY_DIRECTORY_SESSION_KEYS,
-      isLoadingSessions: Boolean(state.loadingByDirectory[directory]),
+      agentKeys:
+        state.agentKeysByDirectory[directory] ?? EMPTY_DIRECTORY_AGENT_KEYS,
+      isLoadingAgents: Boolean(state.loadingByDirectory[directory]),
     }),
-    { compare: sameDirectorySessionsSnapshot }
+    { compare: sameDirectoryAgentsSnapshot }
   )
 }
 
-function useDirectorySessionEntry(
-  store: DirectorySessionsStore,
-  entryKey: string
-) {
+function useDirectoryAgentEntry(store: DirectoryAgentsStore, entryKey: string) {
   return useSelector(store, (state) => state.entriesByKey.get(entryKey), {
-    compare: sameDirectorySessionEntry,
+    compare: sameDirectoryAgentEntry,
   })
 }
 
-type DirectorySessionGroupProps = {
+type DirectoryAgentGroupProps = {
   directory: string
-  directorySessionsStore: DirectorySessionsStore
+  directoryAgentsStore: DirectoryAgentsStore
   collapsedDirectoryStore: CollapsedDirectoryStore
   /** The groups that an Option-click expands or collapses together. */
   collapseAllKeys: Array<string>
   searchActive: boolean
   moveTargetDirectories: Array<string>
-  activeSessionStore: ActiveSidebarSessionStore
-  selectedSessionKeyStore: SelectedSessionKeyStore
-  pinnedSessionKeys: Array<string>
+  activeAgentStore: ActiveSidebarAgentStore
+  selectedAgentKeyStore: SelectedAgentKeyStore
+  pinnedAgentKeys: Array<string>
   isMobile: boolean
   setOpenMobile: (open: boolean) => void
-  /** False for the sessions of another machine. */
-  sessionsDraggable?: boolean
+  /** False for the agents of another machine. */
+  agentsDraggable?: boolean
   isDragging?: boolean
-  isSessionDropTarget?: boolean
+  isAgentDropTarget?: boolean
   overlay?: boolean
   attributes?: Record<string, unknown>
   listeners?: Record<string, unknown>
-  onSessionClick?: (
-    entry: SessionListEntry,
-    modifiers: SessionClickModifiers
-  ) => void
-  onRenameSession?: (entry: SessionListEntry) => void
-  onDeleteSession?: (entry: SessionListEntry) => void
-  onSetSessionUnread?: (entry: SessionListEntry, unread: boolean) => void
-  onMoveSession?: (entry: SessionListEntry, directory: string) => void
-  onMoveSessionAnyDirectory?: (entry: SessionListEntry) => void
-  onTogglePinnedSession?: (entry: SessionListEntry) => void
-  onCreateSessionInDirectory?: (directory: string) => void
-  onDeleteOldSessionsInDirectory?: (directory: string) => void
-  onMarkSessionsRead?: (entries: Array<SessionListEntry>) => void
+  onAgentClick?: (entry: AgentListEntry, modifiers: AgentClickModifiers) => void
+  onRenameAgent?: (entry: AgentListEntry) => void
+  onDeleteAgent?: (entry: AgentListEntry) => void
+  onSetAgentUnread?: (entry: AgentListEntry, unread: boolean) => void
+  onMoveAgent?: (entry: AgentListEntry, directory: string) => void
+  onMoveAgentAnyDirectory?: (entry: AgentListEntry) => void
+  onTogglePinnedAgent?: (entry: AgentListEntry) => void
+  onCreateAgentInDirectory?: (directory: string) => void
+  onDeleteOldAgentsInDirectory?: (directory: string) => void
+  onMarkAgentsRead?: (entries: Array<AgentListEntry>) => void
   onRemoveDirectory?: (directory: string) => void
 }
 
-function directoryUnreadSessions(
-  state: DirectorySessionsState,
-  directory: string
-) {
-  const entries: Array<SessionListEntry> = []
-  for (const entryKey of state.sessionKeysByDirectory[directory] ?? []) {
+function directoryUnreadAgents(state: DirectoryAgentsState, directory: string) {
+  const entries: Array<AgentListEntry> = []
+  for (const entryKey of state.agentKeysByDirectory[directory] ?? []) {
     const entry = state.entriesByKey.get(entryKey)
     if (entry?.unread && entry.path) entries.push(entry)
   }
@@ -1379,18 +1331,18 @@ type DirectoryStatusCounts = {
   done: number
 }
 
-/** The same counts as the machine heading, for the sessions of one directory. */
+/** The same counts as the machine heading, for the agents of one directory. */
 function directoryStatusCounts(
-  state: DirectorySessionsState,
+  state: DirectoryAgentsState,
   directory: string
 ): DirectoryStatusCounts {
   const counts = { working: 0, waiting: 0, done: 0 }
-  for (const entryKey of state.sessionKeysByDirectory[directory] ?? []) {
+  for (const entryKey of state.agentKeysByDirectory[directory] ?? []) {
     const entry = state.entriesByKey.get(entryKey)
     if (!entry) continue
-    if (sessionMatchesStatusFilter(entry, "working")) counts.working++
-    if (sessionMatchesStatusFilter(entry, "waiting")) counts.waiting++
-    if (sessionMatchesStatusFilter(entry, "done")) counts.done++
+    if (agentMatchesStatusFilter(entry, "working")) counts.working++
+    if (agentMatchesStatusFilter(entry, "waiting")) counts.waiting++
+    if (agentMatchesStatusFilter(entry, "done")) counts.done++
   }
   return counts
 }
@@ -1409,7 +1361,7 @@ function sameDirectoryStatusCounts(
 /**
  * A count in a directory heading. Like the counts in the machine heading, a
  * click turns its state on or off; more than one can be on. The directory
- * shows only its sessions with a state that is on.
+ * shows only its agents with a state that is on.
  */
 function DirectoryCountButton({
   directory,
@@ -1423,13 +1375,13 @@ function DirectoryCountButton({
   children,
 }: {
   directory: string
-  filter: SessionStatusFilter
+  filter: AgentStatusFilter
   count: number
-  activeFilter: SessionStatusFilters | null
+  activeFilter: AgentStatusFilters | null
   disabled: boolean
   title: string
   className?: string
-  onToggle: (filter: SessionStatusFilter) => void
+  onToggle: (filter: AgentStatusFilter) => void
   children: React.ReactNode
 }) {
   const active = Boolean(activeFilter?.includes(filter))
@@ -1437,7 +1389,7 @@ function DirectoryCountButton({
   if (count === 0 && !active) return null
   return (
     <TitleTooltip
-      title={active ? `Show all sessions` : `Show only ${title.toLowerCase()}`}
+      title={active ? `Show all agents` : `Show only ${title.toLowerCase()}`}
     >
       <Button
         variant="ghost"
@@ -1469,9 +1421,9 @@ function DirectoryCounts({
 }: {
   directory: string
   counts: DirectoryStatusCounts
-  activeFilter: SessionStatusFilters | null
+  activeFilter: AgentStatusFilters | null
   disabled: boolean
-  onToggle: (filter: SessionStatusFilter) => void
+  onToggle: (filter: AgentStatusFilter) => void
 }) {
   const shared = { directory, activeFilter, disabled, onToggle }
   return (
@@ -1505,52 +1457,54 @@ function DirectoryCounts({
   )
 }
 
-const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
+const DirectoryAgentGroup = React.memo(function DirectoryAgentGroup({
   directory,
-  directorySessionsStore,
+  directoryAgentsStore,
   collapsedDirectoryStore,
   collapseAllKeys,
   searchActive,
   moveTargetDirectories,
-  activeSessionStore,
-  selectedSessionKeyStore,
-  pinnedSessionKeys,
+  activeAgentStore,
+  selectedAgentKeyStore,
+  pinnedAgentKeys,
   isMobile,
   setOpenMobile,
-  sessionsDraggable,
+  agentsDraggable,
   isDragging,
-  isSessionDropTarget,
+  isAgentDropTarget,
   overlay = false,
   attributes,
   listeners,
-  onSessionClick,
-  onRenameSession,
-  onDeleteSession,
-  onSetSessionUnread,
-  onMoveSession,
-  onMoveSessionAnyDirectory,
-  onTogglePinnedSession,
-  onCreateSessionInDirectory,
-  onDeleteOldSessionsInDirectory,
-  onMarkSessionsRead,
+  onAgentClick,
+  onRenameAgent,
+  onDeleteAgent,
+  onSetAgentUnread,
+  onMoveAgent,
+  onMoveAgentAnyDirectory,
+  onTogglePinnedAgent,
+  onCreateAgentInDirectory,
+  onDeleteOldAgentsInDirectory,
+  onMarkAgentsRead,
   onRemoveDirectory,
-}: DirectorySessionGroupProps) {
+}: DirectoryAgentGroupProps) {
   const [renderCount, setRenderCount] = React.useState(
-    INITIAL_DIRECTORY_SESSION_RENDER_COUNT
+    INITIAL_DIRECTORY_AGENT_RENDER_COUNT
   )
-  const { isLoadingSessions, sessionKeys: allSessionKeys } =
-    useDirectorySessions(directorySessionsStore, directory)
+  const { isLoadingAgents, agentKeys: allAgentKeys } = useDirectoryAgents(
+    directoryAgentsStore,
+    directory
+  )
   const [statusFilter, setStatusFilter] =
-    React.useState<SessionStatusFilters | null>(null)
-  const sessionKeys = useSelector(
-    directorySessionsStore,
+    React.useState<AgentStatusFilters | null>(null)
+  const agentKeys = useSelector(
+    directoryAgentsStore,
     (state) => {
       const keys =
-        state.sessionKeysByDirectory[directory] ?? EMPTY_DIRECTORY_SESSION_KEYS
+        state.agentKeysByDirectory[directory] ?? EMPTY_DIRECTORY_AGENT_KEYS
       if (!statusFilter) return keys
       return keys.filter((entryKey) => {
         const entry = state.entriesByKey.get(entryKey)
-        return entry ? sessionMatchesStatusFilter(entry, statusFilter) : false
+        return entry ? agentMatchesStatusFilter(entry, statusFilter) : false
       })
     },
     { compare: directoryOrderEqual }
@@ -1560,55 +1514,55 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
     directory,
     searchActive
   )
-  const hasUnreadSessions = useSelector(
-    directorySessionsStore,
-    (state) => directoryUnreadSessions(state, directory).length > 0
+  const hasUnreadAgents = useSelector(
+    directoryAgentsStore,
+    (state) => directoryUnreadAgents(state, directory).length > 0
   )
   const statusCounts = useSelector(
-    directorySessionsStore,
+    directoryAgentsStore,
     (state) => directoryStatusCounts(state, directory),
     { compare: sameDirectoryStatusCounts }
   )
-  const markSessionsRead = () => {
-    onMarkSessionsRead?.(
-      directoryUnreadSessions(directorySessionsStore.state, directory)
+  const markAgentsRead = () => {
+    onMarkAgentsRead?.(
+      directoryUnreadAgents(directoryAgentsStore.state, directory)
     )
   }
-  const pinnedSessionKeySet = new Set(pinnedSessionKeys)
-  const unpinnedSessionKeys = sessionKeys.filter(
-    (entryKey) => !pinnedSessionKeySet.has(entryKey)
+  const pinnedAgentKeySet = new Set(pinnedAgentKeys)
+  const unpinnedAgentKeys = agentKeys.filter(
+    (entryKey) => !pinnedAgentKeySet.has(entryKey)
   )
   const visibleCount = searchActive
-    ? unpinnedSessionKeys.length
-    : Math.min(unpinnedSessionKeys.length, renderCount)
-  const visibleSessionKeys = unpinnedSessionKeys.slice(0, visibleCount)
-  const hasMoreSessions = visibleCount < unpinnedSessionKeys.length
+    ? unpinnedAgentKeys.length
+    : Math.min(unpinnedAgentKeys.length, renderCount)
+  const visibleAgentKeys = unpinnedAgentKeys.slice(0, visibleCount)
+  const hasMoreAgents = visibleCount < unpinnedAgentKeys.length
   const altKeyHeld = useAltKeyHeld()
   // Holding Option turns "Show N more" into "Show less".
   const showLess =
     altKeyHeld &&
     !searchActive &&
-    visibleCount > INITIAL_DIRECTORY_SESSION_RENDER_COUNT
-  const showTreeLine = !overlay && visibleSessionKeys.length > 0
+    visibleCount > INITIAL_DIRECTORY_AGENT_RENDER_COUNT
+  const showTreeLine = !overlay && visibleAgentKeys.length > 0
   const showLoadingSpinner = useDelayedTrue(
-    isLoadingSessions,
+    isLoadingAgents,
     SIDEBAR_LOADING_SPINNER_DELAY_MS
   )
-  const showLoadingState = isLoadingSessions && allSessionKeys.length === 0
+  const showLoadingState = isLoadingAgents && allAgentKeys.length === 0
   const showHeaderLoadingSpinner =
-    showLoadingSpinner && unpinnedSessionKeys.length === 0 && collapsed
+    showLoadingSpinner && unpinnedAgentKeys.length === 0 && collapsed
   const hasDirectoryActions =
     !overlay &&
     Boolean(
-      onCreateSessionInDirectory ||
-      onDeleteOldSessionsInDirectory ||
-      onMarkSessionsRead ||
+      onCreateAgentInDirectory ||
+      onDeleteOldAgentsInDirectory ||
+      onMarkAgentsRead ||
       onRemoveDirectory
     )
 
   const directoryHeader = (
     // Left item-pad puts the folder icon on the sidebar icon column. The
-    // new-session button stays flush right: its item-size box already holds
+    // new-agent button stays flush right: its item-size box already holds
     // the item-pad, so its icon ends on the right content edge.
     <div className="flex items-center gap-2 rounded-lg pl-(--sidebar-item-pad)">
       <CollapsibleTrigger
@@ -1647,13 +1601,13 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
         }}
       />
 
-      {onCreateSessionInDirectory && !overlay && !isMobile ? (
-        <TitleTooltip title={`Create a session in ${directory}`}>
+      {onCreateAgentInDirectory && !overlay && !isMobile ? (
+        <TitleTooltip title={`Create an agent in ${directory}`}>
           <Button
             size="icon"
             variant="ghost"
             className="shrink-0 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-            onClick={() => onCreateSessionInDirectory(directory)}
+            onClick={() => onCreateAgentInDirectory(directory)}
           >
             <SquarePenIcon className="size-4" />
           </Button>
@@ -1675,24 +1629,24 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
             <EllipsisVerticalIcon className="size-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            {onCreateSessionInDirectory ? (
+            {onCreateAgentInDirectory ? (
               <DropdownMenuItem
-                onClick={() => onCreateSessionInDirectory(directory)}
+                onClick={() => onCreateAgentInDirectory(directory)}
               >
-                New session
+                New agent
               </DropdownMenuItem>
             ) : null}
-            {onDeleteOldSessionsInDirectory ? (
+            {onDeleteOldAgentsInDirectory ? (
               <DropdownMenuItem
-                onClick={() => onDeleteOldSessionsInDirectory(directory)}
+                onClick={() => onDeleteOldAgentsInDirectory(directory)}
               >
-                Archive old sessions…
+                Archive old agents…
               </DropdownMenuItem>
             ) : null}
-            {onMarkSessionsRead ? (
+            {onMarkAgentsRead ? (
               <DropdownMenuItem
-                disabled={!hasUnreadSessions}
-                onClick={markSessionsRead}
+                disabled={!hasUnreadAgents}
+                onClick={markAgentsRead}
               >
                 Mark all as read
               </DropdownMenuItem>
@@ -1713,7 +1667,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
 
   return (
     <Collapsible
-      data-sidebar-session-group={overlay ? undefined : ""}
+      data-sidebar-agent-group={overlay ? undefined : ""}
       open={!collapsed}
       onOpenChange={(open, details) => {
         if (searchActive || overlay) return
@@ -1726,7 +1680,7 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
       className={cn(
         "rounded-lg py-1",
         overlay && "bg-sidebar shadow-lg ring-1 ring-sidebar-border/70",
-        isSessionDropTarget &&
+        isAgentDropTarget &&
           !overlay &&
           "bg-sidebar-accent/40 ring-1 ring-sidebar-ring/50",
         isDragging && !overlay && "opacity-0"
@@ -1737,24 +1691,24 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
           <ContextMenu>
             <ContextMenuTrigger render={directoryHeader} />
             <ContextMenuContent className="w-48">
-              {onCreateSessionInDirectory ? (
+              {onCreateAgentInDirectory ? (
                 <ContextMenuItem
-                  onClick={() => onCreateSessionInDirectory(directory)}
+                  onClick={() => onCreateAgentInDirectory(directory)}
                 >
-                  New session
+                  New agent
                 </ContextMenuItem>
               ) : null}
-              {onDeleteOldSessionsInDirectory ? (
+              {onDeleteOldAgentsInDirectory ? (
                 <ContextMenuItem
-                  onClick={() => onDeleteOldSessionsInDirectory(directory)}
+                  onClick={() => onDeleteOldAgentsInDirectory(directory)}
                 >
-                  Archive old sessions…
+                  Archive old agents…
                 </ContextMenuItem>
               ) : null}
-              {onMarkSessionsRead ? (
+              {onMarkAgentsRead ? (
                 <ContextMenuItem
-                  disabled={!hasUnreadSessions}
-                  onClick={markSessionsRead}
+                  disabled={!hasUnreadAgents}
+                  onClick={markAgentsRead}
                 >
                   Mark all as read
                 </ContextMenuItem>
@@ -1783,57 +1737,55 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                   ) : (
                     <span className="size-4" aria-hidden="true" />
                   )}
-                  Loading sessions…
+                  Loading agents…
                 </div>
-              ) : unpinnedSessionKeys.length > 0 ? (
-                // The directory's line runs down its sessions and "Show more".
+              ) : unpinnedAgentKeys.length > 0 ? (
+                // The directory's line runs down its agents and "Show more".
                 <div className="relative flex flex-col">
                   {showTreeLine ? <SidebarTreeLine level={0} /> : null}
                   <SidebarMenu>
-                    {visibleSessionKeys.map((entryKey) => (
-                      <SidebarSessionItem
+                    {visibleAgentKeys.map((entryKey) => (
+                      <SidebarAgentItem
                         key={entryKey}
                         entryKey={entryKey}
                         inDirectory
-                        directorySessionsStore={directorySessionsStore}
-                        activeSessionStore={activeSessionStore}
-                        selectedSessionKeyStore={selectedSessionKeyStore}
-                        isPinned={pinnedSessionKeys.includes(entryKey)}
+                        directoryAgentsStore={directoryAgentsStore}
+                        activeAgentStore={activeAgentStore}
+                        selectedAgentKeyStore={selectedAgentKeyStore}
+                        isPinned={pinnedAgentKeys.includes(entryKey)}
                         isMobile={isMobile}
                         overlay={overlay}
-                        sessionDraggable={sessionsDraggable}
+                        agentDraggable={agentsDraggable}
                         moveTargetDirectories={moveTargetDirectories}
                         setOpenMobile={setOpenMobile}
-                        onSessionClick={onSessionClick}
-                        onRenameSession={onRenameSession}
-                        onDeleteSession={onDeleteSession}
-                        onSetSessionUnread={onSetSessionUnread}
-                        onMoveSession={onMoveSession}
-                        onMoveSessionAnyDirectory={onMoveSessionAnyDirectory}
-                        onTogglePinnedSession={onTogglePinnedSession}
+                        onAgentClick={onAgentClick}
+                        onRenameAgent={onRenameAgent}
+                        onDeleteAgent={onDeleteAgent}
+                        onSetAgentUnread={onSetAgentUnread}
+                        onMoveAgent={onMoveAgent}
+                        onMoveAgentAnyDirectory={onMoveAgentAnyDirectory}
+                        onTogglePinnedAgent={onTogglePinnedAgent}
                       />
                     ))}
                   </SidebarMenu>
 
-                  {hasMoreSessions || showLess ? (
+                  {hasMoreAgents || showLess ? (
                     <div
                       className="flex flex-col"
-                      style={sessionTreeStyle(1) as React.CSSProperties}
+                      style={agentTreeStyle(1) as React.CSSProperties}
                     >
                       <Button
                         variant="ghost"
-                        className="h-8 justify-start pl-(--session-text-left) text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                        className="h-8 justify-start pl-(--agent-text-left) text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
                         onClick={() => {
                           if (showLess) {
-                            setRenderCount(
-                              INITIAL_DIRECTORY_SESSION_RENDER_COUNT
-                            )
+                            setRenderCount(INITIAL_DIRECTORY_AGENT_RENDER_COUNT)
                             return
                           }
                           setRenderCount((current) =>
                             Math.min(
-                              unpinnedSessionKeys.length,
-                              current + DIRECTORY_SESSION_LOAD_MORE_COUNT
+                              unpinnedAgentKeys.length,
+                              current + DIRECTORY_AGENT_LOAD_MORE_COUNT
                             )
                           )
                         }}
@@ -1841,8 +1793,8 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                         {showLess
                           ? "Show less"
                           : `Show ${Math.min(
-                              DIRECTORY_SESSION_LOAD_MORE_COUNT,
-                              unpinnedSessionKeys.length - visibleCount
+                              DIRECTORY_AGENT_LOAD_MORE_COUNT,
+                              unpinnedAgentKeys.length - visibleCount
                             )} more`}
                       </Button>
                     </div>
@@ -1850,14 +1802,14 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
                 </div>
               ) : (
                 <div className="p-2 text-sm text-sidebar-foreground/70">
-                  {/* "Unpinned" only when sessions are pinned. */}
-                  {pinnedSessionKeys.length === 0
+                  {/* "Unpinned" only when agents are pinned. */}
+                  {pinnedAgentKeys.length === 0
                     ? searchActive || statusFilter
-                      ? "No matching sessions."
-                      : "No sessions."
+                      ? "No matching agents."
+                      : "No agents."
                     : searchActive || statusFilter
-                      ? "No matching unpinned sessions."
-                      : "No unpinned sessions."}
+                      ? "No matching unpinned agents."
+                      : "No unpinned agents."}
                 </div>
               )}
             </SidebarGroupContent>
@@ -1868,66 +1820,63 @@ const DirectorySessionGroup = React.memo(function DirectorySessionGroup({
   )
 })
 
-type PinnedSessionGroupProps = {
-  pinnedSessionKeys: Array<string>
+type PinnedAgentGroupProps = {
+  pinnedAgentKeys: Array<string>
   /** The group is inside another sidebar group that already adds the side gutter. */
   nested?: boolean
-  directorySessionsStore: DirectorySessionsStore
+  directoryAgentsStore: DirectoryAgentsStore
   collapsedDirectoryStore: CollapsedDirectoryStore
   /** The groups that an Option-click expands or collapses together. */
   collapseAllKeys: Array<string>
   searchActive: boolean
-  activeSessionStore: ActiveSidebarSessionStore
-  selectedSessionKeyStore: SelectedSessionKeyStore
+  activeAgentStore: ActiveSidebarAgentStore
+  selectedAgentKeyStore: SelectedAgentKeyStore
   isMobile: boolean
   moveTargetDirectories: Array<string>
   setOpenMobile: (open: boolean) => void
-  /** False for the sessions of another machine. */
-  sessionsDraggable?: boolean
-  onSessionClick?: (
-    entry: SessionListEntry,
-    modifiers: SessionClickModifiers
-  ) => void
-  onRenameSession?: (entry: SessionListEntry) => void
-  onDeleteSession?: (entry: SessionListEntry) => void
-  onSetSessionUnread?: (entry: SessionListEntry, unread: boolean) => void
-  onMoveSession?: (entry: SessionListEntry, directory: string) => void
-  onMoveSessionAnyDirectory?: (entry: SessionListEntry) => void
-  onTogglePinnedSession?: (entry: SessionListEntry) => void
+  /** False for the agents of another machine. */
+  agentsDraggable?: boolean
+  onAgentClick?: (entry: AgentListEntry, modifiers: AgentClickModifiers) => void
+  onRenameAgent?: (entry: AgentListEntry) => void
+  onDeleteAgent?: (entry: AgentListEntry) => void
+  onSetAgentUnread?: (entry: AgentListEntry, unread: boolean) => void
+  onMoveAgent?: (entry: AgentListEntry, directory: string) => void
+  onMoveAgentAnyDirectory?: (entry: AgentListEntry) => void
+  onTogglePinnedAgent?: (entry: AgentListEntry) => void
 }
 
-function PinnedSessionGroup({
-  pinnedSessionKeys,
+function PinnedAgentGroup({
+  pinnedAgentKeys,
   nested = false,
-  directorySessionsStore,
+  directoryAgentsStore,
   collapsedDirectoryStore,
   collapseAllKeys,
   searchActive,
-  activeSessionStore,
-  selectedSessionKeyStore,
+  activeAgentStore,
+  selectedAgentKeyStore,
   isMobile,
   moveTargetDirectories,
   setOpenMobile,
-  sessionsDraggable,
-  onSessionClick,
-  onRenameSession,
-  onDeleteSession,
-  onSetSessionUnread,
-  onMoveSession,
-  onMoveSessionAnyDirectory,
-  onTogglePinnedSession,
-}: PinnedSessionGroupProps) {
+  agentsDraggable,
+  onAgentClick,
+  onRenameAgent,
+  onDeleteAgent,
+  onSetAgentUnread,
+  onMoveAgent,
+  onMoveAgentAnyDirectory,
+  onTogglePinnedAgent,
+}: PinnedAgentGroupProps) {
   const collapsed = useDirectoryCollapsed(
     collapsedDirectoryStore,
-    PINNED_SESSION_GROUP_COLLAPSE_KEY,
+    PINNED_AGENT_GROUP_COLLAPSE_KEY,
     searchActive
   )
 
-  if (pinnedSessionKeys.length === 0) return null
+  if (pinnedAgentKeys.length === 0) return null
 
   return (
     <Collapsible
-      data-sidebar-session-group=""
+      data-sidebar-agent-group=""
       open={!collapsed}
       onOpenChange={(open, details) => {
         if (searchActive) return
@@ -1936,7 +1885,7 @@ function PinnedSessionGroup({
           return
         }
         collapsedDirectoryStore.setCollapsed(
-          PINNED_SESSION_GROUP_COLLAPSE_KEY,
+          PINNED_AGENT_GROUP_COLLAPSE_KEY,
           !open
         )
       }}
@@ -1966,27 +1915,27 @@ function PinnedSessionGroup({
             <div className="relative flex flex-col">
               <SidebarTreeLine level={0} />
               <SidebarMenu>
-                {pinnedSessionKeys.map((entryKey) => (
-                  <SidebarSessionItem
+                {pinnedAgentKeys.map((entryKey) => (
+                  <SidebarAgentItem
                     key={entryKey}
                     entryKey={entryKey}
                     inDirectory
-                    directorySessionsStore={directorySessionsStore}
-                    activeSessionStore={activeSessionStore}
-                    selectedSessionKeyStore={selectedSessionKeyStore}
+                    directoryAgentsStore={directoryAgentsStore}
+                    activeAgentStore={activeAgentStore}
+                    selectedAgentKeyStore={selectedAgentKeyStore}
                     isPinned
                     isMobile={isMobile}
                     overlay={false}
-                    sessionDraggable={sessionsDraggable}
+                    agentDraggable={agentsDraggable}
                     moveTargetDirectories={moveTargetDirectories}
                     setOpenMobile={setOpenMobile}
-                    onSessionClick={onSessionClick}
-                    onRenameSession={onRenameSession}
-                    onDeleteSession={onDeleteSession}
-                    onSetSessionUnread={onSetSessionUnread}
-                    onMoveSession={onMoveSession}
-                    onMoveSessionAnyDirectory={onMoveSessionAnyDirectory}
-                    onTogglePinnedSession={onTogglePinnedSession}
+                    onAgentClick={onAgentClick}
+                    onRenameAgent={onRenameAgent}
+                    onDeleteAgent={onDeleteAgent}
+                    onSetAgentUnread={onSetAgentUnread}
+                    onMoveAgent={onMoveAgent}
+                    onMoveAgentAnyDirectory={onMoveAgentAnyDirectory}
+                    onTogglePinnedAgent={onTogglePinnedAgent}
                   />
                 ))}
               </SidebarMenu>
@@ -1999,19 +1948,19 @@ function PinnedSessionGroup({
 }
 
 type AppSidebarSearchButtonProps = {
-  onOpenSessionsDialog: () => void
+  onOpenAgentsDialog: () => void
 }
 
 function AppSidebarSearchButton({
-  onOpenSessionsDialog,
+  onOpenAgentsDialog,
 }: AppSidebarSearchButtonProps) {
   return (
     <SidebarGroup className="pb-0">
       <SidebarMenu>
         <SidebarMenuItem>
-          <SidebarMenuButton type="button" onClick={onOpenSessionsDialog}>
+          <SidebarMenuButton type="button" onClick={onOpenAgentsDialog}>
             <SearchIcon />
-            <span>Search sessions…</span>
+            <span>Search agents…</span>
             <span className="ml-auto hidden items-center md:flex">
               <Kbd>{formatShortcutLabel(appShortcut("S"))}</Kbd>
             </span>
@@ -2023,19 +1972,19 @@ function AppSidebarSearchButton({
 }
 
 type AppSidebarDirectoriesHeaderProps = {
-  sessionSearch: string
-  matchingSessionCount: number
+  agentSearch: string
+  matchingAgentCount: number
   collapsed: boolean
   onOpenAddDirectoryDialog: () => void
 }
 
 function AppSidebarDirectoriesHeader({
-  sessionSearch,
-  matchingSessionCount,
+  agentSearch,
+  matchingAgentCount,
   collapsed,
   onOpenAddDirectoryDialog,
 }: AppSidebarDirectoriesHeaderProps) {
-  const searchActive = sessionSearch.trim().length > 0
+  const searchActive = agentSearch.trim().length > 0
 
   return (
     // pr-0: the item-size icon buttons already hold the item-pad, so their
@@ -2047,7 +1996,7 @@ function AppSidebarDirectoriesHeader({
       >
         <span className="min-w-0 truncate">
           {searchActive
-            ? `${matchingSessionCount} matching session${matchingSessionCount === 1 ? "" : "s"}`
+            ? `${matchingAgentCount} matching agent${matchingAgentCount === 1 ? "" : "s"}`
             : "Directories"}
         </span>
         {!searchActive ? (
@@ -2099,56 +2048,56 @@ export function DirectoryActions({
 
 const NO_MOVE_TARGET_DIRECTORIES: Array<string> = []
 
-/** A session of another machine, from its summary, as a sidebar entry. */
-function machineSummaryEntry(session: MachineSessionSummary): SessionListEntry {
+/** An agent of another machine, from its summary, as a sidebar entry. */
+function machineSummaryEntry(agent: MachineAgentSummary): AgentListEntry {
   return {
-    id: session.id,
-    // The session path of a Pico server. With it, the rename and archive
-    // routes find the session, and the key of the row matches the pinned
-    // session keys of that machine.
-    path: `pico:${session.id}`,
-    cwd: session.directory || session.cwd,
-    title: session.title,
-    ...(session.lastMessageAt
-      ? { lastMessageAt: new Date(session.lastMessageAt).toISOString() }
+    id: agent.id,
+    // The agent path of a Pico server. With it, the rename and archive
+    // routes find the agent, and the key of the row matches the pinned
+    // agent keys of that machine.
+    path: `pico:${agent.id}`,
+    cwd: agent.directory || agent.cwd,
+    title: agent.title,
+    ...(agent.lastMessageAt
+      ? { lastMessageAt: new Date(agent.lastMessageAt).toISOString() }
       : {}),
-    ...(session.lastUserMessageAt
+    ...(agent.lastUserMessageAt
       ? {
-          lastUserMessageAt: new Date(session.lastUserMessageAt).toISOString(),
+          lastUserMessageAt: new Date(agent.lastUserMessageAt).toISOString(),
         }
       : {}),
-    streaming: session.busy,
-    needsInput: session.needsInput,
-    ...(session.waiting ? { waiting: session.waiting } : {}),
-    unread: isMachineSessionUnread(session),
-    ...(session.parent ? { parent: session.parent } : {}),
+    streaming: agent.busy,
+    needsInput: agent.needsInput,
+    ...(agent.waiting ? { waiting: agent.waiting } : {}),
+    unread: isMachineAgentUnread(agent),
+    ...(agent.parent ? { parent: agent.parent } : {}),
   }
 }
 
 /**
- * The sidebar directories of a machine with their sessions, as the machine
+ * The sidebar directories of a machine with their agents, as the machine
  * shows them when it is the machine of the page.
  */
-function groupMachineSessions(machine: MachineInfo) {
+function groupMachineAgents(machine: MachineInfo) {
   const summary = machine.summary
   const directories = summary?.directories ?? []
-  const sessionsByDirectory: Record<string, Array<SessionListEntry>> = {}
-  for (const directory of directories) sessionsByDirectory[directory] = []
-  for (const session of summary?.sessions ?? []) {
-    const directory = session.directory || session.cwd
-    sessionsByDirectory[directory]?.push(machineSummaryEntry(session))
+  const agentsByDirectory: Record<string, Array<AgentListEntry>> = {}
+  for (const directory of directories) agentsByDirectory[directory] = []
+  for (const agent of summary?.agents ?? []) {
+    const directory = agent.directory || agent.cwd
+    agentsByDirectory[directory]?.push(machineSummaryEntry(agent))
   }
-  return { directories, sessionsByDirectory }
+  return { directories, agentsByDirectory }
 }
 
 /**
- * The pinned session keys of another machine. They are part of the sidebar
+ * The pinned agent keys of another machine. They are part of the sidebar
  * state that the machine's server keeps, so this starts the sidebar sync of
  * that machine. The sync keeps the local copy and sends changes to it.
  */
-function useOtherMachinePinnedSessionKeys(machineId: string, online: boolean) {
+function useOtherMachinePinnedAgentKeys(machineId: string, online: boolean) {
   const [keys, setKeys] = React.useState(() =>
-    readStoredPinnedSessionKeys(machineId)
+    readStoredPinnedAgentKeys(machineId)
   )
 
   React.useEffect(() => {
@@ -2161,20 +2110,20 @@ function useOtherMachinePinnedSessionKeys(machineId: string, online: boolean) {
     "pico:sidebar-state",
     ({ machineId: changedMachine, changed }) => {
       if (changedMachine !== machineId) return
-      if (changed.includes("pinnedSessionKeys"))
-        setKeys(readStoredPinnedSessionKeys(machineId))
+      if (changed.includes("pinnedAgentKeys"))
+        setKeys(readStoredPinnedAgentKeys(machineId))
     }
   )
 
   const toggle = React.useCallback(
     (key: string) => {
-      const current = readStoredPinnedSessionKeys(machineId)
+      const current = readStoredPinnedAgentKeys(machineId)
       const next = current.includes(key)
         ? current.filter((entry) => entry !== key)
         : [key, ...current]
       machineLocalStorageSetItem(
         machineId,
-        PINNED_SESSIONS_STORAGE_KEY,
+        PINNED_AGENTS_STORAGE_KEY,
         JSON.stringify(next)
       )
       setKeys(next)
@@ -2186,11 +2135,11 @@ function useOtherMachinePinnedSessionKeys(machineId: string, online: boolean) {
 }
 
 /**
- * The directories and sessions of another machine of the hub, from its
+ * The directories and agents of another machine of the hub, from its
  * summary. They look like the directories of this machine. A click opens the
- * session on its machine; the new-session button of a directory opens the
- * machine and starts a session there. Pin, rename, and archive change the
- * session on its machine.
+ * agent on its machine; the new-agent button of a directory opens the
+ * machine and starts an agent there. Pin, rename, and archive change the
+ * agent on its machine.
  */
 export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
   const { isMobile, setOpenMobile } = useSidebar()
@@ -2208,7 +2157,7 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
     })
   }, [summaryDirectories])
   const allGrouped = React.useMemo(() => {
-    const grouped = groupMachineSessions(machine)
+    const grouped = groupMachineAgents(machine)
     if (removedDirectories.size === 0) return grouped
     return {
       ...grouped,
@@ -2217,25 +2166,25 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
       ),
     }
   }, [machine, removedDirectories])
-  const statusFilter = useSessionStatusFilter(machine.id)
-  const [storedPinnedKeys, togglePinnedKey] = useOtherMachinePinnedSessionKeys(
+  const statusFilter = useAgentStatusFilter(machine.id)
+  const [storedPinnedKeys, togglePinnedKey] = useOtherMachinePinnedAgentKeys(
     machine.id,
     machine.state === "online"
   )
-  // A click on a count in the machine heading shows only the sessions with
+  // A click on a count in the machine heading shows only the agents with
   // that state.
   const grouped = React.useMemo(() => {
     if (!statusFilter) return allGrouped
     const pinned = new Set(storedPinnedKeys)
-    const filtered = filterDirectorySessionsByStatus(
+    const filtered = filterDirectoryAgentsByStatus(
       allGrouped.directories,
-      allGrouped.sessionsByDirectory,
+      allGrouped.agentsByDirectory,
       statusFilter,
-      (entry) => pinned.has(sessionListEntryKey(entry))
+      (entry) => pinned.has(agentListEntryKey(entry))
     )
     return {
       directories: filtered.visibleDirectories,
-      sessionsByDirectory: filtered.filteredSessions,
+      agentsByDirectory: filtered.filteredAgents,
     }
   }, [allGrouped, statusFilter, storedPinnedKeys])
   const [stores] = React.useState(() => {
@@ -2245,54 +2194,54 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
     )
     collapsed.loadStored()
     return {
-      sessions: createDirectorySessionsStore(grouped.sessionsByDirectory, {}),
+      agents: createDirectoryAgentsStore(grouped.agentsByDirectory, {}),
       collapsed,
-      active: createActiveSidebarSessionStore(),
-      selected: createSelectedSessionKeyStore(),
+      active: createActiveSidebarAgentStore(),
+      selected: createSelectedAgentKeyStore(),
     }
   })
 
   React.useEffect(() => {
-    stores.sessions.setData(grouped.sessionsByDirectory, {})
+    stores.agents.setData(grouped.agentsByDirectory, {})
   }, [grouped, stores])
 
   const online = machine.state === "online"
-  // Only the pins of sessions in the summary: the summary does not have
-  // archived sessions, and it stops at 200 sessions.
-  const pinnedSessionKeys = React.useMemo(() => {
+  // Only the pins of agents in the summary: the summary does not have
+  // archived agents, and it stops at 200 agents.
+  const pinnedAgentKeys = React.useMemo(() => {
     const known = new Set(
-      Object.values(grouped.sessionsByDirectory)
+      Object.values(grouped.agentsByDirectory)
         .flat()
-        .map((entry) => sessionListEntryKey(entry))
+        .map((entry) => agentListEntryKey(entry))
     )
     return storedPinnedKeys.filter((key) => known.has(key))
   }, [grouped, storedPinnedKeys])
   const collapseAllKeys = React.useMemo(
-    () => [PINNED_SESSION_GROUP_COLLAPSE_KEY, ...grouped.directories],
+    () => [PINNED_AGENT_GROUP_COLLAPSE_KEY, ...grouped.directories],
     [grouped.directories]
   )
-  const [renameEntry, setRenameEntry] = React.useState<SessionListEntry>()
-  const [archiveEntry, setArchiveEntry] = React.useState<SessionListEntry>()
-  const sessionActions = online
+  const [renameEntry, setRenameEntry] = React.useState<AgentListEntry>()
+  const [archiveEntry, setArchiveEntry] = React.useState<AgentListEntry>()
+  const agentActions = online
     ? {
-        onRenameSession: setRenameEntry,
-        onDeleteSession: setArchiveEntry,
-        onTogglePinnedSession: (entry: SessionListEntry) =>
-          togglePinnedKey(sessionListEntryKey(entry)),
+        onRenameAgent: setRenameEntry,
+        onDeleteAgent: setArchiveEntry,
+        onTogglePinnedAgent: (entry: AgentListEntry) =>
+          togglePinnedKey(agentListEntryKey(entry)),
       }
     : {}
-  const openSession = React.useCallback(
-    (entry: SessionListEntry) => {
+  const openAgent = React.useCallback(
+    (entry: AgentListEntry) => {
       if (entry.id)
-        openMachineSession({ machineId: machine.id, sessionId: entry.id })
+        openMachineAgent({ machineId: machine.id, agentId: entry.id })
     },
     [machine.id]
   )
-  const createSession = React.useCallback(
+  const createAgent = React.useCallback(
     (directory: string) => {
       if (isMobile) setOpenMobile(false)
       openMachine(machine.id, {
-        action: { type: "new-session", directory },
+        action: { type: "new-agent", directory },
       })
     },
     [isMobile, machine.id, setOpenMobile]
@@ -2317,11 +2266,11 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
   if (
     statusFilter &&
     grouped.directories.length === 0 &&
-    pinnedSessionKeys.length === 0
+    pinnedAgentKeys.length === 0
   )
     return (
       <p className="px-(--sidebar-item-pad) py-1 text-xs text-sidebar-foreground/50">
-        No sessions with these states.
+        No agents with these states.
       </p>
     )
   if (!statusFilter && grouped.directories.length === 0) {
@@ -2347,41 +2296,41 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
 
   return (
     <>
-      <PinnedSessionGroup
+      <PinnedAgentGroup
         nested
-        pinnedSessionKeys={pinnedSessionKeys}
-        directorySessionsStore={stores.sessions}
+        pinnedAgentKeys={pinnedAgentKeys}
+        directoryAgentsStore={stores.agents}
         collapsedDirectoryStore={stores.collapsed}
         collapseAllKeys={collapseAllKeys}
         searchActive={Boolean(statusFilter)}
-        activeSessionStore={stores.active}
-        selectedSessionKeyStore={stores.selected}
+        activeAgentStore={stores.active}
+        selectedAgentKeyStore={stores.selected}
         isMobile={isMobile}
         moveTargetDirectories={NO_MOVE_TARGET_DIRECTORIES}
         setOpenMobile={setOpenMobile}
-        sessionsDraggable={false}
-        onSessionClick={openSession}
-        {...sessionActions}
+        agentsDraggable={false}
+        onAgentClick={openAgent}
+        {...agentActions}
       />
       {grouped.directories.map((directory) => (
-        <DirectorySessionGroup
+        <DirectoryAgentGroup
           key={directory}
           directory={directory}
-          directorySessionsStore={stores.sessions}
+          directoryAgentsStore={stores.agents}
           collapsedDirectoryStore={stores.collapsed}
           collapseAllKeys={collapseAllKeys}
           searchActive={Boolean(statusFilter)}
           moveTargetDirectories={NO_MOVE_TARGET_DIRECTORIES}
-          activeSessionStore={stores.active}
-          selectedSessionKeyStore={stores.selected}
-          pinnedSessionKeys={pinnedSessionKeys}
+          activeAgentStore={stores.active}
+          selectedAgentKeyStore={stores.selected}
+          pinnedAgentKeys={pinnedAgentKeys}
           isMobile={isMobile}
           setOpenMobile={setOpenMobile}
-          sessionsDraggable={false}
-          onSessionClick={openSession}
-          onCreateSessionInDirectory={online ? createSession : undefined}
+          agentsDraggable={false}
+          onAgentClick={openAgent}
+          onCreateAgentInDirectory={online ? createAgent : undefined}
           onRemoveDirectory={online ? removeDirectory : undefined}
-          {...sessionActions}
+          {...agentActions}
         />
       ))}
       <OtherMachineRenameDialog
@@ -2409,36 +2358,36 @@ export function AppSidebar(props: AppSidebarProps) {
 }
 
 function useAppSidebarView({
-  sessionSearch,
-  onOpenSessionsDialog,
+  agentSearch,
+  onOpenAgentsDialog,
   visibleDirectories,
-  directorySessionsStore,
-  matchingSessionCount,
-  selectedSessionKeys,
-  activeSessionId,
-  activeSessionKey,
-  pinnedSessionKeys,
+  directoryAgentsStore,
+  matchingAgentCount,
+  selectedAgentKeys,
+  activeAgentId,
+  activeAgentKey,
+  pinnedAgentKeys,
   emptyStateText,
   statusFilterActive = false,
   onOpenAddDirectoryDialog,
-  onSessionClick,
-  onRenameSession,
-  onDeleteSession,
-  onSetSessionUnread,
-  onMoveSession,
-  onMoveSessionAnyDirectory,
-  onTogglePinnedSession,
-  onCreateSessionInDirectory,
-  onDeleteOldSessionsInDirectory,
-  onMarkSessionsRead,
+  onAgentClick,
+  onRenameAgent,
+  onDeleteAgent,
+  onSetAgentUnread,
+  onMoveAgent,
+  onMoveAgentAnyDirectory,
+  onTogglePinnedAgent,
+  onCreateAgentInDirectory,
+  onDeleteOldAgentsInDirectory,
+  onMarkAgentsRead,
   onRemoveDirectory,
   onReorderDirectories,
-  onOpenArchivedSessions,
+  onOpenArchivedAgents,
 }: AppSidebarProps) {
   const machineId = useMachineId()
   const { isMobile, setOpenMobile } = useSidebar()
-  const searchActive = sessionSearch.trim().length > 0
-  // A search or a state filter shows all matching sessions, with their
+  const searchActive = agentSearch.trim().length > 0
+  // A search or a state filter shows all matching agents, with their
   // groups open, and stops the drag to reorder.
   const listFiltered = searchActive || statusFilterActive
   const directoryOrderingEnabled =
@@ -2446,12 +2395,12 @@ function useAppSidebarView({
   const [activeDirectory, setActiveDirectory] = React.useState<string | null>(
     null
   )
-  const [activeSessionDrag, setActiveSessionDrag] = React.useState<{
+  const [activeAgentDrag, setActiveAgentDrag] = React.useState<{
     entryKey: string
-    entry: SessionListEntry
+    entry: AgentListEntry
     sourceDirectory: string
   } | null>(null)
-  const [sessionDropDirectory, setSessionDropDirectory] = React.useState<
+  const [agentDropDirectory, setAgentDropDirectory] = React.useState<
     string | null
   >(null)
   const [previewDirectoryOrder, setPreviewDirectoryOrder] =
@@ -2459,38 +2408,36 @@ function useAppSidebarView({
   const [collapsedDirectoryStore] = React.useState(() =>
     createCollapsedDirectoryStore(machineId)
   )
-  const [selectedSessionKeyStore] = React.useState(
-    createSelectedSessionKeyStore
-  )
-  const [activeSessionStore] = React.useState(createActiveSidebarSessionStore)
+  const [selectedAgentKeyStore] = React.useState(createSelectedAgentKeyStore)
+  const [activeAgentStore] = React.useState(createActiveSidebarAgentStore)
   // With a group for each machine, the machine heading replaces the
   // "Directories" heading and takes its buttons, so all machine groups have
-  // the same levels: machine, directory, session. A search still shows the
+  // the same levels: machine, directory, agent. A search still shows the
   // heading, with its count of matches.
   const hasMachineGroups = useHasMachineGroups()
   const showDirectoriesHeader = !hasMachineGroups || searchActive
   const directoriesCollapsed = useDirectoryCollapsed(
     collapsedDirectoryStore,
-    DIRECTORIES_SESSION_GROUP_COLLAPSE_KEY,
+    DIRECTORIES_AGENT_GROUP_COLLAPSE_KEY,
     searchActive
   )
   // An Option-click on the pinned group or a directory expands or collapses
   // all of them.
   const collapseAllKeys = React.useMemo(
-    () => [PINNED_SESSION_GROUP_COLLAPSE_KEY, ...visibleDirectories],
+    () => [PINNED_AGENT_GROUP_COLLAPSE_KEY, ...visibleDirectories],
     [visibleDirectories]
   )
 
   React.useLayoutEffect(() => {
-    selectedSessionKeyStore.setKeys(selectedSessionKeys)
-  }, [selectedSessionKeyStore, selectedSessionKeys])
+    selectedAgentKeyStore.setKeys(selectedAgentKeys)
+  }, [selectedAgentKeyStore, selectedAgentKeys])
 
   React.useLayoutEffect(() => {
-    activeSessionStore.setActive({
-      sessionId: activeSessionId,
-      sessionKey: activeSessionKey,
+    activeAgentStore.setActive({
+      agentId: activeAgentId,
+      agentKey: activeAgentKey,
     })
-  }, [activeSessionId, activeSessionKey, activeSessionStore])
+  }, [activeAgentId, activeAgentKey, activeAgentStore])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -2566,21 +2513,21 @@ function useAppSidebarView({
     const activeData = event.active.data.current as
       | {
           type?: string
-          entry?: SessionListEntry
+          entry?: AgentListEntry
           entryKey?: string
           sourceDirectory?: string
         }
       | undefined
 
-    if (activeData?.type === "session" && activeData.entry) {
+    if (activeData?.type === "agent" && activeData.entry) {
       if (isMobile) return
-      setActiveSessionDrag({
+      setActiveAgentDrag({
         entryKey: activeData.entryKey || String(event.active.id),
         entry: activeData.entry,
         sourceDirectory:
           activeData.sourceDirectory || activeData.entry.cwd || "",
       })
-      setSessionDropDirectory(null)
+      setAgentDropDirectory(null)
       return
     }
 
@@ -2596,10 +2543,10 @@ function useAppSidebarView({
     const activeId = String(event.active.id)
     const overId = event.over ? String(event.over.id) : ""
 
-    if (activeData?.type === "session") {
+    if (activeData?.type === "agent") {
       if (isMobile) return
       const overDirectory = visibleDirectories.includes(overId) ? overId : ""
-      setSessionDropDirectory(
+      setAgentDropDirectory(
         overDirectory && overDirectory !== activeData.sourceDirectory
           ? overDirectory
           : null
@@ -2614,22 +2561,22 @@ function useAppSidebarView({
 
   const handleDragCancel = () => {
     setActiveDirectory(null)
-    setActiveSessionDrag(null)
-    setSessionDropDirectory(null)
+    setActiveAgentDrag(null)
+    setAgentDropDirectory(null)
     setPreviewDirectoryOrder(null)
   }
 
   const handleDragEnd = (event: DragEndEvent) => {
     const activeData = event.active.data.current as
-      | { type?: string; entry?: SessionListEntry; sourceDirectory?: string }
+      | { type?: string; entry?: AgentListEntry; sourceDirectory?: string }
       | undefined
     const activeId = String(event.active.id)
     const overId = event.over ? String(event.over.id) : ""
 
-    if (activeData?.type === "session") {
+    if (activeData?.type === "agent") {
       if (isMobile) {
-        setActiveSessionDrag(null)
-        setSessionDropDirectory(null)
+        setActiveAgentDrag(null)
+        setAgentDropDirectory(null)
         return
       }
       const targetDirectory = visibleDirectories.includes(overId) ? overId : ""
@@ -2638,10 +2585,10 @@ function useAppSidebarView({
         targetDirectory &&
         targetDirectory !== activeData.sourceDirectory
       ) {
-        onMoveSession?.(activeData.entry, targetDirectory)
+        onMoveAgent?.(activeData.entry, targetDirectory)
       }
-      setActiveSessionDrag(null)
-      setSessionDropDirectory(null)
+      setActiveAgentDrag(null)
+      setAgentDropDirectory(null)
       return
     }
 
@@ -2683,9 +2630,7 @@ function useAppSidebarView({
     <>
       {topSlot
         ? createPortal(
-            <AppSidebarSearchButton
-              onOpenSessionsDialog={onOpenSessionsDialog}
-            />,
+            <AppSidebarSearchButton onOpenAgentsDialog={onOpenAgentsDialog} />,
             topSlot
           )
         : null}
@@ -2699,23 +2644,23 @@ function useAppSidebarView({
               onDragEnd={handleDragEnd}
               onDragCancel={handleDragCancel}
             >
-              <PinnedSessionGroup
-                pinnedSessionKeys={pinnedSessionKeys}
-                directorySessionsStore={directorySessionsStore}
+              <PinnedAgentGroup
+                pinnedAgentKeys={pinnedAgentKeys}
+                directoryAgentsStore={directoryAgentsStore}
                 collapsedDirectoryStore={collapsedDirectoryStore}
                 collapseAllKeys={collapseAllKeys}
                 searchActive={listFiltered}
-                activeSessionStore={activeSessionStore}
-                selectedSessionKeyStore={selectedSessionKeyStore}
+                activeAgentStore={activeAgentStore}
+                selectedAgentKeyStore={selectedAgentKeyStore}
                 isMobile={isMobile}
                 moveTargetDirectories={visibleDirectories}
                 setOpenMobile={setOpenMobile}
-                onSessionClick={onSessionClick}
-                onRenameSession={onRenameSession}
-                onDeleteSession={onDeleteSession}
-                onSetSessionUnread={onSetSessionUnread}
-                onMoveSession={onMoveSession}
-                onTogglePinnedSession={onTogglePinnedSession}
+                onAgentClick={onAgentClick}
+                onRenameAgent={onRenameAgent}
+                onDeleteAgent={onDeleteAgent}
+                onSetAgentUnread={onSetAgentUnread}
+                onMoveAgent={onMoveAgent}
+                onTogglePinnedAgent={onTogglePinnedAgent}
               />
               <Collapsible
                 open={showDirectoriesHeader ? !directoriesCollapsed : true}
@@ -2725,7 +2670,7 @@ function useAppSidebarView({
                   if (isAltChange(details)) {
                     collapsedDirectoryStore.setAll(
                       [
-                        DIRECTORIES_SESSION_GROUP_COLLAPSE_KEY,
+                        DIRECTORIES_AGENT_GROUP_COLLAPSE_KEY,
                         ...visibleDirectories,
                       ],
                       !open
@@ -2733,7 +2678,7 @@ function useAppSidebarView({
                     return
                   }
                   collapsedDirectoryStore.setCollapsed(
-                    DIRECTORIES_SESSION_GROUP_COLLAPSE_KEY,
+                    DIRECTORIES_AGENT_GROUP_COLLAPSE_KEY,
                     !open
                   )
                 }}
@@ -2743,8 +2688,8 @@ function useAppSidebarView({
                 >
                   {showDirectoriesHeader ? (
                     <AppSidebarDirectoriesHeader
-                      sessionSearch={sessionSearch}
-                      matchingSessionCount={matchingSessionCount}
+                      agentSearch={agentSearch}
+                      matchingAgentCount={matchingAgentCount}
                       collapsed={directoriesCollapsed}
                       onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
                     />
@@ -2775,48 +2720,44 @@ function useAppSidebarView({
                                 disabled={!directoryOrderingEnabled}
                               >
                                 {({ attributes, listeners, isDragging }) => (
-                                  <DirectorySessionGroup
+                                  <DirectoryAgentGroup
                                     directory={directory}
-                                    directorySessionsStore={
-                                      directorySessionsStore
-                                    }
+                                    directoryAgentsStore={directoryAgentsStore}
                                     collapsedDirectoryStore={
                                       collapsedDirectoryStore
                                     }
                                     collapseAllKeys={collapseAllKeys}
                                     searchActive={listFiltered}
                                     moveTargetDirectories={visibleDirectories}
-                                    activeSessionStore={activeSessionStore}
-                                    selectedSessionKeyStore={
-                                      selectedSessionKeyStore
+                                    activeAgentStore={activeAgentStore}
+                                    selectedAgentKeyStore={
+                                      selectedAgentKeyStore
                                     }
-                                    pinnedSessionKeys={pinnedSessionKeys}
+                                    pinnedAgentKeys={pinnedAgentKeys}
                                     isMobile={isMobile}
                                     setOpenMobile={setOpenMobile}
                                     isDragging={isDragging}
-                                    isSessionDropTarget={
-                                      sessionDropDirectory === directory
+                                    isAgentDropTarget={
+                                      agentDropDirectory === directory
                                     }
                                     attributes={attributes}
                                     listeners={listeners}
-                                    onSessionClick={onSessionClick}
-                                    onRenameSession={onRenameSession}
-                                    onDeleteSession={onDeleteSession}
-                                    onSetSessionUnread={onSetSessionUnread}
-                                    onMoveSession={onMoveSession}
-                                    onMoveSessionAnyDirectory={
-                                      onMoveSessionAnyDirectory
+                                    onAgentClick={onAgentClick}
+                                    onRenameAgent={onRenameAgent}
+                                    onDeleteAgent={onDeleteAgent}
+                                    onSetAgentUnread={onSetAgentUnread}
+                                    onMoveAgent={onMoveAgent}
+                                    onMoveAgentAnyDirectory={
+                                      onMoveAgentAnyDirectory
                                     }
-                                    onTogglePinnedSession={
-                                      onTogglePinnedSession
+                                    onTogglePinnedAgent={onTogglePinnedAgent}
+                                    onCreateAgentInDirectory={
+                                      onCreateAgentInDirectory
                                     }
-                                    onCreateSessionInDirectory={
-                                      onCreateSessionInDirectory
+                                    onDeleteOldAgentsInDirectory={
+                                      onDeleteOldAgentsInDirectory
                                     }
-                                    onDeleteOldSessionsInDirectory={
-                                      onDeleteOldSessionsInDirectory
-                                    }
-                                    onMarkSessionsRead={onMarkSessionsRead}
+                                    onMarkAgentsRead={onMarkAgentsRead}
                                     onRemoveDirectory={
                                       onRemoveDirectory
                                         ? removeDirectory
@@ -2836,56 +2777,54 @@ function useAppSidebarView({
 
               <DragOverlay>
                 {activeDirectory ? (
-                  <DirectorySessionGroup
+                  <DirectoryAgentGroup
                     directory={activeDirectory}
-                    directorySessionsStore={directorySessionsStore}
+                    directoryAgentsStore={directoryAgentsStore}
                     collapsedDirectoryStore={collapsedDirectoryStore}
                     collapseAllKeys={collapseAllKeys}
                     searchActive={listFiltered}
                     moveTargetDirectories={visibleDirectories}
-                    activeSessionStore={activeSessionStore}
-                    selectedSessionKeyStore={selectedSessionKeyStore}
-                    pinnedSessionKeys={pinnedSessionKeys}
+                    activeAgentStore={activeAgentStore}
+                    selectedAgentKeyStore={selectedAgentKeyStore}
+                    pinnedAgentKeys={pinnedAgentKeys}
                     isMobile={isMobile}
                     setOpenMobile={setOpenMobile}
                     overlay
-                    onSessionClick={onSessionClick}
-                    onRenameSession={onRenameSession}
-                    onDeleteSession={onDeleteSession}
-                    onSetSessionUnread={onSetSessionUnread}
-                    onMoveSession={onMoveSession}
-                    onMoveSessionAnyDirectory={onMoveSessionAnyDirectory}
-                    onTogglePinnedSession={onTogglePinnedSession}
-                    onCreateSessionInDirectory={onCreateSessionInDirectory}
-                    onDeleteOldSessionsInDirectory={
-                      onDeleteOldSessionsInDirectory
-                    }
-                    onMarkSessionsRead={onMarkSessionsRead}
+                    onAgentClick={onAgentClick}
+                    onRenameAgent={onRenameAgent}
+                    onDeleteAgent={onDeleteAgent}
+                    onSetAgentUnread={onSetAgentUnread}
+                    onMoveAgent={onMoveAgent}
+                    onMoveAgentAnyDirectory={onMoveAgentAnyDirectory}
+                    onTogglePinnedAgent={onTogglePinnedAgent}
+                    onCreateAgentInDirectory={onCreateAgentInDirectory}
+                    onDeleteOldAgentsInDirectory={onDeleteOldAgentsInDirectory}
+                    onMarkAgentsRead={onMarkAgentsRead}
                     onRemoveDirectory={
                       onRemoveDirectory ? removeDirectory : undefined
                     }
                   />
-                ) : activeSessionDrag ? (
+                ) : activeAgentDrag ? (
                   <SidebarMenu className="w-full rounded-md bg-sidebar shadow-lg ring-1 ring-sidebar-border/70">
-                    <SidebarSessionItem
-                      entryKey={activeSessionDrag.entryKey}
-                      directorySessionsStore={directorySessionsStore}
-                      activeSessionStore={activeSessionStore}
-                      selectedSessionKeyStore={selectedSessionKeyStore}
-                      isPinned={pinnedSessionKeys.includes(
-                        activeSessionDrag.entryKey
+                    <SidebarAgentItem
+                      entryKey={activeAgentDrag.entryKey}
+                      directoryAgentsStore={directoryAgentsStore}
+                      activeAgentStore={activeAgentStore}
+                      selectedAgentKeyStore={selectedAgentKeyStore}
+                      isPinned={pinnedAgentKeys.includes(
+                        activeAgentDrag.entryKey
                       )}
                       isMobile={isMobile}
                       overlay
                       moveTargetDirectories={visibleDirectories}
                       setOpenMobile={setOpenMobile}
-                      onSessionClick={onSessionClick}
-                      onRenameSession={onRenameSession}
-                      onDeleteSession={onDeleteSession}
-                      onSetSessionUnread={onSetSessionUnread}
-                      onMoveSession={onMoveSession}
-                      onMoveSessionAnyDirectory={onMoveSessionAnyDirectory}
-                      onTogglePinnedSession={onTogglePinnedSession}
+                      onAgentClick={onAgentClick}
+                      onRenameAgent={onRenameAgent}
+                      onDeleteAgent={onDeleteAgent}
+                      onSetAgentUnread={onSetAgentUnread}
+                      onMoveAgent={onMoveAgent}
+                      onMoveAgentAnyDirectory={onMoveAgentAnyDirectory}
+                      onTogglePinnedAgent={onTogglePinnedAgent}
                     />
                   </SidebarMenu>
                 ) : null}
@@ -2894,7 +2833,7 @@ function useAppSidebarView({
             contentSlot
           )
         : null}
-      {bottomSlot && onOpenArchivedSessions
+      {bottomSlot && onOpenArchivedAgents
         ? createPortal(
             <SidebarGroup className="pt-0">
               <SidebarMenu>
@@ -2904,11 +2843,11 @@ function useAppSidebarView({
                     className="text-muted-foreground"
                     onClick={() => {
                       if (isMobile) setOpenMobile(false)
-                      onOpenArchivedSessions()
+                      onOpenArchivedAgents()
                     }}
                   >
                     <ArchiveIcon />
-                    <span>Archived sessions</span>
+                    <span>Archived agents</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>

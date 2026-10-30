@@ -1,21 +1,21 @@
-import type { SessionListEntry } from "@/lib/pico/api"
+import type { AgentListEntry } from "@/lib/pico/api"
 
 /**
- * The sidebar order of sessions, in three groups:
+ * The sidebar order of agents, in three groups:
  *
- * 1. Sessions with a finished run that you did not see yet, newest first.
- * 2. Streaming sessions.
- * 3. Idle sessions that you saw.
+ * 1. Agents with a finished run that you did not see yet, newest first.
+ * 2. Streaming agents.
+ * 3. Idle agents that you saw.
  *
- * Groups 2 and 3 are sorted by the time of your last message. A session moves
+ * Groups 2 and 3 are sorted by the time of your last message. An agent moves
  * only when its run starts or ends, or when you prompt it. New messages of a
  * running agent do not move it, so the rows stay in place while agents work.
  */
-export function compareSidebarSessions(
-  left: SessionListEntry,
-  right: SessionListEntry
+export function compareSidebarAgents(
+  left: AgentListEntry,
+  right: AgentListEntry
 ) {
-  const byGroup = sessionGroup(left) - sessionGroup(right)
+  const byGroup = agentGroup(left) - agentGroup(right)
   if (byGroup) return byGroup
   if (isUnreadDone(left)) {
     const byFinish = doneTime(right) - doneTime(left)
@@ -27,27 +27,27 @@ export function compareSidebarSessions(
   )
 }
 
-/** `sessions` in sidebar order, in a new array. */
-export function sortSidebarSessions(sessions: Array<SessionListEntry>) {
-  return sessions.toSorted(compareSidebarSessions)
+/** `agents` in sidebar order, in a new array. */
+export function sortSidebarAgents(agents: Array<AgentListEntry>) {
+  return agents.toSorted(compareSidebarAgents)
 }
 
-function sessionGroup(entry: SessionListEntry) {
+function agentGroup(entry: AgentListEntry) {
   if (isUnreadDone(entry)) return 0
   if (entry.streaming) return 1
   return 2
 }
 
-function isUnreadDone(entry: SessionListEntry) {
+function isUnreadDone(entry: AgentListEntry) {
   return Boolean(entry.unread) && !entry.streaming
 }
 
 /** The last message of a finished run is near its end. */
-function doneTime(entry: SessionListEntry) {
+function doneTime(entry: AgentListEntry) {
   return timestampValue(entry.lastMessageAt || entry.modified)
 }
 
-function lastPromptTime(entry: SessionListEntry) {
+function lastPromptTime(entry: AgentListEntry) {
   return timestampValue(
     entry.lastUserMessageAt || entry.modified || entry.lastMessageAt
   )

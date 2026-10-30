@@ -2,43 +2,43 @@ import { CornerLeftUpIcon, GitForkIcon } from "lucide-react"
 
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { emitPicoEvent } from "@/features/pico/agent/events"
-import { useSessionExtensions } from "@/features/pico/agent/session-extensions"
+import { useAgentExtensions } from "@/features/pico/agent/agent-extensions"
 
-type SessionInfo = {
+type AgentInfo = {
   parent?: { id: string; title: string }
   worktree?: { path: string; branch: string }
 }
 
-export function useSessionInfo(viewerContextId: string, sessionId?: string) {
-  const query = useSessionExtensions(viewerContextId, sessionId)
-  return query.data?.session as SessionInfo | undefined
+export function useAgentInfo(viewerContextId: string, agentId?: string) {
+  const query = useAgentExtensions(viewerContextId, agentId)
+  return query.data?.agent as AgentInfo | undefined
 }
 
 /**
- * Compact markers for the parent session and the worktree, for the session
+ * Compact markers for the parent agent and the worktree, for the agent
  * header. They are icons only; the tooltips hold the full text, because the
  * header already shows the branch name.
  */
-export function SessionLineage({
-  sessionId,
+export function AgentLineage({
+  agentId,
   viewerContextId,
 }: {
-  sessionId?: string
+  agentId?: string
   viewerContextId: string
 }) {
-  const info = useSessionInfo(viewerContextId, sessionId)
+  const info = useAgentInfo(viewerContextId, agentId)
   if (!info) return null
   const parent = info.parent
   return (
     <>
       {parent ? (
-        <TitleTooltip title={`Open the parent session, ${parent.title}`}>
+        <TitleTooltip title={`Open the parent agent, ${parent.title}`}>
           <button
             type="button"
-            aria-label={`Open the parent session, ${parent.title}`}
+            aria-label={`Open the parent agent, ${parent.title}`}
             className="inline-flex shrink-0 items-center rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
             onClick={() =>
-              emitPicoEvent("pico:open-session", { sessionId: parent.id })
+              emitPicoEvent("pico:open-agent", { agentId: parent.id })
             }
           >
             <CornerLeftUpIcon className="size-3" />

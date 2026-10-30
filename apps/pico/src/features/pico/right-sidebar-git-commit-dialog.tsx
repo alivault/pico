@@ -880,7 +880,7 @@ export function GitCommitDialogController({
     () => ({
       open: () => {
         if (!viewerContextId || !normalizedCwd) {
-          toast.error("Open a session in a repository before committing.")
+          toast.error("Open an agent in a repository before committing.")
           return
         }
 

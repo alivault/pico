@@ -17,34 +17,34 @@ import { SidebarInset, useSidebar } from "@/components/ui/sidebar"
 import { AppShellFloatingControllers } from "@/features/pico/app-shell-floating-controllers"
 import { AppShellTabsController } from "@/features/pico/app-shell-desktop-layout"
 import {
-  AppShellSessionHeader,
-  type AppShellSessionHeaderActions,
-} from "@/features/pico/app-shell-session-header"
+  AppShellAgentHeader,
+  type AppShellAgentHeaderActions,
+} from "@/features/pico/app-shell-agent-header"
 import { AppShellSidebarController } from "@/features/pico/app-shell-sidebar-controller"
 import { AppShellWindowEffectsHost } from "@/features/pico/app-shell-window-effects"
-import type { AppShellAddDirectoryDialogHandle } from "@/features/pico/app-shell-add-directory-dialog"
+import type { AppShellAddDirectoryDialogHandle } from "@/features/pico/app-shell-add-project-dialog"
 import type { AppShellAuthDialogHandle } from "@/features/pico/app-shell-auth-dialog"
 import type {
   AppCommand,
   AppShellCommandPaletteHandle,
 } from "@/features/pico/app-shell-command-palette"
-import type { AppShellSessionsDialogHandle } from "@/features/pico/app-shell-sessions-dialog"
+import type { AppShellAgentsDialogHandle } from "@/features/pico/app-shell-agents-dialog"
 import type { AppShellSettingsDialogHandle } from "@/features/pico/app-shell-settings-dialog"
 import type {
-  DeleteOldDirectorySessionsDialogHandle,
-  DeleteSessionsDialogHandle,
-  ForkSessionDialogHandle,
-  RenameSessionDialogHandle,
-} from "@/features/pico/app-shell-session-dialogs"
+  DeleteOldDirectoryAgentsDialogHandle,
+  DeleteAgentsDialogHandle,
+  ForkAgentDialogHandle,
+  RenameAgentDialogHandle,
+} from "@/features/pico/app-shell-agent-dialogs"
 import type { AppShellTreeDialogHandle } from "@/features/pico/app-shell-tree-dialog"
 import type { AppShellUiRequestDialogHandle } from "@/features/pico/app-shell-ui-request-dialog"
 import {
-  findSidebarSessionSelectionKey,
-  getCurrentSessionTitleFromState,
-  resolveNewSessionCwd,
+  findSidebarAgentSelectionKey,
+  getCurrentAgentTitleFromState,
+  resolveNewAgentCwd,
   sameStringArray,
-  sessionNotificationKey,
-  sessionScrollKey,
+  agentNotificationKey,
+  agentScrollKey,
   shallowRecordEqual,
   useLatestRef,
 } from "@/features/pico/app-shell-common"
@@ -53,7 +53,7 @@ import {
   EMPTY_COMPOSER_IMAGES,
   EMPTY_COMPOSER_PENDING_MESSAGES,
   createInitialAppShellComposerSnapshot,
-  createOptimisticDraftSessionState,
+  createOptimisticDraftAgentState,
   createOptimisticPendingId,
   insertOptimisticUserItem,
   pendingDraftFollowUpId,
@@ -104,12 +104,12 @@ import {
 import { normalizeCwd } from "@/features/pico/right-sidebar-shared"
 import {
   createAppShellSidebarStore,
-  mergeSidebarSessionStatusMap,
-  bindOptimisticSidebarSessionEntries,
-  bindOptimisticSidebarSessionEntryById,
-  removeOptimisticSidebarSessionEntry,
-  updateOptimisticSidebarSessionPreviewEntry,
-  upsertOptimisticSidebarSessionEntry,
+  mergeSidebarAgentStatusMap,
+  bindOptimisticSidebarAgentEntries,
+  bindOptimisticSidebarAgentEntryById,
+  removeOptimisticSidebarAgentEntry,
+  updateOptimisticSidebarAgentPreviewEntry,
+  upsertOptimisticSidebarAgentEntry,
   useAppShellSidebarValue,
   type AppShellSidebarStore,
 } from "@/features/pico/app-shell-sidebar-store"
@@ -117,10 +117,10 @@ import type {
   AppShellDisplaySettingsState,
   AppShellDraftFlowState,
   AppShellNotificationState,
-  AppShellSessionWorkspaceHandle,
+  AppShellAgentWorkspaceHandle,
   AppShellUiState,
-  CreateSessionOptions,
-  SelectSessionNavigationOptions,
+  CreateAgentOptions,
+  SelectAgentNavigationOptions,
 } from "@/features/pico/app-shell-types"
 import {
   AWAITING_FIRST_RESPONSE_WORKING_LABEL,
@@ -155,18 +155,18 @@ import type {
 } from "@/features/pico/right-sidebar-types"
 import {
   getDesktopNotificationPermission,
-  primeSessionDoneSound,
+  primeAgentDoneSound,
   requestDesktopNotificationPermission,
   type DesktopNotificationPermission,
-} from "@/features/pico/session-done-notifications"
+} from "@/features/pico/agent-done-notifications"
 import { useAppShellPromptMutations } from "@/features/pico/use-app-shell-prompt-mutations"
 import { usePicoTheme } from "@/features/pico/use-pico-theme"
 import {
   applyDirectoryIndexRename,
-  updateSessionsEventDirectoryIndexes,
-  useAppShellSessionMutations,
-} from "@/features/pico/use-app-shell-session-mutations"
-import { useAppShellSessionSync } from "@/features/pico/use-app-shell-session-sync"
+  updateAgentsEventDirectoryIndexes,
+  useAppShellAgentMutations,
+} from "@/features/pico/use-app-shell-agent-mutations"
+import { useAppShellAgentSync } from "@/features/pico/use-app-shell-agent-sync"
 import {
   useAppShellShortcuts,
   type AppShellShortcutState,
@@ -185,41 +185,41 @@ import {
   CENTER_MESSAGES_STORAGE_KEY,
   DRAFT_DIRECTORY_STORAGE_KEY,
   HIDE_TOOL_BLOCKS_STORAGE_KEY,
-  PINNED_SESSIONS_STORAGE_KEY,
+  PINNED_AGENTS_STORAGE_KEY,
   RECENT_DIRECTORIES_LIMIT,
   RECENT_DIRECTORIES_STORAGE_KEY,
   RIGHT_SIDEBAR_OPEN_STORAGE_KEY,
   TERMINAL_PANEL_OPEN_STORAGE_KEY,
-  SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
-  SESSION_DONE_SOUND_ENABLED_STORAGE_KEY,
+  AGENT_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
+  AGENT_DONE_SOUND_ENABLED_STORAGE_KEY,
   SIDEBAR_DIRECTORIES_STORAGE_KEY,
   VIEWER_CONTEXT_STORAGE_KEY,
   createContextId,
-  createInitialSessionState,
-  getSessionTitle,
-  normalizeSessionSelectionKeys,
+  createInitialAgentState,
+  getAgentTitle,
+  normalizeAgentSelectionKeys,
   normalizeStoredDirectoryList,
   promptDraftKey,
   readStoredAutoScrollEnabled,
   readStoredCenterMessages,
   readStoredDraftDirectory,
   readStoredHideToolBlocks,
-  readStoredPinnedSessionKeys,
+  readStoredPinnedAgentKeys,
   readStoredRecentDirectories,
   readStoredRightSidebarOpen,
   readStoredTerminalPanelOpen,
-  readStoredSessionDoneDesktopNotificationsEnabled,
-  readStoredSessionDoneSoundEnabled,
+  readStoredAgentDoneDesktopNotificationsEnabled,
+  readStoredAgentDoneSoundEnabled,
   readStoredSidebarDirectories,
   rememberStoredPromptDraft,
   safeLocalStorageSetItem,
   machineLocalStorageSetItem,
-  sessionListEntryKey,
+  agentListEntryKey,
 } from "@/lib/pico"
 import type {
   ConversationItem,
   PromptImage,
-  SessionState,
+  AgentState,
   StreamingBehavior,
   ThemeColorMode,
   ThemeFamily,
@@ -227,11 +227,11 @@ import type {
 import type {
   ExtensionUiEvent,
   GitActionResponse,
-  SessionDoneEvent,
-  SessionListEntry,
-  SessionHistoryResponse,
-  SessionReadStateResponse,
-  SessionStatusEvent,
+  AgentDoneEvent,
+  AgentListEntry,
+  AgentHistoryResponse,
+  AgentReadStateResponse,
+  AgentStatusEvent,
 } from "@/lib/pico/api"
 import { useMachineId } from "@/lib/pico/machine-context"
 
@@ -246,7 +246,7 @@ type AppShellController = {
     draftFlow: PicoStore<AppShellDraftFlowState>
     notification: PicoStore<AppShellNotificationState>
     rightSidebar: PicoStore<AppShellRightSidebarState>
-    session: PicoStore<SessionState>
+    agent: PicoStore<AgentState>
     sidebar: AppShellSidebarStore
   }
   refs: {
@@ -255,58 +255,58 @@ type AppShellController = {
     composerSkill: React.RefObject<string | undefined>
     composerText: React.RefObject<string>
     conversationFrame: React.RefObject<AppShellConversationFrameHandle | null>
-    sessionState: React.RefObject<SessionState>
+    agentState: React.RefObject<AgentState>
   }
-  actions: AppShellSessionWorkspaceHandle & {
+  actions: AppShellAgentWorkspaceHandle & {
     focusModelSelector: () => void
     focusPrompt: () => void
-    focusSessionSearch: () => void
+    focusAgentSearch: () => void
   }
 }
 
-type AppShellSessionWorkspaceProps = {
+type AppShellAgentWorkspaceProps = {
   viewerContextId: string
-  sessionId?: string
-  onSelectSession?: (
-    sessionId?: string,
-    options?: SelectSessionNavigationOptions
+  agentId?: string
+  onSelectAgent?: (
+    agentId?: string,
+    options?: SelectAgentNavigationOptions
   ) => void
   sidebar: React.ReactNode
   sidebarStore: AppShellSidebarStore
-  sessionSearchInputRef: React.RefObject<HTMLInputElement | null>
+  agentSearchInputRef: React.RefObject<HTMLInputElement | null>
 }
 
-function AppShellSessionWorkspace(
-  props: AppShellSessionWorkspaceProps & {
-    ref?: React.Ref<AppShellSessionWorkspaceHandle>
+function AppShellAgentWorkspace(
+  props: AppShellAgentWorkspaceProps & {
+    ref?: React.Ref<AppShellAgentWorkspaceHandle>
   }
 ) {
-  return useAppShellSessionWorkspaceView(props)
+  return useAppShellAgentWorkspaceView(props)
 }
 
-function useAppShellSessionWorkspaceView({
+function useAppShellAgentWorkspaceView({
   viewerContextId,
-  sessionId,
-  onSelectSession,
+  agentId,
+  onSelectAgent,
   sidebar,
   sidebarStore,
-  sessionSearchInputRef,
+  agentSearchInputRef,
   ref,
-}: AppShellSessionWorkspaceProps & {
-  ref?: React.Ref<AppShellSessionWorkspaceHandle>
+}: AppShellAgentWorkspaceProps & {
+  ref?: React.Ref<AppShellAgentWorkspaceHandle>
 }) {
   const machineId = useMachineId()
   const queryClient = useQueryClient()
-  const initialSessionStateRef = React.useRef<SessionState | null>(null)
-  if (!initialSessionStateRef.current) {
-    initialSessionStateRef.current = createInitialSessionState()
+  const initialAgentStateRef = React.useRef<AgentState | null>(null)
+  if (!initialAgentStateRef.current) {
+    initialAgentStateRef.current = createInitialAgentState()
   }
-  const sessionStoreRef = React.useRef<PicoStore<SessionState> | null>(null)
-  if (!sessionStoreRef.current) {
-    sessionStoreRef.current = createPicoStore(initialSessionStateRef.current)
+  const agentStoreRef = React.useRef<PicoStore<AgentState> | null>(null)
+  if (!agentStoreRef.current) {
+    agentStoreRef.current = createPicoStore(initialAgentStateRef.current)
   }
-  const sessionStore = sessionStoreRef.current
-  const sessionStateRef = React.useRef(sessionStore.state)
+  const agentStore = agentStoreRef.current
+  const agentStateRef = React.useRef(agentStore.state)
   const appUiStoreRef = React.useRef<PicoStore<AppShellUiState> | null>(null)
   if (!appUiStoreRef.current) {
     appUiStoreRef.current = createPicoStore<AppShellUiState>(
@@ -314,8 +314,8 @@ function useAppShellSessionWorkspaceView({
         currentTab: "conversation",
         gitPanelOpen: false,
         terminalPanelOpen: false,
-        initialLoadingSessionId: sessionId || null,
-        loadingSessionId: null,
+        initialLoadingAgentId: agentId || null,
+        loadingAgentId: null,
       },
       shallowRecordEqual
     )
@@ -368,15 +368,15 @@ function useAppShellSessionWorkspaceView({
     },
     [appUiStore]
   )
-  const setLoadingSessionId = React.useCallback<
+  const setLoadingAgentId = React.useCallback<
     React.Dispatch<React.SetStateAction<string | null>>
   >(
     (action) => {
-      setStoreField(appUiStore, "loadingSessionId", action)
+      setStoreField(appUiStore, "loadingAgentId", action)
     },
     [appUiStore]
   )
-  const previousRouteSessionIdRef = React.useRef(sessionId)
+  const previousRouteAgentIdRef = React.useRef(agentId)
   const composerDraftSeedStoreRef = React.useRef<PicoStore<{
     text: string
     skillName?: string
@@ -481,7 +481,7 @@ function useAppShellSessionWorkspaceView({
     images: Array<PromptImage>
     streamingBehavior?: StreamingBehavior
     optimisticId?: string
-    optimisticSidebarSessionId?: string
+    optimisticSidebarAgentId?: string
   } | null> | null>(null)
   if (!pendingDraftPromptStoreRef.current) {
     pendingDraftPromptStoreRef.current = createPicoStore<{
@@ -490,7 +490,7 @@ function useAppShellSessionWorkspaceView({
       images: Array<PromptImage>
       streamingBehavior?: StreamingBehavior
       optimisticId?: string
-      optimisticSidebarSessionId?: string
+      optimisticSidebarAgentId?: string
     } | null>(null)
   }
   const pendingDraftPromptStore = pendingDraftPromptStoreRef.current
@@ -533,37 +533,37 @@ function useAppShellSessionWorkspaceView({
     notificationStoreRef.current = createPicoStore<AppShellNotificationState>(
       {
         desktopNotificationPermission: "unsupported",
-        sessionDoneDesktopNotificationsEnabled: true,
-        sessionDoneEvents: [],
-        sessionDoneSoundEnabled: true,
+        agentDoneDesktopNotificationsEnabled: true,
+        agentDoneEvents: [],
+        agentDoneSoundEnabled: true,
       },
       shallowRecordEqual
     )
   }
   const notificationStore = notificationStoreRef.current!
-  const setSessionDoneEvents = React.useCallback<
-    React.Dispatch<React.SetStateAction<Array<SessionDoneEvent>>>
+  const setAgentDoneEvents = React.useCallback<
+    React.Dispatch<React.SetStateAction<Array<AgentDoneEvent>>>
   >(
     (action) => {
-      setStoreField(notificationStore, "sessionDoneEvents", action)
+      setStoreField(notificationStore, "agentDoneEvents", action)
     },
     [notificationStore]
   )
-  const setSessionDoneSoundEnabled = React.useCallback<
+  const setAgentDoneSoundEnabled = React.useCallback<
     React.Dispatch<React.SetStateAction<boolean>>
   >(
     (action) => {
-      setStoreField(notificationStore, "sessionDoneSoundEnabled", action)
+      setStoreField(notificationStore, "agentDoneSoundEnabled", action)
     },
     [notificationStore]
   )
-  const setSessionDoneDesktopNotificationsEnabled = React.useCallback<
+  const setAgentDoneDesktopNotificationsEnabled = React.useCallback<
     React.Dispatch<React.SetStateAction<boolean>>
   >(
     (action) => {
       setStoreField(
         notificationStore,
-        "sessionDoneDesktopNotificationsEnabled",
+        "agentDoneDesktopNotificationsEnabled",
         action
       )
     },
@@ -582,18 +582,18 @@ function useAppShellSessionWorkspaceView({
   if (!draftFlowStoreRef.current) {
     draftFlowStoreRef.current = createPicoStore<AppShellDraftFlowState>(
       {
-        draftSessionLoadingOwnerKey: null,
+        draftAgentLoadingOwnerKey: null,
         storedDraftDirectory: "",
       },
       shallowRecordEqual
     )
   }
   const draftFlowStore = draftFlowStoreRef.current!
-  const setDraftSessionLoadingOwnerKey = React.useCallback<
+  const setDraftAgentLoadingOwnerKey = React.useCallback<
     React.Dispatch<React.SetStateAction<string | null>>
   >(
     (action) => {
-      setStoreField(draftFlowStore, "draftSessionLoadingOwnerKey", action)
+      setStoreField(draftFlowStore, "draftAgentLoadingOwnerKey", action)
     },
     [draftFlowStore]
   )
@@ -658,19 +658,19 @@ function useAppShellSessionWorkspaceView({
     [composerStore]
   )
   const contextUsageStoreRef = React.useRef<PicoStore<
-    SessionState["contextUsage"]
+    AgentState["contextUsage"]
   > | null>(null)
   if (!contextUsageStoreRef.current) {
     contextUsageStoreRef.current =
-      createPicoStore<SessionState["contextUsage"]>(undefined)
+      createPicoStore<AgentState["contextUsage"]>(undefined)
   }
   const contextUsageStore = contextUsageStoreRef.current
   const contextUsageThrottlerRef = React.useRef<Throttler<
-    (contextUsage: SessionState["contextUsage"]) => void
+    (contextUsage: AgentState["contextUsage"]) => void
   > | null>(null)
   if (!contextUsageThrottlerRef.current) {
     contextUsageThrottlerRef.current = new Throttler(
-      (contextUsage: SessionState["contextUsage"]) => {
+      (contextUsage: AgentState["contextUsage"]) => {
         setStoreState(contextUsageStore, contextUsage)
       },
       {
@@ -737,7 +737,7 @@ function useAppShellSessionWorkspaceView({
     [composerImagesStore, composerStore]
   )
   const setComposerContextUsage = React.useCallback(
-    (contextUsage: SessionState["contextUsage"]) => {
+    (contextUsage: AgentState["contextUsage"]) => {
       contextUsageThrottler.maybeExecute(contextUsage)
     },
     [contextUsageThrottler]
@@ -759,30 +759,26 @@ function useAppShellSessionWorkspaceView({
   const addDirectoryDialogRef =
     React.useRef<AppShellAddDirectoryDialogHandle | null>(null)
   const addDirectoryOpenRef = React.useRef(false)
-  const moveSessionDirectoryDialogRef =
+  const moveAgentDirectoryDialogRef =
     React.useRef<AppShellAddDirectoryDialogHandle | null>(null)
-  const moveSessionDirectoryOpenRef = React.useRef(false)
-  const moveSessionDirectoryTargetRef = React.useRef<SessionListEntry | null>(
-    null
-  )
-  const renameDialogRef = React.useRef<RenameSessionDialogHandle | null>(null)
+  const moveAgentDirectoryOpenRef = React.useRef(false)
+  const moveAgentDirectoryTargetRef = React.useRef<AgentListEntry | null>(null)
+  const renameDialogRef = React.useRef<RenameAgentDialogHandle | null>(null)
   const renameOpenRef = React.useRef(false)
-  const deleteDialogRef = React.useRef<DeleteSessionsDialogHandle | null>(null)
+  const deleteDialogRef = React.useRef<DeleteAgentsDialogHandle | null>(null)
   const deleteOpenRef = React.useRef(false)
-  const deleteOldDirectorySessionsDialogRef =
-    React.useRef<DeleteOldDirectorySessionsDialogHandle | null>(null)
-  const deleteOldDirectorySessionsOpenRef = React.useRef(false)
-  const forkDialogRef = React.useRef<ForkSessionDialogHandle | null>(null)
+  const deleteOldDirectoryAgentsDialogRef =
+    React.useRef<DeleteOldDirectoryAgentsDialogHandle | null>(null)
+  const deleteOldDirectoryAgentsOpenRef = React.useRef(false)
+  const forkDialogRef = React.useRef<ForkAgentDialogHandle | null>(null)
   const forkOpenRef = React.useRef(false)
   const treeDialogRef = React.useRef<AppShellTreeDialogHandle | null>(null)
   const treeOpenRef = React.useRef(false)
   const gitCommitDialogRef =
     React.useRef<GitCommitDialogControllerHandle | null>(null)
   const gitCommitOpenRef = React.useRef(false)
-  const sessionsDialogRef = React.useRef<AppShellSessionsDialogHandle | null>(
-    null
-  )
-  const sessionsOpenRef = React.useRef(false)
+  const agentsDialogRef = React.useRef<AppShellAgentsDialogHandle | null>(null)
+  const agentsOpenRef = React.useRef(false)
   const settingsDialogRef = React.useRef<AppShellSettingsDialogHandle | null>(
     null
   )
@@ -799,63 +795,62 @@ function useAppShellSessionWorkspaceView({
   const [isLoadingOlderHistory, setIsLoadingOlderHistory] =
     React.useState(false)
   const lastSyncedEditorTextRef = React.useRef("")
-  const publishSidebarActiveSession = React.useCallback(
+  const publishSidebarActiveAgent = React.useCallback(
     (
-      activeSession: {
+      activeAgent: {
         draft?: boolean
-        sessionFile?: string
-        sessionId?: string
-        sessionKey?: string
-        sessionPath?: string
+        agentFile?: string
+        agentId?: string
+        agentKey?: string
+        agentPath?: string
       },
-      routeSessionId = sessionId
+      routeAgentId = agentId
     ) => {
-      const activeSessionId =
-        activeSession.sessionId ||
-        (activeSession.sessionKey ? undefined : routeSessionId)
-      const activeSidebarSessionId = activeSession.draft
+      const activeAgentId =
+        activeAgent.agentId || (activeAgent.agentKey ? undefined : routeAgentId)
+      const activeSidebarAgentId = activeAgent.draft
         ? ""
-        : activeSessionId?.trim() || ""
-      const activeSidebarSessionPath = activeSession.draft
+        : activeAgentId?.trim() || ""
+      const activeSidebarAgentPath = activeAgent.draft
         ? ""
-        : (activeSession.sessionFile || activeSession.sessionPath || "").trim()
-      const activeSidebarSessionKey = activeSession.draft
+        : (activeAgent.agentFile || activeAgent.agentPath || "").trim()
+      const activeSidebarAgentKey = activeAgent.draft
         ? ""
-        : sessionNotificationKey({
-            sessionFile: activeSidebarSessionPath,
-            sessionId: activeSidebarSessionId,
+        : agentNotificationKey({
+            agentFile: activeSidebarAgentPath,
+            agentId: activeSidebarAgentId,
           }) ||
-          activeSession.sessionKey?.trim() ||
+          activeAgent.agentKey?.trim() ||
           ""
 
       sidebarStore.setSidebarState((current) => {
         if (
-          current.activeSidebarSessionId === activeSidebarSessionId &&
-          current.activeSidebarSessionKey === activeSidebarSessionKey &&
-          current.activeSidebarSessionPath === activeSidebarSessionPath
+          current.activeSidebarAgentId === activeSidebarAgentId &&
+          current.activeSidebarAgentKey === activeSidebarAgentKey &&
+          current.activeSidebarAgentPath === activeSidebarAgentPath
         ) {
           return current
         }
 
         return {
-          activeSidebarSessionId,
-          activeSidebarSessionKey,
-          activeSidebarSessionPath,
+          activeSidebarAgentId,
+          activeSidebarAgentKey,
+          activeSidebarAgentPath,
         }
       })
     },
-    [sessionId, sidebarStore]
+    [agentId, sidebarStore]
   )
-  const setSessionState = React.useCallback<
-    React.Dispatch<React.SetStateAction<SessionState>>
+  const setAgentState = React.useCallback<
+    React.Dispatch<React.SetStateAction<AgentState>>
   >(
     (action) => {
-      const currentRefState = sessionStateRef.current
+      const currentRefState = agentStateRef.current
       const nextState =
         typeof action === "function"
-          ? (action as (current: SessionState) => SessionState)(currentRefState)
+          ? (action as (current: AgentState) => AgentState)(currentRefState)
           : action
-      const currentStoreState = sessionStore.state
+      const currentStoreState = agentStore.state
       if (
         Object.is(currentRefState, nextState) &&
         Object.is(currentStoreState, nextState)
@@ -863,18 +858,18 @@ function useAppShellSessionWorkspaceView({
         return
       }
 
-      sessionStateRef.current = nextState
-      setStoreState(sessionStore, nextState)
-      publishSidebarActiveSession(nextState)
+      agentStateRef.current = nextState
+      setStoreState(agentStore, nextState)
+      publishSidebarActiveAgent(nextState)
     },
-    [publishSidebarActiveSession, sessionStore]
+    [publishSidebarActiveAgent, agentStore]
   )
   const composerTextRef = React.useRef(composerDraftSeedStore.state.text)
   const composerSkillRef = React.useRef<string | undefined>(
     composerDraftSeedStore.state.skillName
   )
-  const pendingRouteSessionIdRef = React.useRef<string | undefined>(undefined)
-  const pendingRouteSessionPathRef = React.useRef<string | undefined>(undefined)
+  const pendingRouteAgentIdRef = React.useRef<string | undefined>(undefined)
+  const pendingRouteAgentPathRef = React.useRef<string | undefined>(undefined)
   const pendingUiRequestHandlerRef = React.useRef(
     (_request: ExtensionUiEvent) => {}
   )
@@ -884,47 +879,47 @@ function useAppShellSessionWorkspaceView({
   const dismissUiRequestRef = React.useRef((id: string) => {
     uiRequestDialogRef.current?.close(id)
   })
-  const autoAddedSessionDirectoryKeysRef = React.useRef<Set<string>>(new Set())
+  const autoAddedAgentDirectoryKeysRef = React.useRef<Set<string>>(new Set())
   const pendingMobileSidebarPromptFocusRef = React.useRef(false)
   const conversationItemsStoreRef = React.useRef<ConversationItemsStore | null>(
     null
   )
   if (!conversationItemsStoreRef.current) {
     conversationItemsStoreRef.current = createConversationItemsStore(
-      sessionStateRef.current.items
+      agentStateRef.current.items
     )
   }
   const conversationItemsStore = conversationItemsStoreRef.current
   const loadOlderHistory = React.useCallback(async () => {
-    const currentState = sessionStateRef.current
+    const currentState = agentStateRef.current
     const before = currentState.historyOffset
-    const sessionId = currentState.sessionId?.trim()
+    const agentId = currentState.agentId?.trim()
     if (
       loadingOlderHistoryRef.current ||
       currentState.draft ||
-      !sessionId ||
+      !agentId ||
       before <= 0
     ) {
       return
     }
 
-    const sessionKey = currentState.sessionKey
+    const agentKey = currentState.agentKey
     loadingOlderHistoryRef.current = true
     setIsLoadingOlderHistory(true)
     try {
       const history = await fetchJson<
-        Extract<SessionHistoryResponse, { ok: true }>
+        Extract<AgentHistoryResponse, { ok: true }>
       >(
-        buildRequestUrl("/api/session/history", {
+        buildRequestUrl("/api/agent/history", {
           machineId,
           contextId: viewerContextId,
-          sessionId,
+          agentId,
           searchParams: { before, limit: 50 },
         })
       )
-      const latestState = sessionStateRef.current
+      const latestState = agentStateRef.current
       if (
-        latestState.sessionKey !== sessionKey ||
+        latestState.agentKey !== agentKey ||
         latestState.historyOffset !== before
       ) {
         return
@@ -937,7 +932,7 @@ function useAppShellSessionWorkspaceView({
         historyTotalCount: history.totalCount,
       }
       conversationItemsStore.setItems(nextState.items)
-      setSessionState(nextState)
+      setAgentState(nextState)
     } catch (error) {
       toast.error("Could not load earlier messages", {
         description: error instanceof Error ? error.message : String(error),
@@ -946,7 +941,7 @@ function useAppShellSessionWorkspaceView({
       loadingOlderHistoryRef.current = false
       setIsLoadingOlderHistory(false)
     }
-  }, [conversationItemsStore, setSessionState, viewerContextId])
+  }, [conversationItemsStore, setAgentState, viewerContextId])
   const workingStateStoreRef =
     React.useRef<PicoStore<AppShellWorkingState | null> | null>(null)
   if (!workingStateStoreRef.current) {
@@ -978,7 +973,7 @@ function useAppShellSessionWorkspaceView({
           ...currentComposerSnapshot,
           awaitingFirstTurn: currentComposerSnapshot.disabled ? false : next,
         })
-        if (next && !sessionStateRef.current.streaming) {
+        if (next && !agentStateRef.current.streaming) {
           setStoreState(workingStateStore, {
             label: AWAITING_FIRST_RESPONSE_WORKING_LABEL,
           })
@@ -1036,7 +1031,7 @@ function useAppShellSessionWorkspaceView({
         images: Array<PromptImage>
         streamingBehavior?: StreamingBehavior
         optimisticId?: string
-        optimisticSidebarSessionId?: string
+        optimisticSidebarAgentId?: string
       } | null>
     >
   >(
@@ -1048,10 +1043,10 @@ function useAppShellSessionWorkspaceView({
         setStoreState(pendingDraftPromptStore, next)
         if (next) {
           setStoreState(workingStateStore, {
-            label: "Waiting for new session…",
+            label: "Waiting for new agent…",
           })
         } else if (
-          workingStateStore.state?.label === "Waiting for new session…"
+          workingStateStore.state?.label === "Waiting for new agent…"
         ) {
           setStoreState(workingStateStore, null)
         }
@@ -1129,13 +1124,13 @@ function useAppShellSessionWorkspaceView({
         streamingBehavior: options.streamingBehavior,
       } satisfies UserConversationItem
 
-      const currentState = sessionStateRef.current
+      const currentState = agentStateRef.current
       const nextItems = insertOptimisticUserItem(currentState.items, item)
       if (nextItems !== currentState.items) {
         const nextState = { ...currentState, items: nextItems }
-        sessionStateRef.current = nextState
+        agentStateRef.current = nextState
         conversationItemsStore.setItems(nextItems)
-        setSessionState(nextState)
+        setAgentState(nextState)
       }
 
       return pendingId
@@ -1146,14 +1141,14 @@ function useAppShellSessionWorkspaceView({
     (pendingId: string | undefined) => {
       if (!pendingId) return
 
-      const currentState = sessionStateRef.current
+      const currentState = agentStateRef.current
       const nextItems = removeOptimisticUserItem(currentState.items, pendingId)
       if (nextItems === currentState.items) return
 
       const nextState = { ...currentState, items: nextItems }
-      sessionStateRef.current = nextState
+      agentStateRef.current = nextState
       conversationItemsStore.setItems(nextItems)
-      setSessionState(nextState)
+      setAgentState(nextState)
     },
     [conversationItemsStore]
   )
@@ -1166,25 +1161,25 @@ function useAppShellSessionWorkspaceView({
     systemTheme,
     themeFamily: currentTheme,
   } = usePicoTheme()
-  const { initialLoadingSessionId, loadingSessionId } = useSelector(
+  const { initialLoadingAgentId, loadingAgentId } = useSelector(
     appUiStore,
     (state) => ({
-      initialLoadingSessionId: state.initialLoadingSessionId,
-      loadingSessionId: state.loadingSessionId,
+      initialLoadingAgentId: state.initialLoadingAgentId,
+      loadingAgentId: state.loadingAgentId,
     }),
     { compare: shallowRecordEqual }
   )
-  const { draftSessionLoadingOwnerKey, storedDraftDirectory } =
+  const { draftAgentLoadingOwnerKey, storedDraftDirectory } =
     useSelector(draftFlowStore)
-  const sessionState = useSelector(
-    sessionStore,
-    (currentSessionState) => ({
-      cwd: currentSessionState.cwd,
-      directory: currentSessionState.directory,
-      draft: currentSessionState.draft,
-      sessionFile: currentSessionState.sessionFile,
-      sessionId: currentSessionState.sessionId,
-      sessionKey: currentSessionState.sessionKey,
+  const agentState = useSelector(
+    agentStore,
+    (currentAgentState) => ({
+      cwd: currentAgentState.cwd,
+      directory: currentAgentState.directory,
+      draft: currentAgentState.draft,
+      agentFile: currentAgentState.agentFile,
+      agentId: currentAgentState.agentId,
+      agentKey: currentAgentState.agentKey,
     }),
     { compare: shallowRecordEqual }
   )
@@ -1208,7 +1203,7 @@ function useAppShellSessionWorkspaceView({
     })
   }
 
-  const fileEditCwd = normalizeCwd(sessionState.cwd)
+  const fileEditCwd = normalizeCwd(agentState.cwd)
   const dirtyFileEditPaths = useDirtyProjectFilePaths(machineId, fileEditCwd)
 
   // A file with unsaved changes keeps its tab: a preview tab becomes pinned.
@@ -1316,12 +1311,12 @@ function useAppShellSessionWorkspaceView({
 
   React.useEffect(() => {
     resetRightSidebarFiles(rightSidebarStore)
-  }, [rightSidebarStore, sessionState.cwd])
+  }, [rightSidebarStore, agentState.cwd])
 
   React.useEffect(() => {
-    if (!sessionState.draft) return
+    if (!agentState.draft) return
     resetRightSidebarFiles(rightSidebarStore)
-  }, [rightSidebarStore, sessionState.draft])
+  }, [rightSidebarStore, agentState.draft])
 
   const sidebarWorkspaceVersion = useAppShellSidebarValue(
     sidebarStore,
@@ -1332,37 +1327,37 @@ function useAppShellSessionWorkspaceView({
     baseSidebarDirectories,
     directoryStateByPath,
     directoryIndexes,
-    sidebarSessions,
-    selectedSidebarSessions,
-    sidebarSessionEntriesByKey,
+    sidebarAgents,
+    selectedSidebarAgents,
+    sidebarAgentEntriesByKey,
   } = sidebarStore.getWorkspaceSnapshot()
-  const sessionsEventDirectories = useAppShellSidebarValue(
+  const agentsEventDirectories = useAppShellSidebarValue(
     sidebarStore,
-    (snapshot) => snapshot.state.sessionsEvent?.directories || [],
+    (snapshot) => snapshot.state.agentsEvent?.directories || [],
     sameStringArray
   )
-  const applySidebarSessionStatusRef = React.useRef(
-    (status: SessionStatusEvent) => {
-      sidebarStore.setSidebarSessionStatusByKey((current) =>
-        mergeSidebarSessionStatusMap(current, status)
+  const applySidebarAgentStatusRef = React.useRef(
+    (status: AgentStatusEvent) => {
+      sidebarStore.setSidebarAgentStatusByKey((current) =>
+        mergeSidebarAgentStatusMap(current, status)
       )
     }
   )
-  applySidebarSessionStatusRef.current = (status) => {
-    sidebarStore.setSidebarSessionStatusByKey((current) =>
-      mergeSidebarSessionStatusMap(current, status)
+  applySidebarAgentStatusRef.current = (status) => {
+    sidebarStore.setSidebarAgentStatusByKey((current) =>
+      mergeSidebarAgentStatusMap(current, status)
     )
   }
-  const bindOptimisticSidebarSessionRef = React.useRef(
-    (session: { cwd?: string; sessionId?: string; sessionPath?: string }) => {
+  const bindOptimisticSidebarAgentRef = React.useRef(
+    (agent: { cwd?: string; agentId?: string; agentPath?: string }) => {
       sidebarStore.setDirectoryIndexDataByPath((current) =>
-        bindOptimisticSidebarSessionEntries(current, session)
+        bindOptimisticSidebarAgentEntries(current, agent)
       )
-      sidebarStore.setSessionsEvent((current) => {
+      sidebarStore.setAgentsEvent((current) => {
         if (!current?.directoryIndexes) return current
-        const directoryIndexes = bindOptimisticSidebarSessionEntries(
+        const directoryIndexes = bindOptimisticSidebarAgentEntries(
           current.directoryIndexes,
-          session
+          agent
         )
         return directoryIndexes === current.directoryIndexes
           ? current
@@ -1370,91 +1365,85 @@ function useAppShellSessionWorkspaceView({
       })
     }
   )
-  // The server sends a new name (rename, auto name) in the session state at
+  // The server sends a new name (rename, auto name) in the agent state at
   // once. The sidebar index refreshes later, and not while the agent streams,
   // so put the name in the sidebar entry now.
-  const activeSessionFile = sessionState.sessionFile
-  const activeSessionName = useSelector(sessionStore, (state) =>
-    state.sessionName?.trim()
+  const activeAgentFile = agentState.agentFile
+  const activeAgentName = useSelector(agentStore, (state) =>
+    state.agentName?.trim()
   )
   React.useEffect(() => {
-    if (!activeSessionFile || !activeSessionName) return
+    if (!activeAgentFile || !activeAgentName) return
     sidebarStore.setDirectoryIndexDataByPath((current) =>
-      applyDirectoryIndexRename(current, activeSessionFile, activeSessionName)
+      applyDirectoryIndexRename(current, activeAgentFile, activeAgentName)
     )
-    sidebarStore.setSessionsEvent((current) =>
-      updateSessionsEventDirectoryIndexes(current, (indexes) =>
-        applyDirectoryIndexRename(indexes, activeSessionFile, activeSessionName)
+    sidebarStore.setAgentsEvent((current) =>
+      updateAgentsEventDirectoryIndexes(current, (indexes) =>
+        applyDirectoryIndexRename(indexes, activeAgentFile, activeAgentName)
       )
     )
-  }, [activeSessionFile, activeSessionName, sidebarStore])
-  const activeSessionId =
-    sessionState.sessionId || (sessionState.sessionKey ? undefined : sessionId)
-  const currentSessionPinKey = sessionListEntryKey({
-    path: sessionState.sessionFile,
-    id: activeSessionId,
+  }, [activeAgentFile, activeAgentName, sidebarStore])
+  const activeAgentId =
+    agentState.agentId || (agentState.agentKey ? undefined : agentId)
+  const currentAgentPinKey = agentListEntryKey({
+    path: agentState.agentFile,
+    id: activeAgentId,
   })
-  const currentSessionPinned = useAppShellSidebarValue(
-    sidebarStore,
-    (snapshot) =>
-      currentSessionPinKey
-        ? snapshot.state.pinnedSidebarSessionKeys.includes(currentSessionPinKey)
-        : false
+  const currentAgentPinned = useAppShellSidebarValue(sidebarStore, (snapshot) =>
+    currentAgentPinKey
+      ? snapshot.state.pinnedSidebarAgentKeys.includes(currentAgentPinKey)
+      : false
   )
-  const currentSessionQueryScope = sessionScrollKey(sessionState)
-  const contextUsageSessionScopeRef = React.useRef("")
+  const currentAgentQueryScope = agentScrollKey(agentState)
+  const contextUsageAgentScopeRef = React.useRef("")
   React.useLayoutEffect(() => {
-    if (contextUsageSessionScopeRef.current === currentSessionQueryScope) return
-    contextUsageSessionScopeRef.current = currentSessionQueryScope
+    if (contextUsageAgentScopeRef.current === currentAgentQueryScope) return
+    contextUsageAgentScopeRef.current = currentAgentQueryScope
     contextUsageThrottler.cancel()
-    setStoreState(contextUsageStore, sessionStateRef.current.contextUsage)
-  }, [contextUsageStore, contextUsageThrottler, currentSessionQueryScope])
-  const initialRouteLoadingSessionId =
-    initialLoadingSessionId && !sessionState.sessionKey
-      ? initialLoadingSessionId
-      : null
-  const activeLoadingSessionId =
-    loadingSessionId && loadingSessionId !== sessionState.sessionId
-      ? loadingSessionId
-      : initialRouteLoadingSessionId &&
-          initialRouteLoadingSessionId !== sessionState.sessionId
-        ? initialRouteLoadingSessionId
+    setStoreState(contextUsageStore, agentStateRef.current.contextUsage)
+  }, [contextUsageStore, contextUsageThrottler, currentAgentQueryScope])
+  const initialRouteLoadingAgentId =
+    initialLoadingAgentId && !agentState.agentKey ? initialLoadingAgentId : null
+  const activeLoadingAgentId =
+    loadingAgentId && loadingAgentId !== agentState.agentId
+      ? loadingAgentId
+      : initialRouteLoadingAgentId &&
+          initialRouteLoadingAgentId !== agentState.agentId
+        ? initialRouteLoadingAgentId
         : null
-  const isSessionViewLoading = Boolean(activeLoadingSessionId)
-  const loadingSessionSummary = activeLoadingSessionId
-    ? sidebarSessions.find((session) => session.id === activeLoadingSessionId)
+  const isAgentViewLoading = Boolean(activeLoadingAgentId)
+  const loadingAgentSummary = activeLoadingAgentId
+    ? sidebarAgents.find((agent) => agent.id === activeLoadingAgentId)
     : undefined
-  const loadingSessionTitle = getSessionTitle(loadingSessionSummary)
-  const loadingDisplaySessionTitle =
-    loadingSessionTitle !== "New session"
-      ? loadingSessionTitle
-      : "Loading session…"
-  const displaySessionCwd = isSessionViewLoading
-    ? loadingSessionSummary?.cwd
-    : sessionState.cwd
+  const loadingAgentTitle = getAgentTitle(loadingAgentSummary)
+  const loadingDisplayAgentTitle =
+    loadingAgentTitle !== "New agent" ? loadingAgentTitle : "Loading agent…"
+  const displayAgentCwd = isAgentViewLoading
+    ? loadingAgentSummary?.cwd
+    : agentState.cwd
   React.useEffect(() => {
-    const previousSessionId = previousRouteSessionIdRef.current
-    previousRouteSessionIdRef.current = sessionId
+    const previousAgentId = previousRouteAgentIdRef.current
+    previousRouteAgentIdRef.current = agentId
 
-    if (previousSessionId === sessionId) return
+    if (previousAgentId === agentId) return
 
-    const currentSession = sessionStateRef.current
-    const optimisticSessionPath = sessionId
-      ? pendingRouteSessionPathRef.current ||
-        sidebarStore.state.derived.sidebarSessions.find(
-          (session) => session.id === sessionId
+    const currentAgent = agentStateRef.current
+    const optimisticAgentPath = agentId
+      ? pendingRouteAgentPathRef.current ||
+        sidebarStore.state.derived.sidebarAgents.find(
+          (agent) => agent.id === agentId
         )?.path
       : undefined
-    const optimisticActiveSession = sessionId
-      ? currentSession.draft || currentSession.sessionId !== sessionId
+    const optimisticActiveAgent = agentId
+      ? currentAgent.draft || currentAgent.agentId !== agentId
         ? {
-            sessionId,
-            sessionPath: optimisticSessionPath,
+            agentId,
+            agentPath: optimisticAgentPath,
           }
-        : currentSession
+        : currentAgent
       : { draft: true }
 
-    publishSidebarActiveSession(optimisticActiveSession, sessionId)
+    publishSidebarActiveAgent(optimisticActiveAgent, agentId)
     setStoreState(appUiStore, (current) => ({
       ...current,
       currentTab:
@@ -1463,27 +1452,22 @@ function useAppShellSessionWorkspaceView({
         current.currentTab === "terminal"
           ? "conversation"
           : current.currentTab,
-      initialLoadingSessionId: sessionId
-        ? current.initialLoadingSessionId
-        : null,
-      loadingSessionId:
-        sessionId && sessionStateRef.current.sessionId !== sessionId
-          ? sessionId
-          : null,
+      initialLoadingAgentId: agentId ? current.initialLoadingAgentId : null,
+      loadingAgentId:
+        agentId && agentStateRef.current.agentId !== agentId ? agentId : null,
     }))
-  }, [appUiStore, publishSidebarActiveSession, sessionId, sidebarStore])
+  }, [appUiStore, publishSidebarActiveAgent, agentId, sidebarStore])
 
   React.useEffect(() => {
     if (isMobile) return
     setCurrentTab((tab) =>
-      tab === "git" || tab === "agent" || tab === "terminal" ? "conversation" : tab
+      tab === "git" || tab === "agent" || tab === "terminal"
+        ? "conversation"
+        : tab
     )
   }, [isMobile, setCurrentTab])
 
-  const syncComposerDraft = (
-    value: string,
-    target = sessionStateRef.current
-  ) => {
+  const syncComposerDraft = (value: string, target = agentStateRef.current) => {
     const parsed = parseComposerSkillMessage(value)
     const nextText = parsed.matched ? parsed.text : value
     const nextSkill = parsed.matched ? parsed.skillName : undefined
@@ -1512,7 +1496,7 @@ function useAppShellSessionWorkspaceView({
 
   const replaceComposerDraft = (
     value: string,
-    target = sessionStateRef.current,
+    target = agentStateRef.current,
     options?: {
       forceSync?: boolean
     }
@@ -1551,9 +1535,9 @@ function useAppShellSessionWorkspaceView({
       setGitPanelOpen(readStoredRightSidebarOpen())
       setTerminalPanelOpen(readStoredTerminalPanelOpen())
       setStoredDraftDirectory(readStoredDraftDirectory(machineId) || "")
-      setSessionDoneSoundEnabled(readStoredSessionDoneSoundEnabled())
-      setSessionDoneDesktopNotificationsEnabled(
-        readStoredSessionDoneDesktopNotificationsEnabled()
+      setAgentDoneSoundEnabled(readStoredAgentDoneSoundEnabled())
+      setAgentDoneDesktopNotificationsEnabled(
+        readStoredAgentDoneDesktopNotificationsEnabled()
       )
       setHideToolBlocks(readStoredHideToolBlocks())
       setCenterMessages(readStoredCenterMessages())
@@ -1568,7 +1552,7 @@ function useAppShellSessionWorkspaceView({
   }, [])
 
   const openCommandPalette = () => {
-    sessionsDialogRef.current?.close()
+    agentsDialogRef.current?.close()
     settingsDialogRef.current?.close()
     commandPaletteRef.current?.open()
   }
@@ -1577,21 +1561,21 @@ function useAppShellSessionWorkspaceView({
     commandPaletteRef.current?.close()
   }
 
-  const openSessionsDialog = () => {
+  const openAgentsDialog = () => {
     commandPaletteRef.current?.close()
     settingsDialogRef.current?.close()
-    sessionsDialogRef.current?.open()
+    agentsDialogRef.current?.open()
   }
 
   const openSettingsDialog = () => {
     commandPaletteRef.current?.close()
-    sessionsDialogRef.current?.close()
+    agentsDialogRef.current?.close()
     settingsDialogRef.current?.open()
   }
 
   const openCommitDialog = () => {
     commandPaletteRef.current?.close()
-    sessionsDialogRef.current?.close()
+    agentsDialogRef.current?.close()
     settingsDialogRef.current?.close()
     gitCommitDialogRef.current?.open()
   }
@@ -1634,7 +1618,7 @@ function useAppShellSessionWorkspaceView({
   const gitPushMutation = useMutation({
     mutationKey: picoQueryKeys.gitAction(
       viewerContextId,
-      sessionStateRef.current.cwd?.trim() || "",
+      agentStateRef.current.cwd?.trim() || "",
       "push"
     ),
     mutationFn: async (cwd: string) =>
@@ -1666,7 +1650,7 @@ function useAppShellSessionWorkspaceView({
   const gitForcePushMutation = useMutation({
     mutationKey: picoQueryKeys.gitAction(
       viewerContextId,
-      sessionStateRef.current.cwd?.trim() || "",
+      agentStateRef.current.cwd?.trim() || "",
       "force-push"
     ),
     mutationFn: async (cwd: string) =>
@@ -1700,7 +1684,7 @@ function useAppShellSessionWorkspaceView({
   const gitPullMutation = useMutation({
     mutationKey: picoQueryKeys.gitAction(
       viewerContextId,
-      sessionStateRef.current.cwd?.trim() || "",
+      agentStateRef.current.cwd?.trim() || "",
       "pull"
     ),
     mutationFn: async (cwd: string) =>
@@ -1730,9 +1714,9 @@ function useAppShellSessionWorkspaceView({
   })
 
   const runGitRemoteAction = async (action: GitRemoteAction) => {
-    const cwd = sessionStateRef.current.cwd?.trim() || ""
+    const cwd = agentStateRef.current.cwd?.trim() || ""
     if (!cwd) {
-      toast.error("Open a session in a repository before running Git actions.")
+      toast.error("Open an agent in a repository before running Git actions.")
       return
     }
 
@@ -1812,45 +1796,44 @@ function useAppShellSessionWorkspaceView({
   }
 
   const openRenameDialog = () => {
-    const currentState = sessionStateRef.current
-    if (!currentState.sessionFile) return
+    const currentState = agentStateRef.current
+    if (!currentState.agentFile) return
     renameDialogRef.current?.open({
-      path: currentState.sessionFile,
+      path: currentState.agentFile,
       title:
-        currentState.sessionName ||
-        getCurrentSessionTitleFromState(currentState),
-      hasGeneratedName: Boolean(currentState.sessionName?.trim()),
+        currentState.agentName || getCurrentAgentTitleFromState(currentState),
+      hasGeneratedName: Boolean(currentState.agentName?.trim()),
     })
   }
 
-  const openRenameDialogForEntry = (entry: SessionListEntry) => {
+  const openRenameDialogForEntry = (entry: AgentListEntry) => {
     renameDialogRef.current?.openForEntry(entry)
   }
 
-  const openDeleteDialog = (targets: Array<SessionListEntry>) => {
+  const openDeleteDialog = (targets: Array<AgentListEntry>) => {
     deleteDialogRef.current?.open(targets)
   }
 
-  const openDeleteOldDirectorySessionsDialog = (directory: string) => {
-    deleteOldDirectorySessionsDialogRef.current?.open(directory)
+  const openDeleteOldDirectoryAgentsDialog = (directory: string) => {
+    deleteOldDirectoryAgentsDialogRef.current?.open(directory)
   }
 
-  const currentSessionListEntry = () => {
-    const currentState = sessionStateRef.current
-    if (!currentState.sessionFile) return undefined
+  const currentAgentListEntry = () => {
+    const currentState = agentStateRef.current
+    if (!currentState.agentFile) return undefined
 
     return {
-      path: currentState.sessionFile,
-      id: currentState.sessionId,
+      path: currentState.agentFile,
+      id: currentState.agentId,
       cwd: currentState.cwd,
-      title: getCurrentSessionTitleFromState(currentState),
-      name: currentState.sessionName,
+      title: getCurrentAgentTitleFromState(currentState),
+      name: currentState.agentName,
       modified: currentState.modified,
-    } satisfies SessionListEntry
+    } satisfies AgentListEntry
   }
 
-  const openDeleteDialogForCurrentSession = () => {
-    const currentEntry = currentSessionListEntry()
+  const openDeleteDialogForCurrentAgent = () => {
+    const currentEntry = currentAgentListEntry()
     if (!currentEntry) return
 
     openDeleteDialog([currentEntry])
@@ -1860,16 +1843,16 @@ function useAppShellSessionWorkspaceView({
     addDirectoryDialogRef.current?.open()
   }
 
-  const openMoveSessionDirectoryDialogForEntry = (entry: SessionListEntry) => {
+  const openMoveAgentDirectoryDialogForEntry = (entry: AgentListEntry) => {
     if (!entry.path) return
-    moveSessionDirectoryTargetRef.current = entry
-    moveSessionDirectoryDialogRef.current?.open()
+    moveAgentDirectoryTargetRef.current = entry
+    moveAgentDirectoryDialogRef.current?.open()
   }
 
-  const openMoveSessionDirectoryDialogForCurrentSession = () => {
-    const currentEntry = currentSessionListEntry()
+  const openMoveAgentDirectoryDialogForCurrentAgent = () => {
+    const currentEntry = currentAgentListEntry()
     if (!currentEntry) return
-    openMoveSessionDirectoryDialogForEntry(currentEntry)
+    openMoveAgentDirectoryDialogForEntry(currentEntry)
   }
 
   const openForkDialog = async () => {
@@ -1880,8 +1863,8 @@ function useAppShellSessionWorkspaceView({
     await treeDialogRef.current?.open()
   }
 
-  const focusSessionSearch = () => {
-    openSessionsDialog()
+  const focusAgentSearch = () => {
+    openAgentsDialog()
   }
 
   const focusPrompt = () => {
@@ -1915,12 +1898,12 @@ function useAppShellSessionWorkspaceView({
       addDirectoryOpenRef.current ||
       authOpenRef.current ||
       commandPaletteOpenRef.current ||
-      deleteOldDirectorySessionsOpenRef.current ||
+      deleteOldDirectoryAgentsOpenRef.current ||
       deleteOpenRef.current ||
       forkOpenRef.current ||
       gitCommitOpenRef.current ||
       renameOpenRef.current ||
-      sessionsOpenRef.current ||
+      agentsOpenRef.current ||
       settingsOpenRef.current ||
       treeOpenRef.current ||
       uiRequestOpenRef.current
@@ -1962,11 +1945,11 @@ function useAppShellSessionWorkspaceView({
     }
   }, [focusPromptRef])
   const promptFocusRequestRef = React.useRef({
-    sessionId: "",
+    agentId: "",
     nonce: 0,
   })
   const promptFocusRequestTimeoutRef = React.useRef<number | null>(null)
-  const lastAutoFocusedSessionKeyRef = React.useRef<string | null>(null)
+  const lastAutoFocusedAgentKeyRef = React.useRef<string | null>(null)
 
   const schedulePromptFocusRequest = () => {
     if (promptFocusRequestTimeoutRef.current !== null) {
@@ -2010,58 +1993,57 @@ function useAppShellSessionWorkspaceView({
   }, [focusPromptRef, openMobile, openMobileSettled])
 
   React.useEffect(() => {
-    if (isSessionViewLoading || hasOpenDialogSurface()) return
+    if (isAgentViewLoading || hasOpenDialogSurface()) return
 
-    const sessionFocusKey =
-      sessionState.sessionKey || sessionState.sessionId || "draft"
-    if (lastAutoFocusedSessionKeyRef.current === sessionFocusKey) return
+    const agentFocusKey = agentState.agentKey || agentState.agentId || "draft"
+    if (lastAutoFocusedAgentKeyRef.current === agentFocusKey) return
 
-    lastAutoFocusedSessionKeyRef.current = sessionFocusKey
+    lastAutoFocusedAgentKeyRef.current = agentFocusKey
     focusPromptRef.current()
   }, [
     focusPromptRef,
-    isSessionViewLoading,
-    sessionState.sessionId,
-    sessionState.sessionKey,
+    isAgentViewLoading,
+    agentState.agentId,
+    agentState.agentKey,
   ])
 
   React.useEffect(() => {
     const promptFocusRequest = promptFocusRequestRef.current
     if (
       !promptFocusRequest.nonce ||
-      isSessionViewLoading ||
+      isAgentViewLoading ||
       hasOpenDialogSurface()
     ) {
       return
     }
     if (
-      promptFocusRequest.sessionId &&
-      sessionState.sessionId !== promptFocusRequest.sessionId
+      promptFocusRequest.agentId &&
+      agentState.agentId !== promptFocusRequest.agentId
     ) {
       return
     }
 
     schedulePromptFocusRequest()
-  }, [isSessionViewLoading, sessionState.sessionId])
+  }, [isAgentViewLoading, agentState.agentId])
 
-  const handleSessionDoneSoundEnabledChange = (enabled: boolean) => {
-    setSessionDoneSoundEnabled(enabled)
+  const handleAgentDoneSoundEnabledChange = (enabled: boolean) => {
+    setAgentDoneSoundEnabled(enabled)
     safeLocalStorageSetItem(
-      SESSION_DONE_SOUND_ENABLED_STORAGE_KEY,
+      AGENT_DONE_SOUND_ENABLED_STORAGE_KEY,
       enabled ? "1" : "0"
     )
 
     if (enabled) {
-      void primeSessionDoneSound()
+      void primeAgentDoneSound()
     }
   }
 
-  const handleSessionDoneDesktopNotificationsEnabledChange = async (
+  const handleAgentDoneDesktopNotificationsEnabledChange = async (
     enabled: boolean
   ) => {
-    setSessionDoneDesktopNotificationsEnabled(enabled)
+    setAgentDoneDesktopNotificationsEnabled(enabled)
     safeLocalStorageSetItem(
-      SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
+      AGENT_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
       enabled ? "1" : "0"
     )
 
@@ -2081,70 +2063,69 @@ function useAppShellSessionWorkspaceView({
     }
   }
 
-  const syncSidebarSelectionForSession = React.useCallback(
-    (nextSessionId?: string, options?: SelectSessionNavigationOptions) => {
-      const nextKey = nextSessionId
-        ? findSidebarSessionSelectionKey(
-            sidebarStore.state.derived.sidebarSessionEntriesByKey,
+  const syncSidebarSelectionForAgent = React.useCallback(
+    (nextAgentId?: string, options?: SelectAgentNavigationOptions) => {
+      const nextKey = nextAgentId
+        ? findSidebarAgentSelectionKey(
+            sidebarStore.state.derived.sidebarAgentEntriesByKey,
             {
-              sessionId: nextSessionId,
-              sessionPath: options?.sessionPath,
+              agentId: nextAgentId,
+              agentPath: options?.agentPath,
             }
           )
         : ""
 
-      sidebarStore.setSelectedSidebarSessionKeys((current) => {
+      sidebarStore.setSelectedSidebarAgentKeys((current) => {
         if (!nextKey) return current.length === 0 ? current : []
         return sameStringArray(current, [nextKey]) ? current : [nextKey]
       })
-      sidebarStore.setSidebarSessionSelectionAnchor((current) =>
+      sidebarStore.setSidebarAgentSelectionAnchor((current) =>
         current === nextKey ? current : nextKey
       )
     },
     [sidebarStore]
   )
 
-  const handleSelectSession = React.useCallback(
-    (nextSessionId?: string, options?: SelectSessionNavigationOptions) => {
+  const handleSelectAgent = React.useCallback(
+    (nextAgentId?: string, options?: SelectAgentNavigationOptions) => {
       setCurrentTab((tab) => (tab === "git" ? "conversation" : tab))
-      syncSidebarSelectionForSession(nextSessionId, options)
-      publishSidebarActiveSession({
-        draft: !nextSessionId,
-        sessionId: nextSessionId,
-        sessionPath: options?.sessionPath,
+      syncSidebarSelectionForAgent(nextAgentId, options)
+      publishSidebarActiveAgent({
+        draft: !nextAgentId,
+        agentId: nextAgentId,
+        agentPath: options?.agentPath,
       })
 
-      pendingRouteSessionIdRef.current = nextSessionId
-      pendingRouteSessionPathRef.current =
-        options?.sessionPath?.trim() || undefined
-      if (nextSessionId) {
+      pendingRouteAgentIdRef.current = nextAgentId
+      pendingRouteAgentPathRef.current = options?.agentPath?.trim() || undefined
+      if (nextAgentId) {
         promptFocusRequestRef.current = {
-          sessionId: nextSessionId,
+          agentId: nextAgentId,
           nonce: promptFocusRequestRef.current.nonce + 1,
         }
       }
-      setLoadingSessionId((current) => {
-        if (!nextSessionId) {
+      setLoadingAgentId((current) => {
+        if (!nextAgentId) {
           return null
         }
         if (
-          !sessionStateRef.current.draft &&
-          sessionStateRef.current.sessionId === nextSessionId
+          !agentStateRef.current.draft &&
+          agentStateRef.current.agentId === nextAgentId
         ) {
           return current
         }
-        return nextSessionId
+        return nextAgentId
       })
-      onSelectSession?.(nextSessionId, options)
+      onSelectAgent?.(nextAgentId, options)
     },
     [
-      onSelectSession,
-      sessionStateRef,
-      publishSidebarActiveSession,
-      syncSidebarSelectionForSession,
+      onSelectAgent,
+      agentStateRef,
+      publishSidebarActiveAgent,
+      syncSidebarSelectionForAgent,
     ]
   )
-  const handleSelectSessionRef = useLatestRef(handleSelectSession)
+  const handleSelectAgentRef = useLatestRef(handleSelectAgent)
   // Another device changed the shared sidebar layout. The first directories
   // that the event stream loads stay the same, so the stream does not restart.
   usePicoEvent(
@@ -2158,43 +2139,43 @@ function useAppShellSessionWorkspaceView({
           )
         )
       }
-      if (changed.includes("pinnedSessionKeys")) {
-        sidebarStore.setPinnedSidebarSessionKeys(
-          readStoredPinnedSessionKeys(machineId)
+      if (changed.includes("pinnedAgentKeys")) {
+        sidebarStore.setPinnedSidebarAgentKeys(
+          readStoredPinnedAgentKeys(machineId)
         )
       }
     }
   )
 
-  usePicoEvent("pico:open-session", (detail) => {
-    handleSelectSession(detail.sessionId)
+  usePicoEvent("pico:open-agent", (detail) => {
+    handleSelectAgent(detail.agentId)
   })
 
-  useAppShellSessionSync({
+  useAppShellAgentSync({
     viewerContextId,
-    sessionId,
-    draftSessionLoadingOwnerKey,
+    agentId,
+    draftAgentLoadingOwnerKey,
     bootstrapSidebarDirectories:
       sidebarStore.state.state.initialSidebarBootstrapDirectories,
     hideToolBlocksRef,
-    sessionStore,
-    sessionStateRef,
+    agentStore,
+    agentStateRef,
     composerTextRef,
     composerSkillRef,
     replaceComposerDraftRef,
-    handleSelectSessionRef,
-    pendingRouteSessionIdRef,
-    pendingRouteSessionPathRef,
-    setSessionState,
+    handleSelectAgentRef,
+    pendingRouteAgentIdRef,
+    pendingRouteAgentPathRef,
+    setAgentState,
     setConversationItems,
     setWorkingState,
     setCompactRunningState,
     setComposerContextUsage,
     setComposerStreaming,
-    setSessionsEvent: sidebarStore.setSessionsEvent,
-    setSessionDoneEvents,
-    applySidebarSessionStatusRef,
-    bindOptimisticSidebarSessionRef,
+    setAgentsEvent: sidebarStore.setAgentsEvent,
+    setAgentDoneEvents,
+    applySidebarAgentStatusRef,
+    bindOptimisticSidebarAgentRef,
     setComposerImages,
     setPendingMessages,
     pendingUiRequestHandlerRef,
@@ -2202,31 +2183,31 @@ function useAppShellSessionWorkspaceView({
     lastSyncedEditorTextRef,
   })
 
-  // The sidebar directory of the session. A worktree session works in its
-  // worktree, but belongs to the directory of the session that made it.
-  const sessionDirectory = (sessionState.directory ?? sessionState.cwd)?.trim()
+  // The sidebar directory of the agent. A worktree agent works in its
+  // worktree, but belongs to the directory of the agent that made it.
+  const agentDirectory = (agentState.directory ?? agentState.cwd)?.trim()
 
   React.useEffect(() => {
-    if (!sessionDirectory) return
+    if (!agentDirectory) return
     machineLocalStorageSetItem(
       machineId,
       DRAFT_DIRECTORY_STORAGE_KEY,
-      sessionDirectory
+      agentDirectory
     )
-    setStoredDraftDirectory(sessionDirectory)
-  }, [sessionDirectory])
+    setStoredDraftDirectory(agentDirectory)
+  }, [agentDirectory])
 
   React.useEffect(() => {
-    const nextDirectory = sessionDirectory
-    const nextSessionId = sessionState.sessionId?.trim()
-    if (!sessionId || !nextSessionId || sessionState.draft || !nextDirectory) {
+    const nextDirectory = agentDirectory
+    const nextAgentId = agentState.agentId?.trim()
+    if (!agentId || !nextAgentId || agentState.draft || !nextDirectory) {
       return
     }
-    if (nextSessionId !== sessionId) return
+    if (nextAgentId !== agentId) return
 
-    const autoAddKey = `${nextSessionId}\n${nextDirectory}`
-    if (autoAddedSessionDirectoryKeysRef.current.has(autoAddKey)) return
-    autoAddedSessionDirectoryKeysRef.current.add(autoAddKey)
+    const autoAddKey = `${nextAgentId}\n${nextDirectory}`
+    if (autoAddedAgentDirectoryKeysRef.current.has(autoAddKey)) return
+    autoAddedAgentDirectoryKeysRef.current.add(autoAddKey)
 
     sidebarStore.setSidebarDirectories((current) => {
       const normalizedCurrent = normalizeStoredDirectoryList(current)
@@ -2244,16 +2225,16 @@ function useAppShellSessionWorkspaceView({
       return nextDirectories
     })
   }, [
-    sessionDirectory,
-    sessionId,
-    sessionState.draft,
-    sessionState.sessionId,
+    agentDirectory,
+    agentId,
+    agentState.draft,
+    agentState.agentId,
     sidebarStore,
   ])
 
-  const defaultNewSessionDirectory =
-    sessionDirectory || baseSidebarDirectories[0] || storedDraftDirectory || ""
-  const newSessionDirectoryOptions = React.useMemo(() => {
+  const defaultNewAgentDirectory =
+    agentDirectory || baseSidebarDirectories[0] || storedDraftDirectory || ""
+  const newAgentDirectoryOptions = React.useMemo(() => {
     const nextOptions: Array<{ path: string; label: string }> = []
     const seen = new Set<string>()
     const pushDirectoryOption = (path: string, label: string) => {
@@ -2263,8 +2244,8 @@ function useAppShellSessionWorkspaceView({
       nextOptions.push({ path: normalizedPath, label })
     }
 
-    if (sessionDirectory) {
-      pushDirectoryOption(sessionDirectory, "Current session directory")
+    if (agentDirectory) {
+      pushDirectoryOption(agentDirectory, "Current agent directory")
     }
     if (storedDraftDirectory) {
       pushDirectoryOption(storedDraftDirectory, "Draft directory")
@@ -2274,14 +2255,14 @@ function useAppShellSessionWorkspaceView({
     }
 
     return nextOptions
-  }, [baseSidebarDirectories, sessionDirectory, storedDraftDirectory])
+  }, [baseSidebarDirectories, agentDirectory, storedDraftDirectory])
 
   const knownDirectories = React.useMemo(
     () =>
       normalizeStoredDirectoryList([
         ...baseSidebarDirectories,
-        ...sessionsEventDirectories,
-        sessionState.cwd || "",
+        ...agentsEventDirectories,
+        agentState.cwd || "",
         storedDraftDirectory,
         ...Array.from(directoryStateByPath.keys()),
         ...Object.values(directoryIndexes).flatMap((entries) =>
@@ -2292,18 +2273,18 @@ function useAppShellSessionWorkspaceView({
       baseSidebarDirectories,
       directoryIndexes,
       directoryStateByPath,
-      sessionState.cwd,
-      sessionsEventDirectories,
+      agentState.cwd,
+      agentsEventDirectories,
       storedDraftDirectory,
     ]
   )
 
-  const sessionsDialogDirectory =
-    sessionState.cwd?.trim() ||
+  const agentsDialogDirectory =
+    agentState.cwd?.trim() ||
     (baseSidebarDirectories.length > 0
       ? (baseSidebarDirectories[0] ?? "")
       : storedDraftDirectory) ||
-    defaultNewSessionDirectory
+    defaultNewAgentDirectory
 
   const rememberRecentDirectory = (directory: string) => {
     const normalizedDirectory = directory.trim()
@@ -2323,23 +2304,23 @@ function useAppShellSessionWorkspaceView({
     })
   }
 
-  const prefetchDirectorySessionsIndex = React.useCallback(
+  const prefetchDirectoryAgentsIndex = React.useCallback(
     (_directory: string) => {},
     []
   )
 
-  const addOptimisticSidebarSession = React.useCallback(
+  const addOptimisticSidebarAgent = React.useCallback(
     (options?: { id?: string; cwd?: string; lastMessagePreview?: string }) => {
-      const currentState = sessionStateRef.current
+      const currentState = agentStateRef.current
       const optimisticId = (
         options?.id ||
-        currentState.sessionKey ||
+        currentState.agentKey ||
         `optimistic:${promptDraftKey(currentState)}`
       ).trim()
       const cwd = (
         options?.cwd ||
         currentState.cwd ||
-        defaultNewSessionDirectory
+        defaultNewAgentDirectory
       ).trim()
       if (!optimisticId || !cwd) return undefined
 
@@ -2347,7 +2328,7 @@ function useAppShellSessionWorkspaceView({
       const entry = {
         id: optimisticId,
         cwd,
-        title: "New session",
+        title: "New agent",
         modified,
         lastUserMessageAt: modified,
         lastMessageAt: modified,
@@ -2357,8 +2338,8 @@ function useAppShellSessionWorkspaceView({
         streaming: true,
         unread: false,
         optimistic: true,
-      } satisfies SessionListEntry
-      const entryKey = sessionListEntryKey(entry)
+      } satisfies AgentListEntry
+      const entryKey = agentListEntryKey(entry)
 
       sidebarStore.setSidebarDirectories((current) => {
         const normalizedCurrent = normalizeStoredDirectoryList(current)
@@ -2381,16 +2362,16 @@ function useAppShellSessionWorkspaceView({
         cwd,
       }
       sidebarStore.setDirectoryIndexDataByPath((current) =>
-        upsertOptimisticSidebarSessionEntry(current, optimisticEntry)
+        upsertOptimisticSidebarAgentEntry(current, optimisticEntry)
       )
       // Update the event index only when it has this directory. Otherwise
       // the event gets an index with only the new entry, and the merge of the
       // event replaces the full directory list with it.
-      sidebarStore.setSessionsEvent((current) =>
+      sidebarStore.setAgentsEvent((current) =>
         current?.directoryIndexes?.[cwd]
           ? {
               ...current,
-              directoryIndexes: upsertOptimisticSidebarSessionEntry(
+              directoryIndexes: upsertOptimisticSidebarAgentEntry(
                 current.directoryIndexes || {},
                 optimisticEntry
               ),
@@ -2398,33 +2379,33 @@ function useAppShellSessionWorkspaceView({
           : current
       )
       if (entryKey) {
-        sidebarStore.setSelectedSidebarSessionKeys((current) =>
+        sidebarStore.setSelectedSidebarAgentKeys((current) =>
           sameStringArray(current, [entryKey]) ? current : [entryKey]
         )
-        sidebarStore.setSidebarSessionSelectionAnchor((current) =>
+        sidebarStore.setSidebarAgentSelectionAnchor((current) =>
           current === entryKey ? current : entryKey
         )
       }
 
       return optimisticId
     },
-    [defaultNewSessionDirectory, sessionStateRef, sidebarStore]
+    [defaultNewAgentDirectory, agentStateRef, sidebarStore]
   )
 
-  const removeOptimisticSidebarSession = React.useCallback(
+  const removeOptimisticSidebarAgent = React.useCallback(
     (optimisticId: string | undefined) => {
       const targetId = optimisticId?.trim() || ""
       if (!targetId) return
 
-      const entryKey = sessionListEntryKey({ id: targetId })
+      const entryKey = agentListEntryKey({ id: targetId })
       sidebarStore.setDirectoryIndexDataByPath((current) =>
-        removeOptimisticSidebarSessionEntry(current, targetId)
+        removeOptimisticSidebarAgentEntry(current, targetId)
       )
-      sidebarStore.setSessionsEvent((current) =>
+      sidebarStore.setAgentsEvent((current) =>
         current?.directoryIndexes
           ? {
               ...current,
-              directoryIndexes: removeOptimisticSidebarSessionEntry(
+              directoryIndexes: removeOptimisticSidebarAgentEntry(
                 current.directoryIndexes,
                 targetId
               ),
@@ -2432,10 +2413,10 @@ function useAppShellSessionWorkspaceView({
           : current
       )
       if (entryKey) {
-        sidebarStore.setSelectedSidebarSessionKeys((current) =>
+        sidebarStore.setSelectedSidebarAgentKeys((current) =>
           current.filter((key) => key !== entryKey)
         )
-        sidebarStore.setSidebarSessionSelectionAnchor((current) =>
+        sidebarStore.setSidebarAgentSelectionAnchor((current) =>
           current === entryKey ? "" : current
         )
       }
@@ -2443,73 +2424,73 @@ function useAppShellSessionWorkspaceView({
     [sidebarStore]
   )
 
-  const bindOptimisticSidebarSession = React.useCallback(
+  const bindOptimisticSidebarAgent = React.useCallback(
     (
       optimisticId: string | undefined,
-      session: { sessionId?: string; sessionPath?: string }
+      agent: { agentId?: string; agentPath?: string }
     ) => {
       const targetId = optimisticId?.trim() || ""
-      if (!targetId || !session.sessionId) return
+      if (!targetId || !agent.agentId) return
 
       sidebarStore.setDirectoryIndexDataByPath((current) =>
-        bindOptimisticSidebarSessionEntryById(current, targetId, session)
+        bindOptimisticSidebarAgentEntryById(current, targetId, agent)
       )
-      sidebarStore.setSessionsEvent((current) => {
+      sidebarStore.setAgentsEvent((current) => {
         if (!current?.directoryIndexes) return current
-        const directoryIndexes = bindOptimisticSidebarSessionEntryById(
+        const directoryIndexes = bindOptimisticSidebarAgentEntryById(
           current.directoryIndexes,
           targetId,
-          session
+          agent
         )
         return directoryIndexes === current.directoryIndexes
           ? current
           : { ...current, directoryIndexes }
       })
 
-      const previousKey = sessionListEntryKey({ id: targetId })
-      const nextKey = sessionListEntryKey({
-        id: session.sessionId,
-        path: session.sessionPath,
+      const previousKey = agentListEntryKey({ id: targetId })
+      const nextKey = agentListEntryKey({
+        id: agent.agentId,
+        path: agent.agentPath,
       })
       if (!previousKey || !nextKey) return
-      sidebarStore.setSelectedSidebarSessionKeys((current) =>
+      sidebarStore.setSelectedSidebarAgentKeys((current) =>
         current.includes(previousKey)
           ? current.map((key) => (key === previousKey ? nextKey : key))
           : current
       )
-      sidebarStore.setSidebarSessionSelectionAnchor((current) =>
+      sidebarStore.setSidebarAgentSelectionAnchor((current) =>
         current === previousKey ? nextKey : current
       )
     },
     [sidebarStore]
   )
 
-  const updateOptimisticSidebarSessionPreview = React.useCallback(
-    (options: { preview: string; optimisticSidebarSessionId?: string }) => {
+  const updateOptimisticSidebarAgentPreview = React.useCallback(
+    (options: { preview: string; optimisticSidebarAgentId?: string }) => {
       const preview = options.preview.trim()
       if (!preview) return
 
-      const currentState = sessionStateRef.current
+      const currentState = agentStateRef.current
       const modified = new Date().toISOString()
-      const sessionId =
-        options.optimisticSidebarSessionId ||
-        currentState.sessionId ||
-        currentState.sessionKey
-      const sessionPath = currentState.sessionFile
+      const agentId =
+        options.optimisticSidebarAgentId ||
+        currentState.agentId ||
+        currentState.agentKey
+      const agentPath = currentState.agentFile
 
       const previewUpdate = {
-        ...(sessionId ? { sessionId } : {}),
-        ...(sessionPath ? { sessionPath } : {}),
+        ...(agentId ? { agentId } : {}),
+        ...(agentPath ? { agentPath } : {}),
         preview,
         modified,
       }
 
       sidebarStore.setDirectoryIndexDataByPath((current) =>
-        updateOptimisticSidebarSessionPreviewEntry(current, previewUpdate)
+        updateOptimisticSidebarAgentPreviewEntry(current, previewUpdate)
       )
-      sidebarStore.setSessionsEvent((current) => {
+      sidebarStore.setAgentsEvent((current) => {
         if (!current?.directoryIndexes) return current
-        const directoryIndexes = updateOptimisticSidebarSessionPreviewEntry(
+        const directoryIndexes = updateOptimisticSidebarAgentPreviewEntry(
           current.directoryIndexes,
           previewUpdate
         )
@@ -2518,14 +2499,14 @@ function useAppShellSessionWorkspaceView({
           : { ...current, directoryIndexes }
       })
     },
-    [sessionStateRef, sidebarStore]
+    [agentStateRef, sidebarStore]
   )
 
   const clearSelectedSidebarSelection = React.useCallback(() => {
-    sidebarStore.setSelectedSidebarSessionKeys((current) =>
+    sidebarStore.setSelectedSidebarAgentKeys((current) =>
       current.length === 0 ? current : []
     )
-    sidebarStore.setSidebarSessionSelectionAnchor((current) =>
+    sidebarStore.setSidebarAgentSelectionAnchor((current) =>
       current ? "" : current
     )
   }, [sidebarStore])
@@ -2537,20 +2518,20 @@ function useAppShellSessionWorkspaceView({
   const pendingMessages = pendingMessagesStore.state
 
   const {
-    abortSession,
+    abortAgent,
     addDirectoryPath,
-    createSession: requestCreateSession,
+    createAgent: requestCreateAgent,
     holdPendingQueue,
     savePendingQueue,
     startPendingQueue,
     submitPrompt,
   } = useAppShellPromptMutations({
     viewerContextId,
-    activeSessionId,
-    defaultNewSessionDirectory,
-    sessionStore,
-    sessionStateRef,
-    draftSessionLoadingOwnerKey,
+    activeAgentId,
+    defaultNewAgentDirectory,
+    agentStore,
+    agentStateRef,
+    draftAgentLoadingOwnerKey,
     pendingDraftPrompt,
     pendingDraftFollowUps,
     awaitingFirstTurn,
@@ -2562,16 +2543,16 @@ function useAppShellSessionWorkspaceView({
     replaceComposerDraft,
     lastSyncedEditorTextRef,
     rememberRecentDirectory,
-    prefetchDirectorySessionsIndex,
+    prefetchDirectoryAgentsIndex,
     addOptimisticUserMessage,
     removeOptimisticUserMessage,
-    addOptimisticSidebarSession,
-    removeOptimisticSidebarSession,
-    bindOptimisticSidebarSession,
-    updateOptimisticSidebarSessionPreview,
+    addOptimisticSidebarAgent,
+    removeOptimisticSidebarAgent,
+    bindOptimisticSidebarAgent,
+    updateOptimisticSidebarAgentPreview,
     setSidebarDirectories: sidebarStore.setSidebarDirectories,
     setStoredDraftDirectory,
-    setDraftSessionLoadingOwnerKey,
+    setDraftAgentLoadingOwnerKey,
     setPendingDraftPrompt,
     setPendingDraftFollowUps,
     setPendingMessages,
@@ -2586,7 +2567,7 @@ function useAppShellSessionWorkspaceView({
       const nextDirectory = directory.trim()
       if (!nextDirectory) return
 
-      const previousState = sessionStateRef.current
+      const previousState = agentStateRef.current
       if (!previousState.draft || previousState.items.length > 0) return
 
       machineLocalStorageSetItem(
@@ -2598,14 +2579,14 @@ function useAppShellSessionWorkspaceView({
       rememberRecentDirectory(nextDirectory)
 
       const ownerKey = promptDraftKey({ cwd: nextDirectory })
-      const nextState = createOptimisticDraftSessionState({
+      const nextState = createOptimisticDraftAgentState({
         previous: previousState,
         cwd: nextDirectory,
         ownerKey,
       })
-      sessionStateRef.current = nextState
+      agentStateRef.current = nextState
       conversationItemsStore.setItems(nextState.items)
-      setSessionState(nextState)
+      setAgentState(nextState)
 
       rememberStoredPromptDraft(
         machineId,
@@ -2619,8 +2600,8 @@ function useAppShellSessionWorkspaceView({
     [
       conversationItemsStore,
       rememberRecentDirectory,
-      sessionStateRef,
-      setSessionState,
+      agentStateRef,
+      setAgentState,
       setStoredDraftDirectory,
     ]
   )
@@ -2636,35 +2617,35 @@ function useAppShellSessionWorkspaceView({
     [addDirectoryPath, switchEmptyDraftDirectory]
   )
 
-  const createSession = React.useCallback(
-    async (cwdOverride?: string, options?: CreateSessionOptions) => {
-      const previousState = sessionStateRef.current
-      const nextCwd = resolveNewSessionCwd({
+  const createAgent = React.useCallback(
+    async (cwdOverride?: string, options?: CreateAgentOptions) => {
+      const previousState = agentStateRef.current
+      const nextCwd = resolveNewAgentCwd({
         cwdOverride,
-        defaultDirectory: defaultNewSessionDirectory,
+        defaultDirectory: defaultNewAgentDirectory,
         currentCwd: previousState.cwd,
       })
       const ownerKey = promptDraftKey({ cwd: nextCwd })
-      const optimisticSessionKey = `optimistic:${ownerKey}`
+      const optimisticAgentKey = `optimistic:${ownerKey}`
       const shouldCloseMobileSidebar =
         Boolean(options?.closeMobileSidebar) && isMobile && openMobile
 
       // Start the request before focusing the composer so an immediate Enter
-      // queues against the new draft instead of the previous route session.
-      const createSessionPromise = requestCreateSession(nextCwd)
+      // queues against the new draft instead of the previous route agent.
+      const createAgentPromise = requestCreateAgent(nextCwd)
 
-      handleSelectSession(undefined)
+      handleSelectAgent(undefined)
       clearSelectedSidebarSelection()
       setAwaitingFirstTurn(false)
       setPendingMessages((current) => (current.length === 0 ? current : []))
-      const nextState = createOptimisticDraftSessionState({
+      const nextState = createOptimisticDraftAgentState({
         previous: previousState,
         cwd: nextCwd,
         ownerKey,
       })
-      sessionStateRef.current = nextState
+      agentStateRef.current = nextState
       conversationItemsStore.setItems(nextState.items)
-      setSessionState(nextState)
+      setAgentState(nextState)
 
       if (shouldCloseMobileSidebar) {
         pendingMobileSidebarPromptFocusRef.current = true
@@ -2673,39 +2654,39 @@ function useAppShellSessionWorkspaceView({
         focusPrompt()
       }
 
-      const created = await createSessionPromise
+      const created = await createAgentPromise
       if (created) {
         return
       }
 
-      if (sessionStateRef.current.sessionKey !== optimisticSessionKey) {
+      if (agentStateRef.current.agentKey !== optimisticAgentKey) {
         return
       }
 
-      sessionStateRef.current = previousState
+      agentStateRef.current = previousState
       conversationItemsStore.setItems(previousState.items)
-      setSessionState(previousState)
+      setAgentState(previousState)
     },
     [
       clearSelectedSidebarSelection,
       conversationItemsStore,
-      defaultNewSessionDirectory,
+      defaultNewAgentDirectory,
       focusPrompt,
-      handleSelectSession,
+      handleSelectAgent,
       isMobile,
       openMobile,
-      requestCreateSession,
-      sessionStateRef,
+      requestCreateAgent,
+      agentStateRef,
       setAwaitingFirstTurn,
       setOpenMobile,
       setPendingMessages,
-      setSessionState,
+      setAgentState,
     ]
   )
 
   // Actions from outside this shell: for example the sidebar group of this
   // machine, shown while another machine was open, or the directory picker
-  // of another machine's new-session composer. The effect runs again when
+  // of another machine's new-agent composer. The effect runs again when
   // the shell shows, so actions that came while it was hidden run then.
   const runMachineAction = React.useEffectEvent((action: MachineAction) => {
     if (action.type === "add-directory") {
@@ -2713,11 +2694,11 @@ function useAppShellSessionWorkspaceView({
       return
     }
     const draft = action.draft
-    void createSession(action.directory).then(() => {
+    void createAgent(action.directory).then(() => {
       if (!draft) return
       // The prompt that the user wrote in another machine's composer before
       // choosing a directory of this machine.
-      replaceComposerDraftRef.current(draft.text, sessionStateRef.current, {
+      replaceComposerDraftRef.current(draft.text, agentStateRef.current, {
         forceSync: true,
       })
       if (draft.images.length > 0) setComposerImages(draft.images)
@@ -2750,7 +2731,7 @@ function useAppShellSessionWorkspaceView({
     comment: Omit<ComposerDiffLineComment, "cwd" | "id">
   ) => {
     const text = comment.text.trim()
-    const cwd = sessionStateRef.current.cwd?.trim() || ""
+    const cwd = agentStateRef.current.cwd?.trim() || ""
     if (!text || !cwd) return
 
     setComposerLineComments((current) => [
@@ -2792,7 +2773,7 @@ function useAppShellSessionWorkspaceView({
     pendingDraftFollowUpMessages.length > 0 || pendingMessages.length > 0
       ? [...pendingDraftFollowUpMessages, ...pendingMessages]
       : EMPTY_COMPOSER_PENDING_MESSAGES
-  const composerDisabled = isSessionViewLoading
+  const composerDisabled = isAgentViewLoading
   const displayedLineComments = composerDisabled
     ? EMPTY_COMPOSER_LINE_COMMENTS
     : composerLineComments
@@ -2846,7 +2827,7 @@ function useAppShellSessionWorkspaceView({
         message,
       ])
     )
-    // New rows join the drafts only while no session queue exists yet.
+    // New rows join the drafts only while no agent queue exists yet.
     const draftOnly = pendingMessages.length === 0
     const draftRows = rows.filter((row) =>
       row.pendingId ? drafts.has(row.pendingId) : draftOnly
@@ -2900,82 +2881,80 @@ function useAppShellSessionWorkspaceView({
 
   const {
     cycleThinkingLevel,
-    deleteSessions,
-    moveSessionPath,
-    renameSessionPath,
+    deleteAgents,
+    moveAgentPath,
+    renameAgentPath,
     runClone,
     runCompact,
     setModel,
     setThinkingBlocksHidden,
     setThinkingLevel,
     toggleHideThinking,
-  } = useAppShellSessionMutations({
+  } = useAppShellAgentMutations({
     viewerContextId,
-    activeSessionId,
-    sessionStateRef,
-    setSessionState,
+    activeAgentId,
+    agentStateRef,
+    setAgentState,
     getDirectoryIndexDataByPath: () =>
       sidebarStore.state.state.directoryIndexDataByPath,
     setDirectoryIndexDataByPath: sidebarStore.setDirectoryIndexDataByPath,
-    getSessionsEvent: () => sidebarStore.state.state.sessionsEvent,
-    setSessionsEvent: sidebarStore.setSessionsEvent,
+    getAgentsEvent: () => sidebarStore.state.state.agentsEvent,
+    setAgentsEvent: sidebarStore.setAgentsEvent,
     getSidebarSelection: () => {
       const sidebarState = sidebarStore.state.state
       return {
-        selectedSidebarSessionKeys: sidebarState.selectedSidebarSessionKeys,
-        sidebarSessionSelectionAnchor:
-          sidebarState.sidebarSessionSelectionAnchor,
+        selectedSidebarAgentKeys: sidebarState.selectedSidebarAgentKeys,
+        sidebarAgentSelectionAnchor: sidebarState.sidebarAgentSelectionAnchor,
       }
     },
-    optimisticallyClearActiveDeletedSession: (targetPath) => {
-      const previousState = sessionStateRef.current
-      if (previousState.sessionFile !== targetPath) return undefined
+    optimisticallyClearActiveDeletedAgent: (targetPath) => {
+      const previousState = agentStateRef.current
+      if (previousState.agentFile !== targetPath) return undefined
 
       const ownerKey = `delete:${targetPath}`
-      const optimisticSessionKey = `optimistic:${ownerKey}`
-      handleSelectSession(undefined, { replace: true })
-      const nextState = createOptimisticDraftSessionState({
+      const optimisticAgentKey = `optimistic:${ownerKey}`
+      handleSelectAgent(undefined, { replace: true })
+      const nextState = createOptimisticDraftAgentState({
         previous: previousState,
         cwd: previousState.cwd,
         ownerKey,
       })
-      sessionStateRef.current = nextState
+      agentStateRef.current = nextState
       conversationItemsStore.setItems(nextState.items)
-      setSessionState(nextState)
+      setAgentState(nextState)
 
       return () => {
-        if (sessionStateRef.current.sessionKey !== optimisticSessionKey) return
-        if (previousState.sessionId) {
-          handleSelectSession(previousState.sessionId, {
+        if (agentStateRef.current.agentKey !== optimisticAgentKey) return
+        if (previousState.agentId) {
+          handleSelectAgent(previousState.agentId, {
             replace: true,
-            sessionPath: previousState.sessionFile,
+            agentPath: previousState.agentFile,
           })
         }
-        sessionStateRef.current = previousState
+        agentStateRef.current = previousState
         conversationItemsStore.setItems(previousState.items)
-        setSessionState(previousState)
+        setAgentState(previousState)
       }
     },
-    setSelectedSidebarSessionKeys: sidebarStore.setSelectedSidebarSessionKeys,
-    setSidebarSessionSelectionAnchor:
-      sidebarStore.setSidebarSessionSelectionAnchor,
-    setPinnedSidebarSessionKeys: sidebarStore.setPinnedSidebarSessionKeys,
+    setSelectedSidebarAgentKeys: sidebarStore.setSelectedSidebarAgentKeys,
+    setSidebarAgentSelectionAnchor: sidebarStore.setSidebarAgentSelectionAnchor,
+    setPinnedSidebarAgentKeys: sidebarStore.setPinnedSidebarAgentKeys,
     setCompactWorkingState,
     isCompactAbortRequested,
   })
 
-  const moveSessionToDirectory = async (
-    entry: SessionListEntry,
+  const moveAgentToDirectory = async (
+    entry: AgentListEntry,
     directory: string
   ) => {
-    const moved = await moveSessionPath(entry, directory)
+    const moved = await moveAgentPath(entry, directory)
     if (moved) {
       rememberRecentDirectory(directory)
     }
     return moved
   }
 
-  const setSessionUnread = async (entry: SessionListEntry, unread: boolean) => {
+  const setAgentUnread = async (entry: AgentListEntry, unread: boolean) => {
     if (!viewerContextId || !entry.path) return false
 
     const targetPath = entry.path
@@ -2983,11 +2962,11 @@ function useAppShellSessionWorkspaceView({
     const nextUnread = Boolean(unread)
 
     const applyUnread = (value: boolean) => {
-      sidebarStore.setSidebarSessionStatusByKey((current) =>
-        mergeSidebarSessionStatusMap(current, {
-          type: "session_status",
-          sessionId: entry.id,
-          sessionPath: targetPath,
+      sidebarStore.setSidebarAgentStatusByKey((current) =>
+        mergeSidebarAgentStatusMap(current, {
+          type: "agent_status",
+          agentId: entry.id,
+          agentPath: targetPath,
           unread: value,
         })
       )
@@ -2996,11 +2975,11 @@ function useAppShellSessionWorkspaceView({
     applyUnread(nextUnread)
 
     try {
-      await fetchJson<Extract<SessionReadStateResponse, { ok: true }>>(
-        buildRequestUrl("/api/session/read-state", {
+      await fetchJson<Extract<AgentReadStateResponse, { ok: true }>>(
+        buildRequestUrl("/api/agent/read-state", {
           machineId,
           contextId: viewerContextId,
-          sessionId: activeSessionId,
+          agentId: activeAgentId,
         }),
         {
           method: "POST",
@@ -3009,36 +2988,34 @@ function useAppShellSessionWorkspaceView({
         }
       )
       await queryClient.invalidateQueries({
-        queryKey: ["pico", "directory-sessions-index", viewerContextId],
+        queryKey: ["pico", "directory-agents-index", viewerContextId],
         refetchType: "active",
       })
-      toast.success(
-        nextUnread ? "Marked session unread" : "Marked session read"
-      )
+      toast.success(nextUnread ? "Marked agent unread" : "Marked agent read")
       return true
     } catch (error) {
       applyUnread(previousUnread)
       toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to update session read state"
+          : "Failed to update agent read state"
       )
       return false
     }
   }
 
-  const markSessionsRead = async (entries: Array<SessionListEntry>) => {
+  const markAgentsRead = async (entries: Array<AgentListEntry>) => {
     if (!viewerContextId) return false
 
     const targets = entries.filter((entry) => entry.path && entry.unread)
     if (targets.length === 0) return true
 
-    const applyUnread = (target: SessionListEntry, value: boolean) => {
-      sidebarStore.setSidebarSessionStatusByKey((current) =>
-        mergeSidebarSessionStatusMap(current, {
-          type: "session_status",
-          sessionId: target.id,
-          sessionPath: target.path,
+    const applyUnread = (target: AgentListEntry, value: boolean) => {
+      sidebarStore.setSidebarAgentStatusByKey((current) =>
+        mergeSidebarAgentStatusMap(current, {
+          type: "agent_status",
+          agentId: target.id,
+          agentPath: target.path,
           unread: value,
         })
       )
@@ -3048,11 +3025,11 @@ function useAppShellSessionWorkspaceView({
 
     const results = await Promise.allSettled(
       targets.map((target) =>
-        fetchJson<Extract<SessionReadStateResponse, { ok: true }>>(
-          buildRequestUrl("/api/session/read-state", {
+        fetchJson<Extract<AgentReadStateResponse, { ok: true }>>(
+          buildRequestUrl("/api/agent/read-state", {
             machineId,
             contextId: viewerContextId,
-            sessionId: activeSessionId,
+            agentId: activeAgentId,
           }),
           {
             method: "POST",
@@ -3071,44 +3048,44 @@ function useAppShellSessionWorkspaceView({
     })
 
     await queryClient.invalidateQueries({
-      queryKey: ["pico", "directory-sessions-index", viewerContextId],
+      queryKey: ["pico", "directory-agents-index", viewerContextId],
       refetchType: "active",
     })
 
     if (failed > 0) {
-      toast.error(`Failed to mark ${failed} of ${targets.length} sessions read`)
+      toast.error(`Failed to mark ${failed} of ${targets.length} agents read`)
       return false
     }
     toast.success(
       targets.length === 1
-        ? "Marked 1 session read"
-        : `Marked ${targets.length} sessions read`
+        ? "Marked 1 agent read"
+        : `Marked ${targets.length} agents read`
     )
     return true
   }
 
-  const moveSessionDirectoryTargetToPath = async (directory: string) => {
-    const target = moveSessionDirectoryTargetRef.current
+  const moveAgentDirectoryTargetToPath = async (directory: string) => {
+    const target = moveAgentDirectoryTargetRef.current
     if (!target) return false
 
-    const moved = await moveSessionToDirectory(target, directory)
+    const moved = await moveAgentToDirectory(target, directory)
     if (moved) {
-      moveSessionDirectoryTargetRef.current = null
+      moveAgentDirectoryTargetRef.current = null
     }
     return moved
   }
 
-  const moveCurrentSessionToDirectory = async (directory: string) => {
-    const currentState = sessionStateRef.current
-    if (!currentState.sessionFile) return false
+  const moveCurrentAgentToDirectory = async (directory: string) => {
+    const currentState = agentStateRef.current
+    if (!currentState.agentFile) return false
 
-    return await moveSessionToDirectory(
+    return await moveAgentToDirectory(
       {
-        path: currentState.sessionFile,
-        id: currentState.sessionId,
+        path: currentState.agentFile,
+        id: currentState.agentId,
         cwd: currentState.cwd,
-        title: getCurrentSessionTitleFromState(currentState),
-        name: currentState.sessionName,
+        title: getCurrentAgentTitleFromState(currentState),
+        name: currentState.agentName,
         modified: currentState.modified,
       },
       directory
@@ -3145,7 +3122,7 @@ function useAppShellSessionWorkspaceView({
   const runBuiltinSlashCommand = async (name: string, args: string) => {
     const trimmedArgs = args.trim()
     const clearComposerDraft = () => {
-      replaceComposerDraft("", sessionStateRef.current, { forceSync: true })
+      replaceComposerDraft("", agentStateRef.current, { forceSync: true })
     }
 
     switch (name) {
@@ -3190,8 +3167,8 @@ function useAppShellSessionWorkspaceView({
         return
       }
       case "rename": {
-        if (!sessionState.sessionFile) {
-          toast.error("Start the session before renaming it.")
+        if (!agentState.agentFile) {
+          toast.error("Start the agent before renaming it.")
           return
         }
         if (!trimmedArgs) {
@@ -3200,17 +3177,17 @@ function useAppShellSessionWorkspaceView({
           return
         }
         clearComposerDraft()
-        await renameSessionPath(sessionState.sessionFile, trimmedArgs)
+        await renameAgentPath(agentState.agentFile, trimmedArgs)
         return
       }
       case "archive":
       case "delete": {
-        if (!sessionState.sessionFile) {
-          toast.error("Start the session before archiving it.")
+        if (!agentState.agentFile) {
+          toast.error("Start the agent before archiving it.")
           return
         }
         clearComposerDraft()
-        openDeleteDialogForCurrentSession()
+        openDeleteDialogForCurrentAgent()
         return
       }
       case "fork": {
@@ -3233,14 +3210,14 @@ function useAppShellSessionWorkspaceView({
       }
       case "hide-thinking": {
         clearComposerDraft()
-        if (!sessionStateRef.current.hideThinkingBlock) {
+        if (!agentStateRef.current.hideThinkingBlock) {
           await toggleHideThinking()
         }
         return
       }
       case "show-thinking": {
         clearComposerDraft()
-        if (sessionStateRef.current.hideThinkingBlock) {
+        if (agentStateRef.current.hideThinkingBlock) {
           await toggleHideThinking()
         }
         return
@@ -3276,15 +3253,15 @@ function useAppShellSessionWorkspaceView({
   }
 
   const composerSnapshot = {
-    activeSessionId,
+    activeAgentId,
     awaitingFirstTurn: composerDisabled ? false : awaitingFirstTurn,
     canStartPendingQueue:
       !composerDisabled &&
       pendingMessages.length > 0 &&
       // A paused queue holds its prompts, also while a new run streams.
       (pendingMessages.some((message) => isHeldPendingId(message.pendingId)) ||
-        (!sessionStateRef.current.streaming &&
-          !sessionStateRef.current.compacting)) &&
+        (!agentStateRef.current.streaming &&
+          !agentStateRef.current.compacting)) &&
       !awaitingFirstTurn &&
       !isSubmitting,
     centerMessages: displaySettingsRef.current.centerMessages,
@@ -3295,8 +3272,8 @@ function useAppShellSessionWorkspaceView({
     composerText: displayedComposerText,
     currentPendingMessages: displayedPendingMessages,
     disabled: composerDisabled,
-    isCompacting: composerDisabled ? false : sessionStateRef.current.compacting,
-    isStreaming: composerDisabled ? false : sessionStateRef.current.streaming,
+    isCompacting: composerDisabled ? false : agentStateRef.current.compacting,
+    isStreaming: composerDisabled ? false : agentStateRef.current.streaming,
     isSubmitting: composerDisabled ? false : isSubmitting,
     viewerContextId,
   } satisfies AppShellComposerSnapshot
@@ -3306,7 +3283,7 @@ function useAppShellSessionWorkspaceView({
   })
 
   const composerActionsRef = useLatestRef<AppShellComposerActions>({
-    abortSession,
+    abortAgent,
     onPickImages,
     removeLineComment: (id) => {
       setComposerLineComments((current) =>
@@ -3334,11 +3311,11 @@ function useAppShellSessionWorkspaceView({
       })
       const images = composerImagesRef.current
       // The draft moves: it does not stay in this machine's composer too.
-      replaceComposerDraft("", sessionStateRef.current, { forceSync: true })
+      replaceComposerDraft("", agentStateRef.current, { forceSync: true })
       setComposerImages([])
       openMachine(targetMachine, {
         action: {
-          type: "new-session",
+          type: "new-agent",
           directory,
           draft: text || images.length > 0 ? { text, images } : undefined,
         },
@@ -3348,34 +3325,34 @@ function useAppShellSessionWorkspaceView({
 
   const commandPaletteStateRef = useLatestRef({
     gitPanelOpen,
-    hasAvailableModels: sessionStateRef.current.availableModels.length > 0,
+    hasAvailableModels: agentStateRef.current.availableModels.length > 0,
     isMobile,
-    selectedSidebarSessions,
-    sessionFile: sessionState.sessionFile,
+    selectedSidebarAgents,
+    agentFile: agentState.agentFile,
     terminalPanelOpen,
   })
 
   const buildCommandPaletteCommands = () => {
     const commandState = commandPaletteStateRef.current
-    const currentThinkingLevel = sessionStateRef.current.thinkingLevel
+    const currentThinkingLevel = agentStateRef.current.thinkingLevel
     const commands: Array<AppCommand> = [
       {
-        id: "new-session",
-        group: "Sessions",
-        title: "New session",
-        description: "Create a new draft session",
+        id: "new-agent",
+        group: "Agents",
+        title: "New agent",
+        description: "Create a new draft agent",
         shortcut: formatShortcutLabel(appShortcut("N")),
-        keywords: ["create", "draft", "session"],
-        onSelect: createSession,
+        keywords: ["create", "draft", "agent"],
+        onSelect: createAgent,
       },
       {
-        id: "open-sessions",
-        group: "Sessions",
-        title: "Open sessions",
-        description: "Search and switch sessions",
+        id: "open-agents",
+        group: "Agents",
+        title: "Open agents",
+        description: "Search and switch agents",
         shortcut: formatShortcutLabel(appShortcut("S")),
-        keywords: ["session", "search", "switch", "jump"],
-        onSelect: openSessionsDialog,
+        keywords: ["agent", "search", "switch", "jump"],
+        onSelect: openAgentsDialog,
       },
       {
         id: "open-git-view",
@@ -3493,36 +3470,37 @@ function useAppShellSessionWorkspaceView({
         onSelect: openAddDirectoryDialog,
       },
       {
-        id: "tree-session",
-        group: "Sessions",
+        id: "conversation-tree",
+        group: "Agents",
         title: "Open tree",
-        description: "Jump to an earlier point in the current session tree",
+        description: "Go to an earlier point in the conversation tree",
         shortcut: "Esc Esc",
         keywords: ["tree", "branch", "history", "navigate"],
         onSelect: openTreeDialog,
       },
       {
-        id: "fork-session",
-        group: "Sessions",
-        title: "Fork session",
-        description: "Create a new session from a previous user message",
+        id: "fork-conversation",
+        group: "Agents",
+        title: "Fork conversation",
+        description: "Start a new agent from an earlier user message",
         shortcut: formatShortcutLabel(appShortcut("F")),
         keywords: ["fork", "branch", "draft"],
         onSelect: openForkDialog,
       },
       {
-        id: "clone-session",
-        group: "Sessions",
-        title: "Clone session",
-        description: "Duplicate the current active branch into a new session",
-        keywords: ["clone", "branch", "duplicate", "session"],
+        id: "clone-conversation",
+        group: "Agents",
+        title: "Clone conversation",
+        description:
+          "Copy the current branch of the conversation into a new agent",
+        keywords: ["clone", "branch", "duplicate", "agent"],
         onSelect: runClone,
       },
       {
-        id: "compact-session",
-        group: "Sessions",
+        id: "compact-conversation",
+        group: "Agents",
         title: "Compact",
-        description: "Manually compact the session context with /compact",
+        description: "Compact the conversation with /compact",
         keywords: ["compact", "context", "compress", "summarize"],
         onSelect: runCompact,
       },
@@ -3618,46 +3596,42 @@ function useAppShellSessionWorkspaceView({
       },
     ]
 
-    if (commandState.sessionFile) {
+    if (commandState.agentFile) {
       commands.splice(1, 0, {
-        id: "rename-session",
-        group: "Sessions",
-        title: "Rename session",
-        description: "Rename the current session",
+        id: "rename-agent",
+        group: "Agents",
+        title: "Rename agent",
+        description: "Rename the current agent",
         shortcut: formatShortcutLabel(appShortcut("E")),
         keywords: ["rename", "title", "name"],
         onSelect: openRenameDialog,
       })
       commands.push({
-        id: "delete-session",
-        group: "Sessions",
-        title: "Archive session",
-        description: `Archive ${getCurrentSessionTitleFromState(
-          sessionStateRef.current
+        id: "delete-agent",
+        group: "Agents",
+        title: "Archive agent",
+        description: `Archive ${getCurrentAgentTitleFromState(
+          agentStateRef.current
         )}`,
         shortcut: formatShortcutLabel(appShortcut("X")),
-        keywords: ["archive", "delete", "remove", "session"],
-        onSelect: openDeleteDialogForCurrentSession,
+        keywords: ["archive", "delete", "remove", "agent"],
+        onSelect: openDeleteDialogForCurrentAgent,
       })
     }
 
-    if (commandState.selectedSidebarSessions.length > 0) {
+    if (commandState.selectedSidebarAgents.length > 0) {
       commands.push({
-        id: "delete-selected-sessions",
+        id: "delete-selected-agents",
         group: "Sidebar",
-        title: "Archive selected sidebar sessions",
+        title: "Archive selected sidebar agents",
         description: `Archive ${
-          commandState.selectedSidebarSessions.length
+          commandState.selectedSidebarAgents.length
         } selected sidebar ${
-          commandState.selectedSidebarSessions.length === 1
-            ? "session"
-            : "sessions"
+          commandState.selectedSidebarAgents.length === 1 ? "agent" : "agents"
         }`,
-        keywords: ["archive", "delete", "selected", "sidebar", "sessions"],
+        keywords: ["archive", "delete", "selected", "sidebar", "agents"],
         onSelect: () => {
-          openDeleteDialog(
-            commandPaletteStateRef.current.selectedSidebarSessions
-          )
+          openDeleteDialog(commandPaletteStateRef.current.selectedSidebarAgents)
         },
       })
     }
@@ -3672,18 +3646,18 @@ function useAppShellSessionWorkspaceView({
   const abortCompact = React.useCallback(async () => {
     if (!compactRunningRef.current) return
     compactAbortRequestedRef.current = true
-    await abortSession()
-  }, [abortSession])
+    await abortAgent()
+  }, [abortAgent])
 
   const shortcutActionsRef = useLatestRef({
     abortCompact,
-    abortSession,
-    createSession,
+    abortAgent,
+    createAgent,
     closeCommandPalette,
     forcePushGitChanges,
     focusModelSelector,
     focusPrompt,
-    focusSessionSearch,
+    focusAgentSearch,
     jumpToNextMessage: () => {
       conversationFrameRef.current?.jumpToNextMessage()
     },
@@ -3694,10 +3668,10 @@ function useAppShellSessionWorkspaceView({
     openCommandPalette,
     openCommitDialog,
     openDeleteDialog,
-    openDeleteDialogForCurrentSession,
+    openDeleteDialogForCurrentAgent,
     openForkDialog,
     openRenameDialog,
-    openSessionsDialog,
+    openAgentsDialog,
     openSettingsDialog,
     openTreeDialog,
     pullGitChanges,
@@ -3718,51 +3692,50 @@ function useAppShellSessionWorkspaceView({
 
   const shortcutStateRef = useLatestRef<AppShellShortcutState>({
     currentTab: isMobile ? appUiStore.state.currentTab : "conversation",
-    selectedSidebarSessions,
-    sessionHasAvailableModels:
-      sessionStateRef.current.availableModels.length > 0,
-    sessionHasFile: Boolean(sessionState.sessionFile),
-    sessionIsStreaming: sessionStateRef.current.streaming,
-    sidebarSessionEntriesByKey,
+    selectedSidebarAgents,
+    agentHasAvailableModels: agentStateRef.current.availableModels.length > 0,
+    agentHasFile: Boolean(agentState.agentFile),
+    agentIsStreaming: agentStateRef.current.streaming,
+    sidebarAgentEntriesByKey,
   })
-  const toggleCurrentSessionPinned = () => {
-    const currentState = sessionStateRef.current
-    const key = sessionListEntryKey({
-      path: currentState.sessionFile,
-      id: currentState.sessionId,
+  const toggleCurrentAgentPinned = () => {
+    const currentState = agentStateRef.current
+    const key = agentListEntryKey({
+      path: currentState.agentFile,
+      id: currentState.agentId,
     })
     if (!key) return
 
-    sidebarStore.setPinnedSidebarSessionKeys((current) => {
-      const currentKeys = normalizeSessionSelectionKeys(current)
+    sidebarStore.setPinnedSidebarAgentKeys((current) => {
+      const currentKeys = normalizeAgentSelectionKeys(current)
       const nextKeys = currentKeys.includes(key)
         ? currentKeys.filter((currentKey) => currentKey !== key)
         : [key, ...currentKeys]
 
       machineLocalStorageSetItem(
         machineId,
-        PINNED_SESSIONS_STORAGE_KEY,
+        PINNED_AGENTS_STORAGE_KEY,
         JSON.stringify(nextKeys)
       )
       return nextKeys
     })
   }
 
-  const sessionHeaderActionsRef = useLatestRef<AppShellSessionHeaderActions>({
-    createSession,
-    onDeleteCurrentSession: openDeleteDialogForCurrentSession,
-    onForkSession: openForkDialog,
-    onMoveCurrentSession: moveCurrentSessionToDirectory,
-    onMoveCurrentSessionToAnyDirectory:
-      openMoveSessionDirectoryDialogForCurrentSession,
+  const agentHeaderActionsRef = useLatestRef<AppShellAgentHeaderActions>({
+    createAgent,
+    onDeleteCurrentAgent: openDeleteDialogForCurrentAgent,
+    onForkAgent: openForkDialog,
+    onMoveCurrentAgent: moveCurrentAgentToDirectory,
+    onMoveCurrentAgentToAnyDirectory:
+      openMoveAgentDirectoryDialogForCurrentAgent,
     onOpenCommandPalette: openCommandPalette,
     onOpenSettings: openSettingsDialog,
-    onRenameSession: openRenameDialog,
+    onRenameAgent: openRenameDialog,
     onRunCompact: runCompact,
-    onToggleCurrentSessionPinned: toggleCurrentSessionPinned,
+    onToggleCurrentAgentPinned: toggleCurrentAgentPinned,
     onToggleHideThinking: toggleHideThinking,
     onToggleHideToolBlocks: toggleHideToolBlocks,
-    onTreeSession: openTreeDialog,
+    onTreeAgent: openTreeDialog,
   })
 
   useAppShellShortcuts({
@@ -3772,11 +3745,11 @@ function useAppShellSessionWorkspaceView({
     deleteOpenRef,
     forkOpenRef,
     gitCommitOpenRef,
-    moveSessionDirectoryOpenRef,
+    moveAgentDirectoryOpenRef,
     pendingUiRequestOpenRef: uiRequestOpenRef,
     renameOpenRef,
-    sessionSearchInputRef,
-    sessionsOpenRef,
+    agentSearchInputRef,
+    agentsOpenRef,
     settingsOpenRef,
     shortcutActionsRef,
     shortcutStateRef,
@@ -3794,7 +3767,7 @@ function useAppShellSessionWorkspaceView({
       draftFlow: draftFlowStore,
       notification: notificationStore,
       rightSidebar: rightSidebarStore,
-      session: sessionStore,
+      agent: agentStore,
       sidebar: sidebarStore,
     },
     refs: {
@@ -3803,77 +3776,77 @@ function useAppShellSessionWorkspaceView({
       composerSkill: composerSkillRef,
       composerText: composerTextRef,
       conversationFrame: conversationFrameRef,
-      sessionState: sessionStateRef,
+      agentState: agentStateRef,
     },
     actions: {
-      createSession,
+      createAgent,
       focusModelSelector,
       focusPrompt,
-      focusSessionSearch,
+      focusAgentSearch,
       openAddDirectoryDialog,
       openCommandPalette,
       openDeleteDialog,
-      moveSessionToDirectory,
-      openDeleteOldDirectorySessionsDialog,
-      openMoveSessionDirectoryDialogForEntry,
+      moveAgentToDirectory,
+      openDeleteOldDirectoryAgentsDialog,
+      openMoveAgentDirectoryDialogForEntry,
       openRenameDialogForEntry,
-      openSessionsDialog,
+      openAgentsDialog,
       openSettingsDialog,
-      setSessionUnread,
-      markSessionsRead,
-      selectSession: handleSelectSession,
+      setAgentUnread,
+      markAgentsRead,
+      selectAgent: handleSelectAgent,
     },
   }
 
   React.useImperativeHandle(ref, () => {
     const actions = appShellControllerRef.current?.actions
     return {
-      createSession: actions?.createSession ?? createSession,
+      createAgent: actions?.createAgent ?? createAgent,
       openAddDirectoryDialog:
         actions?.openAddDirectoryDialog ?? openAddDirectoryDialog,
       openCommandPalette: actions?.openCommandPalette ?? openCommandPalette,
       openDeleteDialog: actions?.openDeleteDialog ?? openDeleteDialog,
-      openDeleteOldDirectorySessionsDialog:
-        actions?.openDeleteOldDirectorySessionsDialog ??
-        openDeleteOldDirectorySessionsDialog,
-      moveSessionToDirectory:
-        actions?.moveSessionToDirectory ?? moveSessionToDirectory,
-      openMoveSessionDirectoryDialogForEntry:
-        actions?.openMoveSessionDirectoryDialogForEntry ??
-        openMoveSessionDirectoryDialogForEntry,
+      openDeleteOldDirectoryAgentsDialog:
+        actions?.openDeleteOldDirectoryAgentsDialog ??
+        openDeleteOldDirectoryAgentsDialog,
+      moveAgentToDirectory:
+        actions?.moveAgentToDirectory ?? moveAgentToDirectory,
+      openMoveAgentDirectoryDialogForEntry:
+        actions?.openMoveAgentDirectoryDialogForEntry ??
+        openMoveAgentDirectoryDialogForEntry,
       openRenameDialogForEntry:
         actions?.openRenameDialogForEntry ?? openRenameDialogForEntry,
-      openSessionsDialog: actions?.openSessionsDialog ?? openSessionsDialog,
+      openAgentsDialog: actions?.openAgentsDialog ?? openAgentsDialog,
       openSettingsDialog: actions?.openSettingsDialog ?? openSettingsDialog,
-      setSessionUnread: actions?.setSessionUnread ?? setSessionUnread,
-      markSessionsRead: actions?.markSessionsRead ?? markSessionsRead,
-      selectSession: actions?.selectSession ?? handleSelectSession,
+      setAgentUnread: actions?.setAgentUnread ?? setAgentUnread,
+      markAgentsRead: actions?.markAgentsRead ?? markAgentsRead,
+      selectAgent: actions?.selectAgent ?? handleSelectAgent,
     }
   }, [
-    createSession,
-    handleSelectSession,
+    createAgent,
+    handleSelectAgent,
     openAddDirectoryDialog,
     openCommandPalette,
-    moveSessionToDirectory,
+    moveAgentToDirectory,
     openDeleteDialog,
-    openDeleteOldDirectorySessionsDialog,
-    openMoveSessionDirectoryDialogForEntry,
+    openDeleteOldDirectoryAgentsDialog,
+    openMoveAgentDirectoryDialogForEntry,
     openRenameDialogForEntry,
-    openSessionsDialog,
+    openAgentsDialog,
     openSettingsDialog,
-    setSessionUnread,
-    markSessionsRead,
+    setAgentUnread,
+    markAgentsRead,
   ])
 
   return (
     <FileLineCommentsProvider value={fileLineComments}>
       <AppShellWindowEffectsHost
-        isSessionViewLoading={isSessionViewLoading}
-        loadingDisplaySessionTitle={loadingDisplaySessionTitle}
+        isAgentViewLoading={isAgentViewLoading}
+        loadingDisplayAgentTitle={loadingDisplayAgentTitle}
         notificationStore={notificationStore}
-        sessionStore={sessionStore}
+        agentStore={agentStore}
         sidebarStore={sidebarStore}
-        onSelectSession={handleSelectSession}
+        onSelectAgent={handleSelectAgent}
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -3887,37 +3860,37 @@ function useAppShellSessionWorkspaceView({
             contextUsageStore={contextUsageStore}
             conversationFrameRef={conversationFrameRef}
             conversationItemsStore={conversationItemsStore}
-            defaultNewSessionDirectory={defaultNewSessionDirectory}
+            defaultNewAgentDirectory={defaultNewAgentDirectory}
             displaySettingsStore={displaySettingsStore}
             fileInputRef={fileInputRef}
             gitPanelOpen={gitPanelOpen}
             header={
-              <AppShellSessionHeader
-                actionsRef={sessionHeaderActionsRef}
-                defaultNewSessionDirectory={defaultNewSessionDirectory}
-                displaySessionCwd={displaySessionCwd}
+              <AppShellAgentHeader
+                actionsRef={agentHeaderActionsRef}
+                defaultNewAgentDirectory={defaultNewAgentDirectory}
+                displayAgentCwd={displayAgentCwd}
                 gitPanelOpen={gitPanelOpen}
                 terminalPanelOpen={terminalPanelOpen}
-                loadingDisplaySessionTitle={loadingDisplaySessionTitle}
-                currentSessionPinned={currentSessionPinned}
+                loadingDisplayAgentTitle={loadingDisplayAgentTitle}
+                currentAgentPinned={currentAgentPinned}
                 displaySettingsStore={displaySettingsStore}
-                isSessionViewLoading={isSessionViewLoading}
-                newSessionDirectoryOptions={newSessionDirectoryOptions}
+                isAgentViewLoading={isAgentViewLoading}
+                newAgentDirectoryOptions={newAgentDirectoryOptions}
                 onToggleGitPanel={toggleGitPanel}
                 onToggleTerminalPanel={toggleTerminalPanel}
-                sessionStore={sessionStore}
+                agentStore={agentStore}
                 viewerContextId={viewerContextId}
               />
             }
             terminalPanelOpen={terminalPanelOpen}
             isLoadingOlderHistory={isLoadingOlderHistory}
-            isSessionViewLoading={isSessionViewLoading}
+            isAgentViewLoading={isAgentViewLoading}
             isSubmitting={isSubmitting}
             isMobile={isMobile}
-            newSessionDirectoryOptions={newSessionDirectoryOptions}
+            newAgentDirectoryOptions={newAgentDirectoryOptions}
             onCancelCompaction={abortCompact}
-            onCreateSession={(cwdOverride) => {
-              void createSession(cwdOverride)
+            onCreateAgent={(cwdOverride) => {
+              void createAgent(cwdOverride)
             }}
             onLoadOlderHistory={loadOlderHistory}
             onOpenAddDirectoryDialog={openAddDirectoryDialog}
@@ -3930,7 +3903,7 @@ function useAppShellSessionWorkspaceView({
             onReorderFileViewTabs={reorderFileViewTabs}
             onCloseTerminalPanel={closeTerminalPanel}
             rightSidebarStore={rightSidebarStore}
-            sessionStore={sessionStore}
+            agentStore={agentStore}
             store={composerStore}
             viewerContextId={viewerContextId}
             workingStateStore={workingStateStore}
@@ -3941,7 +3914,7 @@ function useAppShellSessionWorkspaceView({
       </div>
 
       <AppShellFloatingControllers
-        activeSessionId={activeSessionId}
+        activeAgentId={activeAgentId}
         addDirectoryDialogRef={addDirectoryDialogRef}
         addDirectoryOpenRef={addDirectoryOpenRef}
         addDirectoryPath={addDirectoryPathForDialog}
@@ -3949,18 +3922,16 @@ function useAppShellSessionWorkspaceView({
         commandPaletteCommandsRef={commandPaletteCommandsRef}
         commandPaletteOpenRef={commandPaletteOpenRef}
         commandPaletteRef={commandPaletteRef}
-        currentSessionQueryScope={currentSessionQueryScope}
+        currentAgentQueryScope={currentAgentQueryScope}
         currentTheme={currentTheme}
         currentThemeColorMode={currentThemeColorMode}
         authDialogRef={authDialogRef}
         authOpenRef={authOpenRef}
         deleteDialogRef={deleteDialogRef}
         deleteOpenRef={deleteOpenRef}
-        deleteSessions={deleteSessions}
-        deleteOldDirectorySessionsDialogRef={
-          deleteOldDirectorySessionsDialogRef
-        }
-        deleteOldDirectorySessionsOpenRef={deleteOldDirectorySessionsOpenRef}
+        deleteAgents={deleteAgents}
+        deleteOldDirectoryAgentsDialogRef={deleteOldDirectoryAgentsDialogRef}
+        deleteOldDirectoryAgentsOpenRef={deleteOldDirectoryAgentsOpenRef}
         notificationStore={notificationStore}
         forkDialogRef={forkDialogRef}
         forkOpenRef={forkOpenRef}
@@ -3968,20 +3939,20 @@ function useAppShellSessionWorkspaceView({
         gitCommitOpenRef={gitCommitOpenRef}
         displaySettingsStore={displaySettingsStore}
         knownDirectories={knownDirectories}
-        moveSessionDirectoryDialogRef={moveSessionDirectoryDialogRef}
-        moveSessionDirectoryOpenRef={moveSessionDirectoryOpenRef}
-        moveSessionDirectoryTargetToPath={moveSessionDirectoryTargetToPath}
+        moveAgentDirectoryDialogRef={moveAgentDirectoryDialogRef}
+        moveAgentDirectoryOpenRef={moveAgentDirectoryOpenRef}
+        moveAgentDirectoryTargetToPath={moveAgentDirectoryTargetToPath}
         onAutoScrollEnabledChange={setAutoScroll}
         onCenterMessagesChange={setMessagesCentered}
         onHideThinkingBlocksChange={(hidden) => {
           void setThinkingBlocksHidden(hidden)
         }}
         onHideToolBlocksChange={setToolBlocksHidden}
-        onSessionDoneDesktopNotificationsEnabledChange={
-          handleSessionDoneDesktopNotificationsEnabledChange
+        onAgentDoneDesktopNotificationsEnabledChange={
+          handleAgentDoneDesktopNotificationsEnabledChange
         }
-        onSessionDoneSoundEnabledChange={handleSessionDoneSoundEnabledChange}
-        onSessionDialogSelect={handleSelectSession}
+        onAgentDoneSoundEnabledChange={handleAgentDoneSoundEnabledChange}
+        onAgentDialogSelect={handleSelectAgent}
         onThemeChange={handleThemeChange}
         onThemeColorModeChange={handleThemeColorModeChange}
         onThemePreviewChange={handleThemePreviewChange}
@@ -3989,12 +3960,12 @@ function useAppShellSessionWorkspaceView({
         recentDirectoriesStore={recentDirectoriesStore}
         renameDialogRef={renameDialogRef}
         renameOpenRef={renameOpenRef}
-        renameSessionPath={renameSessionPath}
-        sessionCwd={sessionState.cwd}
-        sessionsDialogDirectory={sessionsDialogDirectory}
-        sessionsDialogRef={sessionsDialogRef}
-        sessionsOpenRef={sessionsOpenRef}
-        sessionStore={sessionStore}
+        renameAgentPath={renameAgentPath}
+        agentCwd={agentState.cwd}
+        agentsDialogDirectory={agentsDialogDirectory}
+        agentsDialogRef={agentsDialogRef}
+        agentsOpenRef={agentsOpenRef}
+        agentStore={agentStore}
         settingsDialogRef={settingsDialogRef}
         settingsOpenRef={settingsOpenRef}
         sidebarStore={sidebarStore}
@@ -4009,13 +3980,13 @@ function useAppShellSessionWorkspaceView({
 }
 
 export function PicoAppShell({
-  sessionId,
-  onSelectSession,
+  agentId,
+  onSelectAgent,
 }: {
-  sessionId?: string
-  onSelectSession?: (
-    sessionId?: string,
-    options?: SelectSessionNavigationOptions
+  agentId?: string
+  onSelectAgent?: (
+    agentId?: string,
+    options?: SelectAgentNavigationOptions
   ) => void
 }) {
   const machineId = useMachineId()
@@ -4025,9 +3996,10 @@ export function PicoAppShell({
     sidebarStoreRef.current = createAppShellSidebarStore()
   }
   const sidebarStore = sidebarStoreRef.current
-  const sessionSearchInputRef = React.useRef<HTMLInputElement | null>(null)
-  const sessionWorkspaceRef =
-    React.useRef<AppShellSessionWorkspaceHandle | null>(null)
+  const agentSearchInputRef = React.useRef<HTMLInputElement | null>(null)
+  const agentWorkspaceRef = React.useRef<AppShellAgentWorkspaceHandle | null>(
+    null
+  )
 
   React.useEffect(() => {
     const storedContext = window.localStorage.getItem(
@@ -4047,7 +4019,7 @@ export function PicoAppShell({
       0,
       INITIAL_SIDEBAR_BOOTSTRAP_DIRECTORY_COUNT
     )
-    const nextPinnedSessionKeys = readStoredPinnedSessionKeys(machineId)
+    const nextPinnedAgentKeys = readStoredPinnedAgentKeys(machineId)
     sidebarStore.setSidebarState((current) => {
       if (
         sameStringArray(current.sidebarDirectories, nextDirectories) &&
@@ -4055,7 +4027,7 @@ export function PicoAppShell({
           current.initialSidebarBootstrapDirectories,
           nextBootstrapDirectories
         ) &&
-        sameStringArray(current.pinnedSidebarSessionKeys, nextPinnedSessionKeys)
+        sameStringArray(current.pinnedSidebarAgentKeys, nextPinnedAgentKeys)
       ) {
         return current
       }
@@ -4063,26 +4035,26 @@ export function PicoAppShell({
       return {
         sidebarDirectories: nextDirectories,
         initialSidebarBootstrapDirectories: nextBootstrapDirectories,
-        pinnedSidebarSessionKeys: nextPinnedSessionKeys,
+        pinnedSidebarAgentKeys: nextPinnedAgentKeys,
       }
     })
   }, [sidebarStore])
 
   return (
-    <AppShellSessionWorkspace
-      ref={sessionWorkspaceRef}
+    <AppShellAgentWorkspace
+      ref={agentWorkspaceRef}
       viewerContextId={viewerContextId}
-      sessionId={sessionId}
-      onSelectSession={onSelectSession}
+      agentId={agentId}
+      onSelectAgent={onSelectAgent}
       sidebar={
         <AppShellSidebarController
           viewerContextId={viewerContextId}
           sidebarStore={sidebarStore}
-          sessionWorkspaceRef={sessionWorkspaceRef}
+          agentWorkspaceRef={agentWorkspaceRef}
         />
       }
       sidebarStore={sidebarStore}
-      sessionSearchInputRef={sessionSearchInputRef}
+      agentSearchInputRef={agentSearchInputRef}
     />
   )
 }
