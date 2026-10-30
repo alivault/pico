@@ -1,7 +1,5 @@
 # Agent Instructions
 
-- Always commit after every change. Write a short commit message that says what the change does.
-
 ## Layout
 
 - This is a pnpm monorepo.
