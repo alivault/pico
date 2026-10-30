@@ -435,17 +435,15 @@ function createReportTask(host: HostBridge) {
           const waiting = () => waitingOn(services.harness, target, context)
           if (
             !handle ||
-            subagentMessageKind(answer, needsInput, await waiting()) !== "waiting"
+            subagentMessageKind(answer, needsInput, await waiting()) !==
+              "waiting"
           )
             break
           // Sleep at least one time in each pass. If the agent is busy but
           // the harness is idle, waitForIdle resolves at once, and without a
           // sleep this loop never yields to the event loop.
           do await sleep(WAITING_POLL_MS, runtime.signal)
-          while (
-            !services.agents.isBusy(task.input.child) &&
-            (await waiting())
-          )
+          while (!services.agents.isBusy(task.input.child) && (await waiting()))
         }
         await runtime.commit(
           () => ({
@@ -459,9 +457,8 @@ function createReportTask(host: HostBridge) {
         const { input } = task
         const services = await host.ready(runtime.signal)
         const needsInput = Boolean(
-          services.agents
-            .list({})
-            .find((agent) => agent.id === input.child)?.needsInput
+          services.agents.list({}).find((agent) => agent.id === input.child)
+            ?.needsInput
         )
         // Tree navigation can replace the parent after the spawn.
         const parent = currentAgent(services, input.parent)
@@ -1028,8 +1025,7 @@ export function createAgentsExtension(host: HostBridge) {
       let subagent = services.agents
         .list({ parent })
         .find(
-          (agent) =>
-            services.agents.meta(agent.id).spawnedByCall === api.callId
+          (agent) => services.agents.meta(agent.id).spawnedByCall === api.callId
         )?.id
       if (!subagent) {
         if (args.profile && !findProfile(args.profile, settings.profiles))
@@ -1051,7 +1047,11 @@ export function createAgentsExtension(host: HostBridge) {
           return errorResult(
             `This agent already has ${live} running subagents. Wait for one or stop one.`
           )
-        const agentState = await api.snapshot(AgentDoc, api.conversationId, context)
+        const agentState = await api.snapshot(
+          AgentDoc,
+          api.conversationId,
+          context
+        )
         const requested = parseModel(args.model)
         let model = agentState?.model as
           | { provider: string; modelId: string }
@@ -1227,18 +1227,14 @@ export function createAgentsExtension(host: HostBridge) {
       const from = agentIdOf(api.conversationId)
       let sent: RemoteAgent
       try {
-        sent = (await connection.request(
-          "POST",
-          "/api/machine/agent/prompt",
-          {
-            body: {
-              id,
-              message: `[Message from agent ${from} on the hub] ${message}`,
-              mode: args.mode ?? "followUp",
-              requestId: callRequestId(api),
-            },
-          }
-        )) as RemoteAgent
+        sent = (await connection.request("POST", "/api/machine/agent/prompt", {
+          body: {
+            id,
+            message: `[Message from agent ${from} on the hub] ${message}`,
+            mode: args.mode ?? "followUp",
+            requestId: callRequestId(api),
+          },
+        })) as RemoteAgent
       } catch (error) {
         return errorResult(
           error instanceof Error ? error.message : String(error)
@@ -1307,22 +1303,17 @@ export function createAgentsExtension(host: HostBridge) {
     try {
       target = requireAgent(services, args.id)
     } catch (error) {
-      return errorResult(
-        error instanceof Error ? error.message : String(error)
-      )
+      return errorResult(error instanceof Error ? error.message : String(error))
     }
     if (target === agentIdOf(api.conversationId))
       return errorResult("An agent cannot send a message to itself.")
     const from = agentIdOf(api.conversationId)
     const toParent =
-      services.agents.has(from) &&
-      services.agents.meta(from).parent === target
+      services.agents.has(from) && services.agents.meta(from).parent === target
     let granted = ""
     if (args.add?.length || args.remove?.length) {
       if (services.agents.meta(target).parent !== from)
-        return errorResult(
-          "add and remove work only for your own subagents."
-        )
+        return errorResult("add and remove work only for your own subagents.")
       await services.agents.changeLimits(target, {
         ...(nameList(args.add) ? { add: nameList(args.add) } : {}),
         ...(nameList(args.remove) ? { remove: nameList(args.remove) } : {}),
@@ -1445,9 +1436,7 @@ export function createAgentsExtension(host: HostBridge) {
     } catch (error) {
       return errorResult(error instanceof Error ? error.message : String(error))
     }
-    const summary = services.agents
-      .list({})
-      .find((item) => item.id === target)
+    const summary = services.agents.list({}).find((item) => item.id === target)
     const text = await transcriptText(
       services.harness,
       conversationOf(target),
@@ -1692,8 +1681,7 @@ export function createAgentsExtension(host: HostBridge) {
             connection: remote.connection,
             id: remote.id,
           })
-        else
-          targets.push({ kind: "local", id: requireAgent(services, value) })
+        else targets.push({ kind: "local", id: requireAgent(services, value) })
       }
     } catch (error) {
       return errorResult(error instanceof Error ? error.message : String(error))

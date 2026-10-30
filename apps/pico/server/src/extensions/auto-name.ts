@@ -67,10 +67,7 @@ function stripLeadingFiller(text: string) {
   return current
 }
 
-function truncateAgentName(
-  text: string,
-  maxLength = MAX_AGENT_NAME_LENGTH
-) {
+function truncateAgentName(text: string, maxLength = MAX_AGENT_NAME_LENGTH) {
   if (text.length <= maxLength) return text
   const slice = text.slice(0, Math.max(0, maxLength - 1))
   const lastSpace = slice.lastIndexOf(" ")

@@ -1610,8 +1610,7 @@ export class Agents implements HostAgents {
   async removeWorktree(id: string, force: boolean) {
     const meta = this.meta(id)
     if (!meta.worktree) return false
-    if (this.isBusy(id))
-      throw badRequest("Wait for the agent to finish first.")
+    if (this.isBusy(id)) throw badRequest("Wait for the agent to finish first.")
     try {
       await removeWorktree(meta.worktree, { force })
     } catch (error) {

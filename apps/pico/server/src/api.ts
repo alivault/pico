@@ -158,9 +158,7 @@ export function createApi(api: ApiContext) {
     const fromKey = draftCwdFromKey(key)
     if (fromKey) return fromKey
     const viewer = viewers.get(contextId)
-    return (
-      viewer?.activeDraft?.cwd ?? viewer?.sidebarProjects[0] ?? homedir()
-    )
+    return viewer?.activeDraft?.cwd ?? viewer?.sidebarProjects[0] ?? homedir()
   }
 
   const ensureAcceptingWork = () => {
@@ -1805,9 +1803,7 @@ export function createApi(api: ApiContext) {
     if (!entryId) throw badRequest("entryId is required")
     const id = requireAgent(request)
     if (agents.isBusy(id))
-      throw badRequest(
-        "Wait for the agent to finish before changing a label."
-      )
+      throw badRequest("Wait for the agent to finish before changing a label.")
     agents.setLabel(
       id,
       entryId,

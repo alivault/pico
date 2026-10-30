@@ -43,7 +43,7 @@ export type PicoServer = {
   readonly agents: Agents
   readonly machines: MachineManager
   port(): number
-  /** Stop taking new work, wait for runs to finish (up to `timeoutMs`), and close. */
+  /** Stop taking new work, wait for turns to finish (up to `timeoutMs`), and close. */
   shutdown(options?: { drain?: boolean; timeoutMs?: number }): Promise<void>
 }
 
@@ -147,10 +147,7 @@ export async function startServer(options: {
         },
         { ntfy: false }
       )
-    } else if (
-      payload.type === "agent_status" &&
-      payload.needsInput === true
-    ) {
+    } else if (payload.type === "agent_status" && payload.needsInput === true) {
       if (!settings.notifyNeedsInput) return
       const job = jobNotice(payload)
       void notifier.send(
@@ -186,10 +183,7 @@ export async function startServer(options: {
         tag: `done-${String(payload.agentId)}`,
         level: payload.outcome === "error" ? "error" : "success",
       })
-    } else if (
-      payload.type === "agent_status" &&
-      payload.needsInput === true
-    ) {
+    } else if (payload.type === "agent_status" && payload.needsInput === true) {
       if (!settings.notifyNeedsInput) return
       const id = typeof payload.agentId === "string" ? payload.agentId : ""
       const title = agents.has(id)

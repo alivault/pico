@@ -314,7 +314,9 @@ async function serve(options: Map<string, string | boolean>) {
     if (stopping) return
     stopping = true
     console.log(
-      drain ? "Pico is stopping after active runs finish…" : "Pico is stopping…"
+      drain
+        ? "Pico is stopping after active turns finish…"
+        : "Pico is stopping…"
     )
     const force = setTimeout(
       () => process.exit(1),

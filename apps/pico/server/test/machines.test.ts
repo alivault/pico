@@ -263,13 +263,12 @@ void test("the offline cache follows state patches and agent lists", () => {
   assert.equal(cache.response("/api/a")?.body.toString(), "{}")
   assert.equal(cache.response("/api/b"), undefined)
   assert.deepEqual(
-    parseSummary({ agents: [{ id: "s1", unreadBy: ["ctx", 3] }] })
-      ?.agents[0]?.unreadBy,
+    parseSummary({ agents: [{ id: "s1", unreadBy: ["ctx", 3] }] })?.agents[0]
+      ?.unreadBy,
     ["ctx"]
   )
   assert.equal(
-    parseSummary({ agents: [{ id: "s1", unread: true }] })?.agents[0]
-      ?.unread,
+    parseSummary({ agents: [{ id: "s1", unread: true }] })?.agents[0]?.unread,
     true
   )
 })
