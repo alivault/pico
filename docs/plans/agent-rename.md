@@ -1,6 +1,6 @@
 # Plan: Rename sessions to agents
 
-Status: phases 1, 2, and 4 are done on branch `rename-agents`. Phase 3 is done except the manual test with `pnpm dev`. Not done: `~/.pi/agent/AGENTS.md` (change it at merge), the website deploy, and the release. Scope: the UI, the tools, the API, the code, and the docs. There is no backwards compatibility: old clients, old machines on the hub, and old tool names stop working. Saved user data stays readable.
+Status: phases 1 to 4 are done on branch `rename-agents`. The manual test ran on a copy of the real data directory: all agents, names, parents, worktrees, projects, and archived agents were there; create, rename, archive, restore, `spawn_subagent`, `agents wait`, `agents read`, and `agents send` worked. Not tested: compact, move to another project, and the hub with another machine. Not done: `~/.pi/agent/AGENTS.md` (change it at merge), the website deploy, and the release.
 
 ## Glossary
 
