@@ -9,16 +9,9 @@ import { createAskExtension } from "./ask.ts"
 import { createBrowserExtension } from "./browser.ts"
 import type { HostBridge } from "./host.ts"
 import { createJobsExtension, type JobsExtension } from "./jobs.ts"
-import { createLspExtension } from "./lsp.ts"
-import { createNotifyExtension } from "./notify.ts"
-import { createPreviewExtension } from "./preview.ts"
-import { createRenderExtension } from "./render.ts"
-import { createScheduleExtension } from "./schedule.ts"
 import { createScratchpadExtension, type Scratchpad } from "./scratchpad.ts"
 import { createSessionsExtension } from "./sessions.ts"
-import { createTestsExtension } from "./tests.ts"
 import { createTodoExtension } from "./todo.ts"
-import { createWatchExtension } from "./watch.ts"
 
 export type PicoExtensionOptions = {
   host: HostBridge
@@ -29,8 +22,6 @@ export type PicoExtensionOptions = {
 export type PicoExtensionServices = {
   jobs: JobsExtension["runner"]
   scratch: Scratchpad
-  /** Stop language servers at shutdown. */
-  close(): Promise<void>
 }
 
 export function createPicoExtensions(options: PicoExtensionOptions): {
@@ -40,28 +31,18 @@ export function createPicoExtensions(options: PicoExtensionOptions): {
   const { host, dataDir } = options
   const jobs = createJobsExtension(host, dataDir)
   const scratchpad = createScratchpadExtension(host, dataDir)
-  const lsp = createLspExtension(host)
-  const watch = createWatchExtension(host)
   return {
     extensions: [
       createAskExtension(),
-      createRenderExtension(),
-      createScheduleExtension(host, watch),
-      watch.extension,
       jobs.extension,
       scratchpad.extension,
       createSessionsExtension(host),
-      createTestsExtension(),
-      lsp.extension,
-      createPreviewExtension(host),
-      createNotifyExtension(host),
       createBrowserExtension(host),
       createTodoExtension(),
     ],
     services: {
       jobs: jobs.runner,
       scratch: scratchpad.scratch,
-      close: () => lsp.pool.shutdown(),
     },
   }
 }

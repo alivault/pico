@@ -12,10 +12,6 @@ import {
   type QuestionsState,
 } from "../src/extensions/ask.ts"
 import {
-  createRenderExtension,
-  normalizeTable,
-} from "../src/extensions/render.ts"
-import {
   applyTodo,
   createTodoExtension,
   TodoDoc,
@@ -178,57 +174,6 @@ void test("ask_user waits for an answer, also across a restart", async () => {
       (entry) => entry.kind === "pi.tool-result"
     )
     assert.equal(asks.length, 1)
-  } finally {
-    await harness.close(ctx)
-  }
-})
-
-void test("show normalizes tables and reports a summary", async () => {
-  assert.deepEqual(normalizeTable([{ a: 1, b: "x" }, { a: 2 }]), {
-    columns: ["a", "b"],
-    rows: [
-      [1, "x"],
-      [2, null],
-    ],
-  })
-  assert.deepEqual(normalizeTable("a,b\n1,2"), {
-    columns: ["a", "b"],
-    rows: [["1", "2"]],
-  })
-  const dir = await tempDir()
-  const harness = await openHarness(
-    join(dir, "db.sqlite"),
-    [createRenderExtension()],
-    (messages) =>
-      lastToolResult(messages)
-        ? { text: lastToolResult(messages)! }
-        : {
-            tools: [
-              {
-                name: "show",
-                arguments: {
-                  kind: "mermaid",
-                  title: "Flow",
-                  data: "graph TD; A-->B",
-                },
-              },
-            ],
-          }
-  )
-  try {
-    const conversation = await harness.createConversation(
-      { ownership: { kind: "ownerless" }, agent: { model: TEST_MODEL } },
-      ctx
-    )
-    await (
-      await conversation.submit({ type: "input", content: "draw" }, ctx)
-    ).wait(ctx)
-    const context = await conversation.context(ctx)
-    const result = context.entries.find(
-      (entry) => entry.kind === "pi.tool-result"
-    )
-    assert.match(JSON.stringify(result?.model), /Shown mermaid: Flow/)
-    assert.match(JSON.stringify(result), /graph TD/)
   } finally {
     await harness.close(ctx)
   }

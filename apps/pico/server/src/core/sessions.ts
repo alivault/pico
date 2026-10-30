@@ -58,7 +58,6 @@ import type {
 } from "../extensions/host.ts"
 import { updateTodo, type TodoChange } from "../extensions/todo.ts"
 import { JobsDoc, jobNeedingUser, type JobsState } from "../extensions/jobs.ts"
-import { TimersDoc, type TimersState } from "../extensions/schedule.ts"
 import { waitingLabel } from "../extensions/waiting.ts"
 import {
   allProfiles,
@@ -174,7 +173,7 @@ export type SessionListEntry = {
   worktreeBranch?: string
   /** The agent waits for an answer from the user. */
   needsInput?: boolean
-  /** What an idle session waits on: timers, watches, or jobs. */
+  /** What an idle session waits on: jobs that report their exit. */
   waiting?: string
 }
 
@@ -436,11 +435,6 @@ export class Sessions implements HostSessions {
     string,
     { jobId: string; name: string; prompt: string }
   >()
-  /** The timers and jobs of each session, for `#waiting`. */
-  readonly #waitSources = new Map<
-    string,
-    { timers?: TimersState; jobs?: JobsState }
-  >()
   /** What each session waits on (see `waitingLabel`). */
   readonly #waiting = new Map<string, string>()
   readonly #held = new Map<string, HeldItem[]>()
@@ -506,15 +500,8 @@ export class Sessions implements HostSessions {
           this.#questionWaits.add(id)
           this.#needsInput.add(id)
         }
-        const [timers, jobs] = await Promise.all([
-          this.#harness.snapshot(TimersDoc, conversationId, ctx),
-          this.#harness.snapshot(JobsDoc, conversationId, ctx),
-        ])
-        this.#waitSources.set(id, {
-          ...(timers ? { timers } : {}),
-          ...(jobs ? { jobs } : {}),
-        })
-        const waiting = waitingLabel(timers, jobs)
+        const jobs = await this.#harness.snapshot(JobsDoc, conversationId, ctx)
+        const waiting = waitingLabel(jobs)
         if (waiting) this.#waiting.set(id, waiting)
       })
     )
@@ -734,11 +721,7 @@ export class Sessions implements HostSessions {
             if (job) this.#jobWaits.set(id, job)
             else this.#jobWaits.delete(id)
             this.#updateNeedsInput(id)
-            this.#updateWaiting(id, { jobs: value as JobsState | undefined })
-          } else if (kind === "pico.timers") {
-            this.#updateWaiting(id, {
-              timers: value as TimersState | undefined,
-            })
+            this.#updateWaiting(id, value as JobsState | undefined)
           }
           this.#markDirty(id, { extensions: true })
         }
@@ -907,19 +890,14 @@ export class Sessions implements HostSessions {
     return this.#needsInput.has(id)
   }
 
-  /** What a session waits on: timers, watches, or jobs. */
+  /** What a session waits on: jobs that report their exit. */
   waiting(id: string) {
     return this.#waiting.get(id)
   }
 
-  /** Keep `#waiting` current when the timers or jobs of a session change. */
-  #updateWaiting(
-    id: string,
-    change: { timers?: TimersState; jobs?: JobsState }
-  ) {
-    const sources = { ...this.#waitSources.get(id), ...change }
-    this.#waitSources.set(id, sources)
-    const waiting = waitingLabel(sources.timers, sources.jobs)
+  /** Keep `#waiting` current when the jobs of a session change. */
+  #updateWaiting(id: string, jobs: JobsState | undefined) {
+    const waiting = waitingLabel(jobs)
     if (waiting === this.#waiting.get(id)) return
     if (waiting) this.#waiting.set(id, waiting)
     else this.#waiting.delete(id)

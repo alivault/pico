@@ -3,9 +3,10 @@
  *
  * Tools are named `mcp__<server>__<tool>`, as in Pi. Each server's `exposure`
  * decides how the model reaches them, also as in Pi: `codemode` (default)
- * only from code mode scripts, `deferred` through tool search, `direct` as
- * ordinary tools, and `hidden` not at all. Servers connect in the background;
- * the tool list updates when they are ready.
+ * only from code mode scripts, `direct` as ordinary tools, and `hidden` not
+ * at all. Pico has no tool search, so Pi's `deferred` works as `codemode`.
+ * Servers connect in the background; the tool list updates when they are
+ * ready.
  *
  * HTTP servers can use OAuth: the user signs in from Pico's settings, and the
  * tokens go to `<data>/mcp-oauth.json`. A server with `replaySafe: true` (for
@@ -36,7 +37,7 @@ import {
   type ToolRegistration,
 } from "@earendil-works/pi-durable"
 
-type Exposure = "codemode" | "deferred" | "direct" | "hidden"
+type Exposure = "codemode" | "direct" | "hidden"
 
 type ServerConfig = {
   type?: "stdio" | "http"
@@ -201,9 +202,7 @@ function resolveRecord(record: Record<string, string> | undefined) {
 }
 
 function normalizeExposure(value: unknown): Exposure {
-  return value === "deferred" || value === "direct" || value === "hidden"
-    ? value
-    : "codemode"
+  return value === "direct" || value === "hidden" ? value : "codemode"
 }
 
 function exposureOf(config: ServerConfig, tool: string): Exposure {
@@ -443,7 +442,6 @@ function build(servers: Server[]): Extension {
         }) as unknown as TSchema,
         ...(exposure === "codemode" ? { callers: ["tools"] as const } : {}),
         ...(server.config.replaySafe ? { replay: "safe" as const } : {}),
-        ...(exposure === "deferred" ? { deferred: true as const } : {}),
         async execute(args, _api, context) {
           const client = server.client
           if (!client || client.connectionState !== "connected") {

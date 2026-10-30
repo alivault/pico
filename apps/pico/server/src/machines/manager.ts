@@ -249,10 +249,6 @@ export class MachineConnection {
   #attempt: AbortController | undefined
   #stream: IncomingMessage | undefined
   #closed = false
-  readonly #forwards = new Map<
-    number,
-    Promise<{ localPort: number; close(): Promise<void> }>
-  >()
 
   constructor(options: {
     profile: MachineProfile
@@ -478,10 +474,6 @@ export class MachineConnection {
     const stream = this.#stream
     this.#stream = undefined
     stream?.destroy()
-    const forwards = [...this.#forwards.values()]
-    this.#forwards.clear()
-    for (const forward of forwards)
-      void forward.then((entry) => entry.close()).catch(() => undefined)
   }
 
   /** The connection broke. Keep the summary and try again later. */
@@ -682,18 +674,6 @@ export class MachineConnection {
     return "socketPath" in endpoint
       ? netConnect(endpoint.socketPath)
       : netConnect(endpoint.port, endpoint.host)
-  }
-
-  /** A local port that reaches a port on the remote loopback (previews). */
-  forward(remotePort: number) {
-    this.endpoint()
-    let forward = this.#forwards.get(remotePort)
-    if (!forward) {
-      forward = this.#transport.forward(remotePort)
-      forward.catch(() => this.#forwards.delete(remotePort))
-      this.#forwards.set(remotePort, forward)
-    }
-    return forward
   }
 
   /** Apply a changed profile. A new target or data directory reconnects. */

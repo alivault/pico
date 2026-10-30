@@ -331,9 +331,6 @@ class FailingTransport implements MachineTransport {
   agent() {
     return new Agent()
   }
-  async forward() {
-    return { localPort: 0, close: async () => undefined }
-  }
   async close() {}
 }
 

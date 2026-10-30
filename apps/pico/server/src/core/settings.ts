@@ -23,8 +23,6 @@ export type PicoSettingsData = {
   maxChildSessions: number
   /** How deep `spawn_session` may nest. */
   maxSpawnDepth: number
-  /** Add language server errors to the results of edit and write. */
-  lspAfterEdit: boolean
   /** Notify devices when a run finishes. */
   notifyRunDone: boolean
   /** Notify devices when the agent asks a question. */
@@ -33,8 +31,6 @@ export type PicoSettingsData = {
   ntfyUrl: string
   /** The address of Pico for links in notifications, for example a Tailscale URL. */
   publicUrl: string
-  /** Ports for preview proxies, as "start-end". */
-  previewPorts: string
   /** Run the durable browser without a window. */
   browserHeadless: boolean
   /**
@@ -61,12 +57,10 @@ export const DEFAULT_SETTINGS: PicoSettingsData = {
   worktreeCopy: [".env*"],
   maxChildSessions: 6,
   maxSpawnDepth: 3,
-  lspAfterEdit: false,
   notifyRunDone: true,
   notifyNeedsInput: true,
   ntfyUrl: "",
   publicUrl: "",
-  previewPorts: "4100-4199",
   browserHeadless: true,
   jobMemoryHigh: "",
   jobMemoryMax: "",

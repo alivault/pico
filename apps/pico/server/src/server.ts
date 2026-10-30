@@ -18,11 +18,6 @@ import { EventHub } from "./events.ts"
 import { HostBridge } from "./extensions/host.ts"
 import { BrowserManager } from "./services/browser.ts"
 import { Notifier } from "./services/notify.ts"
-import {
-  parsePortRange,
-  PreviewProxies,
-  TailscalePreviewServe,
-} from "./services/preview.ts"
 import { ApiError, sendError, sendJson, serveStatic } from "./http.ts"
 import { GitWatcher } from "./services/git.ts"
 import { HighlightService } from "./services/highlight.ts"
@@ -94,11 +89,6 @@ export async function startServer(options: {
     })
     if (kept) console.log(`[pico] the pty-host kept ${kept} terminal(s)`)
   }
-  const previews = new PreviewProxies(
-    options.host,
-    () => parsePortRange(runtime.settings.data.previewPorts),
-    new TailscalePreviewServe()
-  )
   const notifier = new Notifier(
     options.paths.dataDir,
     () => runtime.settings.data.ntfyUrl
@@ -222,7 +212,6 @@ export async function startServer(options: {
     harness: runtime.harness,
     settings: () => runtime.settings.data,
     dataDir: options.paths.dataDir,
-    previews,
     notifier,
     browser,
     machines,
@@ -263,7 +252,7 @@ export async function startServer(options: {
     machines,
     startedAt: Date.now(),
   })
-  const proxy = new MachineProxy(machines, previews)
+  const proxy = new MachineProxy(machines)
   router.post("/api/system/shutdown", (request) => {
     const remote = request.raw.socket.remoteAddress ?? ""
     if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(remote)) {
@@ -474,7 +463,6 @@ export async function startServer(options: {
     terminals,
     jobs: () => runtime.extensions.jobs.liveJobs(),
     browser,
-    previews,
     dropTranscripts: () => sessions.dropUnwatchedTranscripts(),
     notifier,
     sessionLink: (sessionId) => sessionLink(sessionId),
@@ -505,7 +493,6 @@ export async function startServer(options: {
         gitWatcher.stop()
         terminals.shutdown()
         await machines.close()
-        await previews.shutdown()
         await browser.shutdown()
         for (const client of sockets.clients) client.terminate()
         server.closeAllConnections()

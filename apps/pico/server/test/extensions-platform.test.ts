@@ -8,19 +8,17 @@ import { applyProfile, findProfile } from "../src/core/profiles.ts"
 import { createAskExtension } from "../src/extensions/ask.ts"
 import { createMcpExtension } from "../src/extensions/mcp.ts"
 import { createTodoExtension } from "../src/extensions/todo.ts"
-import { createRenderExtension } from "../src/extensions/render.ts"
 import { ctx, openHarness, tempDir, TEST_MODEL } from "./support.ts"
 
 void test("profiles select extensions and remove tools", async () => {
   const dir = await tempDir()
   const todo = createTodoExtension()
-  const render = createRenderExtension()
   const { createCodingTools } = await import("@earendil-works/pi-durable/tools")
   const coding = createCodingTools()
   const ask = createAskExtension()
   const harness = await openHarness(
     join(dir, "db.sqlite"),
-    [coding, render, todo, ask],
+    [coding, todo, ask],
     () => ({ text: "ok" }),
     dir
   )
@@ -31,7 +29,7 @@ void test("profiles select extensions and remove tools", async () => {
     )
     const registry = {
       snapshot: () => {
-        const extensions = [coding, render, todo, ask]
+        const extensions = [coding, todo, ask]
         return {
           installed: () => extensions,
           extension: (name: string) =>

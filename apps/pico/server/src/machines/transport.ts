@@ -24,11 +24,7 @@ export interface MachineTransport {
   endpoint(): Endpoint
   /** An agent for HTTP and SSE requests to the remote server. */
   agent(): Agent
-  /** Forward a local port to a port on the remote host (previews). */
-  forward(
-    remotePort: number
-  ): Promise<{ localPort: number; close(): Promise<void> }>
-  /** Close the forwards. With `exit`, also stop the shared SSH connection. */
+  /** Close the connection. With `exit`, also stop the shared SSH connection. */
   close(options?: { exit?: boolean }): Promise<void>
 }
 

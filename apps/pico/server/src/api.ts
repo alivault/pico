@@ -27,9 +27,6 @@ import {
 import type { Viewers } from "./core/viewers.ts"
 import type { HostBridge } from "./extensions/host.ts"
 import { JobsDoc, stopJob } from "./extensions/jobs.ts"
-import { ensurePreview } from "./extensions/preview.ts"
-import { previewHttps } from "./services/preview.ts"
-import { TimersDoc } from "./extensions/schedule.ts"
 import type { TodoChange } from "./extensions/todo.ts"
 import { eventMatches, type EventHub, type ServerEvent } from "./events.ts"
 import {
@@ -235,16 +232,10 @@ export function createApi(api: ApiContext) {
         "agent-panel",
         "todo",
         "ask-user",
-        "rich-output",
-        "timers",
-        "watches",
         "background-jobs",
         "scratchpad",
         "child-sessions",
         "worktrees",
-        "run-tests",
-        "lsp",
-        "preview",
         "push-notifications",
         "browser",
         "tool-profiles",
@@ -1353,27 +1344,6 @@ export function createApi(api: ApiContext) {
     return { ok: true, items: await sessions.changeTodo(id, change) }
   })
 
-  router.post("/api/session/timer/cancel", async (request) => {
-    const id = requireSession(request)
-    const body = await request.body<{ id?: unknown }>()
-    const timerId = stringField(body.id)
-    if (!timerId) throw badRequest("id is required")
-    const conversationId = conversationIdOf(id)
-    const timers = await runtime.harness.snapshot(
-      TimersDoc,
-      conversationId,
-      BACKGROUND_CONTEXT
-    )
-    const item = timers?.items[timerId]
-    if (!item) throw notFound(`No timer or watch ${timerId}`)
-    if (item.status === "pending")
-      await runtime.harness.abortTask(
-        Number(timerId) as never,
-        BACKGROUND_CONTEXT
-      )
-    return { ok: true }
-  })
-
   router.post("/api/session/job/stop", async (request) => {
     const id = requireSession(request)
     const body = await request.body<{ jobId?: unknown }>()
@@ -1424,26 +1394,6 @@ export function createApi(api: ApiContext) {
     const text = await sessions.instructionFile(id, path)
     if (text === undefined) throw notFound(`No instruction file ${path}`)
     return { ok: true, path, text }
-  })
-
-  router.post("/api/session/preview/ensure", async (request) => {
-    const id = requireSession(request)
-    const body = await request.body<{ https?: boolean }>()
-    try {
-      const state = await ensurePreview(api.host, conversationIdOf(id))
-      return {
-        ok: true,
-        ...state,
-        ...(await previewHttps(
-          api.host.current?.previews,
-          state.port,
-          request.raw,
-          body.https
-        )),
-      }
-    } catch (error) {
-      throw badRequest(error instanceof Error ? error.message : String(error))
-    }
   })
 
   // ---------------------------------------------------------------------------
@@ -1503,7 +1453,6 @@ export function createApi(api: ApiContext) {
       terminals: api.terminals,
       jobs: () => runtime.extensions.jobs.liveJobs(),
       browser: api.host.current?.browser,
-      previews: api.host.current?.previews,
     })),
   }))
 
@@ -1533,7 +1482,6 @@ export function createApi(api: ApiContext) {
     }
     flag("notifyRunDone")
     flag("notifyNeedsInput")
-    flag("lspAfterEdit")
     flag("browserHeadless")
     number("scratchSpillKb", 0, 10_000)
     number("maxChildSessions", 0, 50)
@@ -1547,7 +1495,6 @@ export function createApi(api: ApiContext) {
       throw badRequest("compactAtTokens must be 0 (off) or at least 10000")
     text("ntfyUrl", (value) => /^https?:\/\//.test(value))
     text("publicUrl", (value) => /^https?:\/\//.test(value))
-    text("previewPorts", (value) => /^\d+\s*-\s*\d+$/.test(value))
     text("jobMemoryHigh", validSize)
     text("jobMemoryMax", validSize)
     if (Array.isArray(body.worktreeCopy))
@@ -1916,12 +1863,10 @@ function agentSettings(runtime: Runtime) {
     notifyNeedsInput: data.notifyNeedsInput,
     ntfyUrl: data.ntfyUrl,
     publicUrl: data.publicUrl,
-    lspAfterEdit: data.lspAfterEdit,
     browserHeadless: data.browserHeadless,
     scratchSpillKb: data.scratchSpillKb,
     maxChildSessions: data.maxChildSessions,
     maxSpawnDepth: data.maxSpawnDepth,
-    previewPorts: data.previewPorts,
     worktreeCopy: data.worktreeCopy,
     jobMemoryHigh: data.jobMemoryHigh,
     jobMemoryMax: data.jobMemoryMax,

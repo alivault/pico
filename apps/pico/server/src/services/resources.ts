@@ -1,8 +1,8 @@
 /**
  * What uses memory on this machine for Pico: the server, the pty-host, each
- * running job (with all its child processes), the agent browser, language
- * servers, and previews. The machine API serves it (`/api/resources`), so a
- * hub can show remote machines too.
+ * running job (with all its child processes), and the agent browser. The
+ * machine API serves it (`/api/resources`), so a hub can show remote machines
+ * too.
  *
  * `MemoryPressure` watches the kernel's pressure numbers (Linux) and frees
  * what Pico can give back without harm. It never stops a job.
@@ -10,9 +10,7 @@
 import { freemem, totalmem } from "node:os"
 
 import type { BrowserManager } from "./browser.ts"
-import { closeIdleLspServers, lspServers } from "./lsp.ts"
 import type { Notifier } from "./notify.ts"
-import type { PreviewProxies } from "./preview.ts"
 import {
   memoryPressure,
   processTable,
@@ -40,7 +38,6 @@ export type ResourceDeps = {
     sessionId: string
   }>
   browser?: BrowserManager | undefined
-  previews?: PreviewProxies | undefined
 }
 
 export type JobResource = {
@@ -124,11 +121,6 @@ export async function collectResources(deps: ResourceDeps) {
     browser: deps.browser
       ? { ...deps.browser.stats, rss: browserTree }
       : undefined,
-    lsp: lspServers().map((server) => ({
-      ...server,
-      rss: server.pid ? treeRss(table, server.pid) : undefined,
-    })),
-    previews: deps.previews?.list().length ?? 0,
   }
 }
 
@@ -205,7 +197,6 @@ export class MemoryPressure {
     const freed = {
       browserContexts: 0,
       terminals: this.#deps.terminals.trimMemory(),
-      lspServers: closeIdleLspServers(60_000),
       transcripts: this.#deps.dropTranscripts(),
     }
     if (this.#deps.browser) {

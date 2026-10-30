@@ -290,7 +290,6 @@ export function createBrowserExtension(host: HostBridge) {
 
   const browserTool = defineTool({
     name: "browser",
-    deferred: true,
     // Actions share pages, so a round that uses them runs in order.
     executionMode: "sequential",
     description: [

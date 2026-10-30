@@ -13,7 +13,6 @@ import type { PicoSettingsData } from "../core/settings.ts"
 import type { MachineManager } from "../machines/manager.ts"
 import type { BrowserManager } from "../services/browser.ts"
 import type { Notifier } from "../services/notify.ts"
-import type { PreviewProxies } from "../services/preview.ts"
 import type { Terminals } from "../services/terminal.ts"
 
 /** Session operations that extensions use. `Sessions` implements it. */
@@ -151,7 +150,6 @@ export type HostServices = {
   harness: Harness
   settings: () => Readonly<PicoSettingsData>
   dataDir: string
-  previews?: PreviewProxies
   notifier?: Notifier
   browser?: BrowserManager
   /** The remote machines of a hub, for the session tools. */

@@ -23,7 +23,6 @@ import {
   writeFileSync,
 } from "node:fs"
 import { Agent } from "node:http"
-import { createServer } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -97,18 +96,6 @@ export function targetArgs(target: string) {
   return match[2] ? ["-p", match[2], match[1]!] : [match[1]!]
 }
 
-function freePort() {
-  return new Promise<number>((resolve, reject) => {
-    const server = createServer()
-    server.once("error", reject)
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address()
-      const port = typeof address === "object" && address ? address.port : 0
-      server.close(() => resolve(port))
-    })
-  })
-}
-
 export type SshOptions = {
   profile: MachineProfile
   machinesDir: string
@@ -129,7 +116,6 @@ export class SshTransport implements MachineTransport {
   readonly #ssh: string
   readonly #agent = new Agent({ keepAlive: true })
   #attachedPort: number | undefined
-  readonly #forwards = new Set<string>()
 
   constructor(options: SshOptions) {
     this.#profile = options.profile
@@ -220,10 +206,9 @@ export class SshTransport implements MachineTransport {
 
   async connect(signal: AbortSignal) {
     if (await this.#check()) return
-    // The forwards died with the old master. A stale `api.sock` file can
+    // The attach died with the old master. A stale `api.sock` file can
     // stay, so `attach` must not trust it.
     this.#attachedPort = undefined
-    this.#forwards.clear()
     // A stale socket from a crashed master turns off multiplexing.
     for (const path of [this.#control, this.#api]) {
       try {
@@ -370,37 +355,14 @@ export class SshTransport implements MachineTransport {
     return this.#agent
   }
 
-  async forward(remotePort: number) {
-    const localPort = await freePort()
-    const spec = `127.0.0.1:${localPort}:127.0.0.1:${remotePort}`
-    const result = await this.#mux("forward", spec)
-    if (result.code !== 0)
-      throw new TransportError(
-        lastLines(result.stderr, 1) ||
-          `SSH could not forward port ${remotePort}`,
-        result.code,
-        lastLines(result.stderr)
-      )
-    this.#forwards.add(spec)
-    return {
-      localPort,
-      close: async () => {
-        if (!this.#forwards.delete(spec)) return
-        await this.#mux("cancel", spec).catch(() => undefined)
-      },
-    }
-  }
-
   async close(options: { exit?: boolean } = {}) {
     this.#agent.destroy()
-    const specs = [...this.#forwards]
-    this.#forwards.clear()
     if (this.#attachedPort !== undefined)
-      specs.push(`${this.#api}:127.0.0.1:${this.#attachedPort}`)
+      await this.#mux(
+        "cancel",
+        `${this.#api}:127.0.0.1:${this.#attachedPort}`
+      ).catch(() => undefined)
     this.#attachedPort = undefined
-    await Promise.all(
-      specs.map((spec) => this.#mux("cancel", spec).catch(() => undefined))
-    )
     try {
       unlinkSync(this.#api)
     } catch {

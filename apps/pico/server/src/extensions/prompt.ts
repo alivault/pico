@@ -1,8 +1,8 @@
 /**
  * The `pico` extension: the system prompt, built the way the Pi coding agent
- * builds it. A preamble, the tools, rules, project context (AGENTS.md),
- * skills, and the working directory. Each part is a durable prompt section,
- * so only parts that change are sent again.
+ * builds it: a preamble, rules, project context (AGENTS.md), skills, and the
+ * working directory. Each part is a durable prompt section, so only parts that
+ * change are sent again.
  */
 import { formatSkillsForPrompt } from "@earendil-works/pi-coding-agent"
 import {
@@ -15,9 +15,6 @@ import type { ResourceCache } from "../core/resources.ts"
 
 const DEFAULT_PREAMBLE =
   "You are an expert coding assistant operating inside Pico, a coding agent harness built on pi. You help users by reading files, executing commands, editing code, and writing new files."
-
-/** At most this many deferred tool names in the prompt. */
-const MAX_DEFERRED_NAMES = 30
 
 const TOOL_GUIDELINES: Record<string, string[]> = {
   read: ["Use read to examine files instead of cat or sed."],
@@ -67,18 +64,6 @@ export function createPromptExtension(resources: ResourceCache) {
           DEFAULT_PREAMBLE,
         { tag: false }
       ),
-      // The model gets the active tools as tool definitions, so this
-      // section names only the deferred tools that tool_search can load.
-      section("deferred_tools", (input) => {
-        const deferred = input.agent.deferred.map((tool) => tool.name)
-        if (
-          deferred.length === 0 ||
-          !input.agent.tools.some((tool) => tool.name === "tool_search")
-        )
-          return undefined
-        const more = deferred.length - MAX_DEFERRED_NAMES
-        return `Load these tools with tool_search when you need them: ${deferred.slice(0, MAX_DEFERRED_NAMES).join(", ")}${more > 0 ? `, and ${more} more` : ""}.`
-      }),
       section("rules", (input) => rules(toolNames(input))),
       section("addendum", async (input) => {
         const append = (await resources.get(cwdOf(input))).appendSystemPrompt

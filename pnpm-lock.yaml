@@ -50,9 +50,6 @@ importers:
       '@xterm/headless':
         specifier: 6.0.0
         version: 6.0.0
-      croner:
-        specifier: 9.1.0
-        version: 9.1.0
       playwright-core:
         specifier: 1.64.0
         version: 1.64.0
@@ -65,9 +62,6 @@ importers:
       typescript:
         specifier: 5.9.3
         version: 5.9.3
-      typescript-language-server:
-        specifier: 5.3.0
-        version: 5.3.0
       web-push:
         specifier: 3.6.7
         version: 3.6.7
@@ -300,9 +294,6 @@ importers:
       '@xterm/headless':
         specifier: 6.0.0
         version: 6.0.0
-      croner:
-        specifier: 9.1.0
-        version: 9.1.0
       pi-web-access:
         specifier: 0.44.0
         version: 0.44.0(@earendil-works/pi-ai@1.4.0(@aws-sdk/credential-provider-node@3.972.82)(@modelcontextprotocol/sdk@1.32.1(zod@4.3.6))(@smithy/signature-v4@5.7.3)(undici@8.11.2)(ws@8.21.3)(zod@4.3.6))(@earendil-works/pi-coding-agent@1.4.0(@aws-sdk/credential-provider-node@3.972.82)(@modelcontextprotocol/sdk@1.32.1(zod@4.3.6))(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.3.6))(@earendil-works/pi-tui@1.4.0)(typebox@1.3.27)(zod@4.3.6)
@@ -315,9 +306,6 @@ importers:
       typescript:
         specifier: 5.9.3
         version: 5.9.3
-      typescript-language-server:
-        specifier: 5.3.0
-        version: 5.3.0
       web-push:
         specifier: 3.6.7
         version: 3.6.7
@@ -3447,10 +3435,6 @@ packages:
   crelt@1.0.7:
     resolution: {integrity: sha512-aK6BbWfhf4U/wCcLHKPJl/xa6VkVstRaPywWtMKGwuOLc/wZTyQYuoxgvZnNsBvv7Kg3YTBQYYBCggcviQczuA==}
 
-  croner@9.1.0:
-    resolution: {integrity: sha512-p9nwwR4qyT5W996vBZhdvBCnMhicY5ytZkR4D1Xj0wuTDEiMnjwR57Q3RXYY/s0EpX6Ay3vgIcfaR+ewGHsi+g==}
-    engines: {node: '>=18.0'}
-
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
@@ -5747,11 +5731,6 @@ packages:
     resolution: {integrity: sha512-phPGCwqr2+Qo0fwniCE8e4pKnGu/yFb5nD5Y8bf0EEeiI5GklnACYA9GFy/DrAeRrKHXvHn+1SUsOWgJp6RO+g==}
     engines: {node: '>= 0.4'}
 
-  typescript-language-server@5.3.0:
-    resolution: {integrity: sha512-5puofxZHgFdAYtfNpmwCAvgtaYgg8wrUnH30m7Ze3QuguId5RNRadKASpOpyDxTyUdAF51FjhTdjntLw/EuWcQ==}
-    engines: {node: '>=20'}
-    hasBin: true
-
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
     engines: {node: '>=14.17'}
@@ -6057,20 +6036,6 @@ packages:
         optional: true
       yaml:
         optional: true
-
-  vscode-jsonrpc@5.0.1:
-    resolution: {integrity: sha512-JvONPptw3GAQGXlVV2utDcHx0BiY34FupW/kI6mZ5x06ER5DdPG/tXWMVHjTNULF5uKPOUUD0SaXg5QaubJL0A==}
-    engines: {node: '>=8.0.0 || >=10.0.0'}
-
-  vscode-jsonrpc@9.0.3:
-    resolution: {integrity: sha512-qETYf9PCl1lVfwR+oBmMfc4vP2nqLNA35ABxorw3j06+xlKRgDVxbLgKm4Y/xPL0YWdeDjLoI4ImICIT3nB0zQ==}
-    engines: {node: '>=14.0.0'}
-
-  vscode-languageserver-protocol@3.18.4:
-    resolution: {integrity: sha512-CCXbyr99dafRJzJH/0Ryk7ly5T8XPmSR0//OuF2w4m+9JiOin7zcAT5iET8GRE7Z9taFBejb3GbM0a0mbjdbrg==}
-
-  vscode-languageserver-types@3.18.4:
-    resolution: {integrity: sha512-nQsacoiijvl0fRf2q28uFDrAVwRhdCa3QveiF7/CX0r18mLR5FU/1WskSsCKOjmEbtteKUnY8x8Yzxop+k0zwg==}
 
   w3c-keyname@2.2.8:
     resolution: {integrity: sha512-dpojBhNsCNN7T82Tm7k26A6G9ML3NkhDsnw9n/eoxSRlVBB4CEtIQ/KTCLI2Fwf3ataSXRhYFkQi3SlnFwPvPQ==}
@@ -9262,8 +9227,6 @@ snapshots:
 
   crelt@1.0.7: {}
 
-  croner@9.1.0: {}
-
   cross-spawn@7.0.6:
     dependencies:
       path-key: 3.1.1
@@ -12261,11 +12224,6 @@ snapshots:
       possible-typed-array-names: 1.1.0
       reflect.getprototypeof: 1.0.10
 
-  typescript-language-server@5.3.0:
-    dependencies:
-      vscode-jsonrpc: 5.0.1
-      vscode-languageserver-protocol: 3.18.4
-
   typescript@5.9.3: {}
 
   uhyphen@0.2.0: {}
@@ -12726,17 +12684,6 @@ snapshots:
       jiti: 2.7.0
       tsx: 4.21.0
       yaml: 2.9.0
-
-  vscode-jsonrpc@5.0.1: {}
-
-  vscode-jsonrpc@9.0.3: {}
-
-  vscode-languageserver-protocol@3.18.4:
-    dependencies:
-      vscode-jsonrpc: 9.0.3
-      vscode-languageserver-types: 3.18.4
-
-  vscode-languageserver-types@3.18.4: {}
 
   w3c-keyname@2.2.8: {}
 

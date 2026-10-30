@@ -59,9 +59,6 @@ class LocalTransport implements MachineTransport {
   agent() {
     return this.#agent
   }
-  async forward(remotePort: number) {
-    return { localPort: remotePort, close: async () => undefined }
-  }
   async close() {
     this.#agent.destroy()
   }

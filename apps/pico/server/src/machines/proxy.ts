@@ -22,7 +22,6 @@ import type { Duplex } from "node:stream"
 import { StringDecoder } from "node:string_decoder"
 
 import { sendJson, SseStream } from "../http.ts"
-import { previewHttps, type PreviewProxies } from "../services/preview.ts"
 import { MachineError, SseParser, type MachineManager } from "./manager.ts"
 import {
   cacheableGet,
@@ -89,14 +88,12 @@ function offline(response: ServerResponse, error: unknown, label: string) {
 
 export class MachineProxy {
   readonly #machines: MachineManager
-  readonly #previews: PreviewProxies
   readonly #caches = new Map<string, OfflineCache>()
   /** Offline event streams; they close when their machine is online again. */
   readonly #offlineStreams = new Map<SseStream, string>()
 
-  constructor(machines: MachineManager, previews: PreviewProxies) {
+  constructor(machines: MachineManager) {
     this.#machines = machines
-    this.#previews = previews
     machines.subscribe(() => {
       for (const [stream, machineId] of this.#offlineStreams) {
         const connection = machines.get(machineId)
@@ -182,13 +179,6 @@ export class MachineProxy {
         offline(response, error, connection.profile.label)
       return true
     }
-    if (
-      request.method === "POST" &&
-      route.path === "/api/session/preview/ensure"
-    ) {
-      void this.#preview(request, response, route, connection)
-      return true
-    }
     const upstream = httpRequest(
       {
         ...target.endpoint,
@@ -271,51 +261,6 @@ export class MachineProxy {
           Buffer.concat(chunks)
         )
     })
-  }
-
-  /**
-   * The remote opens its preview proxy on its own loopback. The hub forwards
-   * a local port to it and opens its own preview proxy, so the browser and
-   * the phone reach it as a local preview.
-   */
-  async #preview(
-    request: IncomingMessage,
-    response: ServerResponse,
-    route: { machineId: string; path: string; search: string },
-    connection: NonNullable<ReturnType<MachineManager["get"]>>
-  ) {
-    try {
-      const chunks: Buffer[] = []
-      for await (const chunk of request) chunks.push(chunk as Buffer)
-      const text = Buffer.concat(chunks).toString("utf8").trim()
-      // The hub gives the HTTPS address, so the remote does not get `https`.
-      const { https, ...body } = (text ? JSON.parse(text) : {}) as Record<
-        string,
-        unknown
-      >
-      const result = (await connection.request(
-        "POST",
-        `${route.path}${route.search}`,
-        { body }
-      )) as { ok: true; port?: number; [key: string]: unknown }
-      if (typeof result.port !== "number") {
-        sendJson(response, 200, result)
-        return
-      }
-      const forward = await connection.forward(result.port)
-      const proxy = await this.#previews.open(
-        `http://127.0.0.1:${forward.localPort}`,
-        `${route.machineId}:${typeof result.sessionId === "string" ? result.sessionId : ""}`
-      )
-      sendJson(response, 200, {
-        ...result,
-        port: proxy.port,
-        remotePort: result.port,
-        ...(await previewHttps(this.#previews, proxy.port, request, https)),
-      })
-    } catch (error) {
-      offline(response, error, connection.profile.label)
-    }
   }
 
   /** Handle a WebSocket upgrade to `/m/...`; false when the URL is not one. */

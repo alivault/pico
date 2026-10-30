@@ -5,8 +5,8 @@
  * profile keeps still run without asking. Built-in profiles are below; the
  * `profiles` setting adds more or replaces one by name.
  *
- * Child sessions (sessions with a parent) get more limits: no `ask_user`,
- * `notify`, or `spawn_session` unless the parent grants them, and a bash
+ * Child sessions (sessions with a parent) get more limits: no `ask_user` or
+ * `spawn_session` unless the parent grants them, and a bash
  * guard (see `bashGuard`). The parent can add and remove tools for each child.
  *
  * A name with a dot, such as `browser.eval`, is an action of a tool. The
@@ -43,13 +43,12 @@ export type ToolLimits = {
 }
 
 /** Tools that a child session does not get unless its parent grants them. */
-export const CHILD_DENIED_TOOLS = ["ask_user", "notify", "spawn_session"]
+export const CHILD_DENIED_TOOLS = ["ask_user", "spawn_session"]
 
 const WRITE_TOOLS = [
   "write",
   "edit",
   "bash",
-  "lsp.rename",
   "job_start",
   "terminal",
   "browser.act",
@@ -67,7 +66,7 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
   {
     name: "builder",
     description:
-      "Build and change code: files, shell, git, tests, and language servers. No browser and no other sessions.",
+      "Build and change code: files, shell, git, and tests. No browser and no other sessions.",
     removeTools: [
       "browser",
       "send_to_session",
@@ -85,14 +84,11 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
       "coding-tools",
       "web-access",
       "mcp",
-      "tool-search",
       "codemode",
       "pico",
       "ask",
-      "render",
       "scratchpad",
       "browser",
-      "notify",
       "todo",
     ],
     removeTools: ["write", "edit", "bash", "browser.eval"],
@@ -112,7 +108,7 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
   {
     name: "read-only",
     description:
-      "Read and analyze code, with git history, language servers, tests, and the web. No file changes.",
+      "Read and analyze code, with git history, tests, and the web. No file changes.",
     removeTools: WRITE_TOOLS.filter((tool) => tool !== "bash"),
     instructions:
       "You are in read-only mode: do not change files or the repository. Use bash only for commands that do not change anything.",

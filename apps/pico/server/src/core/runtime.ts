@@ -25,7 +25,6 @@ import { createCodemodeExtension } from "@earendil-works/pi-durable/codemode"
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node"
 import { createNodePhotonImages } from "@earendil-works/pi-durable/images/node"
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
-import { createToolSearchExtension } from "@earendil-works/pi-durable/tool-search"
 
 import type { ServerPaths } from "../config.ts"
 import type { HostBridge } from "../extensions/host.ts"
@@ -113,7 +112,6 @@ export async function openRuntime(
   registry.install(createWebAccessExtension())
   const mcp = createMcpExtension(agentDir, paths.dataDir)
   registry.install(mcp.extension)
-  registry.install(createToolSearchExtension())
   registry.install(
     createCodemodeExtension({
       sandbox: new CodemodeSandbox({ memoryLimitBytes: 256 * 1024 * 1024 }),
@@ -225,7 +223,6 @@ export async function openRuntime(
     compactionPolicy: (model) =>
       modelCompactionPolicy(currentCompaction(), model),
     async close() {
-      await pico.services.close().catch(() => undefined)
       await mcp.close()
       await harness.close(BACKGROUND_CONTEXT)
     },

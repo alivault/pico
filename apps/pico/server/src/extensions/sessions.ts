@@ -8,8 +8,9 @@
  *
  * Messages from a child never steer: they go into the parent's follow-up
  * queue, in arrival order with the user's prompts. Each turn end of a child
- * is a question, done, or waiting (it ended on a timer, a watch, or a job;
- * see `childMessageKind`). Waiting sends nothing: the sessions list action shows it. A child has limited tools (see
+ * is a question, done, or waiting (it ended on a job; see
+ * `childMessageKind`). Waiting sends nothing: the sessions list action shows
+ * it. A child has limited tools (see
  * `core/profiles.ts`): the parent picks a profile and adds or removes tools.
  * A child asks by ending its turn with a message that starts with `Question:`.
  *
@@ -50,7 +51,6 @@ import {
 } from "./host.ts"
 import { allProfiles, findProfile, nameList } from "../core/profiles.ts"
 import { JobsDoc } from "./jobs.ts"
-import { TimersDoc } from "./schedule.ts"
 import { waitingLabel } from "./waiting.ts"
 import { clip, deniedAction, errorResult, json, textResult } from "./util.ts"
 
@@ -278,8 +278,8 @@ export function isQuestion(answer: string, needsInput: boolean) {
 /**
  * What the end of a child's turn means:
  * - `question`: it asks its parent (or waits in `ask_user`).
- * - `waiting`: its turn ended on a timer, a watch, or a job, and it goes on
- *   when that fires. The parent does not get a message for it.
+ * - `waiting`: its turn ended on a job, and it goes on when that job ends.
+ *   The parent does not get a message for it.
  * - `done`: the work is finished, or it stopped.
  */
 export type ChildMessageKind = "question" | "done" | "waiting"
@@ -294,19 +294,15 @@ export function childMessageKind(
 }
 
 /**
- * What a session waits on when its turn ended: pending timers and watches,
- * and running jobs that report their exit. Undefined when it waits on nothing.
+ * What a session waits on when its turn ended: running jobs that report their
+ * exit. Undefined when it waits on nothing.
  */
 export async function waitingOn(
   harness: Pick<Harness, "snapshot">,
   conversationId: ConversationId,
   context: Context
 ) {
-  const [timers, jobs] = await Promise.all([
-    harness.snapshot(TimersDoc, conversationId, context),
-    harness.snapshot(JobsDoc, conversationId, context),
-  ])
-  return waitingLabel(timers, jobs)
+  return waitingLabel(await harness.snapshot(JobsDoc, conversationId, context))
 }
 
 /**
@@ -401,7 +397,7 @@ function createReportTask(host: HostBridge) {
         let answer: string
         let key: string
         let first = true
-        // A turn that ends on a timer, a watch, or a job is `waiting`: wait
+        // A turn that ends on a job is `waiting`: wait
         // until the child runs again and ends with a question or done.
         for (;;) {
           if (handle) await handle.waitForIdle(context)
@@ -528,7 +524,7 @@ type RemoteSession = {
   cwd: string
   busy: boolean
   needsInput: boolean
-  /** What the session waits on: a timer, a watch, or a job. */
+  /** What the session waits on: a job. */
   waiting?: string
   worktree?: { path: string; branch: string }
   /** The tool calls that run now (see `runningToolLines`). */
@@ -870,9 +866,9 @@ export function createSessionsExtension(host: HostBridge) {
     executionMode: "sequential",
     description: [
       "Start a child session: a full agent with its own context that works on `goal`. The user can open it in the sidebar.",
-      "Use it to split independent work or to get a fresh review. It runs in the background: its messages (done or a question) come in your follow-up queue after your current run, so keep working. A child that waits on a timer, a watch, or a job sends no message until it is done or asks. Set wait to get the answer as the result.",
+      "Use it to split independent work or to get a fresh review. It runs in the background: its messages (done or a question) come in your follow-up queue after your current run, so keep working. A child that waits on a job sends no message until it is done or asks. Set wait to get the answer as the result.",
       "Without worktree, the child works in the same directory as you and can edit the same files. Set worktree: true for parallel edits; the child gets its own git branch and worktree.",
-      "Tools: profile picks a set (builder, researcher, reviewer, read-only, or full; default full). A child has no ask_user, notify, or spawn_session unless you put them in add. remove takes more tools away. Bash in a child refuses git push to main, sudo, and the commands in deny_commands.",
+      "Tools: profile picks a set (builder, researcher, reviewer, read-only, or full; default full). A child has no ask_user or spawn_session unless you put them in add. remove takes more tools away. Bash in a child refuses git push to main, sudo, and the commands in deny_commands.",
       "Write the goal as a complete brief: the child does not see this conversation.",
     ].join(" "),
     parameters: Type.Object({
@@ -892,7 +888,7 @@ export function createSessionsExtension(host: HostBridge) {
       add: Type.Optional(
         Type.Array(Type.String(), {
           description:
-            "Tools to give the child, also ask_user, notify, or spawn_session",
+            "Tools to give the child, also ask_user or spawn_session",
         })
       ),
       remove: Type.Optional(
