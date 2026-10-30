@@ -59,18 +59,16 @@ pnpm start import-pi         # import old Pi sessions (stop Pico first)
   with no server for 12 hours, it also ends shells that run nothing. To stop
   Pico and the host: `pico-app stop --pty-host` (terminals and jobs end too).
   `pico-app serve --no-pty-host` keeps terminals in the server process.
-- **Agent tools.** Todo lists, questions to the user, rich output (charts,
-  diagrams, tables), timers and watches, background jobs, child sessions in
-  git worktrees, LSP, browser automation, app previews, web access, and MCP.
-  A small set of tools is always loaded. The model loads the others (browser,
-  preview, lsp, notify, run_tests) with `tool_search`.
+- **Agent tools.** Todo lists, questions to the user, background jobs that
+  report their exit, terminals, child sessions in git worktrees, browser
+  automation, code mode, web access, and MCP.
 - **Tool profiles.** `full`, `builder`, `researcher`, `reviewer`,
   `read-only`, or your own.
 - **Safe child sessions.** A child gets a tool profile from its parent. It has
-  no `ask_user`, `notify`, or `spawn_session` unless the parent grants them,
+  no `ask_user` or `spawn_session` unless the parent grants them,
   and its bash refuses `git push` to main, `sudo`, and the commands that the
   parent lists. Each message from a child is a question, done, or waiting
-  (its turn ended on a timer, a watch, or a job). Questions and done go into
+  (its turn ended on a job). Questions and done go into
   the parent's follow-up queue; waiting shows only in the `sessions` list action.
 - **Notifications.** Web Push and ntfy when a run finishes or the agent asks
   a question.
