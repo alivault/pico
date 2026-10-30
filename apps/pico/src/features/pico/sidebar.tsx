@@ -692,12 +692,12 @@ function SidebarAgentItem({
   onTogglePinnedAgent,
 }: SidebarAgentItemProps) {
   const entry = useDirectoryAgentEntry(directoryAgentsStore, entryKey)
-  const childDepth = useSelector(
+  const subagentDepth = useSelector(
     directoryAgentsStore,
     (state) => state.depthByKey.get(entryKey) ?? 0
   )
   // An agent in a directory is one level in, under the directory's line.
-  const nestingDepth = (inDirectory ? 1 : 0) + childDepth
+  const nestingDepth = (inDirectory ? 1 : 0) + subagentDepth
   const isSelected = useSidebarAgentSelected(selectedAgentKeyStore, entryKey)
   const isActive = useSidebarAgentActive(activeAgentStore, entryKey, entry?.id)
   const showAgentPreviews = useShowAgentPreviews()
@@ -776,7 +776,7 @@ function SidebarAgentItem({
         !(isActive || isSelected) &&
           nestingDepth === 0 &&
           "group-hover/agent:bg-sidebar-accent/50",
-        // A child row draws its highlight in an inset layer, so the tree
+        // A subagent row draws its highlight in an inset layer, so the tree
         // lines stay clear. The click area stays the full row width.
         nestingDepth > 0 &&
           "isolate not-data-active:hover:bg-transparent! active:bg-transparent! not-data-active:data-open:hover:bg-transparent! data-active:bg-transparent!"
@@ -912,12 +912,12 @@ function SidebarAgentItem({
       {...draggable.listeners}
     >
       {agentButton}
-      {/* An subagent draws the lines of its parents' levels. Rows of one
+      {/* A subagent draws the lines of its parents' levels. Rows of one
           subtree follow each other, so their lines join into one. */}
-      {Array.from({ length: childDepth }, (_, index) => (
+      {Array.from({ length: subagentDepth }, (_, index) => (
         <SidebarTreeLine
           key={index}
-          level={nestingDepth - childDepth + index}
+          level={nestingDepth - subagentDepth + index}
         />
       ))}
       {agentTrailingControls}
@@ -1057,25 +1057,26 @@ function buildDirectoryAgentEntryMap(
 /** Agents with each subagent after its parent, in list order. */
 function nestSubagents(agents: Array<AgentListEntry>) {
   const ids = new Set(agents.flatMap((entry) => (entry.id ? [entry.id] : [])))
-  const childrenOf = new Map<string, Array<AgentListEntry>>()
+  const subagentsOf = new Map<string, Array<AgentListEntry>>()
   const roots: Array<AgentListEntry> = []
   for (const entry of agents) {
     if (entry.parent && entry.parent !== entry.id && ids.has(entry.parent)) {
-      const siblings = childrenOf.get(entry.parent) ?? []
+      const siblings = subagentsOf.get(entry.parent) ?? []
       siblings.push(entry)
-      childrenOf.set(entry.parent, siblings)
+      subagentsOf.set(entry.parent, siblings)
     } else {
       roots.push(entry)
     }
   }
-  if (childrenOf.size === 0) return agents
+  if (subagentsOf.size === 0) return agents
   const ordered: Array<AgentListEntry> = []
   const seen = new Set<AgentListEntry>()
   const visit = (entry: AgentListEntry) => {
     if (seen.has(entry)) return
     seen.add(entry)
     ordered.push(entry)
-    for (const child of childrenOf.get(entry.id ?? "") ?? []) visit(child)
+    for (const subagent of subagentsOf.get(entry.id ?? "") ?? [])
+      visit(subagent)
   }
   for (const root of roots) visit(root)
   for (const entry of agents) visit(entry)
@@ -1086,7 +1087,7 @@ const MAX_AGENT_NESTING_DEPTH = 4
 
 /**
  * The nesting depth of each subagent, in nested list order: 1 for a
- * child of a top-level agent, 2 for its child, and so on. Top-level
+ * subagent of a top-level agent, 2 for its subagent, and so on. Top-level
  * agents have no entry.
  */
 function buildAgentDepths(

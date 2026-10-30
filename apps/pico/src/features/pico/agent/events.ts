@@ -7,7 +7,7 @@ import * as React from "react"
 export type PicoEventMap = {
   /** An agent's Agent panel state changed on the server. */
   "pico:agent-extensions": { agentId: string; kind?: string }
-  /** Select an agent, for example an subagent. */
+  /** Select an agent, for example a subagent. */
   "pico:open-agent": { agentId: string }
   /** Show a right sidebar tab. */
   "pico:open-sidebar-tab": { tab: "agent" | "review" }
