@@ -19,11 +19,11 @@ export type PicoSettingsData = {
   scratchSpillKb: number
   /** Files that git ignores which a new worktree gets a copy of, such as `.env*`. */
   worktreeCopy: string[]
-  /** Live child agents that one session may have. */
+  /** Working subagents that one agent may have. */
   maxSubagents: number
-  /** How deep `spawn_session` may nest. */
+  /** How deep `spawn_subagent` may nest. */
   maxSubagentDepth: number
-  /** Notify devices when a run finishes. */
+  /** Notify devices when an agent finishes its turn. */
   notifyTurnDone: boolean
   /** Notify devices when the agent asks a question. */
   notifyNeedsInput: boolean
@@ -43,7 +43,7 @@ export type PicoSettingsData = {
   /** The user's tool profiles, added to the built-in ones by name. */
   profiles: Record<string, Omit<Profile, "name">>
   /**
-   * Compact a session when its context is above this many tokens, on every
+   * Compact a conversation when its context is above this many tokens, on every
    * model with a larger window. 0 keeps Pi's threshold near the full window.
    */
   compactAtTokens: number
