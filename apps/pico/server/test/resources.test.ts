@@ -216,7 +216,7 @@ void test("memory pressure frees idle things and names the heaviest jobs, one ti
             return 1
           },
         } as never,
-        agentLink: (agentId) => `/?session=${agentId}`,
+        agentLink: (agentId) => `/?agent=${agentId}`,
       },
       async () => pressure
     )

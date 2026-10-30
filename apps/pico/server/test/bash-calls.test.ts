@@ -105,7 +105,7 @@ void test("the watchdog tells the parent about an idle, silent call one time", a
     assert.equal(sent.length, 1)
     assert.equal(sent[0]!.id, "s1")
     assert.equal(sent[0]!.requestId, "stall:s2:call-1")
-    assert.match(sent[0]!.message, /Session s2 \(Child\) may hang/)
+    assert.match(sent[0]!.message, /Agent s2 \(Child\) may hang/)
     assert.match(sent[0]!.message, /git rebase -i HEAD~3/)
     assert.match(sent[0]!.message, /10 min/)
     assert.match(sent[0]!.message, /PIDs: 100 \(nvim\)/)

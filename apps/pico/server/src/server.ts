@@ -119,9 +119,7 @@ export async function startServer(options: {
     const base = runtime.settings.data.publicUrl.replace(/\/+$/, "")
     const query = new URLSearchParams()
     if (machineId) query.set("machine", machineId)
-    // The page's search parameter; old notifications keep their links.
-    // Stored name: do not change.
-    if (typeof agentId === "string") query.set("session", agentId)
+    if (typeof agentId === "string") query.set("agent", agentId)
     const path = query.size ? `/?${query.toString()}` : "/"
     return base ? `${base}${path}` : path
   }

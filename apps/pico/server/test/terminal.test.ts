@@ -20,7 +20,7 @@ void test("PTY runs a shell, scopes access, and replays output", async () => {
     )
     assert.throws(
       () => terminals.write("other", terminal.id, "echo bad\r", undefined),
-      /session/
+      /agent/
     )
     let output = ""
     let done: () => void

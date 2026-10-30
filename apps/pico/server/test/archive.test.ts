@@ -11,7 +11,7 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import { AgentMetaDoc, publicId } from "../src/core/agents.ts"
 import { tempDir } from "./support.ts"
 
-void test("an archived session is listed and can be restored", async () => {
+void test("an archived agent is listed and can be restored", async () => {
   const data = await tempDir("pico-archive-test-")
   const harness = await Harness.open(
     await openNodeSqliteStorage(join(data, "pico.sqlite")),
@@ -92,7 +92,7 @@ void test("an archived session is listed and can be restored", async () => {
       (
         (await (
           await fetch(
-            `${url}/api/directory-agents?directory=${encodeURIComponent(data)}`
+            `${url}/api/project-agents?project=${encodeURIComponent(data)}`
           )
         ).json()) as { totalCount: number }
       ).totalCount
@@ -101,7 +101,7 @@ void test("an archived session is listed and can be restored", async () => {
         (await (await fetch(`${url}/api/agents/archived`)).json()) as {
           agents: Array<{
             id: string
-            directory: string
+            project: string
             archivedAt?: string
           }>
         }
@@ -118,15 +118,15 @@ void test("an archived session is listed and can be restored", async () => {
     const list = await archived()
     assert.equal(list.length, 1)
     assert.equal(list[0]!.id, id)
-    assert.equal(list[0]!.directory, data)
+    assert.equal(list[0]!.project, data)
     assert.ok(list[0]!.archivedAt)
 
-    const restored = await post("/api/session/restore", { path: `pico:${id}` })
+    const restored = await post("/api/agent/restore", { path: `pico:${id}` })
     assert.equal(restored.status, 200)
     assert.deepEqual(await restored.json(), {
       ok: true,
       path: `pico:${id}`,
-      directory: data,
+      project: data,
     })
     assert.equal(await visibleCount(), 1)
     assert.deepEqual(await archived(), [])

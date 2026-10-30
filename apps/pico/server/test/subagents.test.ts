@@ -1,7 +1,15 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { bashGuard } from "../src/core/profiles.ts"
+import {
+  actionRemoved,
+  bashGuard,
+  findProfile,
+  SUBAGENT_DENIED_TOOLS,
+} from "../src/core/profiles.ts"
+import { HostBridge } from "../src/extensions/host.ts"
+import { createPicoExtensions } from "../src/extensions/index.ts"
+import { tempDir } from "./support.ts"
 import {
   subagentMessageKind,
   isQuestion,
@@ -74,7 +82,7 @@ void test("subagent messages are marked as questions or finished work", () => {
     needsInput: false,
     subagent: true,
   })
-  assert.match(question, /^\[Child session s5: question\] Helper/)
+  assert.match(question, /^\[Subagent s5: question\] Helper/)
   assert.match(question, /agents send/)
   const done = reportMessage({
     name: "s5",
@@ -83,5 +91,41 @@ void test("subagent messages are marked as questions or finished work", () => {
     needsInput: false,
     subagent: true,
   })
-  assert.match(done, /^\[Child session s5: done\] Helper/)
+  assert.match(done, /^\[Subagent s5: done\] Helper/)
+})
+
+void test("the tool list has spawn_subagent and agents, and no old session tools", async () => {
+  const { extensions } = createPicoExtensions({
+    host: new HostBridge(),
+    dataDir: await tempDir(),
+  })
+  const names = extensions.flatMap((extension) =>
+    (extension.tools ?? []).map((tool) => tool.name)
+  )
+  assert.ok(names.includes("spawn_subagent"))
+  assert.ok(names.includes("agents"))
+  for (const old of ["spawn_session", "send_to_session", "sessions"])
+    assert.ok(!names.includes(old), old)
+  assert.ok(
+    extensions.some((extension) => extension.name === "agents"),
+    "the agents extension"
+  )
+})
+
+void test("profiles and subagent limits name agents.send as an action", () => {
+  assert.ok(actionRemoved("agents.send", findProfile("builder")))
+  assert.ok(!actionRemoved("agents.send", findProfile("reviewer")))
+  assert.ok(actionRemoved("agents.send", findProfile("read-only")))
+  assert.ok(!actionRemoved("agents.send", findProfile("full")))
+  assert.ok(
+    actionRemoved("agents.send", findProfile("full"), {
+      limits: { remove: ["agents.send"] },
+    })
+  )
+  assert.deepEqual(SUBAGENT_DENIED_TOOLS, ["ask_user", "spawn_subagent"])
+  assert.ok(
+    actionRemoved("spawn_subagent", findProfile("full"), {
+      subagent: { parent: "s1" },
+    })
+  )
 })

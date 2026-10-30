@@ -15,7 +15,7 @@ import { tempDir } from "./support.ts"
 const IMAGE =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 
-void test("an open event stream follows session selection and moves its live watcher", async () => {
+void test("an open event stream follows agent selection and moves its live watcher", async () => {
   const data = await tempDir("pico-switch-test-")
   const harness = await Harness.open(
     await openNodeSqliteStorage(join(data, "pico.sqlite")),
@@ -105,7 +105,7 @@ void test("an open event stream follows session selection and moves its live wat
     assert.ok(port, log)
     const url = `http://127.0.0.1:${port}`
     const response = await fetch(
-      `${url}/events?context=browser&session=${ids[0]}`,
+      `${url}/events?context=browser&agent=${ids[0]}`,
       { signal: abort.signal }
     )
     assert.equal(response.status, 200)
@@ -138,7 +138,7 @@ void test("an open event stream follows session selection and moves its live wat
     }
     assert.equal((await nextState()).agentId, ids[0])
     const selection = await fetch(
-      `${url}/api/session/select?context=browser&session=${ids[1]}`,
+      `${url}/api/agent/select?context=browser&agent=${ids[1]}`,
       { method: "POST" }
     )
     assert.equal(selection.status, 200)
@@ -147,7 +147,7 @@ void test("an open event stream follows session selection and moves its live wat
     assert.equal(selected.items?.length, 1)
     // Images come as URLs, and the URL answers with the image bytes.
     const imageUrl = selected.items?.[0]?.images?.[0]?.url
-    assert.match(imageUrl ?? "", /^\/api\/session-image\//)
+    assert.match(imageUrl ?? "", /^\/api\/agent-image\//)
     const image = await fetch(`${url}${imageUrl}`)
     assert.equal(image.status, 200)
     assert.equal(image.headers.get("content-type"), "image/png")
@@ -157,7 +157,7 @@ void test("an open event stream follows session selection and moves its live wat
     )
     const missing = await fetch(`${url}${imageUrl!.replace(/\/0$/, "/1")}`)
     assert.equal(missing.status, 404)
-    const renamed = await fetch(`${url}/api/session/rename`, {
+    const renamed = await fetch(`${url}/api/agent/rename`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path: `pico:${ids[1]}`, name: "Renamed second" }),

@@ -1745,7 +1745,7 @@ export function createAgentsExtension(host: HostBridge) {
         ? (await Promise.all(states.map(arrived))).some(Boolean)
         : states.every((state) => state.state !== "working")
       if (done || (deadline !== undefined && Date.now() >= deadline)) break
-      // Local agents end their runs in the harness; a short poll keeps
+      // Local agents end their turns in the harness; a short poll keeps
       // this simple for a mix of local and remote agents.
       await sleep(
         Math.min(

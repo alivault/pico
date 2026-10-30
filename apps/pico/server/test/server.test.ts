@@ -76,21 +76,21 @@ void test("server needs no token, refuses a second owner, and stops cleanly", as
             : {}),
         })
       ).json()) as {
-        directories: string[]
+        projects: string[]
         pinnedAgentKeys: string[]
         initialized: boolean
       }
     assert.equal((await sidebar("/api/sidebar-state")).initialized, false)
     await sidebar("/api/sidebar-state", {
       clientId: "one",
-      directories: ["/a"],
+      projects: ["/a"],
     })
     const merged = await sidebar("/api/sidebar-state/merge", {
       clientId: "two",
-      directories: ["/b", "/a"],
+      projects: ["/b", "/a"],
       pinnedAgentKeys: ["s1"],
     })
-    assert.deepEqual(merged.directories, ["/a", "/b"])
+    assert.deepEqual(merged.projects, ["/a", "/b"])
     assert.deepEqual((await sidebar("/api/sidebar-state")).pinnedAgentKeys, [
       "s1",
     ])

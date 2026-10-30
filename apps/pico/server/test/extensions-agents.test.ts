@@ -48,7 +48,7 @@ function lastUser(messages: readonly Message[]) {
         .join("")
 }
 
-/** A small session store on the Harness, in place of Pico's `Agents`. */
+/** A small agent store on the Harness, in place of Pico's `Agents`. */
 function fakeAgents(harness: Harness) {
   const metas = new Map<string, HostAgentMeta & { createdAt: number }>()
   const unread = new Set<string>()
@@ -58,7 +58,7 @@ function fakeAgents(harness: Harness) {
     meta: (id: string) => metas.get(id)!,
     isBusy: () => false,
     runningTools: () => [],
-    children: (id: string) =>
+    subagents: (id: string) =>
       [...metas.entries()]
         .filter(([, meta]) => meta.parent === id)
         .map(([key]) => key),
@@ -197,25 +197,25 @@ async function eventually<T>(read: () => Promise<T | undefined>, ms = 8000) {
   throw new Error("Timed out")
 }
 
-void test("session ids normalize", () => {
+void test("agent IDs normalize", () => {
   assert.equal(normalizeAgentId("12"), "s12")
   assert.equal(normalizeAgentId("pico:s12"), "s12")
   assert.equal(normalizeAgentId(" s3 "), "s3")
 })
 
-void test("spawn_session starts a child and reports its answer back", async () => {
+void test("spawn_subagent starts a subagent and reports its answer back", async () => {
   const dir = await tempDir()
   const host = new HostBridge()
   const script: Script = (messages) => {
     const user = lastUser(messages)
     if (user.startsWith("Compute the answer"))
       return { text: "The answer is 42." }
-    if (user.includes(": done]")) return { text: "Thanks, child." }
+    if (user.includes(": done]")) return { text: "Thanks, subagent." }
     if (lastToolResult(messages)) return { text: "spawned" }
     return {
       tools: [
         {
-          name: "spawn_session",
+          name: "spawn_subagent",
           arguments: { goal: "Compute the answer", name: "Helper" },
         },
       ],
@@ -245,9 +245,9 @@ void test("spawn_session starts a child and reports its answer back", async () =
       return found ? JSON.stringify(found.model) : undefined
     })
     assert.match(report, /The answer is 42\./)
-    const children = fake.agents.children(parent)
-    assert.equal(children.length, 1)
-    assert.equal(fake.metas.get(children[0]!)?.name, "Helper")
+    const subagents = fake.agents.subagents(parent)
+    assert.equal(subagents.length, 1)
+    assert.equal(fake.metas.get(subagents[0]!)?.name, "Helper")
     await conversation.waitForIdle(ctx)
     const view = await conversation.context(ctx)
     assert.equal(
@@ -263,7 +263,7 @@ void test("spawn_session starts a child and reports its answer back", async () =
   }
 })
 
-void test("a child's question goes to the parent's follow-up queue, marked as a question", async () => {
+void test("a subagent's question goes to the parent's follow-up queue, marked as a question", async () => {
   const dir = await tempDir()
   const host = new HostBridge()
   const script: Script = (messages) => {
@@ -275,7 +275,7 @@ void test("a child's question goes to the parent's follow-up queue, marked as a 
     return {
       tools: [
         {
-          name: "spawn_session",
+          name: "spawn_subagent",
           arguments: {
             goal: "Pick a database",
             profile: "builder",
@@ -311,8 +311,8 @@ void test("a child's question goes to the parent's follow-up queue, marked as a 
       return found ? JSON.stringify(found.model) : undefined
     })
     assert.match(report, /SQLite or Postgres/)
-    const child = fake.agents.children(parent)[0]!
-    const meta = fake.metas.get(child)!
+    const subagent = fake.agents.subagents(parent)[0]!
+    const meta = fake.metas.get(subagent)!
     assert.equal(meta.profile, "builder")
     assert.deepEqual(meta.limits, {
       add: ["notify"],
@@ -324,7 +324,7 @@ void test("a child's question goes to the parent's follow-up queue, marked as a 
   }
 })
 
-void test("a child that waits on a job sends nothing until it is done", async () => {
+void test("a subagent that waits on a job sends nothing until it is done", async () => {
   const dir = await tempDir()
   const host = new HostBridge()
   const script: Script = (messages) => {
@@ -334,7 +334,7 @@ void test("a child that waits on a job sends nothing until it is done", async ()
     if (user.includes(": done]")) return { text: "Thanks." }
     if (lastToolResult(messages)) return { text: "spawned" }
     return {
-      tools: [{ name: "spawn_session", arguments: { goal: "Build it" } }],
+      tools: [{ name: "spawn_subagent", arguments: { goal: "Build it" } }],
     }
   }
   const harness = await openHarness(
@@ -373,18 +373,18 @@ void test("a child that waits on a job sends nothing until it is done", async ()
       (await conversation.context(ctx)).entries.filter(
         (entry) =>
           entry.kind === "pi.user" &&
-          JSON.stringify(entry.model).includes("[Child session")
+          JSON.stringify(entry.model).includes("[Subagent")
       )
     await conversation.submit({ type: "input", content: "delegate" }, ctx)
-    const child = await eventually(
-      async () => fake.agents.children(parent)[0]
+    const subagent = await eventually(
+      async () => fake.agents.subagents(parent)[0]
     )
-    const childConversation = (await harness.conversation(
-      conversationOf(child),
+    const subagentConversation = (await harness.conversation(
+      conversationOf(subagent),
       ctx
     ))!
     await eventually(async () =>
-      (await lastAnswer(harness, conversationOf(child), ctx)) ===
+      (await lastAnswer(harness, conversationOf(subagent), ctx)) ===
       "Started the build."
         ? true
         : undefined
@@ -392,11 +392,11 @@ void test("a child that waits on a job sends nothing until it is done", async ()
     await new Promise((done) => setTimeout(done, 300))
     assert.equal((await reports()).length, 0)
     assert.equal(
-      await waitingOn(harness, conversationOf(child), ctx),
+      await waitingOn(harness, conversationOf(subagent), ctx),
       "a job (build)"
     )
-    await setJob(child, "exited")
-    await childConversation.submit(
+    await setJob(subagent, "exited")
+    await subagentConversation.submit(
       { type: "input", content: "[Job j1 exited]" },
       ctx
     )
@@ -411,10 +411,10 @@ void test("a child that waits on a job sends nothing until it is done", async ()
   }
 })
 
-void test("each message to a busy child gets its own answer back, one time", async () => {
+void test("each message to a busy subagent gets its own answer back, one time", async () => {
   const dir = await tempDir()
   const host = new HostBridge()
-  let child = ""
+  let subagent = ""
   let release = false
   const script: Script = (messages) => {
     const user = lastUser(messages)
@@ -430,13 +430,17 @@ void test("each message to a busy child gets its own answer back, one time", asy
       return {
         tools: [
           {
-            name: "send_to_session",
-            arguments: { id: child, message: user.replace("fyi", "FYI") },
+            name: "agents",
+            arguments: {
+              action: "send",
+              id: subagent,
+              message: user.replace("fyi", "FYI"),
+            },
           },
         ],
       }
     return {
-      tools: [{ name: "spawn_session", arguments: { goal: "Slow work" } }],
+      tools: [{ name: "spawn_subagent", arguments: { goal: "Slow work" } }],
     }
   }
   const harness = await openHarness(
@@ -457,7 +461,7 @@ void test("each message to a busy child gets its own answer back, one time", asy
         .filter(
           (entry) =>
             entry.kind === "pi.user" &&
-            JSON.stringify(entry.model).includes("[Child session")
+            JSON.stringify(entry.model).includes("[Subagent")
         )
         .map(
           (entry) =>
@@ -466,9 +470,9 @@ void test("each message to a busy child gets its own answer back, one time", asy
             )?.[1]
         )
     await conversation.submit({ type: "input", content: "delegate" }, ctx)
-    child = await eventually(async () => fake.agents.children(parent)[0])
+    subagent = await eventually(async () => fake.agents.subagents(parent)[0])
     await conversation.waitForIdle(ctx)
-    // The child is still busy: both messages wait in its follow-up queue.
+    // The subagent is still busy: both messages wait in its follow-up queue.
     for (const message of ["fyi 1", "fyi 2"]) {
       await conversation.submit({ type: "input", content: message }, ctx)
       await conversation.waitForIdle(ctx)
@@ -480,7 +484,7 @@ void test("each message to a busy child gets its own answer back, one time", asy
     )
     await new Promise((done) => setTimeout(done, 300))
     await conversation.waitForIdle(ctx)
-    // Each report waits for the child to be idle, so their order can vary.
+    // Each report waits for the subagent to be idle, so their order can vary.
     assert.deepEqual(
       (await reports()).toSorted((a, b) => String(a).localeCompare(String(b))),
       ["Noted FYI 1", "Noted FYI 2", "The work is done"]
@@ -490,19 +494,19 @@ void test("each message to a busy child gets its own answer back, one time", asy
   }
 })
 
-void test("spawn_session with wait returns the answer, and agents read reads it", async () => {
+void test("spawn_subagent with wait returns the answer, and agents read reads it", async () => {
   const dir = await tempDir()
   const host = new HostBridge()
-  let childId = ""
+  let subagentId = ""
   const script: Script = (messages) => {
     const user = lastUser(messages)
     if (user.startsWith("Name a color")) return { text: "Blue." }
     const result = lastToolResult(messages)
     if (result?.includes("finished")) {
-      childId = /session (s\d+)/.exec(result)?.[1] ?? ""
+      subagentId = /[Ss]ubagent (s\d+)/.exec(result)?.[1] ?? ""
       return {
         tools: [
-          { name: "agents", arguments: { action: "read", id: childId } },
+          { name: "agents", arguments: { action: "read", id: subagentId } },
         ],
       }
     }
@@ -510,7 +514,7 @@ void test("spawn_session with wait returns the answer, and agents read reads it"
     return {
       tools: [
         {
-          name: "spawn_session",
+          name: "spawn_subagent",
           arguments: { goal: "Name a color", wait: true },
         },
       ],
@@ -670,7 +674,7 @@ void test("agents mark agents read and archive them", async () => {
     assert.match(results[0]!, new RegExp(`Marked ${other} read`))
     assert.match(results[1]!, new RegExp(`Marked ${other} unread`))
     assert.match(results[2]!, new RegExp(`Archived ${other}`))
-    assert.match(results[2]!, /s999: Unknown session/)
+    assert.match(results[2]!, /s999: Unknown agent/)
     assert.match(results[3]!, new RegExp(`${other} .*archived`))
     assert.match(results[4]!, new RegExp(`Restored ${other}`))
     assert.equal(fake.unread.has(other), true)
@@ -720,19 +724,67 @@ void test("an agent cannot archive itself", async () => {
   }
 })
 
+void test("the builder profile refuses the agents send action", async () => {
+  const dir = await tempDir()
+  const host = new HostBridge()
+  let other = ""
+  const script: Script = (messages) =>
+    lastToolResult(messages)
+      ? { text: "done" }
+      : {
+          tools: [
+            {
+              name: "agents",
+              arguments: { action: "send", id: other, message: "hello" },
+            },
+          ],
+        }
+  const harness = await openHarness(
+    join(dir, "db.sqlite"),
+    [createAgentsExtension(host)],
+    script,
+    dir
+  )
+  const fake = bind(host, harness, dir)
+  try {
+    const self = await fake.agents.create(dir, { profile: "builder" })
+    other = await fake.agents.create(dir)
+    const conversation = (await harness.conversation(
+      conversationOf(self),
+      ctx
+    ))!
+    await (
+      await conversation.submit({ type: "input", content: "go" }, ctx)
+    ).wait(ctx)
+    const view = await conversation.context(ctx)
+    const result = view.entries.find((entry) => entry.kind === "pi.tool-result")
+    assert.match(JSON.stringify(result?.model), /may not use agents\.send/)
+    assert.deepEqual(await reportsIn(harness, other), [])
+    const target = (await harness.conversation(conversationOf(other), ctx))!
+    assert.equal(
+      (await target.context(ctx)).entries.filter(
+        (entry) => entry.kind === "pi.user"
+      ).length,
+      0
+    )
+  } finally {
+    await harness.close(ctx)
+  }
+})
+
 /** The user entries of a conversation that are reports of other agents. */
 async function reportsIn(harness: Harness, id: string) {
   const conversation = (await harness.conversation(conversationOf(id), ctx))!
   return (await conversation.context(ctx)).entries
     .filter((entry) => entry.kind === "pi.user")
     .map((entry) => lastUser(entry.model as Message[]))
-    .filter((text) => /^\[(Child session|Session) s\d+: /.test(text))
+    .filter((text) => /^\[(Subagent|Agent) s\d+: /.test(text))
 }
 
 void test("agents wait and the report give an answer one time", async () => {
   const dir = await tempDir()
   const host = new HostBridge()
-  let child = ""
+  let subagent = ""
   let release = false
   const script: Script = (messages) => {
     const user = lastUser(messages)
@@ -740,23 +792,23 @@ void test("agents wait and the report give an answer one time", async () => {
       return release
         ? { text: "Blue." }
         : { tools: [{ name: "agents", arguments: { action: "list" } }] }
-    if (user.startsWith("[Child session")) return { text: "Got a report." }
+    if (user.startsWith("[Subagent")) return { text: "Got a report." }
     const result = lastToolResult(messages)
-    if (result?.includes("Started child session")) {
-      child = /session (s\d+)/.exec(result)?.[1] ?? ""
+    if (result?.includes("Started subagent")) {
+      subagent = /[Ss]ubagent (s\d+)/.exec(result)?.[1] ?? ""
       release = true
       return {
         tools: [
           {
             name: "agents",
-            arguments: { action: "wait", ids: [child], any: true },
+            arguments: { action: "wait", ids: [subagent], any: true },
           },
         ],
       }
     }
     if (result) return { text: "waited" }
     return {
-      tools: [{ name: "spawn_session", arguments: { goal: "Name a color" } }],
+      tools: [{ name: "spawn_subagent", arguments: { goal: "Name a color" } }],
     }
   }
   const harness = await openHarness(
@@ -791,7 +843,7 @@ void test("agents wait and the report give an answer one time", async () => {
   }
 })
 
-void test("a child's message to its parent gets no report back", async () => {
+void test("a subagent's message to its parent gets no report back", async () => {
   const dir = await tempDir()
   const host = new HostBridge()
   let parent = ""
@@ -804,16 +856,16 @@ void test("a child's message to its parent gets no report back", async () => {
       return {
         tools: [
           {
-            name: "send_to_session",
-            arguments: { id: parent, message: "Half done." },
+            name: "agents",
+            arguments: { action: "send", id: parent, message: "Half done." },
           },
         ],
       }
     }
-    if (user.startsWith("[Child session")) return { text: "Noted." }
+    if (user.startsWith("[Subagent")) return { text: "Noted." }
     if (result) return { text: "ok" }
     return {
-      tools: [{ name: "spawn_session", arguments: { goal: "Work and tell" } }],
+      tools: [{ name: "spawn_subagent", arguments: { goal: "Work and tell" } }],
     }
   }
   const harness = await openHarness(
@@ -830,8 +882,8 @@ void test("a child's message to its parent gets no report back", async () => {
       ctx
     ))!
     await conversation.submit({ type: "input", content: "go" }, ctx)
-    const child = await eventually(
-      async () => fake.agents.children(parent)[0]
+    const subagent = await eventually(
+      async () => fake.agents.subagents(parent)[0]
     )
     await eventually(async () =>
       (await reportsIn(harness, parent)).some((text) =>
@@ -845,8 +897,8 @@ void test("a child's message to its parent gets no report back", async () => {
     const reports = await reportsIn(harness, parent)
     assert.equal(reports.length, 2)
     assert.match(reports.join("\n"), /Half done\./)
-    // The parent's "Noted." does not go back to the child.
-    assert.deepEqual(await reportsIn(harness, child), [])
+    // The parent's "Noted." does not go back to the subagent.
+    assert.deepEqual(await reportsIn(harness, subagent), [])
   } finally {
     await harness.close(ctx)
   }

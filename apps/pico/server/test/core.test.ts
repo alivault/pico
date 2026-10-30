@@ -52,7 +52,7 @@ void test("events are ordered, scoped, and bounded", () => {
     ),
     false
   )
-  for (let i = 0; i < 600; i++) hub.push({ type: "session_status" })
+  for (let i = 0; i < 600; i++) hub.push({ type: "agent_status" })
   assert.equal(hub.eventsAfter(event.sequence), undefined)
   assert.equal(hub.eventsAfter(hub.currentSequence)!.length, 0)
 })
@@ -170,12 +170,12 @@ void test("tool results keep their images as URLs", () => {
   const block = item?.kind === "assistant" ? item.blocks[0] : undefined
   assert.equal(block?.type, "tool")
   assert.deepEqual(block?.type === "tool" ? block.images : undefined, [
-    { mimeType: "image/png", url: "/api/session-image/abc/2/0" },
+    { mimeType: "image/png", url: "/api/agent-image/abc/2/0" },
   ])
   assert.deepEqual(block?.type === "tool" ? block.details : undefined, {
     kind: "image",
     title: "a.png",
-    data: "/api/session-image/abc/2/details",
+    data: "/api/agent-image/abc/2/details",
   })
   assert.deepEqual(
     detailsImage({ kind: "image", data: "data:image/png;base64,aGVsbG8=" }),
@@ -183,7 +183,7 @@ void test("tool results keep their images as URLs", () => {
   )
 })
 
-void test("read state is global and an open tab keeps its session read", async () => {
+void test("read state is global and an open tab keeps its agent read", async () => {
   const dir = await tempDir("pico-viewers-")
   const file = join(dir, "viewers.json")
   const viewers = new Viewers(file)

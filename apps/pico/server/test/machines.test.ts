@@ -216,7 +216,7 @@ void test("the SSE parser joins data lines and skips comments", () => {
   )
 })
 
-void test("the offline cache follows state patches and session lists", () => {
+void test("the offline cache follows state patches and agent lists", () => {
   assert.deepEqual(
     applyStatePatch(
       { type: "state_sync", agentId: "s1", items: [1, 2, 3] },
@@ -253,10 +253,10 @@ void test("the offline cache follows state patches and session lists", () => {
     type: "state_sync",
     itemsPatch: { previousLength: 1, start: 1, deleteCount: 0, items: ["b"] },
   })
-  observe({ type: "agents", directories: ["/p"] })
+  observe({ type: "agents", projects: ["/p"] })
   const [state, agents] = cache.bootstrap("ctx", "s1")
   assert.deepEqual(state?.items, ["a", "b"])
-  assert.deepEqual(agents?.directories, ["/p"])
+  assert.deepEqual(agents?.projects, ["/p"])
   assert.deepEqual(cache.bootstrap("other", undefined), [])
 
   cache.putResponse("/api/a", "application/json", Buffer.from("{}"))
@@ -574,7 +574,7 @@ void test("a hub proxies HTTP, SSE, and terminals to a remote machine", async ()
     assert.equal(summary.ok, true)
     assert.deepEqual(summary.agents, [])
     assert.equal(
-      (await fetch(`${hub.url}/m/m_remote/api/machine/session/read?id=s999`))
+      (await fetch(`${hub.url}/m/m_remote/api/machine/agent/read?id=s999`))
         .status,
       404
     )
