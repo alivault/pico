@@ -356,7 +356,7 @@ function messageImageUrls(
 
 /**
  * Build items from history entries, oldest first. Images become URLs of the
- * session `agentId` (see `imagePath`).
+ * agent `agentId` (see `imagePath`).
  */
 export function itemsFromEntries(
   entries: readonly EntryRecord[],

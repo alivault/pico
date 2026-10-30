@@ -1,6 +1,6 @@
 /**
  * The agent runtime: one durable Harness on Pico's SQLite database, with Pi's
- * model catalog and credentials, and the extensions every session runs with.
+ * model catalog and credentials, and the extensions every agent runs with.
  */
 import { mkdirSync } from "node:fs"
 import { homedir } from "node:os"

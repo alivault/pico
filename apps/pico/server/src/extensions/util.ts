@@ -187,8 +187,8 @@ export function tail(text: string, lines: number) {
 }
 
 /**
- * Send a background message (a job exit, a child's answer, a timer, a watch)
- * to the session that owns `conversationId`, or to the session that replaced
+ * Send a background message (a job exit, a subagent's answer, a timer, a watch)
+ * to the agent that owns `conversationId`, or to the agent that replaced
  * it through tree navigation. It is a steer: a busy agent gets it at its next
  * turn boundary, not only when its run ends. `requestId` makes a retry after a
  * restart find the same submission.
@@ -214,10 +214,10 @@ export async function notifyAgent(
 }
 
 // -----------------------------------------------------------------------------
-// Session state for the web client
+// Agent state for the web client
 
 /**
- * A part of a session's state that the web client shows in its Agent panel.
+ * A part of an agent's state that the web client shows in its Agent panel.
  * `kinds` are the documents it reads; a change to one of them tells clients
  * to read it again.
  */
@@ -246,7 +246,7 @@ export function stateKinds(): Set<string> {
 }
 
 /**
- * An error result when the calling session may not use `action` (for example
+ * An error result when the calling agent may not use `action` (for example
  * `browser.eval`): its profile or its limits remove it. Undefined when it may.
  */
 export function deniedAction(
@@ -269,7 +269,7 @@ export function deniedAction(
   )
   return removed
     ? errorResult(
-        `This session may not use ${action}: its profile or its limits remove it.${meta.parent ? " Ask your parent for it with a Question." : ""}`
+        `This agent may not use ${action}: its profile or its limits remove it.${meta.parent ? " Ask your parent for it with a Question." : ""}`
       )
     : undefined
 }

@@ -12,7 +12,7 @@ export type ServerEvent = {
   readonly sequence: number
   /** Only for this viewer context; absent goes to every context. */
   readonly contextId?: string
-  /** The public session the event is about. */
+  /** The public agent the event is about. */
   readonly agentId?: string
   readonly payload: ServerEventPayload
 }
@@ -46,7 +46,7 @@ export class EventHub {
       payload,
     }
     if (payload.type === "state_sync") {
-      // Only the newest state of a session matters for replay.
+      // Only the newest state of an agent matters for replay.
       for (let index = this.#events.length - 1; index >= 0; index -= 1) {
         const old = this.#events[index]!
         if (
@@ -92,7 +92,7 @@ export class EventHub {
   }
 }
 
-/** Events that belong to the selected session only. */
+/** Events that belong to the selected agent only. */
 const SELECTED_AGENT_EVENTS = new Set([
   "state_sync",
   "conversation_delta",

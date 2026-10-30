@@ -1,7 +1,7 @@
 /**
  * Git worktrees for agents.
  *
- * A session can work in its own worktree, so parallel agents do not edit
+ * An agent can work in its own worktree, so parallel agents do not edit
  * the same files. Worktrees go to `<data>/worktrees/<repository>/<slug>`,
  * outside the repository, so tools in one worktree do not see the others.
  */
@@ -93,7 +93,7 @@ async function copyIgnoredFiles(
 }
 
 /**
- * Make a worktree for a new session. `cwd` may be a subdirectory of the
+ * Make a worktree for a new agent. `cwd` may be a subdirectory of the
  * repository; the returned `cwd` is the same subdirectory in the worktree.
  */
 export async function createWorktree(
@@ -110,7 +110,7 @@ export async function createWorktree(
   if (!root) throw new Error(`${cwd} is not in a git repository`)
   const suffix = randomBytes(3).toString("hex")
   const requested = options.branch?.trim()
-  const slug = slugify(requested ?? options.name ?? "session")
+  const slug = slugify(requested ?? options.name ?? "agent")
   const branch = requested || `pico/${slug}-${suffix}`
   const path = join(
     options.dataDir,

@@ -1,8 +1,8 @@
 /**
- * Automatic session names, ported from the `auto-session-name` Pi extension.
+ * Automatic agent names, ported from the `auto-session-name` Pi extension.
  *
- * When the first prompt of an unnamed session arrives, the session gets a
- * heuristic name at once. The session's own model then refines it in the
+ * When the first prompt of an unnamed agent arrives, the agent gets a
+ * heuristic name at once. The agent's own model then refines it in the
  * background. A name the user set is never replaced. `generate()` also serves
  * the "generate name" request, Pi's `/auto-name` command.
  */
@@ -15,7 +15,7 @@ const MAX_AGENT_NAME_WORDS = 6
 const MAX_PROMPT_CHARS = 1600
 const GENERATION_TIMEOUT_MS = 30_000
 const IMAGE_ONLY_NAME = "Image task"
-const TITLE_SYSTEM_PROMPT = `You write short session names for coding-agent terminal tabs.
+const TITLE_SYSTEM_PROMPT = `You write short agent names for coding-agent terminal tabs.
 
 Return only the title text.
 
@@ -134,7 +134,7 @@ function buildTitlePrompt(prompt: string, cwd: string, imageCount: number) {
 }
 
 /**
- * Ask `model` for a name. Uses the session's own model: a catalog entry does
+ * Ask `model` for a name. Uses the agent's own model: a catalog entry does
  * not guarantee account access, notably with subscriptions.
  */
 export async function generateAgentName(

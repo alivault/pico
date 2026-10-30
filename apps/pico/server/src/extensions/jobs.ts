@@ -7,10 +7,10 @@
  *
  * A job's process runs in the pty-host process (see `pty-backend.ts`), so it
  * survives a server restart. The `pico.jobs` document keeps each job, and a
- * session-wide index lists the running ones. At startup, `recover` takes over
+ * store-wide index (pi-durable scope `session`) lists the running ones. At startup, `recover` takes over
  * the jobs that the pty-host kept and records the jobs that ended while the
  * server was down. Jobs without a process become `lost` (for example after
- * the pty-host stopped, or with `--no-pty-host`), and their session gets one
+ * the pty-host stopped, or with `--no-pty-host`), and their agent gets one
  * message about it.
  */
 
@@ -129,7 +129,7 @@ export const JobsDoc = defineDoc<JobsState>({
   initial: () => ({ items: {} }),
 })
 
-/** Running jobs of every session, so a restart can find the lost ones. */
+/** Running jobs of every agent, so a restart can find the lost ones. */
 export const JobIndexDoc = defineDoc<{ running: Record<string, number> }>({
   kind: "pico.jobs.index",
   checkpointWhen: () => false,
@@ -265,7 +265,7 @@ async function editRunningJob(
   }, context)
 }
 
-/** Send a steer to the session of a conversation, or its replacement (see `notifyAgent`). */
+/** Send a steer to the agent of a conversation, or its replacement (see `notifyAgent`). */
 async function steerAgent(
   services: HostServices,
   conversationId: ConversationId,
@@ -732,7 +732,7 @@ class JobRunner {
     return this.#live.get(jobId)?.device
   }
 
-  /** The jobs that run now, with their session. */
+  /** The jobs that run now, with their agent. */
   liveJobs() {
     return [...this.#live.values()].map((live) => ({
       id: live.job.id,
@@ -1035,7 +1035,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     return jobs?.items[id.trim()]
   }
 
-  /** Refuse a call that brings in the user from a child session. */
+  /** Refuse a call that brings in the user from a subagent. */
   const subagentRefusal = (
     services: HostServices,
     conversationId: ConversationId
@@ -1044,7 +1044,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     if (!services.agents.has(id)) return undefined
     const meta = services.agents.meta(id)
     if (!meta.parent || meta.limits?.add?.includes("ask_user")) return undefined
-    return 'A child session cannot call the user. Ask your parent session: end your turn with a message that starts with "Question:".'
+    return 'A subagent cannot call the user. Ask your parent agent: end your turn with a message that starts with "Question:".'
   }
 
   /**
@@ -1093,7 +1093,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     )
     if (running.length >= MAX_RUNNING_PER_AGENT)
       return {
-        error: `This session already runs ${running.length} jobs. Stop one first.`,
+        error: `This agent already runs ${running.length} jobs. Stop one first.`,
       }
     const cwd = input.cwd?.trim() || (await cwdOf(api, context))
     const refusal = await subagentCommandRefusal(
@@ -1104,7 +1104,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     )
     if (refusal)
       return {
-        error: `${refusal}. Ask your parent session: end your turn with a message that starts with "Question:".`,
+        error: `${refusal}. Ask your parent agent: end your turn with a message that starts with "Question:".`,
       }
     const id = `j${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
     const job: Job = {
@@ -1414,7 +1414,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     )
     runner.markFocused(job.id)
     return {
-      text: `Asked the user to type in the terminal of ${job.name}: "${text}". Pico shows the tab when the user opens this session, and sends a notification. Use the wait action to see the result.`,
+      text: `Asked the user to type in the terminal of ${job.name}: "${text}". Pico shows the tab when the user opens this agent, and sends a notification. Use the wait action to see the result.`,
     }
   }
 
@@ -1446,7 +1446,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     // Actions on one terminal depend on each other: run calls in order.
     executionMode: "sequential",
     description: [
-      "Use terminals: your jobs (from job_start or open) and the user's terminal tabs of this session.",
+      "Use terminals: your jobs (from job_start or open) and the user's terminal tabs of this agent.",
       'Actions: list (all, with memory; with id, one job and its last output); output (the log of a job: the last `tail` lines, default 80, lines from `from_line`, or only lines that match `grep`); stop (stop a job: SIGTERM, then SIGKILL); open (a shell, or `command`, in a new terminal; it is a job); read (source visible: the screen now, for full-screen programs; recent: the last `lines` with scrollback); wait (until a line matches `pattern`, the job waits for input, or exits); send_text (type `text`, with `enter` to press Enter); send_keys (`keys`, for example ["up", "enter"] or ["ctrl+c"]); focus (bring the user to the terminal with `prompt`, only when the user is needed: a password, a login, a choice that is the user\'s); close (remove a finished job and its log).',
       "send_text and send_keys refuse when the terminal hides input: a secret is for the user. You can read the user's terminals, but not type in them.",
     ].join(" "),

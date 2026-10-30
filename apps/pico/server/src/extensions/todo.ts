@@ -1,5 +1,5 @@
 /**
- * The `todo` extension: a task list that the agent keeps for a session.
+ * The `todo` extension: a task list that the agent keeps for an agent.
  *
  * The list is a conversation document, not text in the transcript, so it
  * survives compaction. A prompt section shows the open items to the model.
@@ -152,7 +152,7 @@ function shortTodo(
     .join(" ")
 }
 
-/** Change a session's list from outside a tool, for the web client. */
+/** Change an agent's list from outside a tool, for the web client. */
 export async function updateTodo(
   harness: Harness,
   conversationId: ConversationId,

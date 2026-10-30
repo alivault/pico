@@ -5,14 +5,14 @@
  * `rm -rf "$DIR"/*` cannot run with `$DIR` empty. `shellPrefix` is read on each
  * call, so a change to the setting applies without a restart.
  *
- * `guard` can refuse a command before it runs (the bash guard of child
- * agents, see `profiles.ts`): it returns the reason.
+ * `guard` can refuse a command before it runs (the bash guard of
+ * subagents, see `profiles.ts`): it returns the reason.
  *
  * A bash call cannot wait for input: it runs with editors and pagers set to
  * programs that end at once, git prompts off, and stdin from `/dev/null` (the
  * execution environment starts the shell with stdin ignored). A call without
  * its own timeout stops after `DEFAULT_TIMEOUT_SECONDS`. `bash-calls.ts`
- * tracks each call, for the agents tool and the watchdog of child agents.
+ * tracks each call, for the agents tool and the watchdog of subagents.
  */
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
@@ -105,7 +105,7 @@ async function currentBranch(dir: string) {
 }
 
 /**
- * Why a session may not run a command, or undefined. Only child agents
+ * Why an agent may not run a command, or undefined. Only subagents
  * (agents with a parent) have a guard.
  */
 export async function subagentCommandRefusal(
@@ -147,7 +147,7 @@ export function createPicoCodingTools(options: {
       )
       if (refusal)
         throw new Error(
-          `${refusal}. Ask your parent session: end your turn with a message that starts with "Question:".`
+          `${refusal}. Ask your parent agent: end your turn with a message that starts with "Question:".`
         )
       const prefix = options.shellPrefix()
       if (prefix) execution.command = `${prefix}\n${execution.command}`

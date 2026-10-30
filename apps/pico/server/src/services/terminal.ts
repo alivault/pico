@@ -630,7 +630,7 @@ export class Terminals {
     return this.#terminals.get(id)?.process?.device
   }
 
-  /** The user's shell terminals of a session (its terminal panel tabs). */
+  /** The user's shell terminals of an agent (its terminal panel tabs). */
   agentShells(agentId: string) {
     return [...this.#terminals.values()]
       .filter(
@@ -834,7 +834,7 @@ export class Terminals {
     if (!terminal) throw badRequest("Terminal not found.")
     if (terminal.shared) return terminal
     if (terminal.scopeKey !== scopeKey)
-      throw badRequest("Terminal not found for this session.")
+      throw badRequest("Terminal not found for this agent.")
     return terminal
   }
 

@@ -7,9 +7,9 @@
  * its processes (Linux: `/proc/<pid>/environ`) and read their CPU time and
  * I/O.
  *
- * A call of a child session that runs longer than `STALL_MS` with no new
+ * A call of a subagent that runs longer than `STALL_MS` with no new
  * output, and whose processes use almost no CPU or I/O in the last check
- * interval, is reported one time to the parent session. It probably waits
+ * interval, is reported one time to the parent agent. It probably waits
  * for input (an editor or a prompt) or for something that does not come.
  */
 import { readdir, readFile } from "node:fs/promises"
@@ -75,7 +75,7 @@ export function endBashCall(call: BashCall) {
   if (calls.get(id) === call) calls.delete(id)
 }
 
-/** The running bash call of a session with this call ID. */
+/** The running bash call of an agent with this call ID. */
 export function bashCall(agentId: string, callId: string) {
   return calls.get(key(agentId, callId))
 }
@@ -211,15 +211,15 @@ export function stallMessage(input: {
         ? "none found"
         : input.pids.map((item) => `${item.pid} (${item.command})`).join(", ")
   return [
-    `Session ${input.agentId}${input.title ? ` (${input.title})` : ""} may hang: one bash call has run for ${formatDuration(input.ranMs)}, with no new output for ${formatDuration(input.silentMs)}${input.pids === undefined ? "" : " and almost no CPU or I/O"}.`,
+    `Agent ${input.agentId}${input.title ? ` (${input.title})` : ""} may hang: one bash call has run for ${formatDuration(input.ranMs)}, with no new output for ${formatDuration(input.silentMs)}${input.pids === undefined ? "" : " and almost no CPU or I/O"}.`,
     `Command: ${commandLine(input.command, 500)}`,
     `PIDs: ${pids}`,
-    `It may wait for input (an editor or a prompt). To stop the call, stop the session (agents action stop) or kill the PIDs, then tell the session what to do.`,
+    `It may wait for input (an editor or a prompt). To stop the call, stop the agent (agents, action stop) or kill the PIDs, then tell the agent what to do.`,
   ].join("\n")
 }
 
 /**
- * Look at the running calls one time: report the calls of child agents
+ * Look at the running calls one time: report the calls of subagents
  * that seem to hang. Returns the reported calls.
  */
 export async function checkBashCalls(

@@ -687,7 +687,7 @@ export class Agents implements HostAgents {
           change.conversationId === undefined &&
           this.#isStateKind(change.record.kind)
         ) {
-          // An agent-wide document: every agent may show it.
+          // A store-wide document (pi-durable scope `session`): every agent may show it.
           this.#hub.push({
             type: "agent_extensions",
             agentId: "*",

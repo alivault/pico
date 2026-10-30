@@ -1,6 +1,6 @@
 /**
- * What a session waits on when its turn ended: running jobs that report their
- * exit. The agent goes on when one of them ends, so the session is not done.
+ * What an agent waits on when its turn ended: running jobs that report their
+ * exit. The agent goes on when one of them ends, so the agent is not done.
  */
 import type { JobsState } from "./jobs.ts"
 
