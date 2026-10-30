@@ -92,5 +92,5 @@ These are in the plan's table; listed here because the client uses them: `maxSub
 
 - `localStorage`: `pico-pinned-sessions`, `pico-sidebar-session-previews`, `pico-session-done-sound`, `pico-session-done-desktop-notifications`, `pico-draft-directory`, `pico-sidebar-directories`, `pico-collapsed-directories`, `pico-recent-directories`, `pico-machine-collapsed-directories:<id>`.
 - Keys in stored records: `__pico_pinned_sessions__`, `__pico_directories__` (collapsed groups), the `session:` prefix of prompt draft keys, and the Agent panel section key `children` (open sections).
-- The sound file `/sounds/session-done.mp3` (in `public/`).
+- The sound file was `/sounds/session-done.mp3`. Phase 3 renamed it to `/sounds/agent-done.mp3`, because it is not stored.
 - pi's tree entry type `session_info`, and the browser's `sessionStorage`.

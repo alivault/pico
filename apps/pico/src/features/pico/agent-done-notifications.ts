@@ -3,7 +3,7 @@ export type DesktopNotificationPermission =
   | "unsupported"
 
 const AGENT_DONE_NOTIFICATION_DURATION_MS = 4_000
-const AGENT_DONE_SOUND_URL = "/sounds/session-done.mp3"
+const AGENT_DONE_SOUND_URL = "/sounds/agent-done.mp3"
 const AGENT_DONE_SOUND_GAIN = 0.85
 
 type AudioContextConstructor = typeof AudioContext
