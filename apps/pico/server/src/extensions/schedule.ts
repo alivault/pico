@@ -337,7 +337,7 @@ export function createScheduleExtension(
   const scheduleTool = defineTool({
     name: "schedule",
     description: [
-      "Durable timers and watches that send you `message` later. They survive server restarts. If you are busy then, the message arrives at your next turn boundary (after the current tool calls), so you can keep working.",
+      "Durable timers and watches that send you `message` later, also after a server restart. If you are busy, the message arrives after your current tool calls.",
       "Actions: timer (default): give one of in (a duration such as 20m or 1h30m), at (an ISO time), every (repeat at a fixed interval), or cron (a 5-field cron expression, with optional timezone).",
       "watch: get `message` when `check` is true. check.type: command (until success, failure, match, or change), url (until status, match, change, up, or down), file (until change, exists, missing, or match), ci (GitHub checks of a PR through gh, until done, success, or failure). interval is at least 15s (default 1m); timeout ends the watch with a message when the condition stays false (default 24h).",
       "list: the timers and watches, with the last check of each watch. cancel: cancel the timer or watch `id`.",

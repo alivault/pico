@@ -16,32 +16,20 @@ import type { ResourceCache } from "../core/resources.ts"
 const DEFAULT_PREAMBLE =
   "You are an expert coding assistant operating inside Pico, a coding agent harness built on pi. You help users by reading files, executing commands, editing code, and writing new files."
 
-const TOOL_SNIPPETS: Record<string, string> = {
-  read: "Read file contents",
-  bash: "Execute bash commands (ls, grep, find, etc.)",
-  edit: "Make precise file edits with exact text replacement, including multiple disjoint edits in one call",
-  write: "Create or overwrite files",
-  codemode: "Run JavaScript that calls other tools",
-  tool_search: "Search for and load tools that are not loaded yet",
-  web_search: "Search the web",
-  fetch_content:
-    "Fetch URL content as readable text, and read more of stored results",
-}
-
 /** At most this many deferred tool names in the prompt. */
 const MAX_DEFERRED_NAMES = 30
 
 const TOOL_GUIDELINES: Record<string, string[]> = {
   read: ["Use read to examine files instead of cat or sed."],
   edit: [
-    "Use edit for precise changes (edits[].oldText must match exactly)",
-    "When changing multiple separate locations in one file, use one edit call with multiple entries in edits[] instead of multiple edit calls",
-    "Each edits[].oldText is matched against the original file, not after earlier edits are applied. Do not emit overlapping or nested edits. Merge nearby changes into one edit.",
-    "Keep edits[].oldText as small as possible while still being unique in the file. Do not pad with large unchanged regions.",
+    "Make all changes to one file in one edit call, with one entry in edits[] for each change.",
   ],
   write: ["Use write only for new files or complete rewrites."],
   web_search: [
     "Use web_search when current, external, or linked information could help",
+  ],
+  ask_user: [
+    "When you need an answer, a choice, or a confirmation from the user, ask with ask_user. Do not end your turn with a question in plain text.",
   ],
 }
 
@@ -51,12 +39,6 @@ function toolNames(input: PromptInput) {
 
 function cwdOf(input: PromptInput) {
   return input.agent.cwd ?? input.env?.cwd ?? process.cwd()
-}
-
-function firstSentence(text: string) {
-  const line = text.split("\n").find((part) => part.trim()) ?? ""
-  const end = line.search(/[.!?](\s|$)/)
-  return (end >= 0 ? line.slice(0, end + 1) : line).trim()
 }
 
 function rules(names: readonly string[]) {
@@ -85,20 +67,17 @@ export function createPromptExtension(resources: ResourceCache) {
           DEFAULT_PREAMBLE,
         { tag: false }
       ),
-      section("tools", (input) => {
-        const lines = input.agent.tools.map(
-          (tool) =>
-            `- ${tool.name}: ${TOOL_SNIPPETS[tool.name] ?? firstSentence(tool.description)}`
-        )
-        const list = lines.length > 0 ? lines.join("\n") : "(none)"
+      // The model gets the active tools as tool definitions, so this
+      // section names only the deferred tools that tool_search can load.
+      section("deferred_tools", (input) => {
         const deferred = input.agent.deferred.map((tool) => tool.name)
+        if (
+          deferred.length === 0 ||
+          !input.agent.tools.some((tool) => tool.name === "tool_search")
+        )
+          return undefined
         const more = deferred.length - MAX_DEFERRED_NAMES
-        const load =
-          deferred.length > 0 &&
-          input.agent.tools.some((tool) => tool.name === "tool_search")
-            ? `\n\nMore tools are ready to load with tool_search: ${deferred.slice(0, MAX_DEFERRED_NAMES).join(", ")}${more > 0 ? `, and ${more} more` : ""}.`
-            : ""
-        return `${list}${load}\n\nIn addition to the tools above, you may have access to other custom tools depending on the project.`
+        return `Load these tools with tool_search when you need them: ${deferred.slice(0, MAX_DEFERRED_NAMES).join(", ")}${more > 0 ? `, and ${more} more` : ""}.`
       }),
       section("rules", (input) => rules(toolNames(input))),
       section("addendum", async (input) => {

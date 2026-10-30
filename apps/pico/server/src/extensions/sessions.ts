@@ -870,7 +870,7 @@ export function createSessionsExtension(host: HostBridge) {
     executionMode: "sequential",
     description: [
       "Start a child session: a full agent with its own context that works on `goal`. The user can open it in the sidebar.",
-      "Use it to split independent work or to get a fresh review. By default it runs in the background. Its messages (done or a question) go into your follow-up queue: you get them after your current run answers, so keep working instead of waiting. A child whose turn ends on a timer, a watch, or a job is waiting: sessions list shows it, and you get no message until it ends with done or a question. Set wait to get the answer as the result.",
+      "Use it to split independent work or to get a fresh review. It runs in the background: its messages (done or a question) come in your follow-up queue after your current run, so keep working. A child that waits on a timer, a watch, or a job sends no message until it is done or asks. Set wait to get the answer as the result.",
       "Without worktree, the child works in the same directory as you and can edit the same files. Set worktree: true for parallel edits; the child gets its own git branch and worktree.",
       "Tools: profile picks a set (builder, researcher, reviewer, read-only, or full; default full). A child has no ask_user, notify, or spawn_session unless you put them in add. remove takes more tools away. Bash in a child refuses git push to main, sudo, and the commands in deny_commands.",
       "Write the goal as a complete brief: the child does not see this conversation.",

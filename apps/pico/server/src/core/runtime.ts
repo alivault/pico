@@ -42,6 +42,13 @@ import { ResourceCache } from "./resources.ts"
 import { PicoSettings } from "./settings.ts"
 import { SidebarState } from "./sidebar-state.ts"
 
+/**
+ * Tokens of tool declarations in the `codemode` prompt section. Zero: the
+ * model already has every tool's schema as a tool definition, and scripts
+ * find the others with `searchTools()` and `describeTool()`.
+ */
+const CODEMODE_INLINE_BUDGET = 0
+
 export type Runtime = {
   readonly harness: Harness
   readonly models: ModelRuntime
@@ -111,6 +118,7 @@ export async function openRuntime(
     createCodemodeExtension({
       sandbox: new CodemodeSandbox({ memoryLimitBytes: 256 * 1024 * 1024 }),
       namespaces: mcp.namespaces(),
+      inlineBudget: CODEMODE_INLINE_BUDGET,
     })
   )
   registry.install(createPromptExtension(resources))
@@ -122,6 +130,7 @@ export async function openRuntime(
       createCodemodeExtension({
         sandbox: new CodemodeSandbox({ memoryLimitBytes: 256 * 1024 * 1024 }),
         namespaces: mcp.namespaces(),
+        inlineBudget: CODEMODE_INLINE_BUDGET,
       })
     )
   })
