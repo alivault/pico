@@ -82,10 +82,10 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
       "Web research, reading files, and the browser. No shell and no file changes.",
     extensions: [
       "coding-tools",
+      "pico",
       "web-access",
       "mcp",
       "codemode",
-      "pico",
       "ask",
       "scratchpad",
       "browser",

@@ -109,6 +109,9 @@ export async function openRuntime(
       host,
     })
   )
+  // The prompt extension comes before the extensions with prompt sections,
+  // so the preamble starts the system prompt.
+  registry.install(createPromptExtension(resources))
   registry.install(createWebAccessExtension())
   const mcp = createMcpExtension(agentDir, paths.dataDir)
   registry.install(mcp.extension)
@@ -119,7 +122,6 @@ export async function openRuntime(
       inlineBudget: CODEMODE_INLINE_BUDGET,
     })
   )
-  registry.install(createPromptExtension(resources))
   const pico = createPicoExtensions({ host, dataDir: paths.dataDir })
   for (const extension of pico.extensions) registry.install(extension)
   mcp.onChange(() => {
