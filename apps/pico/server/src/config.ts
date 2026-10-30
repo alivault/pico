@@ -7,8 +7,8 @@ declare const PICO_VERSION: string
 export const VERSION: string =
   typeof PICO_VERSION === "string" ? PICO_VERSION : "0.0.0-dev"
 
-/** Version of the HTTP/SSE contract with the web client. */
-export const API_CONTRACT_VERSION = 1
+/** Version of the HTTP/SSE contract with the web client. 2: sessions became agents. */
+export const API_CONTRACT_VERSION = 2
 
 /** Version of the server itself; v3 is the durable rewrite. */
 export const SERVER_PROTOCOL_VERSION = 3

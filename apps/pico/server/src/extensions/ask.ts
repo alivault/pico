@@ -203,7 +203,7 @@ const fieldSchema = Type.Object({
 const askTool = defineTool({
   name: "ask_user",
   description: [
-    "Ask the user a question and wait for the answer. The run pauses until the user answers in the web client, also hours later and after a server restart.",
+    "Ask the user a question and wait for the answer. The turn pauses until the user answers in the web client, also hours later and after a server restart.",
     "Use it when you need a decision or information that you cannot find yourself. Do not use it for questions you can answer by reading the code.",
     "Kinds: choice (one of options), multi (several of options), confirm (yes or no), text (free text), form (named fields).",
   ].join(" "),

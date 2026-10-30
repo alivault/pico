@@ -14,7 +14,7 @@ import {
 export const MIN_NODE = [22, 19] as const
 
 /** The remote server needs this contract version and this feature. */
-export const MIN_API_CONTRACT_VERSION = 1
+export const MIN_API_CONTRACT_VERSION = 2
 export const HUB_FEATURE = "machine-hub"
 
 /** No single quotes: the script goes to the remote shell in single quotes. */
