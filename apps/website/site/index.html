@@ -6,12 +6,12 @@
     <title>Pico — a web workspace for Pi coding agents</title>
     <meta
       name="description"
-      content="Pico is a local web workspace for durable Pi coding-agent sessions. Runs survive restarts. Git, files, terminals, and agent tools in one app."
+      content="Pico is a local web workspace for durable Pi coding agents. Turns survive restarts. Git, files, terminals, and agent tools in one app."
     />
     <meta property="og:title" content="Pico" />
     <meta
       property="og:description"
-      content="A local web workspace for durable Pi coding-agent sessions."
+      content="A local web workspace for durable Pi coding agents."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://pico.aliabbas.net/" />
@@ -48,7 +48,7 @@
           <a href="https://www.npmjs.com/package/@earendil-works/pi-durable"
             >Pi</a
           >
-          session safe. Runs continue after a crash or restart. Git, files,
+          agent safe. Turns continue after a crash or restart. Git, files,
           terminals, and agent tools are all in one app.
         </p>
         <div class="actions">
@@ -67,7 +67,7 @@
           />
           <img
             src="/screenshots/pico-workspace.png"
-            alt="Pico workspace where an agent runs two child sessions, each in its own worktree"
+            alt="Pico workspace where an agent runs two subagents, each in its own worktree"
             width="2898"
             height="1916"
           />
@@ -78,9 +78,9 @@
         <h2>What Pico does</h2>
         <div class="grid">
           <article>
-            <h3>Durable sessions</h3>
+            <h3>Durable agents</h3>
             <p>
-              All sessions live in one SQLite database. Runs continue after a
+              All agents live in one SQLite database. Turns continue after a
               crash or restart. Tools with side effects do not run twice.
             </p>
           </article>
@@ -94,8 +94,8 @@
           <article>
             <h3>Rich agent tools</h3>
             <p>
-              Todo lists, questions, background jobs, terminals, child sessions
-              in Git worktrees, browser automation, web access, and MCP.
+              Todo lists, questions, background jobs, terminals, subagents in
+              Git worktrees, browser automation, web access, and MCP.
             </p>
           </article>
           <article>
@@ -103,14 +103,14 @@
             <p>
               Pick <code>full</code>, <code>builder</code>,
               <code>researcher</code>, <code>reviewer</code>, or
-              <code>read-only</code>, or make your own. Child sessions get a
-              profile from their parent and a bash guard.
+              <code>read-only</code>, or make your own. Subagents get a profile
+              from their parent and a bash guard.
             </p>
           </article>
           <article>
             <h3>Many machines</h3>
             <p>
-              Add other computers over SSH or Tailscale. Their sessions show in
+              Add other computers over SSH or Tailscale. Their agents show in
               the same sidebar and keep running on their own machine.
             </p>
           </article>
@@ -127,8 +127,8 @@
       <section class="demo">
         <h2>See it work</h2>
         <p>
-          One agent starts two child sessions, each in its own Git worktree.
-          When both are done, it merges their branches and runs the tests.
+          One agent starts two subagents, each in its own Git worktree. When
+          both are done, it merges their branches and runs the tests.
         </p>
         <video
           src="/videos/pico-child-sessions-demo.mp4"
@@ -193,9 +193,9 @@ pico-app</code></pre>
         <p>Useful commands:</p>
         <div class="code">
           <pre><code>pico-app status       # is Pico running?
-pico-app stop --wait  # stop after active runs finish
-pico-app import-pi    # import old Pi sessions (stop Pico first)
-pico-app machine add ali@workbox  # show the sessions of another computer
+pico-app stop --wait  # stop after active turns finish
+pico-app import-pi    # import Pi sessions as agents (stop Pico first)
+pico-app machine add ali@workbox  # show the agents of another computer
 pico-app --help</code></pre>
         </div>
         <p>

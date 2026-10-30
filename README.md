@@ -1,12 +1,12 @@
 # Pico
 
 A web workspace for durable [Pi](https://www.npmjs.com/package/@earendil-works/pi-durable)
-coding-agent sessions. One Node server hosts the agent runtime and serves the
+coding agents. One Node server hosts the agent runtime and serves the
 React web app.
 
-![Pico workspace where an agent runs two child sessions, each in its own worktree](apps/pico/public/screenshots/pico-workspace.png)
+![Pico workspace where an agent runs two subagents, each in its own worktree](apps/pico/public/screenshots/pico-workspace.png)
 
-![Pico workspace in light mode with child sessions in the sidebar and the Agent tab](apps/pico/public/screenshots/pico-workspace-alt.png)
+![Pico workspace in light mode with subagents in the sidebar and the Agent tab](apps/pico/public/screenshots/pico-workspace-alt.png)
 
 | Dark mobile browser                                                               | Light mobile browser                                                                   |
 | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -42,14 +42,14 @@ Open `http://127.0.0.1:3141`. Useful commands:
 pnpm start --no-open --port 3141
 pnpm start --data-dir PATH   # default: ~/.pico
 pnpm start status
-pnpm start stop --wait       # let active runs finish first
-pnpm start import-pi         # import old Pi sessions (stop Pico first)
+pnpm start stop --wait       # let active turns finish first
+pnpm start import-pi         # import Pi sessions as agents (stop Pico first)
 ```
 
 ## What it does
 
-- **Durable sessions.** Sessions live in one SQLite database. Runs continue
-  after a crash or restart. Tools with side effects do not run twice.
+- **Durable agents.** Agents and their conversations live in one SQLite
+  database. Turns continue after a crash or restart. Tools with side effects do not run twice.
 - **Workspace.** Git changes and diffs, file browser, syntax highlighting, and
   terminals.
 - **Terminals that survive restarts.** Terminals and background jobs run in a
@@ -60,17 +60,17 @@ pnpm start import-pi         # import old Pi sessions (stop Pico first)
   Pico and the host: `pico-app stop --pty-host` (terminals and jobs end too).
   `pico-app serve --no-pty-host` keeps terminals in the server process.
 - **Agent tools.** Todo lists, questions to the user, background jobs that
-  report their exit, terminals, child sessions in git worktrees, browser
+  report their exit, terminals, subagents in git worktrees, browser
   automation, code mode, web access, and MCP.
 - **Tool profiles.** `full`, `builder`, `researcher`, `reviewer`,
   `read-only`, or your own.
-- **Safe child sessions.** A child gets a tool profile from its parent. It has
-  no `ask_user` or `spawn_session` unless the parent grants them,
-  and its bash refuses `git push` to main, `sudo`, and the commands that the
-  parent lists. Each message from a child is a question, done, or waiting
-  (its turn ended on a job). Questions and done go into
-  the parent's follow-up queue; waiting shows only in the `sessions` list action.
-- **Notifications.** Web Push and ntfy when a run finishes or the agent asks
+- **Safe subagents.** A subagent gets a tool profile from its parent. It has
+  no `ask_user` or `spawn_subagent` unless the parent grants them, and its
+  bash refuses `git push` to main, `sudo`, and the commands that the parent
+  lists. Each message from a subagent is a question, done, or waiting (its
+  turn ended on a job). Questions and done go into the parent's follow-up
+  queue; waiting shows only in the `agents` list action.
+- **Notifications.** Web Push and ntfy when a turn finishes or the agent asks
   a question.
 
 Pi skills, prompt templates, project instructions, and credentials are used.
@@ -89,10 +89,10 @@ Use Tailscale Serve for HTTPS (needed for push notifications).
 
 ## Multiple machines
 
-One Pico can show the sessions of other computers, for example a build
+One Pico can show the agents of other computers, for example a build
 server. Each machine runs its own Pico on its `127.0.0.1`. The Pico that you
 open (the hub) connects to them over SSH and shows them in the sidebar.
-Sessions, terminals, and jobs run on their own machine and continue when the
+Agents, terminals, and jobs run on their own machine and continue when the
 hub goes offline.
 
 ```sh
@@ -114,8 +114,9 @@ Tailscale works: use a MagicDNS name or a `100.x` address as the target,
 with OpenSSH or Tailscale SSH.
 
 Anyone who can open the hub can run commands on all its machines. Keep the
-hub on localhost or your tailnet. Agents on the hub can use the session tools
-with a `machine` argument, for example to start a session on `workbox`.
+hub on localhost or your tailnet. Agents on the hub can use the agent tools
+(`spawn_subagent`, `agents`) with a `machine` argument, for example to start
+a subagent on `workbox`.
 
 ## Development
 
