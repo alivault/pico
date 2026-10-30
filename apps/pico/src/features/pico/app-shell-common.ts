@@ -74,12 +74,12 @@ export function agentScrollKey(agentState: {
 
 export function resolveNewAgentCwd(options: {
   cwdOverride?: string | undefined
-  defaultDirectory?: string | undefined
+  defaultProject?: string | undefined
   currentCwd?: string | undefined
 }) {
   return (
     options.cwdOverride?.trim() ||
-    options.defaultDirectory?.trim() ||
+    options.defaultProject?.trim() ||
     options.currentCwd?.trim() ||
     undefined
   )

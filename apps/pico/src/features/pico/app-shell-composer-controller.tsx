@@ -151,19 +151,19 @@ function localBranchTrackText(branch: GitLocalBranch) {
 }
 
 /**
- * The directories of another machine in the new-agent directory picker.
+ * The projects of another machine in the new-agent project picker.
  * A choice opens that machine and starts the agent there; the prompt
  * draft goes with it.
  */
-function OtherMachineDirectoryGroup({
+function OtherMachineProjectGroup({
   machine,
   onSelect,
 }: {
   machine: MachineInfo
-  onSelect: (directory: string) => void
+  onSelect: (project: string) => void
 }) {
   const online = machine.state === "online"
-  const directories = machine.summary?.directories ?? []
+  const projects = machine.summary?.projects ?? []
   return (
     <DropdownMenuGroup>
       <DropdownMenuSeparator />
@@ -174,16 +174,16 @@ function OtherMachineDirectoryGroup({
           <span className="ml-auto text-xs font-normal">Offline</span>
         )}
       </DropdownMenuLabel>
-      {directories.map((directory) => (
+      {projects.map((project) => (
         <DropdownMenuItem
-          key={directory}
+          key={project}
           disabled={!online}
-          onClick={() => onSelect(directory)}
+          onClick={() => onSelect(project)}
         >
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="truncate">{formatFolderName(directory)}</span>
+            <span className="truncate">{formatFolderName(project)}</span>
             <span className="truncate text-xs text-muted-foreground">
-              {directory}
+              {project}
             </span>
           </div>
         </DropdownMenuItem>
@@ -191,11 +191,11 @@ function OtherMachineDirectoryGroup({
       {online ? (
         <DropdownMenuItem
           onClick={() =>
-            openMachine(machine.id, { action: { type: "add-directory" } })
+            openMachine(machine.id, { action: { type: "add-project" } })
           }
         >
           <FolderPlusIcon className="size-4 shrink-0" aria-hidden="true" />
-          <span>Add directory on {machine.label}…</span>
+          <span>Add project on {machine.label}…</span>
         </DropdownMenuItem>
       ) : null}
     </DropdownMenuGroup>
@@ -209,20 +209,20 @@ type NewAgentComposerBranchCheckoutPayload = {
 
 export function NewAgentComposerSelectors({
   cwd,
-  defaultNewAgentDirectory,
-  directoryOptions,
+  defaultNewAgentProject,
+  projectOptions,
   onCreateAgent,
   onMoveDraftToMachine,
-  onOpenAddDirectoryDialog,
+  onOpenAddProjectDialog,
   viewerContextId,
 }: {
   cwd?: string
-  defaultNewAgentDirectory: string
-  directoryOptions: Array<{ path: string; label: string }>
+  defaultNewAgentProject: string
+  projectOptions: Array<{ path: string; label: string }>
   onCreateAgent: (cwdOverride?: string) => void
   /** Start the agent on another machine, with the prompt draft. */
-  onMoveDraftToMachine: (machineId: string, directory: string) => void
-  onOpenAddDirectoryDialog: () => void
+  onMoveDraftToMachine: (machineId: string, project: string) => void
+  onOpenAddProjectDialog: () => void
   viewerContextId: string
 }) {
   const machineId = useMachineId()
@@ -235,8 +235,8 @@ export function NewAgentComposerSelectors({
   const queryClient = useQueryClient()
   const [createBranchOpen, setCreateBranchOpen] = React.useState(false)
   const [createBranchName, setCreateBranchName] = React.useState("")
-  const selectedDirectory = cwd?.trim() || defaultNewAgentDirectory.trim()
-  const directoryMenuOptions = (() => {
+  const selectedProject = cwd?.trim() || defaultNewAgentProject.trim()
+  const projectMenuOptions = (() => {
     const seen = new Set<string>()
     const options: Array<{ path: string; label: string }> = []
     const pushOption = (path: string, label: string) => {
@@ -246,21 +246,21 @@ export function NewAgentComposerSelectors({
       options.push({ path: normalizedPath, label })
     }
 
-    pushOption(selectedDirectory, "Selected directory")
-    for (const option of directoryOptions) {
+    pushOption(selectedProject, "Selected project")
+    for (const option of projectOptions) {
       pushOption(option.path, option.label)
     }
     return options
   })()
-  const selectedDirectoryLabel =
-    formatFolderName(selectedDirectory) || "Select directory"
+  const selectedProjectLabel =
+    formatFolderName(selectedProject) || "Select project"
   const gitStatusQuery = useQuery({
     ...gitStatusQueryOptions({
       machineId,
-      cwd: selectedDirectory,
+      cwd: selectedProject,
       viewerContextId,
     }),
-    enabled: Boolean(selectedDirectory && viewerContextId),
+    enabled: Boolean(selectedProject && viewerContextId),
     select: (data) => data.gitStatus,
     notifyOnChangeProps: ["data", "isPending", "error"],
   })
@@ -269,10 +269,10 @@ export function NewAgentComposerSelectors({
   const branchQuery = useQuery({
     ...gitBranchesQueryOptions({
       machineId,
-      cwd: selectedDirectory,
+      cwd: selectedProject,
       viewerContextId,
     }),
-    enabled: Boolean(selectedDirectory && viewerContextId && gitStatus),
+    enabled: Boolean(selectedProject && viewerContextId && gitStatus),
     select: (data) => data.localBranches,
     notifyOnChangeProps: ["data", "isPending", "error"],
   })
@@ -287,32 +287,32 @@ export function NewAgentComposerSelectors({
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ cwd: selectedDirectory, ...payload }),
+          body: JSON.stringify({ cwd: selectedProject, ...payload }),
         }
       ),
     onSuccess: (_result, payload) => {
       void queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitStatus(viewerContextId, selectedDirectory),
+        queryKey: picoQueryKeys.gitStatus(viewerContextId, selectedProject),
       })
       void queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitBranches(viewerContextId, selectedDirectory),
+        queryKey: picoQueryKeys.gitBranches(viewerContextId, selectedProject),
       })
       void queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitFiles(viewerContextId, selectedDirectory),
+        queryKey: picoQueryKeys.gitFiles(viewerContextId, selectedProject),
       })
       void queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitCommits(viewerContextId, selectedDirectory),
+        queryKey: picoQueryKeys.gitCommits(viewerContextId, selectedProject),
       })
       void queryClient.invalidateQueries({
         queryKey: picoQueryKeys.projectFileTree(
           viewerContextId,
-          selectedDirectory
+          selectedProject
         ),
       })
       void queryClient.invalidateQueries({
         queryKey: picoQueryKeys.gitFileReviews(
           viewerContextId,
-          selectedDirectory
+          selectedProject
         ),
       })
       setCreateBranchOpen(false)
@@ -348,12 +348,12 @@ export function NewAgentComposerSelectors({
             <Button
               type="button"
               variant="ghost"
-              aria-label="Select new agent directory"
+              aria-label="Select the project of the new agent"
             />
           }
         >
           <FolderIcon className="size-4 shrink-0" aria-hidden="true" />
-          <span className="truncate">{selectedDirectoryLabel}</span>
+          <span className="truncate">{selectedProjectLabel}</span>
           <ChevronDownIcon className="size-5 shrink-0" aria-hidden="true" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-80">
@@ -363,7 +363,7 @@ export function NewAgentComposerSelectors({
                 {thisMachine?.label ?? "This machine"}
               </DropdownMenuLabel>
             ) : null}
-            {directoryMenuOptions.map((option) => (
+            {projectMenuOptions.map((option) => (
               <DropdownMenuItem
                 key={option.path}
                 onClick={() => onCreateAgent(option.path)}
@@ -376,16 +376,16 @@ export function NewAgentComposerSelectors({
                     {formatDisplayPath(option.path)}
                   </span>
                 </div>
-                {option.path === selectedDirectory ? (
+                {option.path === selectedProject ? (
                   <CheckIcon className="ml-2 size-4 shrink-0" />
                 ) : null}
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onOpenAddDirectoryDialog}>
+            <DropdownMenuItem onClick={onOpenAddProjectDialog}>
               <FolderPlusIcon className="size-4 shrink-0" aria-hidden="true" />
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span>Add directory…</span>
+                <span>Add project…</span>
                 <span className="truncate text-xs text-muted-foreground">
                   Search or paste a path for this new agent.
                 </span>
@@ -393,12 +393,10 @@ export function NewAgentComposerSelectors({
             </DropdownMenuItem>
           </DropdownMenuGroup>
           {otherMachines.map((machine) => (
-            <OtherMachineDirectoryGroup
+            <OtherMachineProjectGroup
               key={machine.id}
               machine={machine}
-              onSelect={(directory) =>
-                onMoveDraftToMachine(machine.id, directory)
-              }
+              onSelect={(project) => onMoveDraftToMachine(machine.id, project)}
             />
           ))}
         </DropdownMenuContent>
@@ -480,15 +478,12 @@ export function NewAgentComposerSelectors({
 
       {gitStatus ? (
         <NewAgentWorktreeToggle
-          cwd={selectedDirectory}
+          cwd={selectedProject}
           viewerContextId={viewerContextId}
         />
       ) : null}
 
-      <ProfilePicker
-        cwd={selectedDirectory}
-        viewerContextId={viewerContextId}
-      />
+      <ProfilePicker cwd={selectedProject} viewerContextId={viewerContextId} />
 
       <Dialog
         open={createBranchOpen}
@@ -501,8 +496,8 @@ export function NewAgentComposerSelectors({
           <DialogHeader>
             <DialogTitle>Create branch</DialogTitle>
             <DialogDescription>
-              Create a branch in {formatFolderName(selectedDirectory)} and
-              switch to it for the new agent.
+              Create a branch in {formatFolderName(selectedProject)} and switch
+              to it for the new agent.
             </DialogDescription>
           </DialogHeader>
           <form className="grid gap-4" action={createBranch}>

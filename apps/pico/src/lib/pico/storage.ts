@@ -11,13 +11,17 @@ import {
 export const THEME_STORAGE_KEY = "pico-theme"
 export const THEME_COLOR_MODE_STORAGE_KEY = "pico-theme-color-mode"
 export const APPLIED_THEME_STORAGE_KEY = "pico-applied-theme"
-export const DRAFT_DIRECTORY_STORAGE_KEY = "pico-draft-directory"
-export const SIDEBAR_DIRECTORIES_STORAGE_KEY = "pico-sidebar-directories"
-export const COLLAPSED_DIRECTORIES_STORAGE_KEY = "pico-collapsed-directories"
+// Stored name: do not change.
+export const DRAFT_PROJECT_STORAGE_KEY = "pico-draft-directory"
+// Stored name: do not change.
+export const SIDEBAR_PROJECTS_STORAGE_KEY = "pico-sidebar-directories"
+// Stored name: do not change.
+export const COLLAPSED_PROJECTS_STORAGE_KEY = "pico-collapsed-directories"
 // Stored name: do not change.
 export const PINNED_AGENTS_STORAGE_KEY = "pico-pinned-sessions"
-export const RECENT_DIRECTORIES_STORAGE_KEY = "pico-recent-directories"
-export const RECENT_DIRECTORIES_LIMIT = 8
+// Stored name: do not change.
+export const RECENT_PROJECTS_STORAGE_KEY = "pico-recent-directories"
+export const RECENT_PROJECTS_LIMIT = 8
 // Stored name: do not change.
 export const AGENT_DONE_SOUND_ENABLED_STORAGE_KEY = "pico-session-done-sound"
 // Stored name: do not change.
@@ -147,20 +151,20 @@ function machineSessionStorageSetItem(
   }
 }
 
-export function normalizeStoredDirectoryList(value: unknown) {
+export function normalizeStoredProjectList(value: unknown) {
   if (!Array.isArray(value)) return []
 
-  const nextDirectories: Array<string> = []
+  const nextProjects: Array<string> = []
   const seen = new Set<string>()
 
   for (const entry of value) {
     const normalized = typeof entry === "string" ? entry.trim() : ""
     if (!normalized || seen.has(normalized)) continue
     seen.add(normalized)
-    nextDirectories.push(normalized)
+    nextProjects.push(normalized)
   }
 
-  return nextDirectories
+  return nextProjects
 }
 
 export function agentListEntryKey(agentLike: AgentEntryIdentity = {}) {
@@ -382,22 +386,22 @@ export function rememberStoredPromptDraft(
   )
 }
 
-export function readStoredSidebarDirectories(machineId: string) {
+export function readStoredSidebarProjects(machineId: string) {
   try {
     const raw = machineLocalStorageGetItem(
       machineId,
-      SIDEBAR_DIRECTORIES_STORAGE_KEY
+      SIDEBAR_PROJECTS_STORAGE_KEY
     )
     if (raw == null) {
-      return { directories: [], hasStoredValue: false }
+      return { projects: [], hasStoredValue: false }
     }
 
     return {
-      directories: normalizeStoredDirectoryList(JSON.parse(raw)),
+      projects: normalizeStoredProjectList(JSON.parse(raw)),
       hasStoredValue: true,
     }
   } catch {
-    return { directories: [], hasStoredValue: false }
+    return { projects: [], hasStoredValue: false }
   }
 }
 
@@ -411,9 +415,9 @@ export function readStoredPinnedAgentKeys(machineId: string) {
   }
 }
 
-export function readStoredCollapsedDirectories(
+export function readStoredCollapsedProjects(
   machineId: string,
-  key = COLLAPSED_DIRECTORIES_STORAGE_KEY
+  key = COLLAPSED_PROJECTS_STORAGE_KEY
 ) {
   try {
     const raw = machineLocalStorageGetItem(machineId, key)
@@ -433,20 +437,20 @@ export function readStoredCollapsedDirectories(
   }
 }
 
-export function readStoredDraftDirectory(machineId: string) {
+export function readStoredDraftProject(machineId: string) {
   return (
-    machineLocalStorageGetItem(machineId, DRAFT_DIRECTORY_STORAGE_KEY) ?? ""
+    machineLocalStorageGetItem(machineId, DRAFT_PROJECT_STORAGE_KEY) ?? ""
   ).trim()
 }
 
-export function readStoredRecentDirectories(machineId: string) {
+export function readStoredRecentProjects(machineId: string) {
   try {
     const raw = machineLocalStorageGetItem(
       machineId,
-      RECENT_DIRECTORIES_STORAGE_KEY
+      RECENT_PROJECTS_STORAGE_KEY
     )
     if (!raw) return []
-    return normalizeStoredDirectoryList(JSON.parse(raw))
+    return normalizeStoredProjectList(JSON.parse(raw))
   } catch {
     return []
   }

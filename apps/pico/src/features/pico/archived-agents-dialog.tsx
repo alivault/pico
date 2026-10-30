@@ -50,16 +50,16 @@ function formatArchivedAt(value?: string) {
   return Number.isNaN(date.getTime()) ? "" : archivedDateFormat.format(date)
 }
 
-function shortDirectory(directory: string) {
-  const parts = directory.split("/").filter(Boolean)
-  return parts.length > 2 ? `…/${parts.slice(-2).join("/")}` : directory
+function shortProject(project: string) {
+  const parts = project.split("/").filter(Boolean)
+  return parts.length > 2 ? `…/${parts.slice(-2).join("/")}` : project
 }
 
 type ArchivedAgentsDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   viewerContextId: string
-  /** Called after a restore, so the sidebar can show the directory. */
+  /** Called after a restore, so the sidebar can show the project. */
   onRestored?: (result: RestoreAgentData) => void
 }
 
@@ -111,9 +111,9 @@ export function ArchivedAgentsDialog({
           queryKey: picoQueryKeys.archivedAgents(viewerContextId),
         }),
         queryClient.invalidateQueries({
-          queryKey: picoQueryKeys.directoryAgentsIndex(
+          queryKey: picoQueryKeys.projectAgentsIndex(
             viewerContextId,
-            result.directory
+            result.project
           ),
         }),
       ])
@@ -136,7 +136,7 @@ export function ArchivedAgentsDialog({
   const query = filter.trim().toLowerCase()
   const visibleAgents = query
     ? agents.filter((agent) =>
-        `${agent.title}\n${agent.directory}`.toLowerCase().includes(query)
+        `${agent.title}\n${agent.project}`.toLowerCase().includes(query)
       )
     : agents
   const restoringPath = restoreMutation.isPending
@@ -187,9 +187,9 @@ export function ArchivedAgentsDialog({
                 </div>
                 <div
                   className="truncate text-xs text-muted-foreground"
-                  title={agent.directory}
+                  title={agent.project}
                 >
-                  {shortDirectory(agent.directory)}
+                  {shortProject(agent.project)}
                   {archivedAt ? ` · Archived ${archivedAt}` : ""}
                 </div>
               </div>

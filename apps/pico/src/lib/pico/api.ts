@@ -1,7 +1,7 @@
 import type {
   ConversationItem,
   ConversationDeltaEvent,
-  DirectoryState,
+  ProjectState,
   ModelOption,
   PromptImage,
   AgentState,
@@ -285,32 +285,32 @@ export type GitCommitMessageResponse =
     }
   | ApiErrorResponse
 
-export type DirectoryAgentsIndexSnapshot = {
-  directory: string
+export type ProjectAgentsIndexSnapshot = {
+  project: string
   totalCount: number
   revision: string
   agents: Array<AgentListEntry>
 }
 
-export type DirectoryAgentsIndexesResponse =
+export type ProjectAgentsIndexesResponse =
   | {
       ok: true
-      directories: Array<string>
-      directoryIndexes: Record<string, DirectoryAgentsIndexSnapshot>
+      projects: Array<string>
+      projectIndexes: Record<string, ProjectAgentsIndexSnapshot>
     }
   | ApiErrorResponse
 
-export type DeleteOldDirectoryAgentsRequest = {
-  directory: string
+export type DeleteOldProjectAgentsRequest = {
+  project: string
   olderThanMs: number
   dryRun?: boolean
   includeActiveAgent?: boolean
 }
 
-export type DeleteOldDirectoryAgentsResponse =
+export type DeleteOldProjectAgentsResponse =
   | {
       ok: true
-      directory: string
+      project: string
       cutoff: string
       dryRun: boolean
       deletedAgentIds: Array<string>
@@ -347,9 +347,9 @@ export type AgentsEvent = AgentsPayload & {
   activeAgentPath?: string
   activeAgentId?: string
   activeAgentKey?: string
-  directories?: Array<string>
-  directoryStates?: Array<DirectoryState>
-  directoryIndexes?: Record<string, DirectoryAgentsIndexSnapshot>
+  projects?: Array<string>
+  projectStates?: Array<ProjectState>
+  projectIndexes?: Record<string, ProjectAgentsIndexSnapshot>
 }
 
 export type AgentStatusEvent = {
@@ -621,8 +621,8 @@ export type DeleteAgentsResponse =
   | ApiErrorResponse
 
 export type ArchivedAgentEntry = AgentListEntry & {
-  /** The sidebar directory the agent returns to on restore. */
-  directory: string
+  /** The sidebar project the agent returns to on restore. */
+  project: string
   archivedAt?: string
 }
 
@@ -637,7 +637,7 @@ export type RestoreAgentResponse =
   | {
       ok: true
       path: string
-      directory: string
+      project: string
     }
   | ApiErrorResponse
 
@@ -758,9 +758,9 @@ export type AgentExtensionsEvent = {
 
 /** The sidebar layout that all devices share. */
 export type SidebarStateSnapshot = {
-  directories: Array<string>
+  projects: Array<string>
   pinnedAgentKeys: Array<string>
-  collapsedDirectories: Record<string, boolean>
+  collapsedProjects: Record<string, boolean>
   revision: number
   initialized: boolean
 }

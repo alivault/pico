@@ -77,12 +77,12 @@ import { Kbd } from "@/components/ui/kbd"
 import { useShowAgentPreviews } from "@/features/pico/sidebar-display-settings"
 import { Spinner } from "@/components/ui/spinner"
 import {
-  COLLAPSED_DIRECTORIES_STORAGE_KEY,
-  DIRECTORY_AGENT_LOAD_MORE_COUNT,
-  INITIAL_DIRECTORY_AGENT_RENDER_COUNT,
+  COLLAPSED_PROJECTS_STORAGE_KEY,
+  PROJECT_AGENT_LOAD_MORE_COUNT,
+  INITIAL_PROJECT_AGENT_RENDER_COUNT,
   PINNED_AGENTS_STORAGE_KEY,
-  SIDEBAR_DIRECTORIES_STORAGE_KEY,
-  readStoredCollapsedDirectories,
+  SIDEBAR_PROJECTS_STORAGE_KEY,
+  readStoredCollapsedProjects,
   readStoredPinnedAgentKeys,
   machineLocalStorageSetItem,
   agentListEntryKey,
@@ -124,7 +124,7 @@ import { useMachineId } from "@/lib/pico/machine-context"
 import { useSidebarSlot } from "@/features/pico/sidebar-slots"
 import { sortSidebarAgents } from "@/features/pico/agent-order"
 import {
-  filterDirectoryAgentsByStatus,
+  filterProjectAgentsByStatus,
   agentMatchesStatusFilter,
   toggleStatusFilter,
   type AgentStatusFilter,
@@ -163,7 +163,7 @@ function useDelayedTrue(value: boolean, delayMs: number) {
   return delayedValue
 }
 
-function DirectoryPathLabel({ path }: { path: string }) {
+function ProjectPathLabel({ path }: { path: string }) {
   const folderName = formatFolderName(path) || path
 
   return (
@@ -178,7 +178,7 @@ type AgentClickModifiers = {
   shiftKey: boolean
 }
 
-const EMPTY_DIRECTORY_AGENT_KEYS: Array<string> = []
+const EMPTY_PROJECT_AGENT_KEYS: Array<string> = []
 
 // One shared set of window listeners tracks whether Option (Alt) is held.
 let altKeyHeldSnapshot = false
@@ -225,7 +225,8 @@ function useAltKeyHeld() {
 }
 // Stored name: do not change.
 const PINNED_AGENT_GROUP_COLLAPSE_KEY = "__pico_pinned_sessions__"
-const DIRECTORIES_AGENT_GROUP_COLLAPSE_KEY = "__pico_directories__"
+// Stored name: do not change.
+const PROJECTS_AGENT_GROUP_COLLAPSE_KEY = "__pico_directories__"
 
 function isMacPlatform() {
   if (typeof window === "undefined") return false
@@ -360,42 +361,42 @@ function SidebarAgentTime({
   )
 }
 
-function directoryOrderEqual(left: Array<string>, right: Array<string>) {
+function projectOrderEqual(left: Array<string>, right: Array<string>) {
   return (
     left.length === right.length &&
-    left.every((directory, index) => directory === right[index])
+    left.every((project, index) => project === right[index])
   )
 }
 
-type CollapsedDirectoryState = Record<string, boolean>
+type CollapsedProjectState = Record<string, boolean>
 
-type CollapsedDirectoryStore = PicoStore<CollapsedDirectoryState> & {
+type CollapsedProjectStore = PicoStore<CollapsedProjectState> & {
   loadStored: () => void
-  toggle: (directory: string) => void
-  setCollapsed: (directory: string, collapsed: boolean) => void
-  setAll: (directories: Array<string>, collapsed: boolean) => void
-  remove: (directory: string) => void
+  toggle: (project: string) => void
+  setCollapsed: (project: string, collapsed: boolean) => void
+  setAll: (projects: Array<string>, collapsed: boolean) => void
+  remove: (project: string) => void
 }
 
-function sameCollapsedDirectoryState(
-  left: CollapsedDirectoryState,
-  right: CollapsedDirectoryState
+function sameCollapsedProjectState(
+  left: CollapsedProjectState,
+  right: CollapsedProjectState
 ) {
   const leftKeys = Object.keys(left).sort()
   const rightKeys = Object.keys(right).sort()
-  if (!directoryOrderEqual(leftKeys, rightKeys)) return false
+  if (!projectOrderEqual(leftKeys, rightKeys)) return false
 
   return leftKeys.every((key) => Boolean(left[key]) === Boolean(right[key]))
 }
 
-function createCollapsedDirectoryStore(
+function createCollapsedProjectStore(
   machineId: string,
-  storageKey = COLLAPSED_DIRECTORIES_STORAGE_KEY
-): CollapsedDirectoryStore {
-  const store = createPicoStore<CollapsedDirectoryState>(
+  storageKey = COLLAPSED_PROJECTS_STORAGE_KEY
+): CollapsedProjectStore {
+  const store = createPicoStore<CollapsedProjectState>(
     {},
-    sameCollapsedDirectoryState
-  ) as CollapsedDirectoryStore
+    sameCollapsedProjectState
+  ) as CollapsedProjectStore
 
   const persist = () => {
     machineLocalStorageSetItem(
@@ -407,41 +408,38 @@ function createCollapsedDirectoryStore(
 
   Object.assign(store, {
     loadStored() {
-      setStoreState(
-        store,
-        readStoredCollapsedDirectories(machineId, storageKey)
-      )
+      setStoreState(store, readStoredCollapsedProjects(machineId, storageKey))
     },
-    toggle(directory) {
-      store.setCollapsed(directory, !store.state[directory])
+    toggle(project) {
+      store.setCollapsed(project, !store.state[project])
     },
-    setCollapsed(directory, collapsed) {
+    setCollapsed(project, collapsed) {
       setStoreState(store, (current) => {
-        const currentlyCollapsed = Boolean(current[directory])
+        const currentlyCollapsed = Boolean(current[project])
         if (currentlyCollapsed === collapsed) return current
         const next = { ...current }
         if (collapsed) {
-          next[directory] = true
+          next[project] = true
         } else {
-          delete next[directory]
+          delete next[project]
         }
         return next
       })
       persist()
     },
-    setAll(directories, collapsed) {
+    setAll(projects, collapsed) {
       setStoreState(store, (current) => {
         let changed = false
         const next = { ...current }
 
-        for (const directory of directories) {
+        for (const project of projects) {
           if (collapsed) {
-            if (next[directory]) continue
-            next[directory] = true
+            if (next[project]) continue
+            next[project] = true
             changed = true
           } else {
-            if (!next[directory]) continue
-            delete next[directory]
+            if (!next[project]) continue
+            delete next[project]
             changed = true
           }
         }
@@ -450,38 +448,38 @@ function createCollapsedDirectoryStore(
       })
       persist()
     },
-    remove(directory) {
+    remove(project) {
       setStoreState(store, (current) => {
-        if (!current[directory]) return current
+        if (!current[project]) return current
         const next = { ...current }
-        delete next[directory]
+        delete next[project]
         return next
       })
       persist()
     },
   } satisfies Omit<
-    CollapsedDirectoryStore,
-    keyof PicoStore<CollapsedDirectoryState>
+    CollapsedProjectStore,
+    keyof PicoStore<CollapsedProjectState>
   >)
 
   return store
 }
 
-function useDirectoryCollapsed(
-  store: CollapsedDirectoryStore,
-  directory: string,
+function useProjectCollapsed(
+  store: CollapsedProjectStore,
+  project: string,
   searchActive: boolean
 ) {
-  return useSelector(store, (collapsedDirectories) =>
-    searchActive ? false : Boolean(collapsedDirectories[directory])
+  return useSelector(store, (collapsedProjects) =>
+    searchActive ? false : Boolean(collapsedProjects[project])
   )
 }
 
 type AppSidebarProps = {
   agentSearch: string
   onOpenAgentsDialog: () => void
-  visibleDirectories: Array<string>
-  directoryAgentsStore: DirectoryAgentsStore
+  visibleProjects: Array<string>
+  projectAgentsStore: ProjectAgentsStore
   matchingAgentCount: number
   selectedAgentKeys: Array<string>
   activeAgentId?: string
@@ -490,23 +488,23 @@ type AppSidebarProps = {
   emptyStateText: string
   /** The agents show only one state (a count in the machine heading). */
   statusFilterActive?: boolean
-  onOpenAddDirectoryDialog: () => void
+  onOpenAddProjectDialog: () => void
   onAgentClick?: (entry: AgentListEntry, modifiers: AgentClickModifiers) => void
   onRenameAgent?: (entry: AgentListEntry) => void
   onDeleteAgent?: (entry: AgentListEntry) => void
   onSetAgentUnread?: (entry: AgentListEntry, unread: boolean) => void
-  onMoveAgent?: (entry: AgentListEntry, directory: string) => void
-  onMoveAgentAnyDirectory?: (entry: AgentListEntry) => void
+  onMoveAgent?: (entry: AgentListEntry, project: string) => void
+  onMoveAgentAnyProject?: (entry: AgentListEntry) => void
   onTogglePinnedAgent?: (entry: AgentListEntry) => void
-  onCreateAgentInDirectory?: (directory: string) => void
-  onDeleteOldAgentsInDirectory?: (directory: string) => void
+  onCreateAgentInProject?: (project: string) => void
+  onDeleteOldAgentsInProject?: (project: string) => void
   onMarkAgentsRead?: (entries: Array<AgentListEntry>) => void
-  onRemoveDirectory?: (directory: string) => void
-  onReorderDirectories?: (nextDirectories: Array<string>) => void
+  onRemoveProject?: (project: string) => void
+  onReorderProjects?: (nextProjects: Array<string>) => void
   onOpenArchivedAgents?: () => void
 }
 
-type SortableDirectoryGroupProps = {
+type SortableProjectGroupProps = {
   id: string
   disabled: boolean
   children: (args: {
@@ -516,11 +514,11 @@ type SortableDirectoryGroupProps = {
   }) => React.ReactNode
 }
 
-function SortableDirectoryGroup({
+function SortableProjectGroup({
   id,
   disabled,
   children,
-}: SortableDirectoryGroupProps) {
+}: SortableProjectGroupProps) {
   const {
     attributes,
     listeners,
@@ -530,7 +528,7 @@ function SortableDirectoryGroup({
     isDragging,
   } = useSortable({
     id,
-    data: { type: "directory", directory: id },
+    data: { type: "project", project: id },
   })
 
   return (
@@ -650,9 +648,9 @@ function useSidebarAgentActive(
 
 type SidebarAgentItemProps = {
   entryKey: string
-  /** The row is in a directory or the pinned group, under its line. */
-  inDirectory?: boolean
-  directoryAgentsStore: DirectoryAgentsStore
+  /** The row is in a project or the pinned group, under its line. */
+  inProject?: boolean
+  projectAgentsStore: ProjectAgentsStore
   activeAgentStore: ActiveSidebarAgentStore
   selectedAgentKeyStore: SelectedAgentKeyStore
   isPinned: boolean
@@ -660,44 +658,44 @@ type SidebarAgentItemProps = {
   overlay: boolean
   /** False for an agent of another machine: it cannot move here. */
   agentDraggable?: boolean
-  moveTargetDirectories: Array<string>
+  moveTargetProjects: Array<string>
   setOpenMobile: (open: boolean) => void
   onAgentClick?: (entry: AgentListEntry, modifiers: AgentClickModifiers) => void
   onRenameAgent?: (entry: AgentListEntry) => void
   onDeleteAgent?: (entry: AgentListEntry) => void
   onSetAgentUnread?: (entry: AgentListEntry, unread: boolean) => void
-  onMoveAgent?: (entry: AgentListEntry, directory: string) => void
-  onMoveAgentAnyDirectory?: (entry: AgentListEntry) => void
+  onMoveAgent?: (entry: AgentListEntry, project: string) => void
+  onMoveAgentAnyProject?: (entry: AgentListEntry) => void
   onTogglePinnedAgent?: (entry: AgentListEntry) => void
 }
 
 function SidebarAgentItem({
   entryKey,
-  inDirectory = false,
-  directoryAgentsStore,
+  inProject = false,
+  projectAgentsStore,
   activeAgentStore,
   selectedAgentKeyStore,
   isPinned,
   isMobile,
   overlay,
   agentDraggable = true,
-  moveTargetDirectories,
+  moveTargetProjects,
   setOpenMobile,
   onAgentClick,
   onRenameAgent,
   onDeleteAgent,
   onSetAgentUnread,
   onMoveAgent,
-  onMoveAgentAnyDirectory,
+  onMoveAgentAnyProject,
   onTogglePinnedAgent,
 }: SidebarAgentItemProps) {
-  const entry = useDirectoryAgentEntry(directoryAgentsStore, entryKey)
+  const entry = useProjectAgentEntry(projectAgentsStore, entryKey)
   const subagentDepth = useSelector(
-    directoryAgentsStore,
+    projectAgentsStore,
     (state) => state.depthByKey.get(entryKey) ?? 0
   )
-  // An agent in a directory is one level in, under the directory's line.
-  const nestingDepth = (inDirectory ? 1 : 0) + subagentDepth
+  // An agent in a project is one level in, under the project's line.
+  const nestingDepth = (inProject ? 1 : 0) + subagentDepth
   const isSelected = useSidebarAgentSelected(selectedAgentKeyStore, entryKey)
   const isActive = useSidebarAgentActive(activeAgentStore, entryKey, entry?.id)
   const showAgentPreviews = useShowAgentPreviews()
@@ -709,7 +707,7 @@ function SidebarAgentItem({
       type: "agent",
       entry,
       entryKey,
-      sourceDirectory: entry?.cwd || "",
+      sourceProject: entry?.cwd || "",
     },
   })
   const rowRef = React.useRef<HTMLDivElement | null>(null)
@@ -734,7 +732,7 @@ function SidebarAgentItem({
   const lastMessagePreview = showAgentPreviews
     ? entry.lastMessagePreview?.trim() || ""
     : ""
-  const pinnedDirectoryLabel = isPinned
+  const pinnedProjectLabel = isPinned
     ? formatFolderName(entry.cwd?.trim() || entry.path?.trim() || "")
     : ""
   const exactTimestamp =
@@ -743,14 +741,13 @@ function SidebarAgentItem({
   const isOptimisticAgent = Boolean(
     entry.optimistic || (entry.id?.startsWith("optimistic:") && !entry.path)
   )
-  const availableMoveTargetDirectories = moveTargetDirectories.filter(
-    (directory) => directory && directory !== entry.cwd
+  const availableMoveTargetProjects = moveTargetProjects.filter(
+    (project) => project && project !== entry.cwd
   )
-  const canMoveAnyDirectory = Boolean(entry.path && onMoveAgentAnyDirectory)
+  const canMoveAnyProject = Boolean(entry.path && onMoveAgentAnyProject)
   const hasMoveTargets =
-    Boolean(entry.path && onMoveAgent) &&
-    availableMoveTargetDirectories.length > 0
-  const hasMoveActions = hasMoveTargets || canMoveAnyDirectory
+    Boolean(entry.path && onMoveAgent) && availableMoveTargetProjects.length > 0
+  const hasMoveActions = hasMoveTargets || canMoveAnyProject
   const hasAgentActions =
     Boolean(
       (!isOptimisticAgent && onTogglePinnedAgent) ||
@@ -863,10 +860,10 @@ function SidebarAgentItem({
               {lastMessagePreview}
             </span>
           ) : null}
-          {pinnedDirectoryLabel ? (
+          {pinnedProjectLabel ? (
             <span className="flex min-w-0 items-center gap-1 text-[11px] font-normal text-sidebar-foreground/50">
               <FolderIcon className="size-3 shrink-0" aria-label="Folder" />
-              <span className="truncate">{pinnedDirectoryLabel}</span>
+              <span className="truncate">{pinnedProjectLabel}</span>
             </span>
           ) : null}
         </span>
@@ -946,21 +943,21 @@ function SidebarAgentItem({
               <ContextMenuSub>
                 <ContextMenuSubTrigger>Move to…</ContextMenuSubTrigger>
                 <ContextMenuSubContent className="w-72">
-                  {availableMoveTargetDirectories.map((directory) => (
+                  {availableMoveTargetProjects.map((project) => (
                     <ContextMenuItem
-                      key={directory}
-                      onClick={() => onMoveAgent?.(entry, directory)}
+                      key={project}
+                      onClick={() => onMoveAgent?.(entry, project)}
                     >
                       <span className="truncate">
-                        {formatDisplayPath(directory)}
+                        {formatDisplayPath(project)}
                       </span>
                     </ContextMenuItem>
                   ))}
-                  {canMoveAnyDirectory ? (
+                  {canMoveAnyProject ? (
                     <ContextMenuItem
-                      onClick={() => onMoveAgentAnyDirectory?.(entry)}
+                      onClick={() => onMoveAgentAnyProject?.(entry)}
                     >
-                      Other directory…
+                      Other project…
                     </ContextMenuItem>
                   ) : null}
                 </ContextMenuSubContent>
@@ -988,27 +985,27 @@ function SidebarAgentItem({
   )
 }
 
-type DirectoryAgentsSnapshot = {
+type ProjectAgentsSnapshot = {
   agentKeys: Array<string>
   isLoadingAgents: boolean
 }
 
-type DirectoryAgentsState = {
-  agentKeysByDirectory: Record<string, Array<string>>
+type ProjectAgentsState = {
+  agentKeysByProject: Record<string, Array<string>>
   entriesByKey: Map<string, AgentListEntry>
   /** Nesting depth per subagent; see `buildAgentDepths`. */
   depthByKey: Map<string, number>
-  loadingByDirectory: Record<string, boolean>
+  loadingByProject: Record<string, boolean>
 }
 
-export type DirectoryAgentsStore = PicoStore<DirectoryAgentsState> & {
+export type ProjectAgentsStore = PicoStore<ProjectAgentsState> & {
   setData: (
-    agentsByDirectory: Record<string, Array<AgentListEntry>>,
-    loadingByDirectory: Record<string, boolean>
+    agentsByProject: Record<string, Array<AgentListEntry>>,
+    loadingByProject: Record<string, boolean>
   ) => void
 }
 
-function sameDirectoryAgentEntry(
+function sameProjectAgentEntry(
   left: AgentListEntry | undefined,
   right: AgentListEntry | undefined
 ) {
@@ -1038,12 +1035,12 @@ function sameDirectoryAgentEntry(
   )
 }
 
-function buildDirectoryAgentEntryMap(
-  agentsByDirectory: Record<string, Array<AgentListEntry>>
+function buildProjectAgentEntryMap(
+  agentsByProject: Record<string, Array<AgentListEntry>>
 ) {
   const entriesByKey = new Map<string, AgentListEntry>()
 
-  for (const agents of Object.values(agentsByDirectory)) {
+  for (const agents of Object.values(agentsByProject)) {
     for (const entry of agents) {
       const entryKey = agentListEntryKey(entry)
       if (!entryKey || entriesByKey.has(entryKey)) continue
@@ -1091,11 +1088,11 @@ const MAX_AGENT_NESTING_DEPTH = 4
  * agents have no entry.
  */
 function buildAgentDepths(
-  agentsByDirectory: Record<string, Array<AgentListEntry>>
+  agentsByProject: Record<string, Array<AgentListEntry>>
 ) {
   const depthByKey = new Map<string, number>()
 
-  for (const agents of Object.values(agentsByDirectory)) {
+  for (const agents of Object.values(agentsByProject)) {
     const ids = new Set(agents.flatMap((entry) => (entry.id ? [entry.id] : [])))
     const byId = new Map<string, AgentListEntry>()
     for (const entry of agents) {
@@ -1128,7 +1125,7 @@ const AGENT_STATUS_ICON_CLASS =
 
 /**
  * CSS variables for an agent row at a nesting depth (1 for an agent in a
- * directory, more for subagents). The row padding, status icon, and
+ * project, more for subagents). The row padding, status icon, and
  * indented highlight read them.
  *
  *   --agent-slot-left        x of the status slot: one gap after the
@@ -1150,7 +1147,7 @@ function agentTreeStyle(depth: number) {
 }
 
 /**
- * x of the line at a level: level 0 is under the directory icon, level 1
+ * x of the line at a level: level 0 is under the project icon, level 1
  * under the status icon of a top-level agent, and so on.
  */
 function agentTreeLineLeft(level: number) {
@@ -1168,13 +1165,13 @@ function SidebarTreeLine({ level }: { level: number }) {
   )
 }
 
-function buildDirectoryAgentKeys(
-  agentsByDirectory: Record<string, Array<AgentListEntry>>
+function buildProjectAgentKeys(
+  agentsByProject: Record<string, Array<AgentListEntry>>
 ) {
-  const agentKeysByDirectory: Record<string, Array<string>> = {}
+  const agentKeysByProject: Record<string, Array<string>> = {}
 
-  for (const [directory, agents] of Object.entries(agentsByDirectory)) {
-    agentKeysByDirectory[directory] = nestSubagents(
+  for (const [project, agents] of Object.entries(agentsByProject)) {
+    agentKeysByProject[project] = nestSubagents(
       sortSidebarAgents(agents)
     ).flatMap((entry) => {
       const key = agentListEntryKey(entry)
@@ -1182,38 +1179,38 @@ function buildDirectoryAgentKeys(
     })
   }
 
-  return agentKeysByDirectory
+  return agentKeysByProject
 }
 
-function sameDirectoryAgentsSnapshot(
-  left: DirectoryAgentsSnapshot,
-  right: DirectoryAgentsSnapshot
+function sameProjectAgentsSnapshot(
+  left: ProjectAgentsSnapshot,
+  right: ProjectAgentsSnapshot
 ) {
   return (
     left.isLoadingAgents === right.isLoadingAgents &&
-    directoryOrderEqual(left.agentKeys, right.agentKeys)
+    projectOrderEqual(left.agentKeys, right.agentKeys)
   )
 }
 
-function sameDirectoryAgentsState(
-  left: DirectoryAgentsState,
-  right: DirectoryAgentsState
+function sameProjectAgentsState(
+  left: ProjectAgentsState,
+  right: ProjectAgentsState
 ) {
-  const directories = new Set([
-    ...Object.keys(left.agentKeysByDirectory),
-    ...Object.keys(left.loadingByDirectory),
-    ...Object.keys(right.agentKeysByDirectory),
-    ...Object.keys(right.loadingByDirectory),
+  const projects = new Set([
+    ...Object.keys(left.agentKeysByProject),
+    ...Object.keys(left.loadingByProject),
+    ...Object.keys(right.agentKeysByProject),
+    ...Object.keys(right.loadingByProject),
   ])
 
-  for (const directory of directories) {
+  for (const project of projects) {
     if (
-      !directoryOrderEqual(
-        left.agentKeysByDirectory[directory] ?? EMPTY_DIRECTORY_AGENT_KEYS,
-        right.agentKeysByDirectory[directory] ?? EMPTY_DIRECTORY_AGENT_KEYS
+      !projectOrderEqual(
+        left.agentKeysByProject[project] ?? EMPTY_PROJECT_AGENT_KEYS,
+        right.agentKeysByProject[project] ?? EMPTY_PROJECT_AGENT_KEYS
       ) ||
-      Boolean(left.loadingByDirectory[directory]) !==
-        Boolean(right.loadingByDirectory[directory])
+      Boolean(left.loadingByProject[project]) !==
+        Boolean(right.loadingByProject[project])
     ) {
       return false
     }
@@ -1226,7 +1223,7 @@ function sameDirectoryAgentsState(
 
   for (const entryKey of entryKeys) {
     if (
-      !sameDirectoryAgentEntry(
+      !sameProjectAgentEntry(
         left.entriesByKey.get(entryKey),
         right.entriesByKey.get(entryKey)
       )
@@ -1238,60 +1235,59 @@ function sameDirectoryAgentsState(
   return true
 }
 
-export function createDirectoryAgentsStore(
-  agentsByDirectory: Record<string, Array<AgentListEntry>>,
-  loadingByDirectory: Record<string, boolean>
-): DirectoryAgentsStore {
-  const store = createPicoStore<DirectoryAgentsState>(
+export function createProjectAgentsStore(
+  agentsByProject: Record<string, Array<AgentListEntry>>,
+  loadingByProject: Record<string, boolean>
+): ProjectAgentsStore {
+  const store = createPicoStore<ProjectAgentsState>(
     {
-      agentKeysByDirectory: buildDirectoryAgentKeys(agentsByDirectory),
-      entriesByKey: buildDirectoryAgentEntryMap(agentsByDirectory),
-      depthByKey: buildAgentDepths(agentsByDirectory),
-      loadingByDirectory,
+      agentKeysByProject: buildProjectAgentKeys(agentsByProject),
+      entriesByKey: buildProjectAgentEntryMap(agentsByProject),
+      depthByKey: buildAgentDepths(agentsByProject),
+      loadingByProject,
     },
-    sameDirectoryAgentsState
-  ) as DirectoryAgentsStore
+    sameProjectAgentsState
+  ) as ProjectAgentsStore
 
   Object.assign(store, {
-    setData(nextAgentsByDirectory, nextLoadingByDirectory) {
+    setData(nextAgentsByProject, nextLoadingByProject) {
       setStoreState(store, {
-        agentKeysByDirectory: buildDirectoryAgentKeys(nextAgentsByDirectory),
-        entriesByKey: buildDirectoryAgentEntryMap(nextAgentsByDirectory),
-        depthByKey: buildAgentDepths(nextAgentsByDirectory),
-        loadingByDirectory: nextLoadingByDirectory,
+        agentKeysByProject: buildProjectAgentKeys(nextAgentsByProject),
+        entriesByKey: buildProjectAgentEntryMap(nextAgentsByProject),
+        depthByKey: buildAgentDepths(nextAgentsByProject),
+        loadingByProject: nextLoadingByProject,
       })
     },
-  } satisfies Omit<DirectoryAgentsStore, keyof PicoStore<DirectoryAgentsState>>)
+  } satisfies Omit<ProjectAgentsStore, keyof PicoStore<ProjectAgentsState>>)
 
   return store
 }
 
-function useDirectoryAgents(store: DirectoryAgentsStore, directory: string) {
+function useProjectAgents(store: ProjectAgentsStore, project: string) {
   return useSelector(
     store,
     (state) => ({
-      agentKeys:
-        state.agentKeysByDirectory[directory] ?? EMPTY_DIRECTORY_AGENT_KEYS,
-      isLoadingAgents: Boolean(state.loadingByDirectory[directory]),
+      agentKeys: state.agentKeysByProject[project] ?? EMPTY_PROJECT_AGENT_KEYS,
+      isLoadingAgents: Boolean(state.loadingByProject[project]),
     }),
-    { compare: sameDirectoryAgentsSnapshot }
+    { compare: sameProjectAgentsSnapshot }
   )
 }
 
-function useDirectoryAgentEntry(store: DirectoryAgentsStore, entryKey: string) {
+function useProjectAgentEntry(store: ProjectAgentsStore, entryKey: string) {
   return useSelector(store, (state) => state.entriesByKey.get(entryKey), {
-    compare: sameDirectoryAgentEntry,
+    compare: sameProjectAgentEntry,
   })
 }
 
-type DirectoryAgentGroupProps = {
-  directory: string
-  directoryAgentsStore: DirectoryAgentsStore
-  collapsedDirectoryStore: CollapsedDirectoryStore
+type ProjectAgentGroupProps = {
+  project: string
+  projectAgentsStore: ProjectAgentsStore
+  collapsedProjectStore: CollapsedProjectStore
   /** The groups that an Option-click expands or collapses together. */
   collapseAllKeys: Array<string>
   searchActive: boolean
-  moveTargetDirectories: Array<string>
+  moveTargetProjects: Array<string>
   activeAgentStore: ActiveSidebarAgentStore
   selectedAgentKeyStore: SelectedAgentKeyStore
   pinnedAgentKeys: Array<string>
@@ -1308,37 +1304,37 @@ type DirectoryAgentGroupProps = {
   onRenameAgent?: (entry: AgentListEntry) => void
   onDeleteAgent?: (entry: AgentListEntry) => void
   onSetAgentUnread?: (entry: AgentListEntry, unread: boolean) => void
-  onMoveAgent?: (entry: AgentListEntry, directory: string) => void
-  onMoveAgentAnyDirectory?: (entry: AgentListEntry) => void
+  onMoveAgent?: (entry: AgentListEntry, project: string) => void
+  onMoveAgentAnyProject?: (entry: AgentListEntry) => void
   onTogglePinnedAgent?: (entry: AgentListEntry) => void
-  onCreateAgentInDirectory?: (directory: string) => void
-  onDeleteOldAgentsInDirectory?: (directory: string) => void
+  onCreateAgentInProject?: (project: string) => void
+  onDeleteOldAgentsInProject?: (project: string) => void
   onMarkAgentsRead?: (entries: Array<AgentListEntry>) => void
-  onRemoveDirectory?: (directory: string) => void
+  onRemoveProject?: (project: string) => void
 }
 
-function directoryUnreadAgents(state: DirectoryAgentsState, directory: string) {
+function projectUnreadAgents(state: ProjectAgentsState, project: string) {
   const entries: Array<AgentListEntry> = []
-  for (const entryKey of state.agentKeysByDirectory[directory] ?? []) {
+  for (const entryKey of state.agentKeysByProject[project] ?? []) {
     const entry = state.entriesByKey.get(entryKey)
     if (entry?.unread && entry.path) entries.push(entry)
   }
   return entries
 }
 
-type DirectoryStatusCounts = {
+type ProjectStatusCounts = {
   working: number
   waiting: number
   done: number
 }
 
-/** The same counts as the machine heading, for the agents of one directory. */
-function directoryStatusCounts(
-  state: DirectoryAgentsState,
-  directory: string
-): DirectoryStatusCounts {
+/** The same counts as the machine heading, for the agents of one project. */
+function projectStatusCounts(
+  state: ProjectAgentsState,
+  project: string
+): ProjectStatusCounts {
   const counts = { working: 0, waiting: 0, done: 0 }
-  for (const entryKey of state.agentKeysByDirectory[directory] ?? []) {
+  for (const entryKey of state.agentKeysByProject[project] ?? []) {
     const entry = state.entriesByKey.get(entryKey)
     if (!entry) continue
     if (agentMatchesStatusFilter(entry, "working")) counts.working++
@@ -1348,9 +1344,9 @@ function directoryStatusCounts(
   return counts
 }
 
-function sameDirectoryStatusCounts(
-  left: DirectoryStatusCounts,
-  right: DirectoryStatusCounts
+function sameProjectStatusCounts(
+  left: ProjectStatusCounts,
+  right: ProjectStatusCounts
 ) {
   return (
     left.working === right.working &&
@@ -1360,12 +1356,12 @@ function sameDirectoryStatusCounts(
 }
 
 /**
- * A count in a directory heading. Like the counts in the machine heading, a
- * click turns its state on or off; more than one can be on. The directory
+ * A count in a project heading. Like the counts in the machine heading, a
+ * click turns its state on or off; more than one can be on. The project
  * shows only its agents with a state that is on.
  */
-function DirectoryCountButton({
-  directory,
+function ProjectCountButton({
+  project,
   filter,
   count,
   activeFilter,
@@ -1375,7 +1371,7 @@ function DirectoryCountButton({
   onToggle,
   children,
 }: {
-  directory: string
+  project: string
   filter: AgentStatusFilter
   count: number
   activeFilter: AgentStatusFilters | null
@@ -1397,7 +1393,7 @@ function DirectoryCountButton({
         size="sm"
         disabled={disabled}
         aria-pressed={active}
-        aria-label={`${count} ${title.toLowerCase()} in ${directory}`}
+        aria-label={`${count} ${title.toLowerCase()} in ${project}`}
         className={cn(
           "h-6 shrink-0 gap-1 px-1.5 text-[11px] font-normal text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground disabled:opacity-100",
           active &&
@@ -1413,23 +1409,23 @@ function DirectoryCountButton({
   )
 }
 
-function DirectoryCounts({
-  directory,
+function ProjectCounts({
+  project,
   counts,
   activeFilter,
   disabled,
   onToggle,
 }: {
-  directory: string
-  counts: DirectoryStatusCounts
+  project: string
+  counts: ProjectStatusCounts
   activeFilter: AgentStatusFilters | null
   disabled: boolean
   onToggle: (filter: AgentStatusFilter) => void
 }) {
-  const shared = { directory, activeFilter, disabled, onToggle }
+  const shared = { project, activeFilter, disabled, onToggle }
   return (
     <span className="flex shrink-0 items-center">
-      <DirectoryCountButton
+      <ProjectCountButton
         {...shared}
         filter="waiting"
         count={counts.waiting}
@@ -1437,34 +1433,34 @@ function DirectoryCounts({
         className="text-amber-500 hover:text-amber-500"
       >
         <MessageCircleQuestionIcon className="size-3" />
-      </DirectoryCountButton>
-      <DirectoryCountButton
+      </ProjectCountButton>
+      <ProjectCountButton
         {...shared}
         filter="working"
         count={counts.working}
         title="Working"
       >
         <Spinner size="xs" />
-      </DirectoryCountButton>
-      <DirectoryCountButton
+      </ProjectCountButton>
+      <ProjectCountButton
         {...shared}
         filter="done"
         count={counts.done}
         title="Done"
       >
         <span className="size-2 rounded-full bg-primary" />
-      </DirectoryCountButton>
+      </ProjectCountButton>
     </span>
   )
 }
 
-const DirectoryAgentGroup = React.memo(function DirectoryAgentGroup({
-  directory,
-  directoryAgentsStore,
-  collapsedDirectoryStore,
+const ProjectAgentGroup = React.memo(function ProjectAgentGroup({
+  project,
+  projectAgentsStore,
+  collapsedProjectStore,
   collapseAllKeys,
   searchActive,
-  moveTargetDirectories,
+  moveTargetProjects,
   activeAgentStore,
   selectedAgentKeyStore,
   pinnedAgentKeys,
@@ -1481,53 +1477,50 @@ const DirectoryAgentGroup = React.memo(function DirectoryAgentGroup({
   onDeleteAgent,
   onSetAgentUnread,
   onMoveAgent,
-  onMoveAgentAnyDirectory,
+  onMoveAgentAnyProject,
   onTogglePinnedAgent,
-  onCreateAgentInDirectory,
-  onDeleteOldAgentsInDirectory,
+  onCreateAgentInProject,
+  onDeleteOldAgentsInProject,
   onMarkAgentsRead,
-  onRemoveDirectory,
-}: DirectoryAgentGroupProps) {
+  onRemoveProject,
+}: ProjectAgentGroupProps) {
   const [renderCount, setRenderCount] = React.useState(
-    INITIAL_DIRECTORY_AGENT_RENDER_COUNT
+    INITIAL_PROJECT_AGENT_RENDER_COUNT
   )
-  const { isLoadingAgents, agentKeys: allAgentKeys } = useDirectoryAgents(
-    directoryAgentsStore,
-    directory
+  const { isLoadingAgents, agentKeys: allAgentKeys } = useProjectAgents(
+    projectAgentsStore,
+    project
   )
   const [statusFilter, setStatusFilter] =
     React.useState<AgentStatusFilters | null>(null)
   const agentKeys = useSelector(
-    directoryAgentsStore,
+    projectAgentsStore,
     (state) => {
-      const keys =
-        state.agentKeysByDirectory[directory] ?? EMPTY_DIRECTORY_AGENT_KEYS
+      const keys = state.agentKeysByProject[project] ?? EMPTY_PROJECT_AGENT_KEYS
       if (!statusFilter) return keys
       return keys.filter((entryKey) => {
         const entry = state.entriesByKey.get(entryKey)
         return entry ? agentMatchesStatusFilter(entry, statusFilter) : false
       })
     },
-    { compare: directoryOrderEqual }
+    { compare: projectOrderEqual }
   )
-  const collapsed = useDirectoryCollapsed(
-    collapsedDirectoryStore,
-    directory,
+  const collapsed = useProjectCollapsed(
+    collapsedProjectStore,
+    project,
     searchActive
   )
   const hasUnreadAgents = useSelector(
-    directoryAgentsStore,
-    (state) => directoryUnreadAgents(state, directory).length > 0
+    projectAgentsStore,
+    (state) => projectUnreadAgents(state, project).length > 0
   )
   const statusCounts = useSelector(
-    directoryAgentsStore,
-    (state) => directoryStatusCounts(state, directory),
-    { compare: sameDirectoryStatusCounts }
+    projectAgentsStore,
+    (state) => projectStatusCounts(state, project),
+    { compare: sameProjectStatusCounts }
   )
   const markAgentsRead = () => {
-    onMarkAgentsRead?.(
-      directoryUnreadAgents(directoryAgentsStore.state, directory)
-    )
+    onMarkAgentsRead?.(projectUnreadAgents(projectAgentsStore.state, project))
   }
   const pinnedAgentKeySet = new Set(pinnedAgentKeys)
   const unpinnedAgentKeys = agentKeys.filter(
@@ -1543,7 +1536,7 @@ const DirectoryAgentGroup = React.memo(function DirectoryAgentGroup({
   const showLess =
     altKeyHeld &&
     !searchActive &&
-    visibleCount > INITIAL_DIRECTORY_AGENT_RENDER_COUNT
+    visibleCount > INITIAL_PROJECT_AGENT_RENDER_COUNT
   const showTreeLine = !overlay && visibleAgentKeys.length > 0
   const showLoadingSpinner = useDelayedTrue(
     isLoadingAgents,
@@ -1552,16 +1545,16 @@ const DirectoryAgentGroup = React.memo(function DirectoryAgentGroup({
   const showLoadingState = isLoadingAgents && allAgentKeys.length === 0
   const showHeaderLoadingSpinner =
     showLoadingSpinner && unpinnedAgentKeys.length === 0 && collapsed
-  const hasDirectoryActions =
+  const hasProjectActions =
     !overlay &&
     Boolean(
-      onCreateAgentInDirectory ||
-      onDeleteOldAgentsInDirectory ||
+      onCreateAgentInProject ||
+      onDeleteOldAgentsInProject ||
       onMarkAgentsRead ||
-      onRemoveDirectory
+      onRemoveProject
     )
 
-  const directoryHeader = (
+  const projectHeader = (
     // Left item-pad puts the folder icon on the sidebar icon column. The
     // new-agent button stays flush right: its item-size box already holds
     // the item-pad, so its icon ends on the right content edge.
@@ -1569,7 +1562,7 @@ const DirectoryAgentGroup = React.memo(function DirectoryAgentGroup({
       <CollapsibleTrigger
         type="button"
         className={cn(
-          "group/directory-label flex min-w-0 flex-1 cursor-default items-center gap-2 text-left text-sm text-sidebar-foreground"
+          "group/project-label flex min-w-0 flex-1 cursor-default items-center gap-2 text-left text-sm text-sidebar-foreground"
         )}
         disabled={searchActive || overlay}
         {...(attributes ?? {})}
@@ -1577,13 +1570,13 @@ const DirectoryAgentGroup = React.memo(function DirectoryAgentGroup({
       >
         <FolderIcon className="size-4 shrink-0 text-sidebar-foreground/50" />
         <span className="max-w-full min-w-0">
-          <DirectoryPathLabel path={directory} />
+          <ProjectPathLabel path={project} />
         </span>
         {!searchActive && !overlay ? (
           collapsed ? (
-            <ChevronRightIcon className="size-4 shrink-0 opacity-0 transition-opacity group-hover/directory-label:opacity-100 group-focus-visible/directory-label:opacity-100" />
+            <ChevronRightIcon className="size-4 shrink-0 opacity-0 transition-opacity group-hover/project-label:opacity-100 group-focus-visible/project-label:opacity-100" />
           ) : (
-            <ChevronDownIcon className="size-4 shrink-0 opacity-0 transition-opacity group-hover/directory-label:opacity-100 group-focus-visible/directory-label:opacity-100" />
+            <ChevronDownIcon className="size-4 shrink-0 opacity-0 transition-opacity group-hover/project-label:opacity-100 group-focus-visible/project-label:opacity-100" />
           )
         ) : null}
         {showHeaderLoadingSpinner ? (
@@ -1591,31 +1584,31 @@ const DirectoryAgentGroup = React.memo(function DirectoryAgentGroup({
         ) : null}
       </CollapsibleTrigger>
 
-      <DirectoryCounts
-        directory={directory}
+      <ProjectCounts
+        project={project}
         counts={statusCounts}
         activeFilter={statusFilter}
         disabled={overlay}
         onToggle={(filter) => {
-          collapsedDirectoryStore.setCollapsed(directory, false)
+          collapsedProjectStore.setCollapsed(project, false)
           setStatusFilter((current) => toggleStatusFilter(current, filter))
         }}
       />
 
-      {onCreateAgentInDirectory && !overlay && !isMobile ? (
-        <TitleTooltip title={`Create an agent in ${directory}`}>
+      {onCreateAgentInProject && !overlay && !isMobile ? (
+        <TitleTooltip title={`Create an agent in ${project}`}>
           <Button
             size="icon"
             variant="ghost"
             className="shrink-0 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-            onClick={() => onCreateAgentInDirectory(directory)}
+            onClick={() => onCreateAgentInProject(project)}
           >
             <SquarePenIcon className="size-4" />
           </Button>
         </TitleTooltip>
       ) : null}
 
-      {hasDirectoryActions && isMobile ? (
+      {hasProjectActions && isMobile ? (
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -1623,23 +1616,21 @@ const DirectoryAgentGroup = React.memo(function DirectoryAgentGroup({
                 size="icon"
                 variant="ghost"
                 className="shrink-0 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-                aria-label={`Directory actions for ${directory}`}
+                aria-label={`Project actions for ${project}`}
               />
             }
           >
             <EllipsisVerticalIcon className="size-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            {onCreateAgentInDirectory ? (
-              <DropdownMenuItem
-                onClick={() => onCreateAgentInDirectory(directory)}
-              >
+            {onCreateAgentInProject ? (
+              <DropdownMenuItem onClick={() => onCreateAgentInProject(project)}>
                 New agent
               </DropdownMenuItem>
             ) : null}
-            {onDeleteOldAgentsInDirectory ? (
+            {onDeleteOldAgentsInProject ? (
               <DropdownMenuItem
-                onClick={() => onDeleteOldAgentsInDirectory(directory)}
+                onClick={() => onDeleteOldAgentsInProject(project)}
               >
                 Archive old agents…
               </DropdownMenuItem>
@@ -1652,10 +1643,10 @@ const DirectoryAgentGroup = React.memo(function DirectoryAgentGroup({
                 Mark all as read
               </DropdownMenuItem>
             ) : null}
-            {onRemoveDirectory ? (
+            {onRemoveProject ? (
               <DropdownMenuItem
                 variant="destructive"
-                onClick={() => onRemoveDirectory(directory)}
+                onClick={() => onRemoveProject(project)}
               >
                 Remove from sidebar
               </DropdownMenuItem>
@@ -1673,10 +1664,10 @@ const DirectoryAgentGroup = React.memo(function DirectoryAgentGroup({
       onOpenChange={(open, details) => {
         if (searchActive || overlay) return
         if (isAltChange(details)) {
-          collapsedDirectoryStore.setAll(collapseAllKeys, !open)
+          collapsedProjectStore.setAll(collapseAllKeys, !open)
           return
         }
-        collapsedDirectoryStore.setCollapsed(directory, !open)
+        collapsedProjectStore.setCollapsed(project, !open)
       }}
       className={cn(
         "rounded-lg py-1",
@@ -1688,20 +1679,20 @@ const DirectoryAgentGroup = React.memo(function DirectoryAgentGroup({
       )}
     >
       <SidebarGroup className="px-0 py-0">
-        {hasDirectoryActions && !isMobile ? (
+        {hasProjectActions && !isMobile ? (
           <ContextMenu>
-            <ContextMenuTrigger render={directoryHeader} />
+            <ContextMenuTrigger render={projectHeader} />
             <ContextMenuContent className="w-48">
-              {onCreateAgentInDirectory ? (
+              {onCreateAgentInProject ? (
                 <ContextMenuItem
-                  onClick={() => onCreateAgentInDirectory(directory)}
+                  onClick={() => onCreateAgentInProject(project)}
                 >
                   New agent
                 </ContextMenuItem>
               ) : null}
-              {onDeleteOldAgentsInDirectory ? (
+              {onDeleteOldAgentsInProject ? (
                 <ContextMenuItem
-                  onClick={() => onDeleteOldAgentsInDirectory(directory)}
+                  onClick={() => onDeleteOldAgentsInProject(project)}
                 >
                   Archive old agents…
                 </ContextMenuItem>
@@ -1714,10 +1705,10 @@ const DirectoryAgentGroup = React.memo(function DirectoryAgentGroup({
                   Mark all as read
                 </ContextMenuItem>
               ) : null}
-              {onRemoveDirectory ? (
+              {onRemoveProject ? (
                 <ContextMenuItem
                   variant="destructive"
-                  onClick={() => onRemoveDirectory(directory)}
+                  onClick={() => onRemoveProject(project)}
                 >
                   Remove from sidebar
                 </ContextMenuItem>
@@ -1725,7 +1716,7 @@ const DirectoryAgentGroup = React.memo(function DirectoryAgentGroup({
             </ContextMenuContent>
           </ContextMenu>
         ) : (
-          directoryHeader
+          projectHeader
         )}
 
         {!overlay ? (
@@ -1741,7 +1732,7 @@ const DirectoryAgentGroup = React.memo(function DirectoryAgentGroup({
                   Loading agents…
                 </div>
               ) : unpinnedAgentKeys.length > 0 ? (
-                // The directory's line runs down its agents and "Show more".
+                // The project's line runs down its agents and "Show more".
                 <div className="relative flex flex-col">
                   {showTreeLine ? <SidebarTreeLine level={0} /> : null}
                   <SidebarMenu>
@@ -1749,22 +1740,22 @@ const DirectoryAgentGroup = React.memo(function DirectoryAgentGroup({
                       <SidebarAgentItem
                         key={entryKey}
                         entryKey={entryKey}
-                        inDirectory
-                        directoryAgentsStore={directoryAgentsStore}
+                        inProject
+                        projectAgentsStore={projectAgentsStore}
                         activeAgentStore={activeAgentStore}
                         selectedAgentKeyStore={selectedAgentKeyStore}
                         isPinned={pinnedAgentKeys.includes(entryKey)}
                         isMobile={isMobile}
                         overlay={overlay}
                         agentDraggable={agentsDraggable}
-                        moveTargetDirectories={moveTargetDirectories}
+                        moveTargetProjects={moveTargetProjects}
                         setOpenMobile={setOpenMobile}
                         onAgentClick={onAgentClick}
                         onRenameAgent={onRenameAgent}
                         onDeleteAgent={onDeleteAgent}
                         onSetAgentUnread={onSetAgentUnread}
                         onMoveAgent={onMoveAgent}
-                        onMoveAgentAnyDirectory={onMoveAgentAnyDirectory}
+                        onMoveAgentAnyProject={onMoveAgentAnyProject}
                         onTogglePinnedAgent={onTogglePinnedAgent}
                       />
                     ))}
@@ -1780,13 +1771,13 @@ const DirectoryAgentGroup = React.memo(function DirectoryAgentGroup({
                         className="h-8 justify-start pl-(--agent-text-left) text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
                         onClick={() => {
                           if (showLess) {
-                            setRenderCount(INITIAL_DIRECTORY_AGENT_RENDER_COUNT)
+                            setRenderCount(INITIAL_PROJECT_AGENT_RENDER_COUNT)
                             return
                           }
                           setRenderCount((current) =>
                             Math.min(
                               unpinnedAgentKeys.length,
-                              current + DIRECTORY_AGENT_LOAD_MORE_COUNT
+                              current + PROJECT_AGENT_LOAD_MORE_COUNT
                             )
                           )
                         }}
@@ -1794,7 +1785,7 @@ const DirectoryAgentGroup = React.memo(function DirectoryAgentGroup({
                         {showLess
                           ? "Show less"
                           : `Show ${Math.min(
-                              DIRECTORY_AGENT_LOAD_MORE_COUNT,
+                              PROJECT_AGENT_LOAD_MORE_COUNT,
                               unpinnedAgentKeys.length - visibleCount
                             )} more`}
                       </Button>
@@ -1825,15 +1816,15 @@ type PinnedAgentGroupProps = {
   pinnedAgentKeys: Array<string>
   /** The group is inside another sidebar group that already adds the side gutter. */
   nested?: boolean
-  directoryAgentsStore: DirectoryAgentsStore
-  collapsedDirectoryStore: CollapsedDirectoryStore
+  projectAgentsStore: ProjectAgentsStore
+  collapsedProjectStore: CollapsedProjectStore
   /** The groups that an Option-click expands or collapses together. */
   collapseAllKeys: Array<string>
   searchActive: boolean
   activeAgentStore: ActiveSidebarAgentStore
   selectedAgentKeyStore: SelectedAgentKeyStore
   isMobile: boolean
-  moveTargetDirectories: Array<string>
+  moveTargetProjects: Array<string>
   setOpenMobile: (open: boolean) => void
   /** False for the agents of another machine. */
   agentsDraggable?: boolean
@@ -1841,22 +1832,22 @@ type PinnedAgentGroupProps = {
   onRenameAgent?: (entry: AgentListEntry) => void
   onDeleteAgent?: (entry: AgentListEntry) => void
   onSetAgentUnread?: (entry: AgentListEntry, unread: boolean) => void
-  onMoveAgent?: (entry: AgentListEntry, directory: string) => void
-  onMoveAgentAnyDirectory?: (entry: AgentListEntry) => void
+  onMoveAgent?: (entry: AgentListEntry, project: string) => void
+  onMoveAgentAnyProject?: (entry: AgentListEntry) => void
   onTogglePinnedAgent?: (entry: AgentListEntry) => void
 }
 
 function PinnedAgentGroup({
   pinnedAgentKeys,
   nested = false,
-  directoryAgentsStore,
-  collapsedDirectoryStore,
+  projectAgentsStore,
+  collapsedProjectStore,
   collapseAllKeys,
   searchActive,
   activeAgentStore,
   selectedAgentKeyStore,
   isMobile,
-  moveTargetDirectories,
+  moveTargetProjects,
   setOpenMobile,
   agentsDraggable,
   onAgentClick,
@@ -1864,11 +1855,11 @@ function PinnedAgentGroup({
   onDeleteAgent,
   onSetAgentUnread,
   onMoveAgent,
-  onMoveAgentAnyDirectory,
+  onMoveAgentAnyProject,
   onTogglePinnedAgent,
 }: PinnedAgentGroupProps) {
-  const collapsed = useDirectoryCollapsed(
-    collapsedDirectoryStore,
+  const collapsed = useProjectCollapsed(
+    collapsedProjectStore,
     PINNED_AGENT_GROUP_COLLAPSE_KEY,
     searchActive
   )
@@ -1882,17 +1873,17 @@ function PinnedAgentGroup({
       onOpenChange={(open, details) => {
         if (searchActive) return
         if (isAltChange(details)) {
-          collapsedDirectoryStore.setAll(collapseAllKeys, !open)
+          collapsedProjectStore.setAll(collapseAllKeys, !open)
           return
         }
-        collapsedDirectoryStore.setCollapsed(
+        collapsedProjectStore.setCollapsed(
           PINNED_AGENT_GROUP_COLLAPSE_KEY,
           !open
         )
       }}
     >
       <SidebarGroup className={cn("py-1", nested && "px-0")}>
-        {/* Same header shape as a directory, so the icon sits on the
+        {/* Same header shape as a project, so the icon sits on the
             sidebar icon column and the line starts under it. */}
         <div className="flex h-(--sidebar-item-size) items-center gap-2 rounded-lg pl-(--sidebar-item-pad)">
           <CollapsibleTrigger
@@ -1920,22 +1911,22 @@ function PinnedAgentGroup({
                   <SidebarAgentItem
                     key={entryKey}
                     entryKey={entryKey}
-                    inDirectory
-                    directoryAgentsStore={directoryAgentsStore}
+                    inProject
+                    projectAgentsStore={projectAgentsStore}
                     activeAgentStore={activeAgentStore}
                     selectedAgentKeyStore={selectedAgentKeyStore}
                     isPinned
                     isMobile={isMobile}
                     overlay={false}
                     agentDraggable={agentsDraggable}
-                    moveTargetDirectories={moveTargetDirectories}
+                    moveTargetProjects={moveTargetProjects}
                     setOpenMobile={setOpenMobile}
                     onAgentClick={onAgentClick}
                     onRenameAgent={onRenameAgent}
                     onDeleteAgent={onDeleteAgent}
                     onSetAgentUnread={onSetAgentUnread}
                     onMoveAgent={onMoveAgent}
-                    onMoveAgentAnyDirectory={onMoveAgentAnyDirectory}
+                    onMoveAgentAnyProject={onMoveAgentAnyProject}
                     onTogglePinnedAgent={onTogglePinnedAgent}
                   />
                 ))}
@@ -1972,19 +1963,19 @@ function AppSidebarSearchButton({
   )
 }
 
-type AppSidebarDirectoriesHeaderProps = {
+type AppSidebarProjectsHeaderProps = {
   agentSearch: string
   matchingAgentCount: number
   collapsed: boolean
-  onOpenAddDirectoryDialog: () => void
+  onOpenAddProjectDialog: () => void
 }
 
-function AppSidebarDirectoriesHeader({
+function AppSidebarProjectsHeader({
   agentSearch,
   matchingAgentCount,
   collapsed,
-  onOpenAddDirectoryDialog,
-}: AppSidebarDirectoriesHeaderProps) {
+  onOpenAddProjectDialog,
+}: AppSidebarProjectsHeaderProps) {
   const searchActive = agentSearch.trim().length > 0
 
   return (
@@ -1993,12 +1984,12 @@ function AppSidebarDirectoriesHeader({
     <SidebarGroupLabel className="justify-between gap-3 pr-0">
       <CollapsibleTrigger
         type="button"
-        className="group/directories-label flex min-w-0 flex-1 items-center gap-2 text-left outline-hidden"
+        className="group/projects-label flex min-w-0 flex-1 items-center gap-2 text-left outline-hidden"
       >
         <span className="min-w-0 truncate">
           {searchActive
             ? `${matchingAgentCount} matching agent${matchingAgentCount === 1 ? "" : "s"}`
-            : "Directories"}
+            : "Projects"}
         </span>
         {!searchActive ? (
           collapsed ? (
@@ -2008,22 +1999,22 @@ function AppSidebarDirectoriesHeader({
           )
         ) : null}
       </CollapsibleTrigger>
-      <DirectoryActions onOpenAddDirectoryDialog={onOpenAddDirectoryDialog} />
+      <ProjectActions onOpenAddProjectDialog={onOpenAddProjectDialog} />
     </SidebarGroupLabel>
   )
 }
 
 /**
- * Add directory. It is on the "Directories" heading, or on each machine
+ * Add project. It is on the "Projects" heading, or on each machine
  * heading when the sidebar has a group for each machine. The shortcut adds
- * a directory on the machine that shows, so only its button shows the key.
+ * a project on the machine that shows, so only its button shows the key.
  */
-export function DirectoryActions({
-  onOpenAddDirectoryDialog,
-  title = "Add directory",
+export function ProjectActions({
+  onOpenAddProjectDialog,
+  title = "Add project",
   showShortcut = true,
 }: {
-  onOpenAddDirectoryDialog: () => void
+  onOpenAddProjectDialog: () => void
   title?: string
   showShortcut?: boolean
 }) {
@@ -2037,7 +2028,7 @@ export function DirectoryActions({
           variant="ghost"
           size="icon"
           className="hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-          onClick={onOpenAddDirectoryDialog}
+          onClick={onOpenAddProjectDialog}
           aria-label={title}
         >
           <FolderPlusIcon />
@@ -2047,7 +2038,7 @@ export function DirectoryActions({
   )
 }
 
-const NO_MOVE_TARGET_DIRECTORIES: Array<string> = []
+const NO_MOVE_TARGET_PROJECTS: Array<string> = []
 
 /** An agent of another machine, from its summary, as a sidebar entry. */
 function machineSummaryEntry(agent: MachineAgentSummary): AgentListEntry {
@@ -2057,7 +2048,7 @@ function machineSummaryEntry(agent: MachineAgentSummary): AgentListEntry {
     // routes find the agent, and the key of the row matches the pinned
     // agent keys of that machine.
     path: `pico:${agent.id}`,
-    cwd: agent.directory || agent.cwd,
+    cwd: agent.project || agent.cwd,
     title: agent.title,
     ...(agent.lastMessageAt
       ? { lastMessageAt: new Date(agent.lastMessageAt).toISOString() }
@@ -2076,19 +2067,19 @@ function machineSummaryEntry(agent: MachineAgentSummary): AgentListEntry {
 }
 
 /**
- * The sidebar directories of a machine with their agents, as the machine
+ * The sidebar projects of a machine with their agents, as the machine
  * shows them when it is the machine of the page.
  */
 function groupMachineAgents(machine: MachineInfo) {
   const summary = machine.summary
-  const directories = summary?.directories ?? []
-  const agentsByDirectory: Record<string, Array<AgentListEntry>> = {}
-  for (const directory of directories) agentsByDirectory[directory] = []
+  const projects = summary?.projects ?? []
+  const agentsByProject: Record<string, Array<AgentListEntry>> = {}
+  for (const project of projects) agentsByProject[project] = []
   for (const agent of summary?.agents ?? []) {
-    const directory = agent.directory || agent.cwd
-    agentsByDirectory[directory]?.push(machineSummaryEntry(agent))
+    const project = agent.project || agent.cwd
+    agentsByProject[project]?.push(machineSummaryEntry(agent))
   }
-  return { directories, agentsByDirectory }
+  return { projects, agentsByProject }
 }
 
 /**
@@ -2136,37 +2127,37 @@ function useOtherMachinePinnedAgentKeys(machineId: string, online: boolean) {
 }
 
 /**
- * The directories and agents of another machine of the hub, from its
- * summary. They look like the directories of this machine. A click opens the
- * agent on its machine; the new-agent button of a directory opens the
+ * The projects and agents of another machine of the hub, from its
+ * summary. They look like the projects of this machine. A click opens the
+ * agent on its machine; the new-agent button of a project opens the
  * machine and starts an agent there. Pin, rename, and archive change the
  * agent on its machine.
  */
-export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
+export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
   const { isMobile, setOpenMobile } = useSidebar()
-  // Directories that this page removed, hidden until the summary of the
+  // Projects that this page removed, hidden until the summary of the
   // machine stops showing them.
-  const [removedDirectories, setRemovedDirectories] = React.useState<
+  const [removedProjects, setRemovedProjects] = React.useState<
     ReadonlySet<string>
   >(() => new Set())
-  const summaryDirectories = machine.summary?.directories
+  const summaryProjects = machine.summary?.projects
   React.useEffect(() => {
-    setRemovedDirectories((current) => {
-      const shown = new Set(summaryDirectories ?? [])
+    setRemovedProjects((current) => {
+      const shown = new Set(summaryProjects ?? [])
       const next = new Set([...current].filter((entry) => shown.has(entry)))
       return next.size === current.size ? current : next
     })
-  }, [summaryDirectories])
+  }, [summaryProjects])
   const allGrouped = React.useMemo(() => {
     const grouped = groupMachineAgents(machine)
-    if (removedDirectories.size === 0) return grouped
+    if (removedProjects.size === 0) return grouped
     return {
       ...grouped,
-      directories: grouped.directories.filter(
-        (directory) => !removedDirectories.has(directory)
+      projects: grouped.projects.filter(
+        (project) => !removedProjects.has(project)
       ),
     }
-  }, [machine, removedDirectories])
+  }, [machine, removedProjects])
   const statusFilter = useAgentStatusFilter(machine.id)
   const [storedPinnedKeys, togglePinnedKey] = useOtherMachinePinnedAgentKeys(
     machine.id,
@@ -2177,25 +2168,26 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
   const grouped = React.useMemo(() => {
     if (!statusFilter) return allGrouped
     const pinned = new Set(storedPinnedKeys)
-    const filtered = filterDirectoryAgentsByStatus(
-      allGrouped.directories,
-      allGrouped.agentsByDirectory,
+    const filtered = filterProjectAgentsByStatus(
+      allGrouped.projects,
+      allGrouped.agentsByProject,
       statusFilter,
       (entry) => pinned.has(agentListEntryKey(entry))
     )
     return {
-      directories: filtered.visibleDirectories,
-      agentsByDirectory: filtered.filteredAgents,
+      projects: filtered.visibleProjects,
+      agentsByProject: filtered.filteredAgents,
     }
   }, [allGrouped, statusFilter, storedPinnedKeys])
   const [stores] = React.useState(() => {
-    const collapsed = createCollapsedDirectoryStore(
+    const collapsed = createCollapsedProjectStore(
       machine.id,
+      // Stored name: do not change.
       `pico-machine-collapsed-directories:${machine.id}`
     )
     collapsed.loadStored()
     return {
-      agents: createDirectoryAgentsStore(grouped.agentsByDirectory, {}),
+      agents: createProjectAgentsStore(grouped.agentsByProject, {}),
       collapsed,
       active: createActiveSidebarAgentStore(),
       selected: createSelectedAgentKeyStore(),
@@ -2203,7 +2195,7 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
   })
 
   React.useEffect(() => {
-    stores.agents.setData(grouped.agentsByDirectory, {})
+    stores.agents.setData(grouped.agentsByProject, {})
   }, [grouped, stores])
 
   const online = machine.state === "online"
@@ -2211,15 +2203,15 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
   // archived agents, and it stops at 200 agents.
   const pinnedAgentKeys = React.useMemo(() => {
     const known = new Set(
-      Object.values(grouped.agentsByDirectory)
+      Object.values(grouped.agentsByProject)
         .flat()
         .map((entry) => agentListEntryKey(entry))
     )
     return storedPinnedKeys.filter((key) => known.has(key))
   }, [grouped, storedPinnedKeys])
   const collapseAllKeys = React.useMemo(
-    () => [PINNED_AGENT_GROUP_COLLAPSE_KEY, ...grouped.directories],
-    [grouped.directories]
+    () => [PINNED_AGENT_GROUP_COLLAPSE_KEY, ...grouped.projects],
+    [grouped.projects]
   )
   const [renameEntry, setRenameEntry] = React.useState<AgentListEntry>()
   const [archiveEntry, setArchiveEntry] = React.useState<AgentListEntry>()
@@ -2239,34 +2231,34 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
     [machine.id]
   )
   const createAgent = React.useCallback(
-    (directory: string) => {
+    (project: string) => {
       if (isMobile) setOpenMobile(false)
       openMachine(machine.id, {
-        action: { type: "new-agent", directory },
+        action: { type: "new-agent", project },
       })
     },
     [isMobile, machine.id, setOpenMobile]
   )
-  // The summary has the directory list of the machine's server, so the new
+  // The summary has the project list of the machine's server, so the new
   // list starts from it. The sidebar sync sends it to the machine.
-  const removeDirectory = (directory: string) => {
-    const next = (summaryDirectories ?? []).filter(
-      (entry) => entry !== directory && !removedDirectories.has(entry)
+  const removeProject = (project: string) => {
+    const next = (summaryProjects ?? []).filter(
+      (entry) => entry !== project && !removedProjects.has(entry)
     )
-    stores.collapsed.remove(directory)
+    stores.collapsed.remove(project)
     machineLocalStorageSetItem(
       machine.id,
-      SIDEBAR_DIRECTORIES_STORAGE_KEY,
+      SIDEBAR_PROJECTS_STORAGE_KEY,
       JSON.stringify(next)
     )
-    setRemovedDirectories((current) => new Set([...current, directory]))
+    setRemovedProjects((current) => new Set([...current, project]))
   }
 
-  // A machine without directories: add the first one there. The heading
+  // A machine without projects: add the first one there. The heading
   // shows the state of a machine that is not online.
   if (
     statusFilter &&
-    grouped.directories.length === 0 &&
+    grouped.projects.length === 0 &&
     pinnedAgentKeys.length === 0
   )
     return (
@@ -2274,7 +2266,7 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
         No agents with these states.
       </p>
     )
-  if (!statusFilter && grouped.directories.length === 0) {
+  if (!statusFilter && grouped.projects.length === 0) {
     if (!online) return null
     return (
       <SidebarMenu>
@@ -2284,11 +2276,11 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
             className="text-sidebar-foreground/60"
             onClick={() => {
               if (isMobile) setOpenMobile(false)
-              openMachine(machine.id, { action: { type: "add-directory" } })
+              openMachine(machine.id, { action: { type: "add-project" } })
             }}
           >
             <FolderPlusIcon className="text-sidebar-foreground/50" />
-            <span>Add directory…</span>
+            <span>Add project…</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
@@ -2300,28 +2292,28 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
       <PinnedAgentGroup
         nested
         pinnedAgentKeys={pinnedAgentKeys}
-        directoryAgentsStore={stores.agents}
-        collapsedDirectoryStore={stores.collapsed}
+        projectAgentsStore={stores.agents}
+        collapsedProjectStore={stores.collapsed}
         collapseAllKeys={collapseAllKeys}
         searchActive={Boolean(statusFilter)}
         activeAgentStore={stores.active}
         selectedAgentKeyStore={stores.selected}
         isMobile={isMobile}
-        moveTargetDirectories={NO_MOVE_TARGET_DIRECTORIES}
+        moveTargetProjects={NO_MOVE_TARGET_PROJECTS}
         setOpenMobile={setOpenMobile}
         agentsDraggable={false}
         onAgentClick={openAgent}
         {...agentActions}
       />
-      {grouped.directories.map((directory) => (
-        <DirectoryAgentGroup
-          key={directory}
-          directory={directory}
-          directoryAgentsStore={stores.agents}
-          collapsedDirectoryStore={stores.collapsed}
+      {grouped.projects.map((project) => (
+        <ProjectAgentGroup
+          key={project}
+          project={project}
+          projectAgentsStore={stores.agents}
+          collapsedProjectStore={stores.collapsed}
           collapseAllKeys={collapseAllKeys}
           searchActive={Boolean(statusFilter)}
-          moveTargetDirectories={NO_MOVE_TARGET_DIRECTORIES}
+          moveTargetProjects={NO_MOVE_TARGET_PROJECTS}
           activeAgentStore={stores.active}
           selectedAgentKeyStore={stores.selected}
           pinnedAgentKeys={pinnedAgentKeys}
@@ -2329,8 +2321,8 @@ export function OtherMachineDirectories({ machine }: { machine: MachineInfo }) {
           setOpenMobile={setOpenMobile}
           agentsDraggable={false}
           onAgentClick={openAgent}
-          onCreateAgentInDirectory={online ? createAgent : undefined}
-          onRemoveDirectory={online ? removeDirectory : undefined}
+          onCreateAgentInProject={online ? createAgent : undefined}
+          onRemoveProject={online ? removeProject : undefined}
           {...agentActions}
         />
       ))}
@@ -2361,8 +2353,8 @@ export function AppSidebar(props: AppSidebarProps) {
 function useAppSidebarView({
   agentSearch,
   onOpenAgentsDialog,
-  visibleDirectories,
-  directoryAgentsStore,
+  visibleProjects,
+  projectAgentsStore,
   matchingAgentCount,
   selectedAgentKeys,
   activeAgentId,
@@ -2370,19 +2362,19 @@ function useAppSidebarView({
   pinnedAgentKeys,
   emptyStateText,
   statusFilterActive = false,
-  onOpenAddDirectoryDialog,
+  onOpenAddProjectDialog,
   onAgentClick,
   onRenameAgent,
   onDeleteAgent,
   onSetAgentUnread,
   onMoveAgent,
-  onMoveAgentAnyDirectory,
+  onMoveAgentAnyProject,
   onTogglePinnedAgent,
-  onCreateAgentInDirectory,
-  onDeleteOldAgentsInDirectory,
+  onCreateAgentInProject,
+  onDeleteOldAgentsInProject,
   onMarkAgentsRead,
-  onRemoveDirectory,
-  onReorderDirectories,
+  onRemoveProject,
+  onReorderProjects,
   onOpenArchivedAgents,
 }: AppSidebarProps) {
   const machineId = useMachineId()
@@ -2391,42 +2383,39 @@ function useAppSidebarView({
   // A search or a state filter shows all matching agents, with their
   // groups open, and stops the drag to reorder.
   const listFiltered = searchActive || statusFilterActive
-  const directoryOrderingEnabled =
-    !listFiltered && visibleDirectories.length > 1
-  const [activeDirectory, setActiveDirectory] = React.useState<string | null>(
-    null
-  )
+  const projectOrderingEnabled = !listFiltered && visibleProjects.length > 1
+  const [activeProject, setActiveProject] = React.useState<string | null>(null)
   const [activeAgentDrag, setActiveAgentDrag] = React.useState<{
     entryKey: string
     entry: AgentListEntry
-    sourceDirectory: string
+    sourceProject: string
   } | null>(null)
-  const [agentDropDirectory, setAgentDropDirectory] = React.useState<
-    string | null
-  >(null)
-  const [previewDirectoryOrder, setPreviewDirectoryOrder] =
+  const [agentDropProject, setAgentDropProject] = React.useState<string | null>(
+    null
+  )
+  const [previewProjectOrder, setPreviewProjectOrder] =
     React.useState<Array<string> | null>(null)
-  const [collapsedDirectoryStore] = React.useState(() =>
-    createCollapsedDirectoryStore(machineId)
+  const [collapsedProjectStore] = React.useState(() =>
+    createCollapsedProjectStore(machineId)
   )
   const [selectedAgentKeyStore] = React.useState(createSelectedAgentKeyStore)
   const [activeAgentStore] = React.useState(createActiveSidebarAgentStore)
   // With a group for each machine, the machine heading replaces the
-  // "Directories" heading and takes its buttons, so all machine groups have
-  // the same levels: machine, directory, agent. A search still shows the
+  // "Projects" heading and takes its buttons, so all machine groups have
+  // the same levels: machine, project, agent. A search still shows the
   // heading, with its count of matches.
   const hasMachineGroups = useHasMachineGroups()
-  const showDirectoriesHeader = !hasMachineGroups || searchActive
-  const directoriesCollapsed = useDirectoryCollapsed(
-    collapsedDirectoryStore,
-    DIRECTORIES_AGENT_GROUP_COLLAPSE_KEY,
+  const showProjectsHeader = !hasMachineGroups || searchActive
+  const projectsCollapsed = useProjectCollapsed(
+    collapsedProjectStore,
+    PROJECTS_AGENT_GROUP_COLLAPSE_KEY,
     searchActive
   )
-  // An Option-click on the pinned group or a directory expands or collapses
+  // An Option-click on the pinned group or a project expands or collapses
   // all of them.
   const collapseAllKeys = React.useMemo(
-    () => [PINNED_AGENT_GROUP_COLLAPSE_KEY, ...visibleDirectories],
-    [visibleDirectories]
+    () => [PINNED_AGENT_GROUP_COLLAPSE_KEY, ...visibleProjects],
+    [visibleProjects]
   )
 
   React.useLayoutEffect(() => {
@@ -2449,58 +2438,58 @@ function useAppSidebarView({
   )
 
   React.useEffect(() => {
-    collapsedDirectoryStore.loadStored()
-  }, [collapsedDirectoryStore])
+    collapsedProjectStore.loadStored()
+  }, [collapsedProjectStore])
 
   usePicoEvent(
     "pico:sidebar-state",
     ({ machineId: changedMachine, changed }) => {
       if (changedMachine !== machineId) return
-      if (changed.includes("collapsedDirectories"))
-        collapsedDirectoryStore.loadStored()
+      if (changed.includes("collapsedProjects"))
+        collapsedProjectStore.loadStored()
     }
   )
 
   React.useEffect(() => {
-    if (directoryOrderingEnabled) return
-    setActiveDirectory(null)
-    setPreviewDirectoryOrder(null)
-  }, [directoryOrderingEnabled])
+    if (projectOrderingEnabled) return
+    setActiveProject(null)
+    setPreviewProjectOrder(null)
+  }, [projectOrderingEnabled])
 
-  const orderedVisibleDirectories = (() => {
-    if (!previewDirectoryOrder || previewDirectoryOrder.length === 0) {
-      return visibleDirectories
+  const orderedVisibleProjects = (() => {
+    if (!previewProjectOrder || previewProjectOrder.length === 0) {
+      return visibleProjects
     }
 
-    const visibleDirectorySet = new Set(visibleDirectories)
-    const orderedDirectories = previewDirectoryOrder.filter((directory) =>
-      visibleDirectorySet.has(directory)
+    const visibleProjectSet = new Set(visibleProjects)
+    const orderedProjects = previewProjectOrder.filter((project) =>
+      visibleProjectSet.has(project)
     )
-    const missingDirectories = visibleDirectories.filter(
-      (directory) => !orderedDirectories.includes(directory)
+    const missingProjects = visibleProjects.filter(
+      (project) => !orderedProjects.includes(project)
     )
 
-    return [...orderedDirectories, ...missingDirectories]
+    return [...orderedProjects, ...missingProjects]
   })()
 
   React.useEffect(() => {
-    if (!previewDirectoryOrder) return
-    if (!directoryOrderEqual(orderedVisibleDirectories, visibleDirectories)) {
+    if (!previewProjectOrder) return
+    if (!projectOrderEqual(orderedVisibleProjects, visibleProjects)) {
       return
     }
 
-    setPreviewDirectoryOrder(null)
-  }, [orderedVisibleDirectories, previewDirectoryOrder, visibleDirectories])
+    setPreviewProjectOrder(null)
+  }, [orderedVisibleProjects, previewProjectOrder, visibleProjects])
 
-  const removeDirectory = (directory: string) => {
-    collapsedDirectoryStore.remove(directory)
-    onRemoveDirectory?.(directory)
+  const removeProject = (project: string) => {
+    collapsedProjectStore.remove(project)
+    onRemoveProject?.(project)
   }
 
-  const movePreviewDirectory = (activeId: string, overId: string) => {
-    setPreviewDirectoryOrder((current) => {
+  const movePreviewProject = (activeId: string, overId: string) => {
+    setPreviewProjectOrder((current) => {
       const baseOrder =
-        current && current.length > 0 ? current : visibleDirectories
+        current && current.length > 0 ? current : visibleProjects
       const oldIndex = baseOrder.indexOf(activeId)
       const newIndex = baseOrder.indexOf(overId)
       if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) {
@@ -2516,7 +2505,7 @@ function useAppSidebarView({
           type?: string
           entry?: AgentListEntry
           entryKey?: string
-          sourceDirectory?: string
+          sourceProject?: string
         }
       | undefined
 
@@ -2525,51 +2514,50 @@ function useAppSidebarView({
       setActiveAgentDrag({
         entryKey: activeData.entryKey || String(event.active.id),
         entry: activeData.entry,
-        sourceDirectory:
-          activeData.sourceDirectory || activeData.entry.cwd || "",
+        sourceProject: activeData.sourceProject || activeData.entry.cwd || "",
       })
-      setAgentDropDirectory(null)
+      setAgentDropProject(null)
       return
     }
 
-    if (activeData?.type !== "directory" || !directoryOrderingEnabled) return
-    setActiveDirectory(String(event.active.id))
-    setPreviewDirectoryOrder(visibleDirectories)
+    if (activeData?.type !== "project" || !projectOrderingEnabled) return
+    setActiveProject(String(event.active.id))
+    setPreviewProjectOrder(visibleProjects)
   }
 
   const handleDragOver = (event: DragOverEvent) => {
     const activeData = event.active.data.current as
-      | { type?: string; sourceDirectory?: string }
+      | { type?: string; sourceProject?: string }
       | undefined
     const activeId = String(event.active.id)
     const overId = event.over ? String(event.over.id) : ""
 
     if (activeData?.type === "agent") {
       if (isMobile) return
-      const overDirectory = visibleDirectories.includes(overId) ? overId : ""
-      setAgentDropDirectory(
-        overDirectory && overDirectory !== activeData.sourceDirectory
-          ? overDirectory
+      const overProject = visibleProjects.includes(overId) ? overId : ""
+      setAgentDropProject(
+        overProject && overProject !== activeData.sourceProject
+          ? overProject
           : null
       )
       return
     }
 
-    if (!directoryOrderingEnabled) return
+    if (!projectOrderingEnabled) return
     if (!activeId || !overId || activeId === overId) return
-    movePreviewDirectory(activeId, overId)
+    movePreviewProject(activeId, overId)
   }
 
   const handleDragCancel = () => {
-    setActiveDirectory(null)
+    setActiveProject(null)
     setActiveAgentDrag(null)
-    setAgentDropDirectory(null)
-    setPreviewDirectoryOrder(null)
+    setAgentDropProject(null)
+    setPreviewProjectOrder(null)
   }
 
   const handleDragEnd = (event: DragEndEvent) => {
     const activeData = event.active.data.current as
-      | { type?: string; entry?: AgentListEntry; sourceDirectory?: string }
+      | { type?: string; entry?: AgentListEntry; sourceProject?: string }
       | undefined
     const activeId = String(event.active.id)
     const overId = event.over ? String(event.over.id) : ""
@@ -2577,47 +2565,47 @@ function useAppSidebarView({
     if (activeData?.type === "agent") {
       if (isMobile) {
         setActiveAgentDrag(null)
-        setAgentDropDirectory(null)
+        setAgentDropProject(null)
         return
       }
-      const targetDirectory = visibleDirectories.includes(overId) ? overId : ""
+      const targetProject = visibleProjects.includes(overId) ? overId : ""
       if (
         activeData.entry &&
-        targetDirectory &&
-        targetDirectory !== activeData.sourceDirectory
+        targetProject &&
+        targetProject !== activeData.sourceProject
       ) {
-        onMoveAgent?.(activeData.entry, targetDirectory)
+        onMoveAgent?.(activeData.entry, targetProject)
       }
       setActiveAgentDrag(null)
-      setAgentDropDirectory(null)
+      setAgentDropProject(null)
       return
     }
 
-    let nextOrder = previewDirectoryOrder
+    let nextOrder = previewProjectOrder
     if (
-      directoryOrderingEnabled &&
+      projectOrderingEnabled &&
       (!nextOrder || nextOrder.length === 0) &&
       activeId &&
       overId &&
       activeId !== overId
     ) {
-      const oldIndex = visibleDirectories.indexOf(activeId)
-      const newIndex = visibleDirectories.indexOf(overId)
+      const oldIndex = visibleProjects.indexOf(activeId)
+      const newIndex = visibleProjects.indexOf(overId)
       if (oldIndex !== -1 && newIndex !== -1) {
-        nextOrder = arrayMove(visibleDirectories, oldIndex, newIndex)
+        nextOrder = arrayMove(visibleProjects, oldIndex, newIndex)
       }
     }
 
     if (
       nextOrder &&
       nextOrder.length > 0 &&
-      !directoryOrderEqual(nextOrder, visibleDirectories)
+      !projectOrderEqual(nextOrder, visibleProjects)
     ) {
-      onReorderDirectories?.(nextOrder)
+      onReorderProjects?.(nextOrder)
     }
 
-    setActiveDirectory(null)
-    setPreviewDirectoryOrder(null)
+    setActiveProject(null)
+    setPreviewProjectOrder(null)
   }
 
   // The window draws the sidebar and its machine headings
@@ -2647,14 +2635,14 @@ function useAppSidebarView({
             >
               <PinnedAgentGroup
                 pinnedAgentKeys={pinnedAgentKeys}
-                directoryAgentsStore={directoryAgentsStore}
-                collapsedDirectoryStore={collapsedDirectoryStore}
+                projectAgentsStore={projectAgentsStore}
+                collapsedProjectStore={collapsedProjectStore}
                 collapseAllKeys={collapseAllKeys}
                 searchActive={listFiltered}
                 activeAgentStore={activeAgentStore}
                 selectedAgentKeyStore={selectedAgentKeyStore}
                 isMobile={isMobile}
-                moveTargetDirectories={visibleDirectories}
+                moveTargetProjects={visibleProjects}
                 setOpenMobile={setOpenMobile}
                 onAgentClick={onAgentClick}
                 onRenameAgent={onRenameAgent}
@@ -2664,40 +2652,37 @@ function useAppSidebarView({
                 onTogglePinnedAgent={onTogglePinnedAgent}
               />
               <Collapsible
-                open={showDirectoriesHeader ? !directoriesCollapsed : true}
+                open={showProjectsHeader ? !projectsCollapsed : true}
                 onOpenChange={(open, details) => {
                   if (searchActive) return
-                  // An Option-click also expands or collapses all directories.
+                  // An Option-click also expands or collapses all projects.
                   if (isAltChange(details)) {
-                    collapsedDirectoryStore.setAll(
-                      [
-                        DIRECTORIES_AGENT_GROUP_COLLAPSE_KEY,
-                        ...visibleDirectories,
-                      ],
+                    collapsedProjectStore.setAll(
+                      [PROJECTS_AGENT_GROUP_COLLAPSE_KEY, ...visibleProjects],
                       !open
                     )
                     return
                   }
-                  collapsedDirectoryStore.setCollapsed(
-                    DIRECTORIES_AGENT_GROUP_COLLAPSE_KEY,
+                  collapsedProjectStore.setCollapsed(
+                    PROJECTS_AGENT_GROUP_COLLAPSE_KEY,
                     !open
                   )
                 }}
               >
                 <SidebarGroup
-                  className={showDirectoriesHeader ? "py-1" : "pt-0 pb-1"}
+                  className={showProjectsHeader ? "py-1" : "pt-0 pb-1"}
                 >
-                  {showDirectoriesHeader ? (
-                    <AppSidebarDirectoriesHeader
+                  {showProjectsHeader ? (
+                    <AppSidebarProjectsHeader
                       agentSearch={agentSearch}
                       matchingAgentCount={matchingAgentCount}
-                      collapsed={directoriesCollapsed}
-                      onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
+                      collapsed={projectsCollapsed}
+                      onOpenAddProjectDialog={onOpenAddProjectDialog}
                     />
                   ) : null}
                   <CollapsibleContent>
                     <SidebarGroupContent>
-                      {visibleDirectories.length === 0 ? (
+                      {visibleProjects.length === 0 ? (
                         <div className="p-2">
                           <Empty className="rounded-xl border border-dashed bg-sidebar-accent/10 py-10">
                             <EmptyHeader>
@@ -2710,26 +2695,26 @@ function useAppSidebarView({
                         </div>
                       ) : (
                         <SortableContext
-                          items={orderedVisibleDirectories}
+                          items={orderedVisibleProjects}
                           strategy={verticalListSortingStrategy}
                         >
-                          {orderedVisibleDirectories.map((directory) => {
+                          {orderedVisibleProjects.map((project) => {
                             return (
-                              <SortableDirectoryGroup
-                                key={directory}
-                                id={directory}
-                                disabled={!directoryOrderingEnabled}
+                              <SortableProjectGroup
+                                key={project}
+                                id={project}
+                                disabled={!projectOrderingEnabled}
                               >
                                 {({ attributes, listeners, isDragging }) => (
-                                  <DirectoryAgentGroup
-                                    directory={directory}
-                                    directoryAgentsStore={directoryAgentsStore}
-                                    collapsedDirectoryStore={
-                                      collapsedDirectoryStore
+                                  <ProjectAgentGroup
+                                    project={project}
+                                    projectAgentsStore={projectAgentsStore}
+                                    collapsedProjectStore={
+                                      collapsedProjectStore
                                     }
                                     collapseAllKeys={collapseAllKeys}
                                     searchActive={listFiltered}
-                                    moveTargetDirectories={visibleDirectories}
+                                    moveTargetProjects={visibleProjects}
                                     activeAgentStore={activeAgentStore}
                                     selectedAgentKeyStore={
                                       selectedAgentKeyStore
@@ -2739,7 +2724,7 @@ function useAppSidebarView({
                                     setOpenMobile={setOpenMobile}
                                     isDragging={isDragging}
                                     isAgentDropTarget={
-                                      agentDropDirectory === directory
+                                      agentDropProject === project
                                     }
                                     attributes={attributes}
                                     listeners={listeners}
@@ -2748,25 +2733,25 @@ function useAppSidebarView({
                                     onDeleteAgent={onDeleteAgent}
                                     onSetAgentUnread={onSetAgentUnread}
                                     onMoveAgent={onMoveAgent}
-                                    onMoveAgentAnyDirectory={
-                                      onMoveAgentAnyDirectory
+                                    onMoveAgentAnyProject={
+                                      onMoveAgentAnyProject
                                     }
                                     onTogglePinnedAgent={onTogglePinnedAgent}
-                                    onCreateAgentInDirectory={
-                                      onCreateAgentInDirectory
+                                    onCreateAgentInProject={
+                                      onCreateAgentInProject
                                     }
-                                    onDeleteOldAgentsInDirectory={
-                                      onDeleteOldAgentsInDirectory
+                                    onDeleteOldAgentsInProject={
+                                      onDeleteOldAgentsInProject
                                     }
                                     onMarkAgentsRead={onMarkAgentsRead}
-                                    onRemoveDirectory={
-                                      onRemoveDirectory
-                                        ? removeDirectory
+                                    onRemoveProject={
+                                      onRemoveProject
+                                        ? removeProject
                                         : undefined
                                     }
                                   />
                                 )}
-                              </SortableDirectoryGroup>
+                              </SortableProjectGroup>
                             )
                           })}
                         </SortableContext>
@@ -2777,14 +2762,14 @@ function useAppSidebarView({
               </Collapsible>
 
               <DragOverlay>
-                {activeDirectory ? (
-                  <DirectoryAgentGroup
-                    directory={activeDirectory}
-                    directoryAgentsStore={directoryAgentsStore}
-                    collapsedDirectoryStore={collapsedDirectoryStore}
+                {activeProject ? (
+                  <ProjectAgentGroup
+                    project={activeProject}
+                    projectAgentsStore={projectAgentsStore}
+                    collapsedProjectStore={collapsedProjectStore}
                     collapseAllKeys={collapseAllKeys}
                     searchActive={listFiltered}
-                    moveTargetDirectories={visibleDirectories}
+                    moveTargetProjects={visibleProjects}
                     activeAgentStore={activeAgentStore}
                     selectedAgentKeyStore={selectedAgentKeyStore}
                     pinnedAgentKeys={pinnedAgentKeys}
@@ -2796,20 +2781,20 @@ function useAppSidebarView({
                     onDeleteAgent={onDeleteAgent}
                     onSetAgentUnread={onSetAgentUnread}
                     onMoveAgent={onMoveAgent}
-                    onMoveAgentAnyDirectory={onMoveAgentAnyDirectory}
+                    onMoveAgentAnyProject={onMoveAgentAnyProject}
                     onTogglePinnedAgent={onTogglePinnedAgent}
-                    onCreateAgentInDirectory={onCreateAgentInDirectory}
-                    onDeleteOldAgentsInDirectory={onDeleteOldAgentsInDirectory}
+                    onCreateAgentInProject={onCreateAgentInProject}
+                    onDeleteOldAgentsInProject={onDeleteOldAgentsInProject}
                     onMarkAgentsRead={onMarkAgentsRead}
-                    onRemoveDirectory={
-                      onRemoveDirectory ? removeDirectory : undefined
+                    onRemoveProject={
+                      onRemoveProject ? removeProject : undefined
                     }
                   />
                 ) : activeAgentDrag ? (
                   <SidebarMenu className="w-full rounded-md bg-sidebar shadow-lg ring-1 ring-sidebar-border/70">
                     <SidebarAgentItem
                       entryKey={activeAgentDrag.entryKey}
-                      directoryAgentsStore={directoryAgentsStore}
+                      projectAgentsStore={projectAgentsStore}
                       activeAgentStore={activeAgentStore}
                       selectedAgentKeyStore={selectedAgentKeyStore}
                       isPinned={pinnedAgentKeys.includes(
@@ -2817,14 +2802,14 @@ function useAppSidebarView({
                       )}
                       isMobile={isMobile}
                       overlay
-                      moveTargetDirectories={visibleDirectories}
+                      moveTargetProjects={visibleProjects}
                       setOpenMobile={setOpenMobile}
                       onAgentClick={onAgentClick}
                       onRenameAgent={onRenameAgent}
                       onDeleteAgent={onDeleteAgent}
                       onSetAgentUnread={onSetAgentUnread}
                       onMoveAgent={onMoveAgent}
-                      onMoveAgentAnyDirectory={onMoveAgentAnyDirectory}
+                      onMoveAgentAnyProject={onMoveAgentAnyProject}
                       onTogglePinnedAgent={onTogglePinnedAgent}
                     />
                   </SidebarMenu>

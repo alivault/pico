@@ -16,8 +16,8 @@ export const picoQueryKeys = {
     ["pico", "pi-performance", viewerContextId] as const,
   archivedAgents: (viewerContextId: string) =>
     ["pico", "archived-agents", viewerContextId] as const,
-  directoryAgentsIndex: (viewerContextId: string, directory: string) =>
-    ["pico", "directory-agents-index", viewerContextId, directory] as const,
+  projectAgentsIndex: (viewerContextId: string, project: string) =>
+    ["pico", "project-agents-index", viewerContextId, project] as const,
   gitStatus: (viewerContextId: string, cwd: string) =>
     ["pico", "git-status", viewerContextId, cwd] as const,
   gitChanges: (viewerContextId: string, cwd: string) =>

@@ -152,13 +152,13 @@ function directoryCompletionInputValue(item: CompletionItem) {
   return displayPath.endsWith("/") ? displayPath : `${displayPath}/`
 }
 
-export type AppShellAddDirectoryDialogHandle = {
+export type AppShellAddProjectDialogHandle = {
   open: () => void
   close: () => void
   isOpen: () => boolean
 }
 
-type AddDirectoryDialogState = {
+type AddProjectDialogState = {
   pathCompletionItems: Array<CompletionItem>
   pathCompletionLoading: boolean
   directorySearchItems: Array<CompletionItem>
@@ -166,7 +166,7 @@ type AddDirectoryDialogState = {
   selectedCommandValue: string
 }
 
-type AddDirectoryDialogAction =
+type AddProjectDialogAction =
   | { type: "pathCompletionsStarted" }
   | { type: "pathCompletionsFinished"; items: Array<CompletionItem> }
   | { type: "pathCompletionsReset" }
@@ -175,7 +175,7 @@ type AddDirectoryDialogAction =
   | { type: "directorySearchReset" }
   | { type: "selectedCommandValueChanged"; value: string }
 
-const initialAddDirectoryDialogState: AddDirectoryDialogState = {
+const initialAddProjectDialogState: AddProjectDialogState = {
   pathCompletionItems: [],
   pathCompletionLoading: false,
   directorySearchItems: [],
@@ -183,10 +183,10 @@ const initialAddDirectoryDialogState: AddDirectoryDialogState = {
   selectedCommandValue: "",
 }
 
-function addDirectoryDialogReducer(
-  state: AddDirectoryDialogState,
-  action: AddDirectoryDialogAction
-): AddDirectoryDialogState {
+function addProjectDialogReducer(
+  state: AddProjectDialogState,
+  action: AddProjectDialogAction
+): AddProjectDialogState {
   switch (action.type) {
     case "pathCompletionsStarted":
       return {
@@ -247,41 +247,41 @@ function addDirectoryDialogReducer(
   }
 }
 
-type AppShellAddDirectoryDialogProps = {
+type AppShellAddProjectDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   directoryInput: string
   onDirectoryInputChange: (value: string) => void
-  openedDirectories: Array<string>
+  openedProjects: Array<string>
   currentDirectory?: string
-  recentDirectories: Array<string>
-  knownDirectories: Array<string>
+  recentProjects: Array<string>
+  knownProjects: Array<string>
   useForNewAgent?: boolean
   useForMoveAgent?: boolean
-  onAddDirectoryPath: (path: string) => void
+  onAddProjectPath: (path: string) => void
   onRequestPathCompletions?: (prefix: string) => Promise<Array<CompletionItem>>
   onSearchDirectories?: (query: string) => Promise<Array<CompletionItem>>
 }
 
-function AppShellAddDirectoryDialog(props: AppShellAddDirectoryDialogProps) {
-  return useAppShellAddDirectoryDialogView(props)
+function AppShellAddProjectDialog(props: AppShellAddProjectDialogProps) {
+  return useAppShellAddProjectDialogView(props)
 }
 
-function useAppShellAddDirectoryDialogView({
+function useAppShellAddProjectDialogView({
   open,
   onOpenChange,
   directoryInput,
   onDirectoryInputChange,
-  openedDirectories,
+  openedProjects,
   currentDirectory,
-  recentDirectories,
-  knownDirectories,
+  recentProjects,
+  knownProjects,
   useForNewAgent = false,
   useForMoveAgent = false,
-  onAddDirectoryPath,
+  onAddProjectPath,
   onRequestPathCompletions,
   onSearchDirectories,
-}: AppShellAddDirectoryDialogProps) {
+}: AppShellAddProjectDialogProps) {
   const isMobile = useIsMobile()
   const directoryInputRef = React.useRef(directoryInput)
   const pathCompletionRequestIdRef = React.useRef(0)
@@ -289,8 +289,8 @@ function useAppShellAddDirectoryDialogView({
   const requestPathCompletionsRef = React.useRef(onRequestPathCompletions)
   const searchDirectoriesRef = React.useRef(onSearchDirectories)
   const [state, dispatch] = React.useReducer(
-    addDirectoryDialogReducer,
-    initialAddDirectoryDialogState
+    addProjectDialogReducer,
+    initialAddProjectDialogState
   )
   const {
     pathCompletionItems,
@@ -313,7 +313,7 @@ function useAppShellAddDirectoryDialogView({
           return await requestPathCompletions(prefix)
         },
         {
-          key: "pico.add-directory.path-completions",
+          key: "pico.add-project.path-completions",
           wait: 80,
         }
       )
@@ -330,7 +330,7 @@ function useAppShellAddDirectoryDialogView({
           return await searchDirectories(query)
         },
         {
-          key: "pico.add-directory.directory-search",
+          key: "pico.add-project.directory-search",
           wait: 120,
         }
       )
@@ -338,10 +338,10 @@ function useAppShellAddDirectoryDialogView({
   const directorySearchDebouncer = directorySearchDebouncerRef.current
   const directoryQuery = directoryInput.trim()
   const normalizedDirectoryQuery = directoryQuery.toLowerCase()
-  const openedSet = new Set(openedDirectories)
-  const recentSet = new Set(recentDirectories)
+  const openedSet = new Set(openedProjects)
+  const recentSet = new Set(recentProjects)
   const openedMatching = directoryQuery
-    ? openedDirectories.filter((directoryPath) =>
+    ? openedProjects.filter((directoryPath) =>
         directoryMatchesQuery(directoryPath, directoryQuery)
       )
     : []
@@ -351,12 +351,12 @@ function useAppShellAddDirectoryDialogView({
     directoryMatchesQuery(currentDirectory, directoryQuery)
       ? [currentDirectory]
       : []
-  const recentMatching = recentDirectories.filter(
+  const recentMatching = recentProjects.filter(
     (directoryPath) =>
       !openedSet.has(directoryPath) &&
       directoryMatchesQuery(directoryPath, directoryQuery)
   )
-  const knownMatching = knownDirectories.filter(
+  const knownMatching = knownProjects.filter(
     (directoryPath) =>
       !openedSet.has(directoryPath) &&
       directoryPath !== currentDirectory &&
@@ -366,7 +366,7 @@ function useAppShellAddDirectoryDialogView({
   const manualPath =
     directoryQuery &&
     !directoryDialogHasExactMatch(
-      [...openedDirectories, ...recentDirectories, ...knownDirectories],
+      [...openedProjects, ...recentProjects, ...knownProjects],
       normalizedDirectoryQuery
     )
       ? directoryQuery
@@ -377,7 +377,7 @@ function useAppShellAddDirectoryDialogView({
     recentMatching.length > 0 ||
     knownMatching.length > 0
   const queryLooksLikePath = directoryInputLooksLikePath(directoryQuery)
-  // A path shows its completions also when saved directories match it: a
+  // A path shows its completions also when saved projects match it: a
   // match such as the current directory must not hide the folders in it.
   const shouldShowPathCompletions = Boolean(
     directoryQuery && onRequestPathCompletions && queryLooksLikePath
@@ -400,7 +400,7 @@ function useAppShellAddDirectoryDialogView({
     hasPathCompletionResults ||
     hasDirectorySearchResults
   const addPathDescription = useForMoveAgent
-    ? "Resolve and move this agent to this directory."
+    ? "Resolve and move this agent to this project."
     : useForNewAgent
       ? "Add to sidebar and use for this new agent."
       : "Resolve and add this path to the sidebar."
@@ -421,10 +421,10 @@ function useAppShellAddDirectoryDialogView({
       : ""
   const manualGroupHeading = useForMoveAgent ? "Move to path" : "Add path"
   const manualPathPrefix = useForMoveAgent ? "Move to" : "Add"
-  const dialogTitle = useForMoveAgent ? "Move agent" : "Add directory"
+  const dialogTitle = useForMoveAgent ? "Move agent" : "Add project"
   const dialogDescription = useForMoveAgent
-    ? "Search recent and known directories or paste any path to move this agent."
-    : "Search recent and known directories or add a new path to the sidebar."
+    ? "Search recent and known projects, or paste a path to move this agent."
+    : "Search recent and known projects, or add a new path to the sidebar."
 
   React.useEffect(() => {
     if (!shouldShowPathCompletions) {
@@ -514,7 +514,7 @@ function useAppShellAddDirectoryDialogView({
     [directorySearchDebouncer, pathCompletionDebouncer]
   )
 
-  // Completions come first, except when saved directories match the input:
+  // Completions come first, except when saved projects match the input:
   // then the match stays the first item, so Enter keeps choosing it.
   const pathCompletionsGroup =
     shouldShowPathCompletions &&
@@ -529,7 +529,7 @@ function useAppShellAddDirectoryDialogView({
           <CommandItem
             key={`path-completion:${completion.value}`}
             value={pathCompletionCommandValue(completion, index)}
-            onSelect={() => onAddDirectoryPath(completion.value)}
+            onSelect={() => onAddProjectPath(completion.value)}
           >
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <DirectoryPathLabel path={completion.value} />
@@ -689,7 +689,7 @@ function useAppShellAddDirectoryDialogView({
           <CommandEmpty>
             {directoryQuery
               ? "No directories found. Type or paste a path to add it."
-              : "No recent or discovered directories yet."}
+              : "No recent or discovered projects yet."}
           </CommandEmpty>
         ) : null}
         {hasDirectoryMatches ? null : pathCompletionsGroup}
@@ -705,7 +705,7 @@ function useAppShellAddDirectoryDialogView({
               <CommandItem
                 key={`directory-search:${completion.value}`}
                 value={directorySearchCommandValue(completion, index)}
-                onSelect={() => onAddDirectoryPath(completion.value)}
+                onSelect={() => onAddProjectPath(completion.value)}
               >
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <DirectoryPathLabel path={completion.value} />
@@ -721,7 +721,7 @@ function useAppShellAddDirectoryDialogView({
           <CommandGroup heading={manualGroupHeading}>
             <CommandItem
               value={`add ${manualPath}`}
-              onSelect={() => onAddDirectoryPath(manualPath)}
+              onSelect={() => onAddProjectPath(manualPath)}
             >
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <DirectoryPathLabel
@@ -741,7 +741,7 @@ function useAppShellAddDirectoryDialogView({
               <CommandItem
                 key={`opened:${directoryPath}`}
                 value={`opened ${directoryPath}`}
-                onSelect={() => onAddDirectoryPath(directoryPath)}
+                onSelect={() => onAddProjectPath(directoryPath)}
               >
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <DirectoryPathLabel path={directoryPath} />
@@ -759,7 +759,7 @@ function useAppShellAddDirectoryDialogView({
               <CommandItem
                 key={`current:${directoryPath}`}
                 value={`current ${directoryPath}`}
-                onSelect={() => onAddDirectoryPath(directoryPath)}
+                onSelect={() => onAddProjectPath(directoryPath)}
               >
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <DirectoryPathLabel path={directoryPath} />
@@ -772,12 +772,12 @@ function useAppShellAddDirectoryDialogView({
           </CommandGroup>
         ) : null}
         {recentMatching.length > 0 ? (
-          <CommandGroup heading="Recent directories">
+          <CommandGroup heading="Recent projects">
             {recentMatching.map((directoryPath) => (
               <CommandItem
                 key={`recent:${directoryPath}`}
                 value={`recent ${directoryPath}`}
-                onSelect={() => onAddDirectoryPath(directoryPath)}
+                onSelect={() => onAddProjectPath(directoryPath)}
               >
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <DirectoryPathLabel path={directoryPath} />
@@ -793,15 +793,13 @@ function useAppShellAddDirectoryDialogView({
         ) : null}
         {knownMatching.length > 0 ? (
           <CommandGroup
-            heading={
-              directoryQuery ? "Matching directories" : "Known directories"
-            }
+            heading={directoryQuery ? "Matching projects" : "Known projects"}
           >
             {knownMatching.map((directoryPath) => (
               <CommandItem
                 key={`known:${directoryPath}`}
                 value={`known ${directoryPath}`}
-                onSelect={() => onAddDirectoryPath(directoryPath)}
+                onSelect={() => onAddProjectPath(directoryPath)}
               >
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <DirectoryPathLabel path={directoryPath} />
@@ -865,35 +863,35 @@ function useAppShellAddDirectoryDialogView({
     </CommandDialog>
   )
 }
-type AppShellAddDirectoryDialogControllerProps = {
-  ref?: React.Ref<AppShellAddDirectoryDialogHandle>
+type AppShellAddProjectDialogControllerProps = {
+  ref?: React.Ref<AppShellAddProjectDialogHandle>
   openStateRef?: React.RefObject<boolean>
-  openedDirectories: Array<string>
+  openedProjects: Array<string>
   currentDirectory?: string
-  recentDirectories: Array<string>
-  knownDirectories: Array<string>
+  recentProjects: Array<string>
+  knownProjects: Array<string>
   useForNewAgent?: boolean
   useForMoveAgent?: boolean
-  onAddDirectoryPath: (
+  onAddProjectPath: (
     path: string
   ) => Promise<boolean | string> | boolean | string | void
   onRequestPathCompletions?: (prefix: string) => Promise<Array<CompletionItem>>
   onSearchDirectories?: (query: string) => Promise<Array<CompletionItem>>
 }
 
-export function AppShellAddDirectoryDialogController({
+export function AppShellAddProjectDialogController({
   ref,
   openStateRef,
-  openedDirectories,
+  openedProjects,
   currentDirectory,
-  recentDirectories,
-  knownDirectories,
+  recentProjects,
+  knownProjects,
   useForNewAgent,
   useForMoveAgent,
-  onAddDirectoryPath,
+  onAddProjectPath,
   onRequestPathCompletions,
   onSearchDirectories,
-}: AppShellAddDirectoryDialogControllerProps) {
+}: AppShellAddProjectDialogControllerProps) {
   const [open, setOpen] = React.useState(false)
   const [directoryInput, setDirectoryInput] = React.useState("")
   const openRef = React.useRef(open)
@@ -906,8 +904,8 @@ export function AppShellAddDirectoryDialogController({
     setOpen(nextOpen)
   }
 
-  const addDirectoryPath = async (path: string) => {
-    const success = await onAddDirectoryPath(path)
+  const addProjectPath = async (path: string) => {
+    const success = await onAddProjectPath(path)
     if (success === false) return
 
     setDirectoryInput("")
@@ -930,19 +928,19 @@ export function AppShellAddDirectoryDialogController({
   )
 
   return (
-    <AppShellAddDirectoryDialog
+    <AppShellAddProjectDialog
       open={open}
       onOpenChange={setOpenState}
       directoryInput={directoryInput}
       onDirectoryInputChange={setDirectoryInput}
-      openedDirectories={openedDirectories}
+      openedProjects={openedProjects}
       currentDirectory={currentDirectory}
-      recentDirectories={recentDirectories}
-      knownDirectories={knownDirectories}
+      recentProjects={recentProjects}
+      knownProjects={knownProjects}
       useForNewAgent={useForNewAgent}
       useForMoveAgent={useForMoveAgent}
-      onAddDirectoryPath={(path) => {
-        void addDirectoryPath(path)
+      onAddProjectPath={(path) => {
+        void addProjectPath(path)
       }}
       onRequestPathCompletions={onRequestPathCompletions}
       onSearchDirectories={onSearchDirectories}

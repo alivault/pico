@@ -97,23 +97,22 @@ export function agentMatchesStatusFilter(
 
 /**
  * Keeps only the agents with a state of the filter, and only the
- * directories that still have agents outside the pinned group.
+ * projects that still have agents outside the pinned group.
  */
-export function filterDirectoryAgentsByStatus(
-  directories: Array<string>,
-  agentsByDirectory: Record<string, Array<AgentListEntry>>,
+export function filterProjectAgentsByStatus(
+  projects: Array<string>,
+  agentsByProject: Record<string, Array<AgentListEntry>>,
   filter: AgentStatusFilter | AgentStatusFilters,
   isPinned: (entry: AgentListEntry) => boolean
 ) {
-  const visibleDirectories: Array<string> = []
+  const visibleProjects: Array<string> = []
   const filteredAgents: Record<string, Array<AgentListEntry>> = {}
-  for (const directory of directories) {
-    const agents = (agentsByDirectory[directory] ?? []).filter((entry) =>
+  for (const project of projects) {
+    const agents = (agentsByProject[project] ?? []).filter((entry) =>
       agentMatchesStatusFilter(entry, filter)
     )
-    filteredAgents[directory] = agents
-    if (agents.some((entry) => !isPinned(entry)))
-      visibleDirectories.push(directory)
+    filteredAgents[project] = agents
+    if (agents.some((entry) => !isPinned(entry))) visibleProjects.push(project)
   }
-  return { visibleDirectories, filteredAgents }
+  return { visibleProjects, filteredAgents }
 }

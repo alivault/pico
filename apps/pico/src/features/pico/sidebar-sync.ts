@@ -1,6 +1,6 @@
 /**
- * Sync the sidebar layout across devices: the added directories in order, the
- * pinned agents, and the collapsed directories. Each machine's server keeps
+ * Sync the sidebar layout across devices: the added projects in order, the
+ * pinned agents, and the collapsed projects. Each machine's server keeps
  * the shared copy of that machine. Local storage stays the copy that the UI
  * reads, so the sidebar shows at once when the page opens.
  *
@@ -16,33 +16,33 @@
 import { emitPicoEvent } from "@/features/pico/agent/events"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import {
-  COLLAPSED_DIRECTORIES_STORAGE_KEY,
+  COLLAPSED_PROJECTS_STORAGE_KEY,
   PINNED_AGENTS_STORAGE_KEY,
-  SIDEBAR_DIRECTORIES_STORAGE_KEY,
+  SIDEBAR_PROJECTS_STORAGE_KEY,
   machineLocalStorageGetItem,
   machineLocalStorageSetItem,
-  readStoredCollapsedDirectories,
+  readStoredCollapsedProjects,
   readStoredPinnedAgentKeys,
-  readStoredSidebarDirectories,
+  readStoredSidebarProjects,
 } from "@/lib/pico"
 import type { SidebarStateEvent, SidebarStateSnapshot } from "@/lib/pico/api"
 import { setLocalStorageWriteListener } from "@/lib/pico/storage"
 
 export type SidebarSyncField =
-  | "directories"
+  | "projects"
   | "pinnedAgentKeys"
-  | "collapsedDirectories"
+  | "collapsedProjects"
 
 const FIELD_BY_KEY: Record<string, SidebarSyncField> = {
-  [SIDEBAR_DIRECTORIES_STORAGE_KEY]: "directories",
+  [SIDEBAR_PROJECTS_STORAGE_KEY]: "projects",
   [PINNED_AGENTS_STORAGE_KEY]: "pinnedAgentKeys",
-  [COLLAPSED_DIRECTORIES_STORAGE_KEY]: "collapsedDirectories",
+  [COLLAPSED_PROJECTS_STORAGE_KEY]: "collapsedProjects",
 }
 
 const KEY_BY_FIELD: Record<SidebarSyncField, string> = {
-  directories: SIDEBAR_DIRECTORIES_STORAGE_KEY,
+  projects: SIDEBAR_PROJECTS_STORAGE_KEY,
   pinnedAgentKeys: PINNED_AGENTS_STORAGE_KEY,
-  collapsedDirectories: COLLAPSED_DIRECTORIES_STORAGE_KEY,
+  collapsedProjects: COLLAPSED_PROJECTS_STORAGE_KEY,
 }
 
 /** Set after this browser added its own lists to the shared state once. */
@@ -84,18 +84,18 @@ class MachineSidebarSync {
   }
 
   #readLocal(field: SidebarSyncField) {
-    if (field === "directories")
-      return readStoredSidebarDirectories(this.machineId).directories
+    if (field === "projects")
+      return readStoredSidebarProjects(this.machineId).projects
     if (field === "pinnedAgentKeys")
       return readStoredPinnedAgentKeys(this.machineId)
-    return readStoredCollapsedDirectories(this.machineId)
+    return readStoredCollapsedProjects(this.machineId)
   }
 
   #readAllLocal() {
     return {
-      directories: this.#readLocal("directories"),
+      projects: this.#readLocal("projects"),
       pinnedAgentKeys: this.#readLocal("pinnedAgentKeys"),
-      collapsedDirectories: this.#readLocal("collapsedDirectories"),
+      collapsedProjects: this.#readLocal("collapsedProjects"),
     }
   }
 

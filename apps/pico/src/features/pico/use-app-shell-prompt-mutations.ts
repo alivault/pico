@@ -35,10 +35,10 @@ import {
 } from "@/features/pico/pending-queue"
 import { MachineOfflineError } from "@/lib/pico/machine"
 import {
-  DRAFT_DIRECTORY_STORAGE_KEY,
-  SIDEBAR_DIRECTORIES_STORAGE_KEY,
+  DRAFT_PROJECT_STORAGE_KEY,
+  SIDEBAR_PROJECTS_STORAGE_KEY,
   normalizePromptImage,
-  normalizeStoredDirectoryList,
+  normalizeStoredProjectList,
   promptDraftKey,
   promptDraftKeyMatchesOwner,
   machineLocalStorageSetItem,
@@ -104,7 +104,7 @@ function pendingMessagesFromResponse(
 type UseAppShellPromptMutationsOptions = {
   viewerContextId: string
   activeAgentId?: string
-  defaultNewAgentDirectory?: string
+  defaultNewAgentProject?: string
   agentStore: AgentStateStore
   agentStateRef: React.RefObject<AgentState>
   draftAgentLoadingOwnerKey: string | null
@@ -124,8 +124,8 @@ type UseAppShellPromptMutationsOptions = {
     }
   ) => void
   lastSyncedEditorTextRef: React.RefObject<string>
-  rememberRecentDirectory: (directory: string) => void
-  prefetchDirectoryAgentsIndex: (directory: string) => void
+  rememberRecentProject: (project: string) => void
+  prefetchProjectAgentsIndex: (project: string) => void
   addOptimisticUserMessage: (options: {
     message: string
     images: Array<PromptImage>
@@ -147,8 +147,8 @@ type UseAppShellPromptMutationsOptions = {
     preview: string
     optimisticSidebarAgentId?: string
   }) => void
-  setSidebarDirectories: React.Dispatch<React.SetStateAction<Array<string>>>
-  setStoredDraftDirectory: React.Dispatch<React.SetStateAction<string>>
+  setSidebarProjects: React.Dispatch<React.SetStateAction<Array<string>>>
+  setStoredDraftProject: React.Dispatch<React.SetStateAction<string>>
   setDraftAgentLoadingOwnerKey: React.Dispatch<
     React.SetStateAction<string | null>
   >
@@ -363,7 +363,7 @@ function buildOfflinePromptBody(item: OfflinePromptQueueItem) {
 export function useAppShellPromptMutations({
   viewerContextId,
   activeAgentId,
-  defaultNewAgentDirectory,
+  defaultNewAgentProject,
   agentStore,
   agentStateRef,
   draftAgentLoadingOwnerKey,
@@ -377,16 +377,16 @@ export function useAppShellPromptMutations({
   composerSkillRef,
   replaceComposerDraft,
   lastSyncedEditorTextRef,
-  rememberRecentDirectory,
-  prefetchDirectoryAgentsIndex,
+  rememberRecentProject,
+  prefetchProjectAgentsIndex,
   addOptimisticUserMessage,
   removeOptimisticUserMessage,
   addOptimisticSidebarAgent,
   removeOptimisticSidebarAgent,
   bindOptimisticSidebarAgent,
   updateOptimisticSidebarAgentPreview,
-  setSidebarDirectories,
-  setStoredDraftDirectory,
+  setSidebarProjects,
+  setStoredDraftProject,
   setDraftAgentLoadingOwnerKey,
   setPendingDraftPrompt,
   setPendingDraftFollowUps,
@@ -471,7 +471,7 @@ export function useAppShellPromptMutations({
     [updatePendingMessages]
   )
 
-  const addDirectoryMutation = useMutation({
+  const addProjectMutation = useMutation({
     mutationFn: async (requestedPath: string) => {
       if (!viewerContextId) {
         throw new Error("Viewer context unavailable")
@@ -492,7 +492,7 @@ export function useAppShellPromptMutations({
     },
     onSuccess: async (response) => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.directoryAgentsIndex(
+        queryKey: picoQueryKeys.projectAgentsIndex(
           viewerContextId,
           response.path
         ),
@@ -543,38 +543,38 @@ export function useAppShellPromptMutations({
     ]
   )
 
-  const addDirectoryPath = React.useCallback(
+  const addProjectPath = React.useCallback(
     async (path: string) => {
       if (!viewerContextId) return false
       const requestedPath = path.trim()
       if (!requestedPath) return false
 
       try {
-        const response = await addDirectoryMutation.mutateAsync(requestedPath)
-        setSidebarDirectories((current) => {
-          const next = normalizeStoredDirectoryList([...current, response.path])
+        const response = await addProjectMutation.mutateAsync(requestedPath)
+        setSidebarProjects((current) => {
+          const next = normalizeStoredProjectList([...current, response.path])
           machineLocalStorageSetItem(
             machineId,
-            SIDEBAR_DIRECTORIES_STORAGE_KEY,
+            SIDEBAR_PROJECTS_STORAGE_KEY,
             JSON.stringify(next)
           )
           return next
         })
-        rememberRecentDirectory(response.path)
-        prefetchDirectoryAgentsIndex(response.path)
+        rememberRecentProject(response.path)
+        prefetchProjectAgentsIndex(response.path)
         return response.path
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "Failed to add directory"
+          error instanceof Error ? error.message : "Failed to add project"
         )
         return false
       }
     },
     [
-      addDirectoryMutation,
-      prefetchDirectoryAgentsIndex,
-      rememberRecentDirectory,
-      setSidebarDirectories,
+      addProjectMutation,
+      prefetchProjectAgentsIndex,
+      rememberRecentProject,
+      setSidebarProjects,
       viewerContextId,
     ]
   )
@@ -608,17 +608,17 @@ export function useAppShellPromptMutations({
 
       const nextCwd = resolveNewAgentCwd({
         cwdOverride,
-        defaultDirectory: defaultNewAgentDirectory,
+        defaultProject: defaultNewAgentProject,
         currentCwd: agentStateRef.current.cwd,
       })
       if (nextCwd) {
-        rememberRecentDirectory(nextCwd)
+        rememberRecentProject(nextCwd)
         machineLocalStorageSetItem(
           machineId,
-          DRAFT_DIRECTORY_STORAGE_KEY,
+          DRAFT_PROJECT_STORAGE_KEY,
           nextCwd
         )
-        setStoredDraftDirectory(nextCwd)
+        setStoredDraftProject(nextCwd)
       }
       const ownerKey = promptDraftKey({ cwd: nextCwd })
       draftAgentLoadingOwnerKeyRef.current = ownerKey
@@ -676,14 +676,14 @@ export function useAppShellPromptMutations({
     },
     [
       createAgentRequest,
-      defaultNewAgentDirectory,
-      rememberRecentDirectory,
+      defaultNewAgentProject,
+      rememberRecentProject,
       restorePendingDraftPrompt,
       agentStateRef,
       setAwaitingFirstTurn,
       setDraftAgentLoadingOwnerKey,
       setPendingMessages,
-      setStoredDraftDirectory,
+      setStoredDraftProject,
       viewerContextId,
     ]
   )
@@ -1692,7 +1692,7 @@ export function useAppShellPromptMutations({
 
   return {
     abortAgent,
-    addDirectoryPath,
+    addProjectPath,
     createAgent,
     holdPendingQueue,
     savePendingQueue,

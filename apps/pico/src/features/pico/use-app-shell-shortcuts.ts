@@ -24,7 +24,7 @@ type ShortcutActions = {
   focusAgentSearch: () => void
   jumpToNextMessage: () => void
   jumpToPreviousMessage: () => void
-  openAddDirectoryDialog: () => void
+  openAddProjectDialog: () => void
   openCommandPalette: () => void
   closeCommandPalette: () => void
   openCommitDialog: () => void
@@ -58,13 +58,13 @@ export type AppShellShortcutState = {
 }
 
 type UseAppShellShortcutsOptions = {
-  addDirectoryOpenRef: React.RefObject<boolean>
+  addProjectOpenRef: React.RefObject<boolean>
   commandPaletteOpenRef: React.RefObject<boolean>
   compactRunningRef: React.RefObject<boolean>
   deleteOpenRef: React.RefObject<boolean>
   forkOpenRef: React.RefObject<boolean>
   gitCommitOpenRef: React.RefObject<boolean>
-  moveAgentDirectoryOpenRef: React.RefObject<boolean>
+  moveAgentProjectOpenRef: React.RefObject<boolean>
   pendingUiRequestOpenRef: React.RefObject<boolean>
   renameOpenRef: React.RefObject<boolean>
   agentSearchInputRef: React.RefObject<HTMLInputElement | null>
@@ -145,7 +145,7 @@ function openAdjacentSidebarAgent(offset: -1 | 1) {
   items[nextIndex]?.click()
 }
 
-// Open the first agent of the previous or next sidebar group (a directory
+// Open the first agent of the previous or next sidebar group (a project
 // or the pinned group). Groups without shown agents are skipped.
 function openAdjacentSidebarGroup(offset: -1 | 1) {
   const groups = Array.from(
@@ -174,13 +174,13 @@ function openSidebarAgentAt(index: number) {
 }
 
 export function useAppShellShortcuts({
-  addDirectoryOpenRef,
+  addProjectOpenRef,
   commandPaletteOpenRef,
   compactRunningRef,
   deleteOpenRef,
   forkOpenRef,
   gitCommitOpenRef,
-  moveAgentDirectoryOpenRef,
+  moveAgentProjectOpenRef,
   pendingUiRequestOpenRef,
   renameOpenRef,
   agentSearchInputRef,
@@ -196,12 +196,12 @@ export function useAppShellShortcuts({
     const shortcutState = shortcutStateRef.current
     const commandPaletteOpen = commandPaletteOpenRef.current
     const blockingModalOpen =
-      addDirectoryOpenRef.current ||
+      addProjectOpenRef.current ||
       renameOpenRef.current ||
       deleteOpenRef.current ||
       forkOpenRef.current ||
       gitCommitOpenRef.current ||
-      moveAgentDirectoryOpenRef.current ||
+      moveAgentProjectOpenRef.current ||
       treeOpenRef.current ||
       agentsOpenRef.current ||
       settingsOpenRef.current ||
@@ -502,7 +502,7 @@ export function useAppShellShortcuts({
     if (key === "d") {
       event.preventDefault()
       closeCommandPaletteForShortcut(context.commandPaletteOpen)
-      shortcutActionsRef.current.openAddDirectoryDialog()
+      shortcutActionsRef.current.openAddProjectDialog()
       return
     }
 
@@ -674,9 +674,9 @@ export function useAppShellShortcuts({
       },
       options: {
         meta: {
-          name: "Open previous or next directory",
+          name: "Open previous or next project",
           description:
-            "Open the first agent of the directory above or below in the sidebar.",
+            "Open the first agent of the project above or below in the sidebar.",
         },
       },
     })),

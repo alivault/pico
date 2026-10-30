@@ -6,8 +6,8 @@ import { usePicoEvent } from "@/features/pico/agent/events"
 import { toast } from "@/lib/pico/toast"
 
 import {
-  AppShellAddDirectoryDialogController,
-  type AppShellAddDirectoryDialogHandle,
+  AppShellAddProjectDialogController,
+  type AppShellAddProjectDialogHandle,
 } from "@/features/pico/app-shell-add-project-dialog"
 import {
   AppShellAuthDialogController,
@@ -49,11 +49,11 @@ import type {
 import { GitCommitDialogController } from "@/features/pico/right-sidebar-git-commit-dialog"
 import type { GitCommitDialogControllerHandle } from "@/features/pico/right-sidebar-types"
 import {
-  DeleteOldDirectoryAgentsDialogController,
+  DeleteOldProjectAgentsDialogController,
   DeleteAgentsDialogController,
   ForkAgentDialogController,
   RenameAgentDialogController,
-  type DeleteOldDirectoryAgentsDialogHandle,
+  type DeleteOldProjectAgentsDialogHandle,
   type DeleteAgentsDialogHandle,
   type ForkAgentDialogHandle,
   type RenameAgentDialogHandle,
@@ -72,12 +72,12 @@ import { useMachineId } from "@/lib/pico/machine-context"
 
 type AppShellFloatingControllersProps = {
   activeAgentId?: string
-  addDirectoryDialogRef: React.RefObject<AppShellAddDirectoryDialogHandle | null>
-  addDirectoryOpenRef: React.RefObject<boolean>
-  addDirectoryPath: React.ComponentProps<
-    typeof AppShellAddDirectoryDialogController
-  >["onAddDirectoryPath"]
-  baseSidebarDirectories: Array<string>
+  addProjectDialogRef: React.RefObject<AppShellAddProjectDialogHandle | null>
+  addProjectOpenRef: React.RefObject<boolean>
+  addProjectPath: React.ComponentProps<
+    typeof AppShellAddProjectDialogController
+  >["onAddProjectPath"]
+  baseSidebarProjects: Array<string>
   commandPaletteCommandsRef: React.RefObject<() => Array<AppCommand>>
   commandPaletteOpenRef: React.RefObject<boolean>
   commandPaletteRef: React.RefObject<AppShellCommandPaletteHandle | null>
@@ -91,20 +91,20 @@ type AppShellFloatingControllersProps = {
   deleteAgents: React.ComponentProps<
     typeof DeleteAgentsDialogController
   >["onDeleteAgent"]
-  deleteOldDirectoryAgentsDialogRef: React.RefObject<DeleteOldDirectoryAgentsDialogHandle | null>
-  deleteOldDirectoryAgentsOpenRef: React.RefObject<boolean>
+  deleteOldProjectAgentsDialogRef: React.RefObject<DeleteOldProjectAgentsDialogHandle | null>
+  deleteOldProjectAgentsOpenRef: React.RefObject<boolean>
   notificationStore: PicoStore<AppShellNotificationState>
   forkDialogRef: React.RefObject<ForkAgentDialogHandle | null>
   forkOpenRef: React.RefObject<boolean>
   gitCommitDialogRef: React.RefObject<GitCommitDialogControllerHandle | null>
   gitCommitOpenRef: React.RefObject<boolean>
   displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
-  knownDirectories: Array<string>
-  moveAgentDirectoryDialogRef: React.RefObject<AppShellAddDirectoryDialogHandle | null>
-  moveAgentDirectoryOpenRef: React.RefObject<boolean>
-  moveAgentDirectoryTargetToPath: React.ComponentProps<
-    typeof AppShellAddDirectoryDialogController
-  >["onAddDirectoryPath"]
+  knownProjects: Array<string>
+  moveAgentProjectDialogRef: React.RefObject<AppShellAddProjectDialogHandle | null>
+  moveAgentProjectOpenRef: React.RefObject<boolean>
+  moveAgentProjectTargetToPath: React.ComponentProps<
+    typeof AppShellAddProjectDialogController
+  >["onAddProjectPath"]
   onAutoScrollEnabledChange: (enabled: boolean) => void
   onCenterMessagesChange: (centered: boolean) => void
   onHideThinkingBlocksChange: (hidden: boolean) => void
@@ -118,14 +118,14 @@ type AppShellFloatingControllersProps = {
   onThemeChange: (value: ThemeFamily) => void
   onThemeColorModeChange: (value: ThemeColorMode) => void
   onThemePreviewChange: (value: ThemeFamily, colorMode: ThemeColorMode) => void
-  recentDirectoriesStore: PicoStore<Array<string>>
+  recentProjectsStore: PicoStore<Array<string>>
   renameDialogRef: React.RefObject<RenameAgentDialogHandle | null>
   renameOpenRef: React.RefObject<boolean>
   renameAgentPath: React.ComponentProps<
     typeof RenameAgentDialogController
   >["onRenameAgent"]
   agentCwd?: string
-  agentsDialogDirectory: string
+  agentsDialogProject: string
   agentsDialogRef: React.RefObject<AppShellAgentsDialogHandle | null>
   agentsOpenRef: React.RefObject<boolean>
   agentStore: PicoStore<AgentState>
@@ -166,8 +166,8 @@ const AppShellCommandPaletteHost = React.memo(
 
 const AppShellAgentsDialogHost = React.memo(function AppShellAgentsDialogHost({
   activeAgentId,
-  knownDirectories,
-  agentsDialogDirectory,
+  knownProjects,
+  agentsDialogProject,
   agentsDialogRef,
   agentsOpenRef,
   sidebarStore,
@@ -178,8 +178,8 @@ const AppShellAgentsDialogHost = React.memo(function AppShellAgentsDialogHost({
 }: Pick<
   AppShellFloatingControllersProps,
   | "activeAgentId"
-  | "knownDirectories"
-  | "agentsDialogDirectory"
+  | "knownProjects"
+  | "agentsDialogProject"
   | "agentsDialogRef"
   | "agentsOpenRef"
   | "sidebarStore"
@@ -193,7 +193,7 @@ const AppShellAgentsDialogHost = React.memo(function AppShellAgentsDialogHost({
     (snapshot) => ({
       activeAgentId: snapshot.state.agentsEvent?.activeAgentId || activeAgentId,
       activeAgentPath: snapshot.state.agentsEvent?.activeAgentPath || "",
-      directoryAgentsByPath: snapshot.derived.sidebarDirectoryIndexes,
+      projectAgentsByPath: snapshot.derived.sidebarProjectIndexes,
       agentStatusByKey: snapshot.state.sidebarAgentStatusByKey,
     })
   )
@@ -203,9 +203,9 @@ const AppShellAgentsDialogHost = React.memo(function AppShellAgentsDialogHost({
       ref={agentsDialogRef}
       openStateRef={agentsOpenRef}
       viewerContextId={viewerContextId}
-      currentDirectory={agentsDialogDirectory}
-      knownDirectories={knownDirectories}
-      directoryAgentsByPath={agentsDialogSnapshot.directoryAgentsByPath}
+      currentProject={agentsDialogProject}
+      knownProjects={knownProjects}
+      projectAgentsByPath={agentsDialogSnapshot.projectAgentsByPath}
       agentStatusByKey={agentsDialogSnapshot.agentStatusByKey}
       activeAgentId={agentsDialogSnapshot.activeAgentId}
       activeAgentPath={agentsDialogSnapshot.activeAgentPath}
@@ -221,33 +221,33 @@ const AppShellAgentsDialogHost = React.memo(function AppShellAgentsDialogHost({
   )
 })
 
-const AppShellAddDirectoryDialogHost = React.memo(
-  function AppShellAddDirectoryDialogHost({
-    addDirectoryDialogRef,
-    addDirectoryOpenRef,
+const AppShellAddProjectDialogHost = React.memo(
+  function AppShellAddProjectDialogHost({
+    addProjectDialogRef,
+    addProjectOpenRef,
     activeAgentId,
-    addDirectoryPath,
-    baseSidebarDirectories,
-    knownDirectories,
-    recentDirectoriesStore,
+    addProjectPath,
+    baseSidebarProjects,
+    knownProjects,
+    recentProjectsStore,
     agentCwd,
     agentStore,
     viewerContextId,
   }: Pick<
     AppShellFloatingControllersProps,
     | "activeAgentId"
-    | "addDirectoryDialogRef"
-    | "addDirectoryOpenRef"
-    | "addDirectoryPath"
-    | "baseSidebarDirectories"
-    | "knownDirectories"
-    | "recentDirectoriesStore"
+    | "addProjectDialogRef"
+    | "addProjectOpenRef"
+    | "addProjectPath"
+    | "baseSidebarProjects"
+    | "knownProjects"
+    | "recentProjectsStore"
     | "agentCwd"
     | "agentStore"
     | "viewerContextId"
   >) {
     const machineId = useMachineId()
-    const recentDirectories = useSelector(recentDirectoriesStore)
+    const recentProjects = useSelector(recentProjectsStore)
     const useForNewAgent = useSelector(
       agentStore,
       (agentState) => agentState.draft && agentState.items.length === 0
@@ -288,15 +288,15 @@ const AppShellAddDirectoryDialogHost = React.memo(
     })
 
     return (
-      <AppShellAddDirectoryDialogController
-        ref={addDirectoryDialogRef}
-        openStateRef={addDirectoryOpenRef}
-        openedDirectories={baseSidebarDirectories}
+      <AppShellAddProjectDialogController
+        ref={addProjectDialogRef}
+        openStateRef={addProjectOpenRef}
+        openedProjects={baseSidebarProjects}
         currentDirectory={agentCwd}
-        recentDirectories={recentDirectories}
-        knownDirectories={knownDirectories}
+        recentProjects={recentProjects}
+        knownProjects={knownProjects}
         useForNewAgent={useForNewAgent}
-        onAddDirectoryPath={addDirectoryPath}
+        onAddProjectPath={addProjectPath}
         onRequestPathCompletions={requestPathCompletions}
         onSearchDirectories={searchDirectories}
       />
@@ -304,31 +304,31 @@ const AppShellAddDirectoryDialogHost = React.memo(
   }
 )
 
-const AppShellMoveAgentDirectoryDialogHost = React.memo(
-  function AppShellMoveAgentDirectoryDialogHost({
+const AppShellMoveAgentProjectDialogHost = React.memo(
+  function AppShellMoveAgentProjectDialogHost({
     activeAgentId,
-    baseSidebarDirectories,
-    knownDirectories,
-    moveAgentDirectoryDialogRef,
-    moveAgentDirectoryOpenRef,
-    moveAgentDirectoryTargetToPath,
-    recentDirectoriesStore,
+    baseSidebarProjects,
+    knownProjects,
+    moveAgentProjectDialogRef,
+    moveAgentProjectOpenRef,
+    moveAgentProjectTargetToPath,
+    recentProjectsStore,
     agentCwd,
     viewerContextId,
   }: Pick<
     AppShellFloatingControllersProps,
     | "activeAgentId"
-    | "baseSidebarDirectories"
-    | "knownDirectories"
-    | "moveAgentDirectoryDialogRef"
-    | "moveAgentDirectoryOpenRef"
-    | "moveAgentDirectoryTargetToPath"
-    | "recentDirectoriesStore"
+    | "baseSidebarProjects"
+    | "knownProjects"
+    | "moveAgentProjectDialogRef"
+    | "moveAgentProjectOpenRef"
+    | "moveAgentProjectTargetToPath"
+    | "recentProjectsStore"
     | "agentCwd"
     | "viewerContextId"
   >) {
     const machineId = useMachineId()
-    const recentDirectories = useSelector(recentDirectoriesStore)
+    const recentProjects = useSelector(recentProjectsStore)
     const requestPathCompletions = useStableEvent(async (prefix: string) => {
       if (!viewerContextId) return []
 
@@ -365,15 +365,15 @@ const AppShellMoveAgentDirectoryDialogHost = React.memo(
     })
 
     return (
-      <AppShellAddDirectoryDialogController
-        ref={moveAgentDirectoryDialogRef}
-        openStateRef={moveAgentDirectoryOpenRef}
-        openedDirectories={baseSidebarDirectories}
+      <AppShellAddProjectDialogController
+        ref={moveAgentProjectDialogRef}
+        openStateRef={moveAgentProjectOpenRef}
+        openedProjects={baseSidebarProjects}
         currentDirectory={agentCwd}
-        recentDirectories={recentDirectories}
-        knownDirectories={knownDirectories}
+        recentProjects={recentProjects}
+        knownProjects={knownProjects}
         useForMoveAgent
-        onAddDirectoryPath={moveAgentDirectoryTargetToPath}
+        onAddProjectPath={moveAgentProjectTargetToPath}
         onRequestPathCompletions={requestPathCompletions}
         onSearchDirectories={searchDirectories}
       />
@@ -421,21 +421,21 @@ const AppShellDeleteAgentsDialogHost = React.memo(
   }
 )
 
-const AppShellDeleteOldDirectoryAgentsDialogHost = React.memo(
-  function AppShellDeleteOldDirectoryAgentsDialogHost({
-    deleteOldDirectoryAgentsDialogRef,
-    deleteOldDirectoryAgentsOpenRef,
+const AppShellDeleteOldProjectAgentsDialogHost = React.memo(
+  function AppShellDeleteOldProjectAgentsDialogHost({
+    deleteOldProjectAgentsDialogRef,
+    deleteOldProjectAgentsOpenRef,
     viewerContextId,
   }: Pick<
     AppShellFloatingControllersProps,
-    | "deleteOldDirectoryAgentsDialogRef"
-    | "deleteOldDirectoryAgentsOpenRef"
+    | "deleteOldProjectAgentsDialogRef"
+    | "deleteOldProjectAgentsOpenRef"
     | "viewerContextId"
   >) {
     return (
-      <DeleteOldDirectoryAgentsDialogController
-        ref={deleteOldDirectoryAgentsDialogRef}
-        openStateRef={deleteOldDirectoryAgentsOpenRef}
+      <DeleteOldProjectAgentsDialogController
+        ref={deleteOldProjectAgentsDialogRef}
+        openStateRef={deleteOldProjectAgentsOpenRef}
         viewerContextId={viewerContextId}
       />
     )
@@ -651,10 +651,10 @@ const AppShellUiRequestDialogHost = React.memo(
 export const AppShellFloatingControllers = React.memo(
   function AppShellFloatingControllers({
     activeAgentId,
-    addDirectoryDialogRef,
-    addDirectoryOpenRef,
-    addDirectoryPath,
-    baseSidebarDirectories,
+    addProjectDialogRef,
+    addProjectOpenRef,
+    addProjectPath,
+    baseSidebarProjects,
     commandPaletteCommandsRef,
     commandPaletteOpenRef,
     commandPaletteRef,
@@ -666,18 +666,18 @@ export const AppShellFloatingControllers = React.memo(
     deleteDialogRef,
     deleteOpenRef,
     deleteAgents,
-    deleteOldDirectoryAgentsDialogRef,
-    deleteOldDirectoryAgentsOpenRef,
+    deleteOldProjectAgentsDialogRef,
+    deleteOldProjectAgentsOpenRef,
     notificationStore,
     forkDialogRef,
     forkOpenRef,
     gitCommitDialogRef,
     gitCommitOpenRef,
     displaySettingsStore,
-    knownDirectories,
-    moveAgentDirectoryDialogRef,
-    moveAgentDirectoryOpenRef,
-    moveAgentDirectoryTargetToPath,
+    knownProjects,
+    moveAgentProjectDialogRef,
+    moveAgentProjectOpenRef,
+    moveAgentProjectTargetToPath,
     onAutoScrollEnabledChange,
     onCenterMessagesChange,
     onHideThinkingBlocksChange,
@@ -688,12 +688,12 @@ export const AppShellFloatingControllers = React.memo(
     onThemeChange,
     onThemeColorModeChange,
     onThemePreviewChange,
-    recentDirectoriesStore,
+    recentProjectsStore,
     renameDialogRef,
     renameOpenRef,
     renameAgentPath,
     agentCwd,
-    agentsDialogDirectory,
+    agentsDialogProject,
     agentsDialogRef,
     agentsOpenRef,
     agentStore,
@@ -731,8 +731,8 @@ export const AppShellFloatingControllers = React.memo(
 
         <AppShellAgentsDialogHost
           activeAgentId={activeAgentId}
-          knownDirectories={knownDirectories}
-          agentsDialogDirectory={agentsDialogDirectory}
+          knownProjects={knownProjects}
+          agentsDialogProject={agentsDialogProject}
           agentsDialogRef={agentsDialogRef}
           agentsOpenRef={agentsOpenRef}
           sidebarStore={sidebarStore}
@@ -742,27 +742,27 @@ export const AppShellFloatingControllers = React.memo(
           renameAgentPath={renameAgentPath}
         />
 
-        <AppShellAddDirectoryDialogHost
+        <AppShellAddProjectDialogHost
           activeAgentId={activeAgentId}
-          addDirectoryDialogRef={addDirectoryDialogRef}
-          addDirectoryOpenRef={addDirectoryOpenRef}
-          addDirectoryPath={addDirectoryPath}
-          baseSidebarDirectories={baseSidebarDirectories}
-          knownDirectories={knownDirectories}
-          recentDirectoriesStore={recentDirectoriesStore}
+          addProjectDialogRef={addProjectDialogRef}
+          addProjectOpenRef={addProjectOpenRef}
+          addProjectPath={addProjectPath}
+          baseSidebarProjects={baseSidebarProjects}
+          knownProjects={knownProjects}
+          recentProjectsStore={recentProjectsStore}
           agentCwd={agentCwd}
           agentStore={agentStore}
           viewerContextId={viewerContextId}
         />
 
-        <AppShellMoveAgentDirectoryDialogHost
+        <AppShellMoveAgentProjectDialogHost
           activeAgentId={activeAgentId}
-          baseSidebarDirectories={baseSidebarDirectories}
-          knownDirectories={knownDirectories}
-          moveAgentDirectoryDialogRef={moveAgentDirectoryDialogRef}
-          moveAgentDirectoryOpenRef={moveAgentDirectoryOpenRef}
-          moveAgentDirectoryTargetToPath={moveAgentDirectoryTargetToPath}
-          recentDirectoriesStore={recentDirectoriesStore}
+          baseSidebarProjects={baseSidebarProjects}
+          knownProjects={knownProjects}
+          moveAgentProjectDialogRef={moveAgentProjectDialogRef}
+          moveAgentProjectOpenRef={moveAgentProjectOpenRef}
+          moveAgentProjectTargetToPath={moveAgentProjectTargetToPath}
+          recentProjectsStore={recentProjectsStore}
           agentCwd={agentCwd}
           viewerContextId={viewerContextId}
         />
@@ -780,9 +780,9 @@ export const AppShellFloatingControllers = React.memo(
           deleteAgents={deleteAgents}
         />
 
-        <AppShellDeleteOldDirectoryAgentsDialogHost
-          deleteOldDirectoryAgentsDialogRef={deleteOldDirectoryAgentsDialogRef}
-          deleteOldDirectoryAgentsOpenRef={deleteOldDirectoryAgentsOpenRef}
+        <AppShellDeleteOldProjectAgentsDialogHost
+          deleteOldProjectAgentsDialogRef={deleteOldProjectAgentsDialogRef}
+          deleteOldProjectAgentsOpenRef={deleteOldProjectAgentsOpenRef}
           viewerContextId={viewerContextId}
         />
 

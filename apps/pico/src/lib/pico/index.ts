@@ -1,12 +1,12 @@
 export {
   AUTO_SCROLL_ENABLED_STORAGE_KEY,
   CENTER_MESSAGES_STORAGE_KEY,
-  COLLAPSED_DIRECTORIES_STORAGE_KEY,
-  DRAFT_DIRECTORY_STORAGE_KEY,
+  COLLAPSED_PROJECTS_STORAGE_KEY,
+  DRAFT_PROJECT_STORAGE_KEY,
   HIDE_TOOL_BLOCKS_STORAGE_KEY,
   PINNED_AGENTS_STORAGE_KEY,
-  RECENT_DIRECTORIES_LIMIT,
-  RECENT_DIRECTORIES_STORAGE_KEY,
+  RECENT_PROJECTS_LIMIT,
+  RECENT_PROJECTS_STORAGE_KEY,
   RIGHT_SIDEBAR_ACTIVE_TAB_STORAGE_KEY,
   RIGHT_SIDEBAR_FILE_TREE_WIDTH_STORAGE_KEY,
   RIGHT_SIDEBAR_HISTORY_HEIGHT_STORAGE_KEY,
@@ -18,30 +18,30 @@ export {
   TERMINAL_TABS_STORAGE_KEY,
   AGENT_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
   AGENT_DONE_SOUND_ENABLED_STORAGE_KEY,
-  SIDEBAR_DIRECTORIES_STORAGE_KEY,
+  SIDEBAR_PROJECTS_STORAGE_KEY,
   APPLIED_THEME_STORAGE_KEY,
   THEME_COLOR_MODE_STORAGE_KEY,
   THEME_STORAGE_KEY,
   VIEWER_CONTEXT_STORAGE_KEY,
   createContextId,
   normalizeAgentSelectionKeys,
-  normalizeStoredDirectoryList,
+  normalizeStoredProjectList,
   promptDraftKey,
   promptDraftKeyMatchesOwner,
   readStoredAutoScrollEnabled,
   readStoredCenterMessages,
-  readStoredCollapsedDirectories,
-  readStoredDraftDirectory,
+  readStoredCollapsedProjects,
+  readStoredDraftProject,
   readStoredHideToolBlocks,
   readStoredPinnedAgentKeys,
   readStoredPromptDraft,
-  readStoredRecentDirectories,
+  readStoredRecentProjects,
   readStoredRightSidebarOpen,
   readStoredTerminalPanelOpen,
   readStoredTerminalTabs,
   readStoredAgentDoneDesktopNotificationsEnabled,
   readStoredAgentDoneSoundEnabled,
-  readStoredSidebarDirectories,
+  readStoredSidebarProjects,
   readStoredTheme,
   readStoredThemeColorMode,
   rememberStoredPromptDraft,
@@ -88,8 +88,8 @@ export {
 } from "@/lib/pico/sync"
 export { flattenTree } from "@/lib/pico/tree"
 
-export const INITIAL_DIRECTORY_AGENT_RENDER_COUNT = 5
-export const DIRECTORY_AGENT_LOAD_MORE_COUNT = 5
+export const INITIAL_PROJECT_AGENT_RENDER_COUNT = 5
+export const PROJECT_AGENT_LOAD_MORE_COUNT = 5
 
 export type StreamingBehavior = "followUp" | "steer"
 
@@ -111,7 +111,7 @@ export type AgentSummary = {
   unread?: boolean
 }
 
-export type DirectoryState = {
+export type ProjectState = {
   path: string
   totalCount: number
   revision: string
@@ -312,8 +312,8 @@ export type AgentState = {
   firstMessage: string
   agentFile?: string
   cwd?: string
-  /** The sidebar directory, when it is not `cwd` (worktree agents). */
-  directory?: string
+  /** The sidebar project, when it is not `cwd` (worktree agents). */
+  project?: string
   modified?: string
   model?: ModelOption
   thinkingLevel: string
@@ -390,7 +390,7 @@ export type StateSyncPayload = {
   agentName?: string
   firstMessage?: string
   cwd?: string
-  directory?: string
+  project?: string
   modified?: string
   uiState?: AgentUiState & {
     /** Images to put in the composer, sent one time, for example after a fork. */
@@ -400,8 +400,8 @@ export type StateSyncPayload = {
 
 export type AgentsPayload = {
   type: "agents"
-  directories?: Array<string>
-  directoryStates?: Array<DirectoryState>
+  projects?: Array<string>
+  projectStates?: Array<ProjectState>
 }
 
 export type TreeNode = {

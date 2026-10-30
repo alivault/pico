@@ -7,20 +7,20 @@ import {
   useSelector,
   type PicoStore,
 } from "@/features/pico/tanstack-store-utils"
-import type { DirectoryState } from "@/lib/pico"
-import { normalizeStoredDirectoryList, agentListEntryKey } from "@/lib/pico"
+import type { ProjectState } from "@/lib/pico"
+import { normalizeStoredProjectList, agentListEntryKey } from "@/lib/pico"
 import type {
-  DirectoryAgentsIndexSnapshot,
-  DirectoryAgentsIndexesResponse,
+  ProjectAgentsIndexSnapshot,
+  ProjectAgentsIndexesResponse,
   AgentListEntry,
   AgentStatusEvent,
   AgentsEvent,
 } from "@/lib/pico/api"
 import { isInShownMachineShell } from "@/lib/pico/machine-context"
 
-export type DirectoryAgentsIndexData = DirectoryAgentsIndexSnapshot
-type DirectoryAgentsIndexesData = Extract<
-  DirectoryAgentsIndexesResponse,
+export type ProjectAgentsIndexData = ProjectAgentsIndexSnapshot
+type ProjectAgentsIndexesData = Extract<
+  ProjectAgentsIndexesResponse,
   { ok: true }
 >
 
@@ -29,9 +29,9 @@ function sidebarTextContains(text: string, query: string) {
 }
 
 type AppShellSidebarSnapshot = {
-  baseSidebarDirectories: Array<string>
-  directoryStateByPath: Map<string, DirectoryState>
-  directoryIndexes: Record<string, Array<AgentListEntry>>
+  baseSidebarProjects: Array<string>
+  projectStateByPath: Map<string, ProjectState>
+  projectIndexes: Record<string, Array<AgentListEntry>>
   sidebarAgents: Array<AgentListEntry>
   pinnedSidebarAgents: Array<AgentListEntry>
   selectedSidebarAgents: Array<AgentListEntry>
@@ -43,12 +43,12 @@ type AppShellSidebarState = {
   activeSidebarAgentId: string
   activeSidebarAgentKey: string
   activeSidebarAgentPath: string
-  sidebarDirectories: Array<string>
-  initialSidebarBootstrapDirectories: Array<string>
-  directoryIndexDataByPath: Record<string, DirectoryAgentsIndexData>
-  directoryIndexLoading: Record<string, boolean>
+  sidebarProjects: Array<string>
+  initialSidebarBootstrapProjects: Array<string>
+  projectIndexDataByPath: Record<string, ProjectAgentsIndexData>
+  projectIndexLoading: Record<string, boolean>
   sidebarAgentStatusByKey: SidebarAgentStatusMap
-  sidebarDeferredDirectoryLoadingReady: boolean
+  sidebarDeferredProjectLoadingReady: boolean
   agentSearch: string
   pinnedSidebarAgentKeys: Array<string>
   selectedSidebarAgentKeys: Array<string>
@@ -56,9 +56,9 @@ type AppShellSidebarState = {
 }
 
 type AppShellSidebarDerived = AppShellSidebarSnapshot & {
-  sidebarDirectoryIndexes: Record<string, Array<AgentListEntry>>
-  visibleDirectories: Array<string>
-  filteredDirectoryAgents: Record<string, Array<AgentListEntry>>
+  sidebarProjectIndexes: Record<string, Array<AgentListEntry>>
+  visibleProjects: Array<string>
+  filteredProjectAgents: Record<string, Array<AgentListEntry>>
   emptySidebarStateText: string
   workspaceVersion: string
 }
@@ -80,17 +80,17 @@ export type AppShellSidebarStore = PicoStore<AppShellSidebarStoreSnapshot> & {
   getWorkspaceVersion: () => string
   setSidebarState: (update: AppShellSidebarStateUpdate) => void
   setAgentsEvent: React.Dispatch<React.SetStateAction<AgentsEvent | null>>
-  setSidebarDirectories: React.Dispatch<React.SetStateAction<Array<string>>>
-  setDirectoryIndexDataByPath: React.Dispatch<
-    React.SetStateAction<Record<string, DirectoryAgentsIndexData>>
+  setSidebarProjects: React.Dispatch<React.SetStateAction<Array<string>>>
+  setProjectIndexDataByPath: React.Dispatch<
+    React.SetStateAction<Record<string, ProjectAgentsIndexData>>
   >
-  setDirectoryIndexLoading: React.Dispatch<
+  setProjectIndexLoading: React.Dispatch<
     React.SetStateAction<Record<string, boolean>>
   >
   setSidebarAgentStatusByKey: React.Dispatch<
     React.SetStateAction<SidebarAgentStatusMap>
   >
-  setSidebarDeferredDirectoryLoadingReady: React.Dispatch<
+  setSidebarDeferredProjectLoadingReady: React.Dispatch<
     React.SetStateAction<boolean>
   >
   setAgentSearch: React.Dispatch<React.SetStateAction<string>>
@@ -121,53 +121,53 @@ function sameReferenceArray<T>(left: Array<T>, right: Array<T>) {
   return true
 }
 
-export async function fetchDirectoryAgentsIndexes(options: {
+export async function fetchProjectAgentsIndexes(options: {
   machineId: string
   viewerContextId: string
-  directories: Array<string>
+  projects: Array<string>
 }) {
-  const directories = normalizeStoredDirectoryList(options.directories)
-  if (directories.length === 0) {
+  const projects = normalizeStoredProjectList(options.projects)
+  if (projects.length === 0) {
     return {
       ok: true,
-      directories: [],
-      directoryIndexes: {},
-    } satisfies DirectoryAgentsIndexesData
+      projects: [],
+      projectIndexes: {},
+    } satisfies ProjectAgentsIndexesData
   }
 
-  return await fetchJson<DirectoryAgentsIndexesData>(
+  return await fetchJson<ProjectAgentsIndexesData>(
     buildRequestUrl("/api/project-agents-indexes", {
       machineId: options.machineId,
       contextId: options.viewerContextId,
       searchParams: {
-        directory: directories,
+        project: projects,
       },
     })
   )
 }
 
-export function mergeDirectoryIndexData(
-  current: Record<string, DirectoryAgentsIndexData>,
-  next: Record<string, DirectoryAgentsIndexData>
+export function mergeProjectIndexData(
+  current: Record<string, ProjectAgentsIndexData>,
+  next: Record<string, ProjectAgentsIndexData>
 ) {
   let changed = false
   const merged = { ...current }
 
-  for (const [directory, payload] of Object.entries(next)) {
-    if (JSON.stringify(current[directory]) === JSON.stringify(payload)) {
+  for (const [project, payload] of Object.entries(next)) {
+    if (JSON.stringify(current[project]) === JSON.stringify(payload)) {
       continue
     }
 
-    merged[directory] = payload
+    merged[project] = payload
     changed = true
   }
 
   return changed ? merged : current
 }
 
-export function sameDirectoryIndexDataRecord(
-  left: Record<string, DirectoryAgentsIndexData>,
-  right: Record<string, DirectoryAgentsIndexData>
+export function sameProjectIndexDataRecord(
+  left: Record<string, ProjectAgentsIndexData>,
+  right: Record<string, ProjectAgentsIndexData>
 ) {
   const leftKeys = Object.keys(left).sort()
   const rightKeys = Object.keys(right).sort()
@@ -180,17 +180,17 @@ export function sameDirectoryIndexDataRecord(
   return true
 }
 
-export function updateDirectoryIndexLoadingState(
+export function updateProjectIndexLoadingState(
   current: Record<string, boolean>,
-  directories: Array<string>,
+  projects: Array<string>,
   loading: boolean
 ) {
   let changed = false
   const next = { ...current }
 
-  for (const directory of directories) {
-    if (Boolean(current[directory]) === loading) continue
-    next[directory] = loading
+  for (const project of projects) {
+    if (Boolean(current[project]) === loading) continue
+    next[project] = loading
     changed = true
   }
 
@@ -217,21 +217,21 @@ function sidebarEntryMatchesIdentity(
 }
 
 export function upsertOptimisticSidebarAgentEntry(
-  current: Record<string, DirectoryAgentsIndexData>,
+  current: Record<string, ProjectAgentsIndexData>,
   entry: AgentListEntry & { cwd: string; id: string }
 ) {
-  const directory = entry.cwd.trim()
+  const project = entry.cwd.trim()
   const optimisticId = entry.id.trim()
-  if (!directory || !optimisticId) return current
+  if (!project || !optimisticId) return current
 
-  const currentSnapshot = current[directory]
+  const currentSnapshot = current[project]
   const currentAgents = currentSnapshot?.agents || []
   const existingEntry = currentAgents.find((agent) => agent.id === optimisticId)
   const nextEntry = {
     ...existingEntry,
     ...entry,
     id: optimisticId,
-    cwd: directory,
+    cwd: project,
     optimistic: true,
   } satisfies AgentListEntry
   const nextAgents = [
@@ -245,8 +245,8 @@ export function upsertOptimisticSidebarAgentEntry(
 
   return {
     ...current,
-    [directory]: {
-      directory,
+    [project]: {
+      project,
       totalCount: existingEntry ? totalCountBaseline : totalCountBaseline + 1,
       revision: `optimistic:${optimisticId}:${
         currentSnapshot?.revision || "initial"
@@ -257,7 +257,7 @@ export function upsertOptimisticSidebarAgentEntry(
 }
 
 export function updateOptimisticSidebarAgentPreviewEntry(
-  current: Record<string, DirectoryAgentsIndexData>,
+  current: Record<string, ProjectAgentsIndexData>,
   options: {
     agentId?: string
     agentPath?: string
@@ -269,9 +269,9 @@ export function updateOptimisticSidebarAgentPreviewEntry(
   if (!preview) return current
 
   let changed = false
-  const next: Record<string, DirectoryAgentsIndexData> = { ...current }
+  const next: Record<string, ProjectAgentsIndexData> = { ...current }
 
-  for (const [directory, snapshot] of Object.entries(current)) {
+  for (const [project, snapshot] of Object.entries(current)) {
     const updatedEntries: Array<AgentListEntry> = []
     let agentsChanged = false
 
@@ -296,7 +296,7 @@ export function updateOptimisticSidebarAgentPreviewEntry(
     if (!agentsChanged) continue
 
     const updatedKeys = new Set(updatedEntries.map(agentListEntryKey))
-    next[directory] = {
+    next[project] = {
       ...snapshot,
       revision: `optimistic-preview:${options.modified}:${snapshot.revision}`,
       agents: [
@@ -311,21 +311,21 @@ export function updateOptimisticSidebarAgentPreviewEntry(
 }
 
 export function removeOptimisticSidebarAgentEntry(
-  current: Record<string, DirectoryAgentsIndexData>,
+  current: Record<string, ProjectAgentsIndexData>,
   optimisticId: string | undefined
 ) {
   const targetId = optimisticId?.trim() || ""
   if (!targetId) return current
 
   let changed = false
-  const next: Record<string, DirectoryAgentsIndexData> = { ...current }
+  const next: Record<string, ProjectAgentsIndexData> = { ...current }
 
-  for (const [directory, snapshot] of Object.entries(current)) {
+  for (const [project, snapshot] of Object.entries(current)) {
     const nextAgents = snapshot.agents.filter((entry) => entry.id !== targetId)
     if (nextAgents.length === snapshot.agents.length) continue
 
     changed = true
-    next[directory] = {
+    next[project] = {
       ...snapshot,
       totalCount: Math.max(0, snapshot.totalCount - 1),
       revision: `remove-optimistic:${targetId}:${snapshot.revision}`,
@@ -337,20 +337,20 @@ export function removeOptimisticSidebarAgentEntry(
 }
 
 /**
- * Give the optimistic entries of a directory the identity of the agent that
- * the server made for the draft. A directory index fetch keeps optimistic
+ * Give the optimistic entries of a project the identity of the agent that
+ * the server made for the draft. A project index fetch keeps optimistic
  * entries until the server lists their ID. Without this step, the draft ID
  * never shows in the index, and the sidebar shows the placeholder next to the
  * real agent.
  */
 export function bindOptimisticSidebarAgentEntries(
-  current: Record<string, DirectoryAgentsIndexData>,
+  current: Record<string, ProjectAgentsIndexData>,
   agent: { cwd?: string; agentId?: string; agentPath?: string }
 ) {
-  const directory = agent.cwd?.trim() || ""
+  const project = agent.cwd?.trim() || ""
   const agentId = agent.agentId?.trim() || ""
   const agentPath = agent.agentPath?.trim() || ""
-  const snapshot = directory ? current[directory] : undefined
+  const snapshot = project ? current[project] : undefined
   if (!snapshot || !agentId) return current
 
   const pending = snapshot.agents.filter(
@@ -380,7 +380,7 @@ export function bindOptimisticSidebarAgentEntries(
 
   return {
     ...current,
-    [directory]: {
+    [project]: {
       ...snapshot,
       totalCount: Math.max(0, snapshot.totalCount - removed),
       revision: `bind-optimistic:${agentId}:${snapshot.revision}`,
@@ -393,10 +393,10 @@ export function bindOptimisticSidebarAgentEntries(
  * Give one optimistic entry the identity of the agent that the server made
  * for it. The prompt response names this agent, so this step does not
  * depend on a state sync that shows the draft change into an agent. If the
- * directory already lists the real agent, remove the placeholder.
+ * project already lists the real agent, remove the placeholder.
  */
 export function bindOptimisticSidebarAgentEntryById(
-  current: Record<string, DirectoryAgentsIndexData>,
+  current: Record<string, ProjectAgentsIndexData>,
   optimisticId: string | undefined,
   agent: { agentId?: string; agentPath?: string }
 ) {
@@ -406,9 +406,9 @@ export function bindOptimisticSidebarAgentEntryById(
   if (!targetId || !agentId || targetId === agentId) return current
 
   let changed = false
-  const next: Record<string, DirectoryAgentsIndexData> = { ...current }
+  const next: Record<string, ProjectAgentsIndexData> = { ...current }
 
-  for (const [directory, snapshot] of Object.entries(current)) {
+  for (const [project, snapshot] of Object.entries(current)) {
     const placeholder = snapshot.agents.find(
       (entry) => entry.id === targetId && isOptimisticSidebarAgentEntry(entry)
     )
@@ -433,7 +433,7 @@ export function bindOptimisticSidebarAgentEntryById(
     })
 
     changed = true
-    next[directory] = {
+    next[project] = {
       ...snapshot,
       totalCount: listed
         ? Math.max(0, snapshot.totalCount - 1)
@@ -452,19 +452,19 @@ export function isOptimisticSidebarAgentEntry(entry: AgentListEntry) {
   )
 }
 
-export function mergeDirectoryIndexDataPreservingOptimistic(
-  current: Record<string, DirectoryAgentsIndexData>,
-  next: Record<string, DirectoryAgentsIndexData>
+export function mergeProjectIndexDataPreservingOptimistic(
+  current: Record<string, ProjectAgentsIndexData>,
+  next: Record<string, ProjectAgentsIndexData>
 ) {
-  let merged = mergeDirectoryIndexData(current, next)
+  let merged = mergeProjectIndexData(current, next)
 
-  for (const [directory, snapshot] of Object.entries(current)) {
+  for (const [project, snapshot] of Object.entries(current)) {
     const optimisticAgents = snapshot.agents.filter(
       isOptimisticSidebarAgentEntry
     )
     if (optimisticAgents.length === 0) continue
 
-    const targetSnapshot = merged[directory]
+    const targetSnapshot = merged[project]
     if (!targetSnapshot) continue
 
     const targetIds = new Set(
@@ -477,7 +477,7 @@ export function mergeDirectoryIndexDataPreservingOptimistic(
 
     merged = {
       ...merged,
-      [directory]: {
+      [project]: {
         ...targetSnapshot,
         totalCount: targetSnapshot.totalCount + missingOptimisticAgents.length,
         revision: `preserve-optimistic:${targetSnapshot.revision}`,
@@ -517,7 +517,7 @@ export function getRenderedSidebarAgentKeys() {
 }
 
 export function clearUnreadForActiveSidebarAgent(
-  current: Record<string, DirectoryAgentsIndexData>,
+  current: Record<string, ProjectAgentsIndexData>,
   activeAgent: {
     agentId?: string
     agentPath?: string
@@ -530,9 +530,9 @@ export function clearUnreadForActiveSidebarAgent(
   }
 
   let changed = false
-  const next: Record<string, DirectoryAgentsIndexData> = { ...current }
+  const next: Record<string, ProjectAgentsIndexData> = { ...current }
 
-  for (const [directory, snapshot] of Object.entries(current)) {
+  for (const [project, snapshot] of Object.entries(current)) {
     let agentsChanged = false
     const agents = snapshot.agents.map((entry) => {
       const matchesActiveAgent =
@@ -551,7 +551,7 @@ export function clearUnreadForActiveSidebarAgent(
     })
 
     if (agentsChanged) {
-      next[directory] = {
+      next[project] = {
         ...snapshot,
         agents,
       }
@@ -689,7 +689,7 @@ function applySidebarAgentStatusOverlay(
   let changed = false
   const nextIndexes: Record<string, Array<AgentListEntry>> = {}
 
-  for (const [directory, agents] of Object.entries(indexes)) {
+  for (const [project, agents] of Object.entries(indexes)) {
     let agentsChanged = false
     const nextAgents = agents.map((entry) => {
       const nextEntry = applySidebarAgentStatus(
@@ -703,7 +703,7 @@ function applySidebarAgentStatusOverlay(
       return nextEntry
     })
 
-    nextIndexes[directory] = agentsChanged ? nextAgents : agents
+    nextIndexes[project] = agentsChanged ? nextAgents : agents
   }
 
   return changed ? nextIndexes : indexes
@@ -715,12 +715,12 @@ function createInitialSidebarState(): AppShellSidebarState {
     activeSidebarAgentId: "",
     activeSidebarAgentKey: "",
     activeSidebarAgentPath: "",
-    sidebarDirectories: [],
-    initialSidebarBootstrapDirectories: [],
-    directoryIndexDataByPath: {},
-    directoryIndexLoading: {},
+    sidebarProjects: [],
+    initialSidebarBootstrapProjects: [],
+    projectIndexDataByPath: {},
+    projectIndexLoading: {},
     sidebarAgentStatusByKey: {},
-    sidebarDeferredDirectoryLoadingReady: false,
+    sidebarDeferredProjectLoadingReady: false,
     agentSearch: "",
     pinnedSidebarAgentKeys: [],
     selectedSidebarAgentKeys: [],
@@ -731,60 +731,55 @@ function createInitialSidebarState(): AppShellSidebarState {
 function computeAppShellSidebarDerived(
   state: AppShellSidebarState
 ): AppShellSidebarDerived {
-  const directoryStates = state.agentsEvent?.directoryStates || []
-  const directoryStateByPath = new Map(
-    directoryStates.map((directoryState) => [
-      directoryState.path,
-      directoryState,
-    ])
+  const projectStates = state.agentsEvent?.projectStates || []
+  const projectStateByPath = new Map(
+    projectStates.map((projectState) => [projectState.path, projectState])
   )
-  const baseSidebarDirectories = normalizeStoredDirectoryList(
-    state.sidebarDirectories
-  )
-  const directoryIndexes: Record<string, Array<AgentListEntry>> = {}
+  const baseSidebarProjects = normalizeStoredProjectList(state.sidebarProjects)
+  const projectIndexes: Record<string, Array<AgentListEntry>> = {}
 
-  for (const directory of baseSidebarDirectories) {
-    directoryIndexes[directory] =
-      state.directoryIndexDataByPath[directory]?.agents || []
+  for (const project of baseSidebarProjects) {
+    projectIndexes[project] =
+      state.projectIndexDataByPath[project]?.agents || []
   }
 
-  const sidebarDirectoryIndexes = applySidebarAgentStatusOverlay(
-    directoryIndexes,
+  const sidebarProjectIndexes = applySidebarAgentStatusOverlay(
+    projectIndexes,
     state.sidebarAgentStatusByKey
   )
   const query = state.agentSearch.trim().toLowerCase()
   const sidebarSearchPending = query
-    ? baseSidebarDirectories.some((directory) => {
-        const totalCount = directoryStateByPath.get(directory)?.totalCount ?? 0
+    ? baseSidebarProjects.some((project) => {
+        const totalCount = projectStateByPath.get(project)?.totalCount ?? 0
         const loadedCount = Object.prototype.hasOwnProperty.call(
-          directoryIndexes,
-          directory
+          projectIndexes,
+          project
         )
-          ? directoryIndexes[directory].length
+          ? projectIndexes[project].length
           : 0
-        const loading = Boolean(state.directoryIndexLoading[directory])
+        const loading = Boolean(state.projectIndexLoading[project])
         return loading || (!loadedCount && totalCount > 0)
       })
     : false
-  const visibleDirectories: Array<string> = []
-  const filteredDirectoryAgents: Record<string, Array<AgentListEntry>> = {}
+  const visibleProjects: Array<string> = []
+  const filteredProjectAgents: Record<string, Array<AgentListEntry>> = {}
 
-  for (const directory of baseSidebarDirectories) {
+  for (const project of baseSidebarProjects) {
     const agents = Object.prototype.hasOwnProperty.call(
-      sidebarDirectoryIndexes,
-      directory
+      sidebarProjectIndexes,
+      project
     )
-      ? sidebarDirectoryIndexes[directory]
+      ? sidebarProjectIndexes[project]
       : []
 
     if (!query) {
-      visibleDirectories.push(directory)
-      filteredDirectoryAgents[directory] = agents
+      visibleProjects.push(project)
+      filteredProjectAgents[project] = agents
       continue
     }
 
-    const directoryMatches = sidebarTextContains(directory.toLowerCase(), query)
-    const filteredAgents = directoryMatches
+    const projectMatches = sidebarTextContains(project.toLowerCase(), query)
+    const filteredAgents = projectMatches
       ? agents
       : agents.filter((entry) => {
           const haystack = [entry.title, entry.name, entry.path, entry.cwd]
@@ -794,19 +789,19 @@ function computeAppShellSidebarDerived(
           return sidebarTextContains(haystack, query)
         })
 
-    if (directoryMatches || filteredAgents.length > 0) {
-      visibleDirectories.push(directory)
-      filteredDirectoryAgents[directory] = filteredAgents
+    if (projectMatches || filteredAgents.length > 0) {
+      visibleProjects.push(project)
+      filteredProjectAgents[project] = filteredAgents
     }
   }
 
   const sidebarAgentEntriesByKey = new Map<string, AgentListEntry>()
-  for (const directory of baseSidebarDirectories) {
+  for (const project of baseSidebarProjects) {
     const entries = Object.prototype.hasOwnProperty.call(
-      sidebarDirectoryIndexes,
-      directory
+      sidebarProjectIndexes,
+      project
     )
-      ? sidebarDirectoryIndexes[directory]
+      ? sidebarProjectIndexes[project]
       : []
 
     for (const entry of entries) {
@@ -832,29 +827,29 @@ function computeAppShellSidebarDerived(
     }
   )
   const workspaceVersion = [
-    baseSidebarDirectories.join("\n"),
+    baseSidebarProjects.join("\n"),
     state.pinnedSidebarAgentKeys.join("\n"),
     state.selectedSidebarAgentKeys.join("\n"),
   ].join("\0")
 
   return {
-    baseSidebarDirectories,
-    directoryStateByPath,
-    directoryIndexes: sidebarDirectoryIndexes,
-    sidebarDirectoryIndexes,
+    baseSidebarProjects,
+    projectStateByPath,
+    projectIndexes: sidebarProjectIndexes,
+    sidebarProjectIndexes,
     sidebarAgents,
     pinnedSidebarAgents,
     selectedSidebarAgents,
     sidebarAgentEntriesByKey,
-    visibleDirectories,
-    filteredDirectoryAgents,
+    visibleProjects,
+    filteredProjectAgents,
     emptySidebarStateText: query
       ? sidebarSearchPending
         ? "Searching agents…"
-        : "No agents or directories match your search."
-      : baseSidebarDirectories.length > 0
-        ? "No directories match this view."
-        : "No directories added yet.",
+        : "No agents or projects match your search."
+      : baseSidebarProjects.length > 0
+        ? "No projects match this view."
+        : "No projects added yet.",
     workspaceVersion,
   }
 }
@@ -906,34 +901,31 @@ export function createAppShellSidebarStore(): AppShellSidebarStore {
       if (agentsEvent === store.state.state.agentsEvent) return
       setSidebarState({ agentsEvent })
     },
-    setSidebarDirectories: (action) => {
-      const sidebarDirectories = applyStoreAction(
-        store.state.state.sidebarDirectories,
+    setSidebarProjects: (action) => {
+      const sidebarProjects = applyStoreAction(
+        store.state.state.sidebarProjects,
         action
       )
-      if (sidebarDirectories === store.state.state.sidebarDirectories) return
-      setSidebarState({ sidebarDirectories })
+      if (sidebarProjects === store.state.state.sidebarProjects) return
+      setSidebarState({ sidebarProjects })
     },
-    setDirectoryIndexDataByPath: (action) => {
-      const directoryIndexDataByPath = applyStoreAction(
-        store.state.state.directoryIndexDataByPath,
+    setProjectIndexDataByPath: (action) => {
+      const projectIndexDataByPath = applyStoreAction(
+        store.state.state.projectIndexDataByPath,
         action
       )
-      if (
-        directoryIndexDataByPath === store.state.state.directoryIndexDataByPath
-      ) {
+      if (projectIndexDataByPath === store.state.state.projectIndexDataByPath) {
         return
       }
-      setSidebarState({ directoryIndexDataByPath })
+      setSidebarState({ projectIndexDataByPath })
     },
-    setDirectoryIndexLoading: (action) => {
-      const directoryIndexLoading = applyStoreAction(
-        store.state.state.directoryIndexLoading,
+    setProjectIndexLoading: (action) => {
+      const projectIndexLoading = applyStoreAction(
+        store.state.state.projectIndexLoading,
         action
       )
-      if (directoryIndexLoading === store.state.state.directoryIndexLoading)
-        return
-      setSidebarState({ directoryIndexLoading })
+      if (projectIndexLoading === store.state.state.projectIndexLoading) return
+      setSidebarState({ projectIndexLoading })
     },
     setSidebarAgentStatusByKey: (action) => {
       const sidebarAgentStatusByKey = applyStoreAction(
@@ -947,18 +939,18 @@ export function createAppShellSidebarStore(): AppShellSidebarStore {
       }
       setSidebarState({ sidebarAgentStatusByKey })
     },
-    setSidebarDeferredDirectoryLoadingReady: (action) => {
-      const sidebarDeferredDirectoryLoadingReady = applyStoreAction(
-        store.state.state.sidebarDeferredDirectoryLoadingReady,
+    setSidebarDeferredProjectLoadingReady: (action) => {
+      const sidebarDeferredProjectLoadingReady = applyStoreAction(
+        store.state.state.sidebarDeferredProjectLoadingReady,
         action
       )
       if (
-        sidebarDeferredDirectoryLoadingReady ===
-        store.state.state.sidebarDeferredDirectoryLoadingReady
+        sidebarDeferredProjectLoadingReady ===
+        store.state.state.sidebarDeferredProjectLoadingReady
       ) {
         return
       }
-      setSidebarState({ sidebarDeferredDirectoryLoadingReady })
+      setSidebarState({ sidebarDeferredProjectLoadingReady })
     },
     setAgentSearch: (action) => {
       const agentSearch = applyStoreAction(

@@ -15,15 +15,15 @@ export type AppShellAgentWorkspaceHandle = {
     cwdOverride?: string,
     options?: CreateAgentOptions
   ) => Promise<void>
-  openAddDirectoryDialog: () => void
+  openAddProjectDialog: () => void
   openCommandPalette: () => void
   openDeleteDialog: (targets: Array<AgentListEntry>) => void
-  openDeleteOldDirectoryAgentsDialog: (directory: string) => void
-  moveAgentToDirectory: (
+  openDeleteOldProjectAgentsDialog: (project: string) => void
+  moveAgentToProject: (
     entry: AgentListEntry,
-    directory: string
+    project: string
   ) => Promise<boolean>
-  openMoveAgentDirectoryDialogForEntry: (entry: AgentListEntry) => void
+  openMoveAgentProjectDialogForEntry: (entry: AgentListEntry) => void
   openRenameDialogForEntry: (entry: AgentListEntry) => void
   openAgentsDialog: () => void
   openSettingsDialog: () => void
@@ -58,5 +58,5 @@ export type AppShellNotificationState = {
 
 export type AppShellDraftFlowState = {
   draftAgentLoadingOwnerKey: string | null
-  storedDraftDirectory: string
+  storedDraftProject: string
 }

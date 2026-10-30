@@ -219,10 +219,10 @@ export type AppShellComposerActions = {
   ) => void | Promise<unknown>
   syncComposerDraft: (value: string) => void
   /**
-   * Start a new agent in a directory of another machine. The prompt draft
+   * Start a new agent in a project of another machine. The prompt draft
    * and images move to that machine's composer.
    */
-  moveDraftToMachine: (machineId: string, directory: string) => void
+  moveDraftToMachine: (machineId: string, project: string) => void
 }
 
 export function createInitialAppShellComposerSnapshot(

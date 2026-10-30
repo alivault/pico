@@ -30,7 +30,7 @@ export type MachineAgentSummary = {
   id: string
   title: string
   cwd: string
-  directory: string
+  project: string
   busy: boolean
   needsInput: boolean
   /** What an idle agent waits on: timers, watches, or jobs. */
@@ -65,7 +65,7 @@ export type MachineInfo = {
   summary?: {
     hostname: string
     version: string
-    directories: Array<string>
+    projects: Array<string>
     agents: Array<MachineAgentSummary>
   }
 }

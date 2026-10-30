@@ -44,17 +44,17 @@ export type AppShellAgentContentProps = {
   contextUsageStore: ComposerContextUsageStore
   conversationFrameRef: React.RefObject<AppShellConversationFrameHandle | null>
   conversationItemsStore: ConversationItemsStore
-  defaultNewAgentDirectory: string
+  defaultNewAgentProject: string
   displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
   fileInputRef: React.RefObject<HTMLInputElement | null>
   isLoadingOlderHistory: boolean
   isAgentViewLoading: boolean
   isSubmitting: boolean
-  newAgentDirectoryOptions: Array<{ path: string; label: string }>
+  newAgentProjectOptions: Array<{ path: string; label: string }>
   onCancelCompaction: () => void
   onCreateAgent: (cwdOverride?: string) => void
   onLoadOlderHistory: () => Promise<void>
-  onOpenAddDirectoryDialog: () => void
+  onOpenAddProjectDialog: () => void
   agentStore: PicoStore<AgentState>
   store: PicoStore<AppShellComposerSnapshot>
   viewerContextId: string
@@ -68,17 +68,17 @@ export function AppShellAgentContent({
   contextUsageStore,
   conversationFrameRef,
   conversationItemsStore,
-  defaultNewAgentDirectory,
+  defaultNewAgentProject,
   displaySettingsStore,
   fileInputRef,
   isLoadingOlderHistory,
   isAgentViewLoading,
   isSubmitting,
-  newAgentDirectoryOptions,
+  newAgentProjectOptions,
   onCancelCompaction,
   onCreateAgent,
   onLoadOlderHistory,
-  onOpenAddDirectoryDialog,
+  onOpenAddProjectDialog,
   agentStore,
   store,
   viewerContextId,
@@ -163,13 +163,13 @@ export function AppShellAgentContent({
           topContent={
             <NewAgentComposerSelectors
               cwd={agentState.cwd}
-              defaultNewAgentDirectory={defaultNewAgentDirectory}
-              directoryOptions={newAgentDirectoryOptions}
+              defaultNewAgentProject={defaultNewAgentProject}
+              projectOptions={newAgentProjectOptions}
               onCreateAgent={onCreateAgent}
-              onMoveDraftToMachine={(targetMachine, directory) =>
-                actionsRef.current.moveDraftToMachine(targetMachine, directory)
+              onMoveDraftToMachine={(targetMachine, project) =>
+                actionsRef.current.moveDraftToMachine(targetMachine, project)
               }
-              onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
+              onOpenAddProjectDialog={onOpenAddProjectDialog}
               viewerContextId={viewerContextId}
             />
           }

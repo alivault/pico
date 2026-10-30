@@ -677,7 +677,7 @@ function useAppShellTabsControllerView({
   contextUsageStore,
   conversationFrameRef,
   conversationItemsStore,
-  defaultNewAgentDirectory,
+  defaultNewAgentProject,
   displaySettingsStore,
   fileInputRef,
   gitPanelOpen,
@@ -687,11 +687,11 @@ function useAppShellTabsControllerView({
   isAgentViewLoading,
   isSubmitting,
   isMobile,
-  newAgentDirectoryOptions,
+  newAgentProjectOptions,
   onCancelCompaction,
   onCreateAgent,
   onLoadOlderHistory,
-  onOpenAddDirectoryDialog,
+  onOpenAddProjectDialog,
   onCloseAllFileViewTabs,
   onCloseFileViewTab,
   onCloseFileViewTabsToRight,
@@ -876,17 +876,17 @@ function useAppShellTabsControllerView({
           contextUsageStore={contextUsageStore}
           conversationFrameRef={conversationFrameRef}
           conversationItemsStore={conversationItemsStore}
-          defaultNewAgentDirectory={defaultNewAgentDirectory}
+          defaultNewAgentProject={defaultNewAgentProject}
           displaySettingsStore={displaySettingsStore}
           fileInputRef={fileInputRef}
           isLoadingOlderHistory={isLoadingOlderHistory}
           isAgentViewLoading={isAgentViewLoading}
           isSubmitting={isSubmitting}
-          newAgentDirectoryOptions={newAgentDirectoryOptions}
+          newAgentProjectOptions={newAgentProjectOptions}
           onCancelCompaction={onCancelCompaction}
           onCreateAgent={onCreateAgent}
           onLoadOlderHistory={onLoadOlderHistory}
-          onOpenAddDirectoryDialog={onOpenAddDirectoryDialog}
+          onOpenAddProjectDialog={onOpenAddProjectDialog}
           agentStore={agentStore}
           store={store}
           viewerContextId={viewerContextId}

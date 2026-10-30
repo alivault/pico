@@ -7,8 +7,8 @@ import {
 import { toast } from "@/lib/pico/toast"
 
 import type {
-  DirectoryAgentsIndexesResponse,
-  DirectoryAgentsIndexSnapshot,
+  ProjectAgentsIndexesResponse,
+  ProjectAgentsIndexSnapshot,
   GenerateAgentNameResponse,
   AgentListEntry,
   AgentStatusEvent,
@@ -70,9 +70,9 @@ type AppShellAgentsDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   viewerContextId: string
-  currentDirectory: string
-  knownDirectories: Array<string>
-  directoryAgentsByPath: Record<string, Array<AgentListEntry>>
+  currentProject: string
+  knownProjects: Array<string>
+  projectAgentsByPath: Record<string, Array<AgentListEntry>>
   agentStatusByKey: AgentStatusByKey
   activeAgentId?: string
   activeAgentPath?: string
@@ -149,12 +149,12 @@ function MachineGroupHeading({
   )
 }
 
-function normalizeDirectories(directories: Array<string>) {
+function normalizeProjects(projects: Array<string>) {
   const seen = new Set<string>()
   const normalized: Array<string> = []
 
-  for (const directory of directories) {
-    const value = directory.trim()
+  for (const project of projects) {
+    const value = project.trim()
     if (!value || seen.has(value)) continue
     seen.add(value)
     normalized.push(value)
@@ -324,17 +324,17 @@ function isActiveAgent(
   )
 }
 
-function fetchDirectoryAgentsIndexes(
+function fetchProjectAgentsIndexes(
   machineId: string,
   viewerContextId: string,
-  directories: Array<string>
+  projects: Array<string>
 ) {
-  return fetchJson<DirectoryAgentsIndexesResponse>(
+  return fetchJson<ProjectAgentsIndexesResponse>(
     buildRequestUrl("/api/project-agents-indexes", {
       machineId,
       contextId: viewerContextId,
       searchParams: {
-        directory: directories,
+        project: projects,
       },
     })
   )
@@ -366,11 +366,11 @@ type AgentsDialogAction =
   | { type: "renameSaved"; path: string; name: string }
   | { type: "deleteRequested" }
   | { type: "deleteSaved"; path: string }
-  | { type: "directoriesLoadingStarted"; directories: Array<string> }
+  | { type: "projectsLoadingStarted"; projects: Array<string> }
   | {
-      type: "directoriesLoadingFinished"
-      directories: Array<string>
-      directoryIndexes?: Record<string, DirectoryAgentsIndexSnapshot>
+      type: "projectsLoadingFinished"
+      projects: Array<string>
+      projectIndexes?: Record<string, ProjectAgentsIndexSnapshot>
     }
   | { type: "visibleSelectionChanged"; key: string }
 
@@ -448,13 +448,13 @@ function agentsDialogReducer(
       const loadedAgentsByPath: Record<string, Array<AgentListEntry>> = {}
       let agentsChanged = false
 
-      for (const [directory, agents] of Object.entries(
+      for (const [project, agents] of Object.entries(
         state.loadedAgentsByPath
       )) {
         const filteredAgents = agents.filter(
           (entry) => entry.path !== action.path
         )
-        loadedAgentsByPath[directory] = filteredAgents
+        loadedAgentsByPath[project] = filteredAgents
         if (filteredAgents.length !== agents.length) agentsChanged = true
       }
 
@@ -476,34 +476,34 @@ function agentsDialogReducer(
         stage: "browse",
       }
     }
-    case "directoriesLoadingStarted": {
+    case "projectsLoadingStarted": {
       let changed = false
       const loadingByPath = { ...state.loadingByPath }
-      for (const directory of action.directories) {
-        if (loadingByPath[directory]) continue
-        loadingByPath[directory] = true
+      for (const project of action.projects) {
+        if (loadingByPath[project]) continue
+        loadingByPath[project] = true
         changed = true
       }
 
       return changed ? { ...state, loadingByPath } : state
     }
-    case "directoriesLoadingFinished": {
+    case "projectsLoadingFinished": {
       let loadingChanged = false
       const loadingByPath = { ...state.loadingByPath }
-      for (const directory of action.directories) {
-        if (!Object.prototype.hasOwnProperty.call(loadingByPath, directory)) {
+      for (const project of action.projects) {
+        if (!Object.prototype.hasOwnProperty.call(loadingByPath, project)) {
           continue
         }
-        delete loadingByPath[directory]
+        delete loadingByPath[project]
         loadingChanged = true
       }
 
       let loadedAgentsByPath = state.loadedAgentsByPath
-      if (action.directoryIndexes) {
+      if (action.projectIndexes) {
         loadedAgentsByPath = { ...state.loadedAgentsByPath }
-        for (const directory of action.directories) {
-          loadedAgentsByPath[directory] =
-            action.directoryIndexes[directory]?.agents || []
+        for (const project of action.projects) {
+          loadedAgentsByPath[project] =
+            action.projectIndexes[project]?.agents || []
         }
       }
 
@@ -547,9 +547,9 @@ function useAppShellAgentsDialogView({
   open,
   onOpenChange,
   viewerContextId,
-  currentDirectory,
-  knownDirectories,
-  directoryAgentsByPath,
+  currentProject,
+  knownProjects,
+  projectAgentsByPath,
   agentStatusByKey,
   activeAgentId,
   activeAgentPath,
@@ -576,23 +576,22 @@ function useAppShellAgentsDialogView({
     loadedAgentsByPath,
     loadingByPath,
   } = state
-  const normalizedCurrentDirectory = currentDirectory.trim()
-  const allDirectories = normalizeDirectories([
-    normalizedCurrentDirectory,
-    ...knownDirectories,
-    ...Object.keys(directoryAgentsByPath),
+  const normalizedCurrentProject = currentProject.trim()
+  const allProjects = normalizeProjects([
+    normalizedCurrentProject,
+    ...knownProjects,
+    ...Object.keys(projectAgentsByPath),
   ])
-  const currentDirectories = normalizedCurrentDirectory
-    ? [normalizedCurrentDirectory]
-    : allDirectories.slice(0, 1)
-  const scopedDirectories =
-    scope === "all" ? allDirectories : currentDirectories
+  const currentProjects = normalizedCurrentProject
+    ? [normalizedCurrentProject]
+    : allProjects.slice(0, 1)
+  const scopedProjects = scope === "all" ? allProjects : currentProjects
   const mergedAgentsByPath: Record<string, Array<AgentListEntry>> = {
     ...loadedAgentsByPath,
-    ...directoryAgentsByPath,
+    ...projectAgentsByPath,
   }
-  const visibleGroups = scopedDirectories.map((directory) => {
-    const agents = (mergedAgentsByPath[directory] || []).map((entry) =>
+  const visibleGroups = scopedProjects.map((project) => {
+    const agents = (mergedAgentsByPath[project] || []).map((entry) =>
       applyLocalAgentName(
         applyAgentStatus(entry, agentStatusForEntry(entry, agentStatusByKey)),
         localAgentNames
@@ -600,14 +599,14 @@ function useAppShellAgentsDialogView({
     )
 
     return {
-      directory,
+      project,
       agents,
-      loading: Boolean(loadingByPath[directory]),
+      loading: Boolean(loadingByPath[project]),
     }
   })
   const flatAgents = visibleGroups.flatMap((group) =>
     group.agents.map((entry) => ({
-      directory: group.directory,
+      project: group.project,
       entry,
       key: agentListEntryKey(entry),
     }))
@@ -615,10 +614,10 @@ function useAppShellAgentsDialogView({
   const words = searchWords(query)
   const sortedAgentItems = rankMatches(
     flatAgents,
-    ({ entry, directory }) =>
+    ({ entry, project }) =>
       agentMatchScore(words, {
         title: entry.title,
-        folders: [tildePath(entry.cwd || ""), tildePath(directory)],
+        folders: [tildePath(entry.cwd || ""), tildePath(project)],
       }),
     ({ entry }) => agentActivityTime(entry)
   )
@@ -636,7 +635,7 @@ function useAppShellAgentsDialogView({
       ({ agent, machine }) =>
         agentMatchScore(words, {
           title: agent.title,
-          folders: [tildePath(agent.cwd), tildePath(agent.directory)],
+          folders: [tildePath(agent.cwd), tildePath(agent.project)],
           machine: machine.label,
         }),
       ({ agent }) => agent.lastMessageAt ?? 0
@@ -665,53 +664,49 @@ function useAppShellAgentsDialogView({
   const deletePanelRef = React.useRef<HTMLDivElement | null>(null)
   const previousStageRef = React.useRef(stage)
 
-  // Directories whose load failed while the dialog is open. The load effect
+  // Projects whose load failed while the dialog is open. The load effect
   // skips them, else each failure starts the next request at once, in a loop.
-  const failedDirectoriesRef = React.useRef(new Set<string>())
+  const failedProjectsRef = React.useRef(new Set<string>())
 
   React.useEffect(() => {
     if (open) return
-    failedDirectoriesRef.current.clear()
+    failedProjectsRef.current.clear()
     dispatch({ type: "closed" })
   }, [open])
 
   React.useEffect(() => {
-    if (!open || !viewerContextId || scopedDirectories.length === 0) return
+    if (!open || !viewerContextId || scopedProjects.length === 0) return
 
-    const missingDirectories = scopedDirectories.filter(
-      (directory) =>
-        !Object.prototype.hasOwnProperty.call(mergedAgentsByPath, directory) &&
-        !loadingByPath[directory] &&
-        !failedDirectoriesRef.current.has(directory)
+    const missingProjects = scopedProjects.filter(
+      (project) =>
+        !Object.prototype.hasOwnProperty.call(mergedAgentsByPath, project) &&
+        !loadingByPath[project] &&
+        !failedProjectsRef.current.has(project)
     )
 
-    if (missingDirectories.length === 0) return
+    if (missingProjects.length === 0) return
 
     dispatch({
-      type: "directoriesLoadingStarted",
-      directories: missingDirectories,
+      type: "projectsLoadingStarted",
+      projects: missingProjects,
     })
 
-    void fetchDirectoryAgentsIndexes(
-      machineId,
-      viewerContextId,
-      missingDirectories
-    )
+    void fetchProjectAgentsIndexes(machineId, viewerContextId, missingProjects)
       .then((response) => {
         dispatch({
-          type: "directoriesLoadingFinished",
-          directories: missingDirectories,
-          directoryIndexes: response.ok ? response.directoryIndexes : undefined,
+          type: "projectsLoadingFinished",
+          projects: missingProjects,
+          projectIndexes: response.ok ? response.projectIndexes : undefined,
         })
       })
       .catch((error: unknown) => {
-        for (const directory of missingDirectories) {
-          failedDirectoriesRef.current.add(directory)
+        for (const project of missingProjects) {
+          failedProjectsRef.current.add(project)
         }
         onError?.(error)
         dispatch({
-          type: "directoriesLoadingFinished",
-          directories: missingDirectories,
+          type: "projectsLoadingFinished",
+          projects: missingProjects,
         })
       })
   }, [
@@ -719,7 +714,7 @@ function useAppShellAgentsDialogView({
     mergedAgentsByPath,
     onError,
     open,
-    scopedDirectories,
+    scopedProjects,
     viewerContextId,
   ])
 
@@ -915,7 +910,7 @@ function useAppShellAgentsDialogView({
               suffix={loading ? " · loading" : undefined}
             />
           ) : (
-            `${scope === "all" ? "All agents" : `Current directory: ${tildePath(currentDirectories[0] || "")}`}${loading ? " · loading" : ""}`
+            `${scope === "all" ? "All agents" : `Current project: ${tildePath(currentProjects[0] || "")}`}${loading ? " · loading" : ""}`
           )
         }
       >
@@ -925,7 +920,7 @@ function useAppShellAgentsDialogView({
             <span className="text-muted-foreground">Loading agents…</span>
           </CommandItem>
         ) : null}
-        {sortedAgentItems.map(({ directory, entry }) => {
+        {sortedAgentItems.map(({ project, entry }) => {
           const entryKey = agentListEntryKey(entry)
           const timestamp = entry.lastUserMessageAt || entry.modified
           const agentTime = formatAgentTime(timestamp)
@@ -955,7 +950,7 @@ function useAppShellAgentsDialogView({
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="truncate font-medium">{entry.title}</span>
                 <span className="line-clamp-1 text-xs text-muted-foreground">
-                  {tildePath(entry.cwd || directory)}
+                  {tildePath(entry.cwd || project)}
                 </span>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
@@ -995,7 +990,7 @@ function useAppShellAgentsDialogView({
           const agentTime = agent.lastMessageAt
             ? formatAgentTime(new Date(agent.lastMessageAt).toISOString())
             : ""
-          const directory = agent.directory || agent.cwd
+          const project = agent.project || agent.cwd
           return (
             <CommandItem
               key={item.key}
@@ -1024,7 +1019,7 @@ function useAppShellAgentsDialogView({
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="truncate font-medium">{agent.title}</span>
                 <span className="line-clamp-1 text-xs text-muted-foreground">
-                  {tildePath(agent.cwd || directory)}
+                  {tildePath(agent.cwd || project)}
                 </span>
               </div>
               {agentTime ? (
@@ -1078,7 +1073,7 @@ function useAppShellAgentsDialogView({
           <span className="inline-flex items-center gap-1">
             <FooterKbd>Tab</FooterKbd>
             {scope === "all"
-              ? "Current directory"
+              ? "Current project"
               : machines.length > 1
                 ? "All machines"
                 : "All agents"}
@@ -1295,7 +1290,7 @@ function useAppShellAgentsDialogView({
       open={open}
       onOpenChange={onOpenChange}
       title="Agents"
-      description="Search and switch agents. Press Tab to toggle current directory and all agents."
+      description="Search and switch agents. Press Tab to toggle current project and all agents."
       className="sm:max-w-2xl"
       initialFocus
     >

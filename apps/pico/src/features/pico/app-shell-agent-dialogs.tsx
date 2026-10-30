@@ -17,7 +17,7 @@ import {
 } from "@/features/pico/keyboard-shortcuts"
 import type { ForkMessage } from "@/features/pico/app-shell-dialog-types"
 import type {
-  DeleteOldDirectoryAgentsResponse,
+  DeleteOldProjectAgentsResponse,
   ForkAgentResponse,
   ForkableMessagesResponse,
   GenerateAgentNameResponse,
@@ -59,8 +59,8 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { useMachineId } from "@/lib/pico/machine-context"
 
 type ForkableMessagesData = Extract<ForkableMessagesResponse, { ok: true }>
-type DeleteOldDirectoryAgentsData = Extract<
-  DeleteOldDirectoryAgentsResponse,
+type DeleteOldProjectAgentsData = Extract<
+  DeleteOldProjectAgentsResponse,
   { ok: true }
 >
 type GenerateAgentNameData = Extract<GenerateAgentNameResponse, { ok: true }>
@@ -543,12 +543,12 @@ export type DeleteAgentsDialogHandle = {
   isOpen: () => boolean
 }
 
-type DeleteOldDirectoryAgentsDialogProps = {
+type DeleteOldProjectAgentsDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  directory: string
+  project: string
   daysValue: string
-  preview: DeleteOldDirectoryAgentsData | null
+  preview: DeleteOldProjectAgentsData | null
   previewLoading: boolean
   deleteLoading: boolean
   onDaysValueChange: (value: string) => void
@@ -556,10 +556,10 @@ type DeleteOldDirectoryAgentsDialogProps = {
   onDelete: () => void
 }
 
-function DeleteOldDirectoryAgentsDialog({
+function DeleteOldProjectAgentsDialog({
   open,
   onOpenChange,
-  directory,
+  project,
   daysValue,
   preview,
   previewLoading,
@@ -567,7 +567,7 @@ function DeleteOldDirectoryAgentsDialog({
   onDaysValueChange,
   onPreview,
   onDelete,
-}: DeleteOldDirectoryAgentsDialogProps) {
+}: DeleteOldProjectAgentsDialogProps) {
   const isMobile = useIsMobile()
   const matchCount = preview?.matchingAgents.length ?? 0
   const canDelete = Boolean(preview) && matchCount > 0 && !deleteLoading
@@ -608,7 +608,7 @@ function DeleteOldDirectoryAgentsDialog({
   ) : null
   const body = (
     <div className="space-y-4">
-      <p className="text-sm break-all text-muted-foreground">{directory}</p>
+      <p className="text-sm break-all text-muted-foreground">{project}</p>
       {daysInput}
       {previewBody}
     </div>
@@ -640,7 +640,7 @@ function DeleteOldDirectoryAgentsDialog({
           <DrawerHeader>
             <DrawerTitle>Archive old agents</DrawerTitle>
             <DrawerDescription>
-              Preview and archive inactive agents in this directory.
+              Preview and archive inactive agents in this project.
             </DrawerDescription>
           </DrawerHeader>
           <div className="px-4 pb-2">{body}</div>
@@ -658,7 +658,7 @@ function DeleteOldDirectoryAgentsDialog({
         <DialogHeader>
           <DialogTitle>Archive old agents</DialogTitle>
           <DialogDescription>
-            Preview and archive inactive agents in this directory.
+            Preview and archive inactive agents in this project.
           </DialogDescription>
         </DialogHeader>
         {body}
@@ -668,30 +668,30 @@ function DeleteOldDirectoryAgentsDialog({
   )
 }
 
-export type DeleteOldDirectoryAgentsDialogHandle = {
-  open: (directory: string) => void
+export type DeleteOldProjectAgentsDialogHandle = {
+  open: (project: string) => void
   close: () => void
   isOpen: () => boolean
 }
 
-type DeleteOldDirectoryAgentsDialogControllerProps = {
-  ref?: React.Ref<DeleteOldDirectoryAgentsDialogHandle>
+type DeleteOldProjectAgentsDialogControllerProps = {
+  ref?: React.Ref<DeleteOldProjectAgentsDialogHandle>
   openStateRef?: React.RefObject<boolean>
   viewerContextId: string
 }
 
-export function DeleteOldDirectoryAgentsDialogController({
+export function DeleteOldProjectAgentsDialogController({
   ref,
   openStateRef,
   viewerContextId,
-}: DeleteOldDirectoryAgentsDialogControllerProps) {
+}: DeleteOldProjectAgentsDialogControllerProps) {
   const machineId = useMachineId()
   const queryClient = useQueryClient()
   const [open, setOpen] = React.useState(false)
-  const [directory, setDirectory] = React.useState("")
+  const [project, setProject] = React.useState("")
   const [daysValue, setDaysValue] = React.useState("30")
   const [preview, setPreview] =
-    React.useState<DeleteOldDirectoryAgentsData | null>(null)
+    React.useState<DeleteOldProjectAgentsData | null>(null)
   const openRef = React.useRef(open)
 
   const setOpenState = (nextOpen: boolean) => {
@@ -715,7 +715,7 @@ export function DeleteOldDirectoryAgentsDialogController({
 
   const cleanupMutation = useMutation({
     mutationFn: async (dryRun: boolean) => {
-      return await fetchJson<DeleteOldDirectoryAgentsData>(
+      return await fetchJson<DeleteOldProjectAgentsData>(
         buildRequestUrl("/api/project-agents/cleanup", {
           machineId,
           contextId: viewerContextId,
@@ -724,7 +724,7 @@ export function DeleteOldDirectoryAgentsDialogController({
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            directory,
+            project,
             olderThanMs: olderThanMs(),
             dryRun,
           }),
@@ -734,10 +734,7 @@ export function DeleteOldDirectoryAgentsDialogController({
     onSuccess: async (_response, dryRun) => {
       if (dryRun) return
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.directoryAgentsIndex(
-          viewerContextId,
-          directory
-        ),
+        queryKey: picoQueryKeys.projectAgentsIndex(viewerContextId, project),
       })
     },
   })
@@ -757,10 +754,7 @@ export function DeleteOldDirectoryAgentsDialogController({
       const result = await cleanupMutation.mutateAsync(false)
       setPreview(result)
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.directoryAgentsIndex(
-          viewerContextId,
-          directory
-        ),
+        queryKey: picoQueryKeys.projectAgentsIndex(viewerContextId, project),
       })
       toast.success(
         `Archived ${result.deletedAgentIds.length} old agent${
@@ -775,10 +769,10 @@ export function DeleteOldDirectoryAgentsDialogController({
     }
   }
 
-  const openDirectory = (nextDirectory: string) => {
-    const normalizedDirectory = nextDirectory.trim()
-    if (!normalizedDirectory) return
-    setDirectory(normalizedDirectory)
+  const openProject = (nextProject: string) => {
+    const normalizedProject = nextProject.trim()
+    if (!normalizedProject) return
+    setProject(normalizedProject)
     setDaysValue("30")
     setPreview(null)
     setOpenState(true)
@@ -787,20 +781,20 @@ export function DeleteOldDirectoryAgentsDialogController({
   React.useImperativeHandle(
     ref,
     () => ({
-      open: openDirectory,
+      open: openProject,
       close: () => {
         setOpenState(false)
       },
       isOpen: () => openRef.current,
     }),
-    [daysValue, directory, viewerContextId]
+    [daysValue, project, viewerContextId]
   )
 
   return (
-    <DeleteOldDirectoryAgentsDialog
+    <DeleteOldProjectAgentsDialog
       open={open}
       onOpenChange={setOpenState}
-      directory={directory}
+      project={project}
       daysValue={daysValue}
       preview={preview}
       previewLoading={cleanupMutation.isPending && !preview}

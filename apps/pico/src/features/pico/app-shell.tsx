@@ -22,7 +22,7 @@ import {
 } from "@/features/pico/app-shell-agent-header"
 import { AppShellSidebarController } from "@/features/pico/app-shell-sidebar-controller"
 import { AppShellWindowEffectsHost } from "@/features/pico/app-shell-window-effects"
-import type { AppShellAddDirectoryDialogHandle } from "@/features/pico/app-shell-add-project-dialog"
+import type { AppShellAddProjectDialogHandle } from "@/features/pico/app-shell-add-project-dialog"
 import type { AppShellAuthDialogHandle } from "@/features/pico/app-shell-auth-dialog"
 import type {
   AppCommand,
@@ -31,7 +31,7 @@ import type {
 import type { AppShellAgentsDialogHandle } from "@/features/pico/app-shell-agents-dialog"
 import type { AppShellSettingsDialogHandle } from "@/features/pico/app-shell-settings-dialog"
 import type {
-  DeleteOldDirectoryAgentsDialogHandle,
+  DeleteOldProjectAgentsDialogHandle,
   DeleteAgentsDialogHandle,
   ForkAgentDialogHandle,
   RenameAgentDialogHandle,
@@ -162,8 +162,8 @@ import {
 import { useAppShellPromptMutations } from "@/features/pico/use-app-shell-prompt-mutations"
 import { usePicoTheme } from "@/features/pico/use-pico-theme"
 import {
-  applyDirectoryIndexRename,
-  updateAgentsEventDirectoryIndexes,
+  applyProjectIndexRename,
+  updateAgentsEventProjectIndexes,
   useAppShellAgentMutations,
 } from "@/features/pico/use-app-shell-agent-mutations"
 import { useAppShellAgentSync } from "@/features/pico/use-app-shell-agent-sync"
@@ -183,34 +183,34 @@ import {
 import {
   AUTO_SCROLL_ENABLED_STORAGE_KEY,
   CENTER_MESSAGES_STORAGE_KEY,
-  DRAFT_DIRECTORY_STORAGE_KEY,
+  DRAFT_PROJECT_STORAGE_KEY,
   HIDE_TOOL_BLOCKS_STORAGE_KEY,
   PINNED_AGENTS_STORAGE_KEY,
-  RECENT_DIRECTORIES_LIMIT,
-  RECENT_DIRECTORIES_STORAGE_KEY,
+  RECENT_PROJECTS_LIMIT,
+  RECENT_PROJECTS_STORAGE_KEY,
   RIGHT_SIDEBAR_OPEN_STORAGE_KEY,
   TERMINAL_PANEL_OPEN_STORAGE_KEY,
   AGENT_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
   AGENT_DONE_SOUND_ENABLED_STORAGE_KEY,
-  SIDEBAR_DIRECTORIES_STORAGE_KEY,
+  SIDEBAR_PROJECTS_STORAGE_KEY,
   VIEWER_CONTEXT_STORAGE_KEY,
   createContextId,
   createInitialAgentState,
   getAgentTitle,
   normalizeAgentSelectionKeys,
-  normalizeStoredDirectoryList,
+  normalizeStoredProjectList,
   promptDraftKey,
   readStoredAutoScrollEnabled,
   readStoredCenterMessages,
-  readStoredDraftDirectory,
+  readStoredDraftProject,
   readStoredHideToolBlocks,
   readStoredPinnedAgentKeys,
-  readStoredRecentDirectories,
+  readStoredRecentProjects,
   readStoredRightSidebarOpen,
   readStoredTerminalPanelOpen,
   readStoredAgentDoneDesktopNotificationsEnabled,
   readStoredAgentDoneSoundEnabled,
-  readStoredSidebarDirectories,
+  readStoredSidebarProjects,
   rememberStoredPromptDraft,
   safeLocalStorageSetItem,
   machineLocalStorageSetItem,
@@ -235,7 +235,7 @@ import type {
 } from "@/lib/pico/api"
 import { useMachineId } from "@/lib/pico/machine-context"
 
-const INITIAL_SIDEBAR_BOOTSTRAP_DIRECTORY_COUNT = 6
+const INITIAL_SIDEBAR_BOOTSTRAP_PROJECT_COUNT = 6
 type AppShellController = {
   stores: {
     appUi: PicoStore<AppShellUiState>
@@ -583,7 +583,7 @@ function useAppShellAgentWorkspaceView({
     draftFlowStoreRef.current = createPicoStore<AppShellDraftFlowState>(
       {
         draftAgentLoadingOwnerKey: null,
-        storedDraftDirectory: "",
+        storedDraftProject: "",
       },
       shallowRecordEqual
     )
@@ -597,34 +597,34 @@ function useAppShellAgentWorkspaceView({
     },
     [draftFlowStore]
   )
-  const setStoredDraftDirectory = React.useCallback<
+  const setStoredDraftProject = React.useCallback<
     React.Dispatch<React.SetStateAction<string>>
   >(
     (action) => {
-      setStoreField(draftFlowStore, "storedDraftDirectory", action)
+      setStoreField(draftFlowStore, "storedDraftProject", action)
     },
     [draftFlowStore]
   )
-  const recentDirectoriesStoreRef = React.useRef<PicoStore<
-    Array<string>
-  > | null>(null)
-  if (!recentDirectoriesStoreRef.current) {
-    recentDirectoriesStoreRef.current = createPicoStore<Array<string>>(
+  const recentProjectsStoreRef = React.useRef<PicoStore<Array<string>> | null>(
+    null
+  )
+  if (!recentProjectsStoreRef.current) {
+    recentProjectsStoreRef.current = createPicoStore<Array<string>>(
       [],
       sameStringArray
     )
   }
-  const recentDirectoriesStore = recentDirectoriesStoreRef.current
-  const setRecentDirectories = React.useCallback<
+  const recentProjectsStore = recentProjectsStoreRef.current
+  const setRecentProjects = React.useCallback<
     React.Dispatch<React.SetStateAction<Array<string>>>
   >(
     (action) => {
-      const current = recentDirectoriesStore.state
+      const current = recentProjectsStore.state
       const next = applyStoreAction(current, action)
       if (next === current) return
-      setStoreState(recentDirectoriesStore, next)
+      setStoreState(recentProjectsStore, next)
     },
-    [recentDirectoriesStore]
+    [recentProjectsStore]
   )
   const { isMobile, openMobile, openMobileSettled, setOpenMobile } =
     useSidebar()
@@ -756,20 +756,20 @@ function useAppShellAgentWorkspaceView({
     null
   )
   const commandPaletteOpenRef = React.useRef(false)
-  const addDirectoryDialogRef =
-    React.useRef<AppShellAddDirectoryDialogHandle | null>(null)
-  const addDirectoryOpenRef = React.useRef(false)
-  const moveAgentDirectoryDialogRef =
-    React.useRef<AppShellAddDirectoryDialogHandle | null>(null)
-  const moveAgentDirectoryOpenRef = React.useRef(false)
-  const moveAgentDirectoryTargetRef = React.useRef<AgentListEntry | null>(null)
+  const addProjectDialogRef =
+    React.useRef<AppShellAddProjectDialogHandle | null>(null)
+  const addProjectOpenRef = React.useRef(false)
+  const moveAgentProjectDialogRef =
+    React.useRef<AppShellAddProjectDialogHandle | null>(null)
+  const moveAgentProjectOpenRef = React.useRef(false)
+  const moveAgentProjectTargetRef = React.useRef<AgentListEntry | null>(null)
   const renameDialogRef = React.useRef<RenameAgentDialogHandle | null>(null)
   const renameOpenRef = React.useRef(false)
   const deleteDialogRef = React.useRef<DeleteAgentsDialogHandle | null>(null)
   const deleteOpenRef = React.useRef(false)
-  const deleteOldDirectoryAgentsDialogRef =
-    React.useRef<DeleteOldDirectoryAgentsDialogHandle | null>(null)
-  const deleteOldDirectoryAgentsOpenRef = React.useRef(false)
+  const deleteOldProjectAgentsDialogRef =
+    React.useRef<DeleteOldProjectAgentsDialogHandle | null>(null)
+  const deleteOldProjectAgentsOpenRef = React.useRef(false)
   const forkDialogRef = React.useRef<ForkAgentDialogHandle | null>(null)
   const forkOpenRef = React.useRef(false)
   const treeDialogRef = React.useRef<AppShellTreeDialogHandle | null>(null)
@@ -879,7 +879,7 @@ function useAppShellAgentWorkspaceView({
   const dismissUiRequestRef = React.useRef((id: string) => {
     uiRequestDialogRef.current?.close(id)
   })
-  const autoAddedAgentDirectoryKeysRef = React.useRef<Set<string>>(new Set())
+  const autoAddedAgentProjectKeysRef = React.useRef<Set<string>>(new Set())
   const pendingMobileSidebarPromptFocusRef = React.useRef(false)
   const conversationItemsStoreRef = React.useRef<ConversationItemsStore | null>(
     null
@@ -1169,13 +1169,13 @@ function useAppShellAgentWorkspaceView({
     }),
     { compare: shallowRecordEqual }
   )
-  const { draftAgentLoadingOwnerKey, storedDraftDirectory } =
+  const { draftAgentLoadingOwnerKey, storedDraftProject } =
     useSelector(draftFlowStore)
   const agentState = useSelector(
     agentStore,
     (currentAgentState) => ({
       cwd: currentAgentState.cwd,
-      directory: currentAgentState.directory,
+      project: currentAgentState.project,
       draft: currentAgentState.draft,
       agentFile: currentAgentState.agentFile,
       agentId: currentAgentState.agentId,
@@ -1324,16 +1324,16 @@ function useAppShellAgentWorkspaceView({
   )
   void sidebarWorkspaceVersion
   const {
-    baseSidebarDirectories,
-    directoryStateByPath,
-    directoryIndexes,
+    baseSidebarProjects,
+    projectStateByPath,
+    projectIndexes,
     sidebarAgents,
     selectedSidebarAgents,
     sidebarAgentEntriesByKey,
   } = sidebarStore.getWorkspaceSnapshot()
-  const agentsEventDirectories = useAppShellSidebarValue(
+  const agentsEventProjects = useAppShellSidebarValue(
     sidebarStore,
-    (snapshot) => snapshot.state.agentsEvent?.directories || [],
+    (snapshot) => snapshot.state.agentsEvent?.projects || [],
     sameStringArray
   )
   const applySidebarAgentStatusRef = React.useRef(
@@ -1350,18 +1350,18 @@ function useAppShellAgentWorkspaceView({
   }
   const bindOptimisticSidebarAgentRef = React.useRef(
     (agent: { cwd?: string; agentId?: string; agentPath?: string }) => {
-      sidebarStore.setDirectoryIndexDataByPath((current) =>
+      sidebarStore.setProjectIndexDataByPath((current) =>
         bindOptimisticSidebarAgentEntries(current, agent)
       )
       sidebarStore.setAgentsEvent((current) => {
-        if (!current?.directoryIndexes) return current
-        const directoryIndexes = bindOptimisticSidebarAgentEntries(
-          current.directoryIndexes,
+        if (!current?.projectIndexes) return current
+        const projectIndexes = bindOptimisticSidebarAgentEntries(
+          current.projectIndexes,
           agent
         )
-        return directoryIndexes === current.directoryIndexes
+        return projectIndexes === current.projectIndexes
           ? current
-          : { ...current, directoryIndexes }
+          : { ...current, projectIndexes }
       })
     }
   )
@@ -1374,12 +1374,12 @@ function useAppShellAgentWorkspaceView({
   )
   React.useEffect(() => {
     if (!activeAgentFile || !activeAgentName) return
-    sidebarStore.setDirectoryIndexDataByPath((current) =>
-      applyDirectoryIndexRename(current, activeAgentFile, activeAgentName)
+    sidebarStore.setProjectIndexDataByPath((current) =>
+      applyProjectIndexRename(current, activeAgentFile, activeAgentName)
     )
     sidebarStore.setAgentsEvent((current) =>
-      updateAgentsEventDirectoryIndexes(current, (indexes) =>
-        applyDirectoryIndexRename(indexes, activeAgentFile, activeAgentName)
+      updateAgentsEventProjectIndexes(current, (indexes) =>
+        applyProjectIndexRename(indexes, activeAgentFile, activeAgentName)
       )
     )
   }, [activeAgentFile, activeAgentName, sidebarStore])
@@ -1534,7 +1534,7 @@ function useAppShellAgentWorkspaceView({
     batch(() => {
       setGitPanelOpen(readStoredRightSidebarOpen())
       setTerminalPanelOpen(readStoredTerminalPanelOpen())
-      setStoredDraftDirectory(readStoredDraftDirectory(machineId) || "")
+      setStoredDraftProject(readStoredDraftProject(machineId) || "")
       setAgentDoneSoundEnabled(readStoredAgentDoneSoundEnabled())
       setAgentDoneDesktopNotificationsEnabled(
         readStoredAgentDoneDesktopNotificationsEnabled()
@@ -1542,7 +1542,7 @@ function useAppShellAgentWorkspaceView({
       setHideToolBlocks(readStoredHideToolBlocks())
       setCenterMessages(readStoredCenterMessages())
       setAutoScrollEnabled(readStoredAutoScrollEnabled())
-      setRecentDirectories(readStoredRecentDirectories(machineId))
+      setRecentProjects(readStoredRecentProjects(machineId))
       setDesktopNotificationPermission(getDesktopNotificationPermission())
     })
   }
@@ -1814,8 +1814,8 @@ function useAppShellAgentWorkspaceView({
     deleteDialogRef.current?.open(targets)
   }
 
-  const openDeleteOldDirectoryAgentsDialog = (directory: string) => {
-    deleteOldDirectoryAgentsDialogRef.current?.open(directory)
+  const openDeleteOldProjectAgentsDialog = (project: string) => {
+    deleteOldProjectAgentsDialogRef.current?.open(project)
   }
 
   const currentAgentListEntry = () => {
@@ -1839,20 +1839,20 @@ function useAppShellAgentWorkspaceView({
     openDeleteDialog([currentEntry])
   }
 
-  const openAddDirectoryDialog = () => {
-    addDirectoryDialogRef.current?.open()
+  const openAddProjectDialog = () => {
+    addProjectDialogRef.current?.open()
   }
 
-  const openMoveAgentDirectoryDialogForEntry = (entry: AgentListEntry) => {
+  const openMoveAgentProjectDialogForEntry = (entry: AgentListEntry) => {
     if (!entry.path) return
-    moveAgentDirectoryTargetRef.current = entry
-    moveAgentDirectoryDialogRef.current?.open()
+    moveAgentProjectTargetRef.current = entry
+    moveAgentProjectDialogRef.current?.open()
   }
 
-  const openMoveAgentDirectoryDialogForCurrentAgent = () => {
+  const openMoveAgentProjectDialogForCurrentAgent = () => {
     const currentEntry = currentAgentListEntry()
     if (!currentEntry) return
-    openMoveAgentDirectoryDialogForEntry(currentEntry)
+    openMoveAgentProjectDialogForEntry(currentEntry)
   }
 
   const openForkDialog = async () => {
@@ -1895,10 +1895,10 @@ function useAppShellAgentWorkspaceView({
 
   const hasOpenDialogSurface = () => {
     if (
-      addDirectoryOpenRef.current ||
+      addProjectOpenRef.current ||
       authOpenRef.current ||
       commandPaletteOpenRef.current ||
-      deleteOldDirectoryAgentsOpenRef.current ||
+      deleteOldProjectAgentsOpenRef.current ||
       deleteOpenRef.current ||
       forkOpenRef.current ||
       gitCommitOpenRef.current ||
@@ -2126,16 +2126,16 @@ function useAppShellAgentWorkspaceView({
     ]
   )
   const handleSelectAgentRef = useLatestRef(handleSelectAgent)
-  // Another device changed the shared sidebar layout. The first directories
+  // Another device changed the shared sidebar layout. The first projects
   // that the event stream loads stay the same, so the stream does not restart.
   usePicoEvent(
     "pico:sidebar-state",
     ({ machineId: changedMachine, changed }) => {
       if (changedMachine !== machineId) return
-      if (changed.includes("directories")) {
-        sidebarStore.setSidebarDirectories(
-          normalizeStoredDirectoryList(
-            readStoredSidebarDirectories(machineId).directories
+      if (changed.includes("projects")) {
+        sidebarStore.setSidebarProjects(
+          normalizeStoredProjectList(
+            readStoredSidebarProjects(machineId).projects
           )
         )
       }
@@ -2155,8 +2155,8 @@ function useAppShellAgentWorkspaceView({
     viewerContextId,
     agentId,
     draftAgentLoadingOwnerKey,
-    bootstrapSidebarDirectories:
-      sidebarStore.state.state.initialSidebarBootstrapDirectories,
+    bootstrapSidebarProjects:
+      sidebarStore.state.state.initialSidebarBootstrapProjects,
     hideToolBlocksRef,
     agentStore,
     agentStateRef,
@@ -2183,129 +2183,129 @@ function useAppShellAgentWorkspaceView({
     lastSyncedEditorTextRef,
   })
 
-  // The sidebar directory of the agent. A worktree agent works in its
-  // worktree, but belongs to the directory of the agent that made it.
-  const agentDirectory = (agentState.directory ?? agentState.cwd)?.trim()
+  // The sidebar project of the agent. A worktree agent works in its
+  // worktree, but belongs to the project of the agent that made it.
+  const agentProject = (agentState.project ?? agentState.cwd)?.trim()
 
   React.useEffect(() => {
-    if (!agentDirectory) return
+    if (!agentProject) return
     machineLocalStorageSetItem(
       machineId,
-      DRAFT_DIRECTORY_STORAGE_KEY,
-      agentDirectory
+      DRAFT_PROJECT_STORAGE_KEY,
+      agentProject
     )
-    setStoredDraftDirectory(agentDirectory)
-  }, [agentDirectory])
+    setStoredDraftProject(agentProject)
+  }, [agentProject])
 
   React.useEffect(() => {
-    const nextDirectory = agentDirectory
+    const nextProject = agentProject
     const nextAgentId = agentState.agentId?.trim()
-    if (!agentId || !nextAgentId || agentState.draft || !nextDirectory) {
+    if (!agentId || !nextAgentId || agentState.draft || !nextProject) {
       return
     }
     if (nextAgentId !== agentId) return
 
-    const autoAddKey = `${nextAgentId}\n${nextDirectory}`
-    if (autoAddedAgentDirectoryKeysRef.current.has(autoAddKey)) return
-    autoAddedAgentDirectoryKeysRef.current.add(autoAddKey)
+    const autoAddKey = `${nextAgentId}\n${nextProject}`
+    if (autoAddedAgentProjectKeysRef.current.has(autoAddKey)) return
+    autoAddedAgentProjectKeysRef.current.add(autoAddKey)
 
-    sidebarStore.setSidebarDirectories((current) => {
-      const normalizedCurrent = normalizeStoredDirectoryList(current)
-      if (normalizedCurrent.includes(nextDirectory)) return current
+    sidebarStore.setSidebarProjects((current) => {
+      const normalizedCurrent = normalizeStoredProjectList(current)
+      if (normalizedCurrent.includes(nextProject)) return current
 
-      const nextDirectories = normalizeStoredDirectoryList([
-        nextDirectory,
+      const nextProjects = normalizeStoredProjectList([
+        nextProject,
         ...normalizedCurrent,
       ])
       machineLocalStorageSetItem(
         machineId,
-        SIDEBAR_DIRECTORIES_STORAGE_KEY,
-        JSON.stringify(nextDirectories)
+        SIDEBAR_PROJECTS_STORAGE_KEY,
+        JSON.stringify(nextProjects)
       )
-      return nextDirectories
+      return nextProjects
     })
   }, [
-    agentDirectory,
+    agentProject,
     agentId,
     agentState.draft,
     agentState.agentId,
     sidebarStore,
   ])
 
-  const defaultNewAgentDirectory =
-    agentDirectory || baseSidebarDirectories[0] || storedDraftDirectory || ""
-  const newAgentDirectoryOptions = React.useMemo(() => {
+  const defaultNewAgentProject =
+    agentProject || baseSidebarProjects[0] || storedDraftProject || ""
+  const newAgentProjectOptions = React.useMemo(() => {
     const nextOptions: Array<{ path: string; label: string }> = []
     const seen = new Set<string>()
-    const pushDirectoryOption = (path: string, label: string) => {
+    const pushProjectOption = (path: string, label: string) => {
       const normalizedPath = path.trim()
       if (!normalizedPath || seen.has(normalizedPath)) return
       seen.add(normalizedPath)
       nextOptions.push({ path: normalizedPath, label })
     }
 
-    if (agentDirectory) {
-      pushDirectoryOption(agentDirectory, "Current agent directory")
+    if (agentProject) {
+      pushProjectOption(agentProject, "Project of the current agent")
     }
-    if (storedDraftDirectory) {
-      pushDirectoryOption(storedDraftDirectory, "Draft directory")
+    if (storedDraftProject) {
+      pushProjectOption(storedDraftProject, "Draft project")
     }
-    for (const directory of baseSidebarDirectories) {
-      pushDirectoryOption(directory, "Sidebar directory")
+    for (const project of baseSidebarProjects) {
+      pushProjectOption(project, "Sidebar project")
     }
 
     return nextOptions
-  }, [baseSidebarDirectories, agentDirectory, storedDraftDirectory])
+  }, [baseSidebarProjects, agentProject, storedDraftProject])
 
-  const knownDirectories = React.useMemo(
+  const knownProjects = React.useMemo(
     () =>
-      normalizeStoredDirectoryList([
-        ...baseSidebarDirectories,
-        ...agentsEventDirectories,
+      normalizeStoredProjectList([
+        ...baseSidebarProjects,
+        ...agentsEventProjects,
         agentState.cwd || "",
-        storedDraftDirectory,
-        ...Array.from(directoryStateByPath.keys()),
-        ...Object.values(directoryIndexes).flatMap((entries) =>
+        storedDraftProject,
+        ...Array.from(projectStateByPath.keys()),
+        ...Object.values(projectIndexes).flatMap((entries) =>
           entries.map((entry) => entry.cwd || "")
         ),
       ]),
     [
-      baseSidebarDirectories,
-      directoryIndexes,
-      directoryStateByPath,
+      baseSidebarProjects,
+      projectIndexes,
+      projectStateByPath,
       agentState.cwd,
-      agentsEventDirectories,
-      storedDraftDirectory,
+      agentsEventProjects,
+      storedDraftProject,
     ]
   )
 
-  const agentsDialogDirectory =
+  const agentsDialogProject =
     agentState.cwd?.trim() ||
-    (baseSidebarDirectories.length > 0
-      ? (baseSidebarDirectories[0] ?? "")
-      : storedDraftDirectory) ||
-    defaultNewAgentDirectory
+    (baseSidebarProjects.length > 0
+      ? (baseSidebarProjects[0] ?? "")
+      : storedDraftProject) ||
+    defaultNewAgentProject
 
-  const rememberRecentDirectory = (directory: string) => {
-    const normalizedDirectory = directory.trim()
-    if (!normalizedDirectory) return
+  const rememberRecentProject = (project: string) => {
+    const normalizedProject = project.trim()
+    if (!normalizedProject) return
 
-    setRecentDirectories((current) => {
-      const next = normalizeStoredDirectoryList([
-        normalizedDirectory,
+    setRecentProjects((current) => {
+      const next = normalizeStoredProjectList([
+        normalizedProject,
         ...current,
-      ]).slice(0, RECENT_DIRECTORIES_LIMIT)
+      ]).slice(0, RECENT_PROJECTS_LIMIT)
       machineLocalStorageSetItem(
         machineId,
-        RECENT_DIRECTORIES_STORAGE_KEY,
+        RECENT_PROJECTS_STORAGE_KEY,
         JSON.stringify(next)
       )
       return next
     })
   }
 
-  const prefetchDirectoryAgentsIndex = React.useCallback(
-    (_directory: string) => {},
+  const prefetchProjectAgentsIndex = React.useCallback(
+    (_project: string) => {},
     []
   )
 
@@ -2320,7 +2320,7 @@ function useAppShellAgentWorkspaceView({
       const cwd = (
         options?.cwd ||
         currentState.cwd ||
-        defaultNewAgentDirectory
+        defaultNewAgentProject
       ).trim()
       if (!optimisticId || !cwd) return undefined
 
@@ -2341,38 +2341,38 @@ function useAppShellAgentWorkspaceView({
       } satisfies AgentListEntry
       const entryKey = agentListEntryKey(entry)
 
-      sidebarStore.setSidebarDirectories((current) => {
-        const normalizedCurrent = normalizeStoredDirectoryList(current)
+      sidebarStore.setSidebarProjects((current) => {
+        const normalizedCurrent = normalizeStoredProjectList(current)
         if (normalizedCurrent.includes(cwd)) return current
 
-        const nextDirectories = normalizeStoredDirectoryList([
+        const nextProjects = normalizeStoredProjectList([
           cwd,
           ...normalizedCurrent,
         ])
         machineLocalStorageSetItem(
           machineId,
-          SIDEBAR_DIRECTORIES_STORAGE_KEY,
-          JSON.stringify(nextDirectories)
+          SIDEBAR_PROJECTS_STORAGE_KEY,
+          JSON.stringify(nextProjects)
         )
-        return nextDirectories
+        return nextProjects
       })
       const optimisticEntry = {
         ...entry,
         id: optimisticId,
         cwd,
       }
-      sidebarStore.setDirectoryIndexDataByPath((current) =>
+      sidebarStore.setProjectIndexDataByPath((current) =>
         upsertOptimisticSidebarAgentEntry(current, optimisticEntry)
       )
-      // Update the event index only when it has this directory. Otherwise
+      // Update the event index only when it has this project. Otherwise
       // the event gets an index with only the new entry, and the merge of the
-      // event replaces the full directory list with it.
+      // event replaces the full project list with it.
       sidebarStore.setAgentsEvent((current) =>
-        current?.directoryIndexes?.[cwd]
+        current?.projectIndexes?.[cwd]
           ? {
               ...current,
-              directoryIndexes: upsertOptimisticSidebarAgentEntry(
-                current.directoryIndexes || {},
+              projectIndexes: upsertOptimisticSidebarAgentEntry(
+                current.projectIndexes || {},
                 optimisticEntry
               ),
             }
@@ -2389,7 +2389,7 @@ function useAppShellAgentWorkspaceView({
 
       return optimisticId
     },
-    [defaultNewAgentDirectory, agentStateRef, sidebarStore]
+    [defaultNewAgentProject, agentStateRef, sidebarStore]
   )
 
   const removeOptimisticSidebarAgent = React.useCallback(
@@ -2398,15 +2398,15 @@ function useAppShellAgentWorkspaceView({
       if (!targetId) return
 
       const entryKey = agentListEntryKey({ id: targetId })
-      sidebarStore.setDirectoryIndexDataByPath((current) =>
+      sidebarStore.setProjectIndexDataByPath((current) =>
         removeOptimisticSidebarAgentEntry(current, targetId)
       )
       sidebarStore.setAgentsEvent((current) =>
-        current?.directoryIndexes
+        current?.projectIndexes
           ? {
               ...current,
-              directoryIndexes: removeOptimisticSidebarAgentEntry(
-                current.directoryIndexes,
+              projectIndexes: removeOptimisticSidebarAgentEntry(
+                current.projectIndexes,
                 targetId
               ),
             }
@@ -2432,19 +2432,19 @@ function useAppShellAgentWorkspaceView({
       const targetId = optimisticId?.trim() || ""
       if (!targetId || !agent.agentId) return
 
-      sidebarStore.setDirectoryIndexDataByPath((current) =>
+      sidebarStore.setProjectIndexDataByPath((current) =>
         bindOptimisticSidebarAgentEntryById(current, targetId, agent)
       )
       sidebarStore.setAgentsEvent((current) => {
-        if (!current?.directoryIndexes) return current
-        const directoryIndexes = bindOptimisticSidebarAgentEntryById(
-          current.directoryIndexes,
+        if (!current?.projectIndexes) return current
+        const projectIndexes = bindOptimisticSidebarAgentEntryById(
+          current.projectIndexes,
           targetId,
           agent
         )
-        return directoryIndexes === current.directoryIndexes
+        return projectIndexes === current.projectIndexes
           ? current
-          : { ...current, directoryIndexes }
+          : { ...current, projectIndexes }
       })
 
       const previousKey = agentListEntryKey({ id: targetId })
@@ -2485,18 +2485,18 @@ function useAppShellAgentWorkspaceView({
         modified,
       }
 
-      sidebarStore.setDirectoryIndexDataByPath((current) =>
+      sidebarStore.setProjectIndexDataByPath((current) =>
         updateOptimisticSidebarAgentPreviewEntry(current, previewUpdate)
       )
       sidebarStore.setAgentsEvent((current) => {
-        if (!current?.directoryIndexes) return current
-        const directoryIndexes = updateOptimisticSidebarAgentPreviewEntry(
-          current.directoryIndexes,
+        if (!current?.projectIndexes) return current
+        const projectIndexes = updateOptimisticSidebarAgentPreviewEntry(
+          current.projectIndexes,
           previewUpdate
         )
-        return directoryIndexes === current.directoryIndexes
+        return projectIndexes === current.projectIndexes
           ? current
-          : { ...current, directoryIndexes }
+          : { ...current, projectIndexes }
       })
     },
     [agentStateRef, sidebarStore]
@@ -2519,7 +2519,7 @@ function useAppShellAgentWorkspaceView({
 
   const {
     abortAgent,
-    addDirectoryPath,
+    addProjectPath,
     createAgent: requestCreateAgent,
     holdPendingQueue,
     savePendingQueue,
@@ -2528,7 +2528,7 @@ function useAppShellAgentWorkspaceView({
   } = useAppShellPromptMutations({
     viewerContextId,
     activeAgentId,
-    defaultNewAgentDirectory,
+    defaultNewAgentProject,
     agentStore,
     agentStateRef,
     draftAgentLoadingOwnerKey,
@@ -2542,16 +2542,16 @@ function useAppShellAgentWorkspaceView({
     composerSkillRef,
     replaceComposerDraft,
     lastSyncedEditorTextRef,
-    rememberRecentDirectory,
-    prefetchDirectoryAgentsIndex,
+    rememberRecentProject,
+    prefetchProjectAgentsIndex,
     addOptimisticUserMessage,
     removeOptimisticUserMessage,
     addOptimisticSidebarAgent,
     removeOptimisticSidebarAgent,
     bindOptimisticSidebarAgent,
     updateOptimisticSidebarAgentPreview,
-    setSidebarDirectories: sidebarStore.setSidebarDirectories,
-    setStoredDraftDirectory,
+    setSidebarProjects: sidebarStore.setSidebarProjects,
+    setStoredDraftProject,
     setDraftAgentLoadingOwnerKey,
     setPendingDraftPrompt,
     setPendingDraftFollowUps,
@@ -2562,26 +2562,26 @@ function useAppShellAgentWorkspaceView({
     setComposerImages,
   })
 
-  const switchEmptyDraftDirectory = React.useCallback(
-    (directory: string) => {
-      const nextDirectory = directory.trim()
-      if (!nextDirectory) return
+  const switchEmptyDraftProject = React.useCallback(
+    (project: string) => {
+      const nextProject = project.trim()
+      if (!nextProject) return
 
       const previousState = agentStateRef.current
       if (!previousState.draft || previousState.items.length > 0) return
 
       machineLocalStorageSetItem(
         machineId,
-        DRAFT_DIRECTORY_STORAGE_KEY,
-        nextDirectory
+        DRAFT_PROJECT_STORAGE_KEY,
+        nextProject
       )
-      setStoredDraftDirectory(nextDirectory)
-      rememberRecentDirectory(nextDirectory)
+      setStoredDraftProject(nextProject)
+      rememberRecentProject(nextProject)
 
-      const ownerKey = promptDraftKey({ cwd: nextDirectory })
+      const ownerKey = promptDraftKey({ cwd: nextProject })
       const nextState = createOptimisticDraftAgentState({
         previous: previousState,
-        cwd: nextDirectory,
+        cwd: nextProject,
         ownerKey,
       })
       agentStateRef.current = nextState
@@ -2599,22 +2599,22 @@ function useAppShellAgentWorkspaceView({
     },
     [
       conversationItemsStore,
-      rememberRecentDirectory,
+      rememberRecentProject,
       agentStateRef,
       setAgentState,
-      setStoredDraftDirectory,
+      setStoredDraftProject,
     ]
   )
 
-  const addDirectoryPathForDialog = React.useCallback(
+  const addProjectPathForDialog = React.useCallback(
     async (path: string) => {
-      const result = await addDirectoryPath(path)
+      const result = await addProjectPath(path)
       if (typeof result === "string") {
-        switchEmptyDraftDirectory(result)
+        switchEmptyDraftProject(result)
       }
       return result
     },
-    [addDirectoryPath, switchEmptyDraftDirectory]
+    [addProjectPath, switchEmptyDraftProject]
   )
 
   const createAgent = React.useCallback(
@@ -2622,7 +2622,7 @@ function useAppShellAgentWorkspaceView({
       const previousState = agentStateRef.current
       const nextCwd = resolveNewAgentCwd({
         cwdOverride,
-        defaultDirectory: defaultNewAgentDirectory,
+        defaultProject: defaultNewAgentProject,
         currentCwd: previousState.cwd,
       })
       const ownerKey = promptDraftKey({ cwd: nextCwd })
@@ -2670,7 +2670,7 @@ function useAppShellAgentWorkspaceView({
     [
       clearSelectedSidebarSelection,
       conversationItemsStore,
-      defaultNewAgentDirectory,
+      defaultNewAgentProject,
       focusPrompt,
       handleSelectAgent,
       isMobile,
@@ -2685,19 +2685,19 @@ function useAppShellAgentWorkspaceView({
   )
 
   // Actions from outside this shell: for example the sidebar group of this
-  // machine, shown while another machine was open, or the directory picker
+  // machine, shown while another machine was open, or the project picker
   // of another machine's new-agent composer. The effect runs again when
   // the shell shows, so actions that came while it was hidden run then.
   const runMachineAction = React.useEffectEvent((action: MachineAction) => {
-    if (action.type === "add-directory") {
-      addDirectoryDialogRef.current?.open()
+    if (action.type === "add-project") {
+      addProjectDialogRef.current?.open()
       return
     }
     const draft = action.draft
-    void createAgent(action.directory).then(() => {
+    void createAgent(action.project).then(() => {
       if (!draft) return
       // The prompt that the user wrote in another machine's composer before
-      // choosing a directory of this machine.
+      // choosing a project of this machine.
       replaceComposerDraftRef.current(draft.text, agentStateRef.current, {
         forceSync: true,
       })
@@ -2895,9 +2895,9 @@ function useAppShellAgentWorkspaceView({
     activeAgentId,
     agentStateRef,
     setAgentState,
-    getDirectoryIndexDataByPath: () =>
-      sidebarStore.state.state.directoryIndexDataByPath,
-    setDirectoryIndexDataByPath: sidebarStore.setDirectoryIndexDataByPath,
+    getProjectIndexDataByPath: () =>
+      sidebarStore.state.state.projectIndexDataByPath,
+    setProjectIndexDataByPath: sidebarStore.setProjectIndexDataByPath,
     getAgentsEvent: () => sidebarStore.state.state.agentsEvent,
     setAgentsEvent: sidebarStore.setAgentsEvent,
     getSidebarSelection: () => {
@@ -2943,13 +2943,10 @@ function useAppShellAgentWorkspaceView({
     isCompactAbortRequested,
   })
 
-  const moveAgentToDirectory = async (
-    entry: AgentListEntry,
-    directory: string
-  ) => {
-    const moved = await moveAgentPath(entry, directory)
+  const moveAgentToProject = async (entry: AgentListEntry, project: string) => {
+    const moved = await moveAgentPath(entry, project)
     if (moved) {
-      rememberRecentDirectory(directory)
+      rememberRecentProject(project)
     }
     return moved
   }
@@ -2988,7 +2985,7 @@ function useAppShellAgentWorkspaceView({
         }
       )
       await queryClient.invalidateQueries({
-        queryKey: ["pico", "directory-agents-index", viewerContextId],
+        queryKey: ["pico", "project-agents-index", viewerContextId],
         refetchType: "active",
       })
       toast.success(nextUnread ? "Marked agent unread" : "Marked agent read")
@@ -3048,7 +3045,7 @@ function useAppShellAgentWorkspaceView({
     })
 
     await queryClient.invalidateQueries({
-      queryKey: ["pico", "directory-agents-index", viewerContextId],
+      queryKey: ["pico", "project-agents-index", viewerContextId],
       refetchType: "active",
     })
 
@@ -3064,22 +3061,22 @@ function useAppShellAgentWorkspaceView({
     return true
   }
 
-  const moveAgentDirectoryTargetToPath = async (directory: string) => {
-    const target = moveAgentDirectoryTargetRef.current
+  const moveAgentProjectTargetToPath = async (project: string) => {
+    const target = moveAgentProjectTargetRef.current
     if (!target) return false
 
-    const moved = await moveAgentToDirectory(target, directory)
+    const moved = await moveAgentToProject(target, project)
     if (moved) {
-      moveAgentDirectoryTargetRef.current = null
+      moveAgentProjectTargetRef.current = null
     }
     return moved
   }
 
-  const moveCurrentAgentToDirectory = async (directory: string) => {
+  const moveCurrentAgentToProject = async (project: string) => {
     const currentState = agentStateRef.current
     if (!currentState.agentFile) return false
 
-    return await moveAgentToDirectory(
+    return await moveAgentToProject(
       {
         path: currentState.agentFile,
         id: currentState.agentId,
@@ -3088,7 +3085,7 @@ function useAppShellAgentWorkspaceView({
         name: currentState.agentName,
         modified: currentState.modified,
       },
-      directory
+      project
     )
   }
 
@@ -3304,7 +3301,7 @@ function useAppShellAgentWorkspaceView({
     setThinkingLevel,
     submitPrompt,
     syncComposerDraft,
-    moveDraftToMachine: (targetMachine, directory) => {
+    moveDraftToMachine: (targetMachine, project) => {
       const text = serializeComposerDraft({
         text: composerTextRef.current,
         skillName: composerSkillRef.current,
@@ -3316,7 +3313,7 @@ function useAppShellAgentWorkspaceView({
       openMachine(targetMachine, {
         action: {
           type: "new-agent",
-          directory,
+          project,
           draft: text || images.length > 0 ? { text, images } : undefined,
         },
       })
@@ -3461,13 +3458,13 @@ function useAppShellAgentWorkspaceView({
         },
       },
       {
-        id: "add-directory",
+        id: "add-project",
         group: "Sidebar",
-        title: "Add Directory",
-        description: "Add a directory accordion to the sidebar",
+        title: "Add Project",
+        description: "Add a project to the sidebar",
         shortcut: formatShortcutLabel(appShortcut("D")),
-        keywords: ["workspace", "sidebar", "directory", "folder"],
-        onSelect: openAddDirectoryDialog,
+        keywords: ["workspace", "sidebar", "project", "directory", "folder"],
+        onSelect: openAddProjectDialog,
       },
       {
         id: "conversation-tree",
@@ -3664,7 +3661,7 @@ function useAppShellAgentWorkspaceView({
     jumpToPreviousMessage: () => {
       conversationFrameRef.current?.jumpToPreviousMessage()
     },
-    openAddDirectoryDialog,
+    openAddProjectDialog,
     openCommandPalette,
     openCommitDialog,
     openDeleteDialog,
@@ -3725,9 +3722,8 @@ function useAppShellAgentWorkspaceView({
     createAgent,
     onDeleteCurrentAgent: openDeleteDialogForCurrentAgent,
     onForkAgent: openForkDialog,
-    onMoveCurrentAgent: moveCurrentAgentToDirectory,
-    onMoveCurrentAgentToAnyDirectory:
-      openMoveAgentDirectoryDialogForCurrentAgent,
+    onMoveCurrentAgent: moveCurrentAgentToProject,
+    onMoveCurrentAgentToAnyProject: openMoveAgentProjectDialogForCurrentAgent,
     onOpenCommandPalette: openCommandPalette,
     onOpenSettings: openSettingsDialog,
     onRenameAgent: openRenameDialog,
@@ -3739,13 +3735,13 @@ function useAppShellAgentWorkspaceView({
   })
 
   useAppShellShortcuts({
-    addDirectoryOpenRef,
+    addProjectOpenRef,
     commandPaletteOpenRef,
     compactRunningRef,
     deleteOpenRef,
     forkOpenRef,
     gitCommitOpenRef,
-    moveAgentDirectoryOpenRef,
+    moveAgentProjectOpenRef,
     pendingUiRequestOpenRef: uiRequestOpenRef,
     renameOpenRef,
     agentSearchInputRef,
@@ -3783,12 +3779,12 @@ function useAppShellAgentWorkspaceView({
       focusModelSelector,
       focusPrompt,
       focusAgentSearch,
-      openAddDirectoryDialog,
+      openAddProjectDialog,
       openCommandPalette,
       openDeleteDialog,
-      moveAgentToDirectory,
-      openDeleteOldDirectoryAgentsDialog,
-      openMoveAgentDirectoryDialogForEntry,
+      moveAgentToProject,
+      openDeleteOldProjectAgentsDialog,
+      openMoveAgentProjectDialogForEntry,
       openRenameDialogForEntry,
       openAgentsDialog,
       openSettingsDialog,
@@ -3802,18 +3798,17 @@ function useAppShellAgentWorkspaceView({
     const actions = appShellControllerRef.current?.actions
     return {
       createAgent: actions?.createAgent ?? createAgent,
-      openAddDirectoryDialog:
-        actions?.openAddDirectoryDialog ?? openAddDirectoryDialog,
+      openAddProjectDialog:
+        actions?.openAddProjectDialog ?? openAddProjectDialog,
       openCommandPalette: actions?.openCommandPalette ?? openCommandPalette,
       openDeleteDialog: actions?.openDeleteDialog ?? openDeleteDialog,
-      openDeleteOldDirectoryAgentsDialog:
-        actions?.openDeleteOldDirectoryAgentsDialog ??
-        openDeleteOldDirectoryAgentsDialog,
-      moveAgentToDirectory:
-        actions?.moveAgentToDirectory ?? moveAgentToDirectory,
-      openMoveAgentDirectoryDialogForEntry:
-        actions?.openMoveAgentDirectoryDialogForEntry ??
-        openMoveAgentDirectoryDialogForEntry,
+      openDeleteOldProjectAgentsDialog:
+        actions?.openDeleteOldProjectAgentsDialog ??
+        openDeleteOldProjectAgentsDialog,
+      moveAgentToProject: actions?.moveAgentToProject ?? moveAgentToProject,
+      openMoveAgentProjectDialogForEntry:
+        actions?.openMoveAgentProjectDialogForEntry ??
+        openMoveAgentProjectDialogForEntry,
       openRenameDialogForEntry:
         actions?.openRenameDialogForEntry ?? openRenameDialogForEntry,
       openAgentsDialog: actions?.openAgentsDialog ?? openAgentsDialog,
@@ -3825,12 +3820,12 @@ function useAppShellAgentWorkspaceView({
   }, [
     createAgent,
     handleSelectAgent,
-    openAddDirectoryDialog,
+    openAddProjectDialog,
     openCommandPalette,
-    moveAgentToDirectory,
+    moveAgentToProject,
     openDeleteDialog,
-    openDeleteOldDirectoryAgentsDialog,
-    openMoveAgentDirectoryDialogForEntry,
+    openDeleteOldProjectAgentsDialog,
+    openMoveAgentProjectDialogForEntry,
     openRenameDialogForEntry,
     openAgentsDialog,
     openSettingsDialog,
@@ -3860,14 +3855,14 @@ function useAppShellAgentWorkspaceView({
             contextUsageStore={contextUsageStore}
             conversationFrameRef={conversationFrameRef}
             conversationItemsStore={conversationItemsStore}
-            defaultNewAgentDirectory={defaultNewAgentDirectory}
+            defaultNewAgentProject={defaultNewAgentProject}
             displaySettingsStore={displaySettingsStore}
             fileInputRef={fileInputRef}
             gitPanelOpen={gitPanelOpen}
             header={
               <AppShellAgentHeader
                 actionsRef={agentHeaderActionsRef}
-                defaultNewAgentDirectory={defaultNewAgentDirectory}
+                defaultNewAgentProject={defaultNewAgentProject}
                 displayAgentCwd={displayAgentCwd}
                 gitPanelOpen={gitPanelOpen}
                 terminalPanelOpen={terminalPanelOpen}
@@ -3875,7 +3870,7 @@ function useAppShellAgentWorkspaceView({
                 currentAgentPinned={currentAgentPinned}
                 displaySettingsStore={displaySettingsStore}
                 isAgentViewLoading={isAgentViewLoading}
-                newAgentDirectoryOptions={newAgentDirectoryOptions}
+                newAgentProjectOptions={newAgentProjectOptions}
                 onToggleGitPanel={toggleGitPanel}
                 onToggleTerminalPanel={toggleTerminalPanel}
                 agentStore={agentStore}
@@ -3887,13 +3882,13 @@ function useAppShellAgentWorkspaceView({
             isAgentViewLoading={isAgentViewLoading}
             isSubmitting={isSubmitting}
             isMobile={isMobile}
-            newAgentDirectoryOptions={newAgentDirectoryOptions}
+            newAgentProjectOptions={newAgentProjectOptions}
             onCancelCompaction={abortCompact}
             onCreateAgent={(cwdOverride) => {
               void createAgent(cwdOverride)
             }}
             onLoadOlderHistory={loadOlderHistory}
-            onOpenAddDirectoryDialog={openAddDirectoryDialog}
+            onOpenAddProjectDialog={openAddProjectDialog}
             onCloseAllFileViewTabs={closeAllFileViewTabs}
             onCloseFileViewTab={closeFileViewTab}
             onCloseFileViewTabsToRight={closeFileViewTabsToRight}
@@ -3915,10 +3910,10 @@ function useAppShellAgentWorkspaceView({
 
       <AppShellFloatingControllers
         activeAgentId={activeAgentId}
-        addDirectoryDialogRef={addDirectoryDialogRef}
-        addDirectoryOpenRef={addDirectoryOpenRef}
-        addDirectoryPath={addDirectoryPathForDialog}
-        baseSidebarDirectories={baseSidebarDirectories}
+        addProjectDialogRef={addProjectDialogRef}
+        addProjectOpenRef={addProjectOpenRef}
+        addProjectPath={addProjectPathForDialog}
+        baseSidebarProjects={baseSidebarProjects}
         commandPaletteCommandsRef={commandPaletteCommandsRef}
         commandPaletteOpenRef={commandPaletteOpenRef}
         commandPaletteRef={commandPaletteRef}
@@ -3930,18 +3925,18 @@ function useAppShellAgentWorkspaceView({
         deleteDialogRef={deleteDialogRef}
         deleteOpenRef={deleteOpenRef}
         deleteAgents={deleteAgents}
-        deleteOldDirectoryAgentsDialogRef={deleteOldDirectoryAgentsDialogRef}
-        deleteOldDirectoryAgentsOpenRef={deleteOldDirectoryAgentsOpenRef}
+        deleteOldProjectAgentsDialogRef={deleteOldProjectAgentsDialogRef}
+        deleteOldProjectAgentsOpenRef={deleteOldProjectAgentsOpenRef}
         notificationStore={notificationStore}
         forkDialogRef={forkDialogRef}
         forkOpenRef={forkOpenRef}
         gitCommitDialogRef={gitCommitDialogRef}
         gitCommitOpenRef={gitCommitOpenRef}
         displaySettingsStore={displaySettingsStore}
-        knownDirectories={knownDirectories}
-        moveAgentDirectoryDialogRef={moveAgentDirectoryDialogRef}
-        moveAgentDirectoryOpenRef={moveAgentDirectoryOpenRef}
-        moveAgentDirectoryTargetToPath={moveAgentDirectoryTargetToPath}
+        knownProjects={knownProjects}
+        moveAgentProjectDialogRef={moveAgentProjectDialogRef}
+        moveAgentProjectOpenRef={moveAgentProjectOpenRef}
+        moveAgentProjectTargetToPath={moveAgentProjectTargetToPath}
         onAutoScrollEnabledChange={setAutoScroll}
         onCenterMessagesChange={setMessagesCentered}
         onHideThinkingBlocksChange={(hidden) => {
@@ -3957,12 +3952,12 @@ function useAppShellAgentWorkspaceView({
         onThemeColorModeChange={handleThemeColorModeChange}
         onThemePreviewChange={handleThemePreviewChange}
         systemTheme={systemTheme}
-        recentDirectoriesStore={recentDirectoriesStore}
+        recentProjectsStore={recentProjectsStore}
         renameDialogRef={renameDialogRef}
         renameOpenRef={renameOpenRef}
         renameAgentPath={renameAgentPath}
         agentCwd={agentState.cwd}
-        agentsDialogDirectory={agentsDialogDirectory}
+        agentsDialogProject={agentsDialogProject}
         agentsDialogRef={agentsDialogRef}
         agentsOpenRef={agentsOpenRef}
         agentStore={agentStore}
@@ -4011,21 +4006,19 @@ export function PicoAppShell({
 
     startSidebarSync(machineId, nextContext)
 
-    const storedDirectories = readStoredSidebarDirectories(machineId)
-    const nextDirectories = normalizeStoredDirectoryList(
-      storedDirectories.directories
-    )
-    const nextBootstrapDirectories = nextDirectories.slice(
+    const storedProjects = readStoredSidebarProjects(machineId)
+    const nextProjects = normalizeStoredProjectList(storedProjects.projects)
+    const nextBootstrapProjects = nextProjects.slice(
       0,
-      INITIAL_SIDEBAR_BOOTSTRAP_DIRECTORY_COUNT
+      INITIAL_SIDEBAR_BOOTSTRAP_PROJECT_COUNT
     )
     const nextPinnedAgentKeys = readStoredPinnedAgentKeys(machineId)
     sidebarStore.setSidebarState((current) => {
       if (
-        sameStringArray(current.sidebarDirectories, nextDirectories) &&
+        sameStringArray(current.sidebarProjects, nextProjects) &&
         sameStringArray(
-          current.initialSidebarBootstrapDirectories,
-          nextBootstrapDirectories
+          current.initialSidebarBootstrapProjects,
+          nextBootstrapProjects
         ) &&
         sameStringArray(current.pinnedSidebarAgentKeys, nextPinnedAgentKeys)
       ) {
@@ -4033,8 +4026,8 @@ export function PicoAppShell({
       }
 
       return {
-        sidebarDirectories: nextDirectories,
-        initialSidebarBootstrapDirectories: nextBootstrapDirectories,
+        sidebarProjects: nextProjects,
+        initialSidebarBootstrapProjects: nextBootstrapProjects,
         pinnedSidebarAgentKeys: nextPinnedAgentKeys,
       }
     })

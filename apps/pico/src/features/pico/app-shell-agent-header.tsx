@@ -46,8 +46,8 @@ export type AppShellAgentHeaderActions = {
   createAgent: (cwdOverride?: string) => void | Promise<unknown>
   onDeleteCurrentAgent: () => void
   onForkAgent: () => void | Promise<unknown>
-  onMoveCurrentAgent: (directory: string) => void | Promise<unknown>
-  onMoveCurrentAgentToAnyDirectory: () => void
+  onMoveCurrentAgent: (project: string) => void | Promise<unknown>
+  onMoveCurrentAgentToAnyProject: () => void
   onOpenCommandPalette: () => void
   onOpenSettings: () => void
   onRenameAgent: () => void
@@ -60,7 +60,7 @@ export type AppShellAgentHeaderActions = {
 
 type AppShellAgentHeaderProps = {
   actionsRef: React.RefObject<AppShellAgentHeaderActions>
-  defaultNewAgentDirectory: string
+  defaultNewAgentProject: string
   displayAgentCwd?: string
   gitPanelOpen: boolean
   terminalPanelOpen: boolean
@@ -68,7 +68,7 @@ type AppShellAgentHeaderProps = {
   currentAgentPinned: boolean
   displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
   isAgentViewLoading: boolean
-  newAgentDirectoryOptions: Array<{ path: string; label: string }>
+  newAgentProjectOptions: Array<{ path: string; label: string }>
   onToggleGitPanel: () => void
   onToggleTerminalPanel: () => void
   agentStore: PicoStore<AgentState>
@@ -77,7 +77,7 @@ type AppShellAgentHeaderProps = {
 
 export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
   actionsRef,
-  defaultNewAgentDirectory,
+  defaultNewAgentProject,
   displayAgentCwd,
   gitPanelOpen,
   terminalPanelOpen,
@@ -85,7 +85,7 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
   currentAgentPinned,
   displaySettingsStore,
   isAgentViewLoading,
-  newAgentDirectoryOptions,
+  newAgentProjectOptions,
   onToggleGitPanel,
   onToggleTerminalPanel,
   agentStore,
@@ -113,7 +113,7 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
   const agentInfo = useAgentInfo(viewerContextId, agentHeaderState.agentId)
   // A worktree folder has the branch name, so the branch text covers it.
   const showFolderName = Boolean(displayAgentCwd && !agentInfo?.worktree)
-  const moveAgentDirectoryOptions = newAgentDirectoryOptions.filter(
+  const moveAgentProjectOptions = newAgentProjectOptions.filter(
     (option) => option.path !== displayAgentCwd
   )
 
@@ -123,9 +123,9 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
         <SidebarTrigger className="shrink-0" />
         <TitleTooltip
           title={
-            defaultNewAgentDirectory
+            defaultNewAgentProject
               ? `Create a new agent in ${formatDisplayPath(
-                  defaultNewAgentDirectory
+                  defaultNewAgentProject
                 )}`
               : "Create a new agent"
           }
@@ -192,11 +192,11 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
                   {formatShortcutLabel(appShortcut("N"))}
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
-              {newAgentDirectoryOptions.length > 0 ? (
+              {newAgentProjectOptions.length > 0 ? (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>New agent in…</DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-72">
-                    {newAgentDirectoryOptions.map((option) => (
+                    {newAgentProjectOptions.map((option) => (
                       <DropdownMenuItem
                         key={option.path}
                         onClick={() => {
@@ -211,7 +211,7 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
                             {formatDisplayPath(option.path)}
                           </span>
                         </div>
-                        {option.path === defaultNewAgentDirectory ? (
+                        {option.path === defaultNewAgentProject ? (
                           <DropdownMenuShortcut>Default</DropdownMenuShortcut>
                         ) : null}
                       </DropdownMenuItem>
@@ -234,7 +234,7 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>Move to…</DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-72">
-                    {moveAgentDirectoryOptions.map((option) => (
+                    {moveAgentProjectOptions.map((option) => (
                       <DropdownMenuItem
                         key={option.path}
                         onClick={() => {
@@ -255,10 +255,10 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
                     ))}
                     <DropdownMenuItem
                       onClick={() => {
-                        actionsRef.current.onMoveCurrentAgentToAnyDirectory()
+                        actionsRef.current.onMoveCurrentAgentToAnyProject()
                       }}
                     >
-                      Other directory…
+                      Other project…
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>

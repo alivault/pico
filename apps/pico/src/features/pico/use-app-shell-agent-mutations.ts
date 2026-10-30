@@ -6,7 +6,7 @@ import type { AgentState } from "@/lib/pico"
 import type {
   CloneAgentResponse,
   DeleteAgentsResponse,
-  DirectoryAgentsIndexSnapshot,
+  ProjectAgentsIndexSnapshot,
   MoveAgentResponse,
   ModelResponse,
   RenameAgentResponse,
@@ -29,7 +29,7 @@ type ThinkingResponseData = Extract<ThinkingResponse, { ok: true }>
 type ModelResponseData = Extract<ModelResponse, { ok: true }>
 type RenameAgentResponseData = Extract<RenameAgentResponse, { ok: true }>
 type MoveAgentResponseData = Extract<MoveAgentResponse, { ok: true }>
-type DirectoryIndexDataByPath = Record<string, DirectoryAgentsIndexSnapshot>
+type ProjectIndexDataByPath = Record<string, ProjectAgentsIndexSnapshot>
 
 type SidebarSelectionSnapshot = {
   selectedSidebarAgentKeys: Array<string>
@@ -67,15 +67,15 @@ function sameStringArray(left: Array<string>, right: Array<string>) {
   return true
 }
 
-export function applyDirectoryIndexRename(
-  current: DirectoryIndexDataByPath,
+export function applyProjectIndexRename(
+  current: ProjectIndexDataByPath,
   targetPath: string,
   nextName: string
 ) {
   let changed = false
-  const next: DirectoryIndexDataByPath = { ...current }
+  const next: ProjectIndexDataByPath = { ...current }
 
-  for (const [directory, snapshot] of Object.entries(current)) {
+  for (const [project, snapshot] of Object.entries(current)) {
     let agentsChanged = false
     const agents = snapshot.agents.map((entry) => {
       if (entry.path !== targetPath) return entry
@@ -91,7 +91,7 @@ export function applyDirectoryIndexRename(
     })
 
     if (agentsChanged) {
-      next[directory] = {
+      next[project] = {
         ...snapshot,
         agents,
       }
@@ -101,16 +101,16 @@ export function applyDirectoryIndexRename(
   return changed ? next : current
 }
 
-function applyDirectoryIndexDelete(
-  current: DirectoryIndexDataByPath,
+function applyProjectIndexDelete(
+  current: ProjectIndexDataByPath,
   targetPaths: Set<string>
 ) {
   if (targetPaths.size === 0) return current
 
   let changed = false
-  const next: DirectoryIndexDataByPath = { ...current }
+  const next: ProjectIndexDataByPath = { ...current }
 
-  for (const [directory, snapshot] of Object.entries(current)) {
+  for (const [project, snapshot] of Object.entries(current)) {
     const agents = snapshot.agents.filter(
       (entry) => !entry.path || !targetPaths.has(entry.path)
     )
@@ -118,7 +118,7 @@ function applyDirectoryIndexDelete(
     if (removedCount === 0) continue
 
     changed = true
-    next[directory] = {
+    next[project] = {
       ...snapshot,
       totalCount: Math.max(0, snapshot.totalCount - removedCount),
       agents,
@@ -144,8 +144,8 @@ function agentEntryMatchesMoveTarget(
   )
 }
 
-function applyDirectoryIndexMove(
-  current: DirectoryIndexDataByPath,
+function applyProjectIndexMove(
+  current: ProjectIndexDataByPath,
   options: {
     previousPath: string
     nextPath?: string
@@ -161,9 +161,9 @@ function applyDirectoryIndexMove(
   const agentId = options.fallbackEntry.id || ""
   let changed = false
   let movedEntry: AgentListEntry | undefined
-  const next: DirectoryIndexDataByPath = { ...current }
+  const next: ProjectIndexDataByPath = { ...current }
 
-  for (const [directory, snapshot] of Object.entries(current)) {
+  for (const [project, snapshot] of Object.entries(current)) {
     let removedCount = 0
     const agents = snapshot.agents.filter((entry) => {
       if (
@@ -184,7 +184,7 @@ function applyDirectoryIndexMove(
     if (removedCount === 0) continue
 
     changed = true
-    next[directory] = {
+    next[project] = {
       ...snapshot,
       totalCount: Math.max(0, snapshot.totalCount - removedCount),
       agents,
@@ -218,50 +218,50 @@ function applyDirectoryIndexMove(
   return next
 }
 
-function directoriesWithAgentPaths(
-  indexes: DirectoryIndexDataByPath | undefined,
+function projectsWithAgentPaths(
+  indexes: ProjectIndexDataByPath | undefined,
   targetPaths: Set<string>
 ) {
   if (!indexes || targetPaths.size === 0) return []
 
-  const directories: Array<string> = []
-  for (const [directory, snapshot] of Object.entries(indexes)) {
+  const projects: Array<string> = []
+  for (const [project, snapshot] of Object.entries(indexes)) {
     if (
       snapshot.agents.some((entry) => entry.path && targetPaths.has(entry.path))
     ) {
-      directories.push(directory)
+      projects.push(project)
     }
   }
 
-  return directories
+  return projects
 }
 
-function uniqueDirectories(directories: Array<string>) {
-  return Array.from(new Set(directories.filter(Boolean)))
+function uniqueProjects(projects: Array<string>) {
+  return Array.from(new Set(projects.filter(Boolean)))
 }
 
-function restoreDirectoryIndexesForDirectories(
-  current: DirectoryIndexDataByPath,
-  previous: DirectoryIndexDataByPath | undefined,
-  directories: Array<string>
+function restoreProjectIndexesForProjects(
+  current: ProjectIndexDataByPath,
+  previous: ProjectIndexDataByPath | undefined,
+  projects: Array<string>
 ) {
-  if (directories.length === 0) return current
+  if (projects.length === 0) return current
 
   let changed = false
-  const next: DirectoryIndexDataByPath = { ...current }
+  const next: ProjectIndexDataByPath = { ...current }
 
-  for (const directory of directories) {
-    const previousSnapshot = previous?.[directory]
+  for (const project of projects) {
+    const previousSnapshot = previous?.[project]
     if (previousSnapshot) {
-      if (current[directory] !== previousSnapshot) {
-        next[directory] = previousSnapshot
+      if (current[project] !== previousSnapshot) {
+        next[project] = previousSnapshot
         changed = true
       }
       continue
     }
 
-    if (Object.prototype.hasOwnProperty.call(current, directory)) {
-      delete next[directory]
+    if (Object.prototype.hasOwnProperty.call(current, project)) {
+      delete next[project]
       changed = true
     }
   }
@@ -269,18 +269,18 @@ function restoreDirectoryIndexesForDirectories(
   return changed ? next : current
 }
 
-export function updateAgentsEventDirectoryIndexes(
+export function updateAgentsEventProjectIndexes(
   current: AgentsEvent | null,
-  updater: (indexes: DirectoryIndexDataByPath) => DirectoryIndexDataByPath
+  updater: (indexes: ProjectIndexDataByPath) => ProjectIndexDataByPath
 ) {
-  if (!current?.directoryIndexes) return current
+  if (!current?.projectIndexes) return current
 
-  const nextDirectoryIndexes = updater(current.directoryIndexes)
-  if (nextDirectoryIndexes === current.directoryIndexes) return current
+  const nextProjectIndexes = updater(current.projectIndexes)
+  if (nextProjectIndexes === current.projectIndexes) return current
 
   return {
     ...current,
-    directoryIndexes: nextDirectoryIndexes,
+    projectIndexes: nextProjectIndexes,
   }
 }
 
@@ -329,9 +329,9 @@ type UseAppShellAgentMutationsOptions = {
   activeAgentId?: string
   agentStateRef: React.RefObject<AgentState>
   setAgentState: React.Dispatch<React.SetStateAction<AgentState>>
-  getDirectoryIndexDataByPath: () => DirectoryIndexDataByPath
-  setDirectoryIndexDataByPath: React.Dispatch<
-    React.SetStateAction<DirectoryIndexDataByPath>
+  getProjectIndexDataByPath: () => ProjectIndexDataByPath
+  setProjectIndexDataByPath: React.Dispatch<
+    React.SetStateAction<ProjectIndexDataByPath>
   >
   getAgentsEvent: () => AgentsEvent | null
   setAgentsEvent: React.Dispatch<React.SetStateAction<AgentsEvent | null>>
@@ -353,8 +353,8 @@ export function useAppShellAgentMutations({
   activeAgentId,
   agentStateRef,
   setAgentState,
-  getDirectoryIndexDataByPath,
-  setDirectoryIndexDataByPath,
+  getProjectIndexDataByPath,
+  setProjectIndexDataByPath,
   getAgentsEvent,
   setAgentsEvent,
   getSidebarSelection,
@@ -650,7 +650,7 @@ export function useAppShellAgentMutations({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: ["pico", "directory-agents-index", viewerContextId],
+        queryKey: ["pico", "project-agents-index", viewerContextId],
         refetchType: "active",
       })
     },
@@ -666,27 +666,27 @@ export function useAppShellAgentMutations({
         return false
       }
 
-      const previousDirectoryIndexDataByPath = getDirectoryIndexDataByPath()
+      const previousProjectIndexDataByPath = getProjectIndexDataByPath()
       const previousAgentsEvent = getAgentsEvent()
       const targetPaths = new Set([targetPath])
-      const affectedDirectories = directoriesWithAgentPaths(
-        previousDirectoryIndexDataByPath,
+      const affectedProjects = projectsWithAgentPaths(
+        previousProjectIndexDataByPath,
         targetPaths
       )
-      const affectedEventDirectories = directoriesWithAgentPaths(
-        previousAgentsEvent?.directoryIndexes,
+      const affectedEventProjects = projectsWithAgentPaths(
+        previousAgentsEvent?.projectIndexes,
         targetPaths
       )
       const previousAgentName = agentStateRef.current.agentName
       const activeAgentMatches = agentStateRef.current.agentFile === targetPath
 
       setAgentsEvent((current) =>
-        updateAgentsEventDirectoryIndexes(current, (indexes) =>
-          applyDirectoryIndexRename(indexes, targetPath, optimisticName)
+        updateAgentsEventProjectIndexes(current, (indexes) =>
+          applyProjectIndexRename(indexes, targetPath, optimisticName)
         )
       )
-      setDirectoryIndexDataByPath((current) =>
-        applyDirectoryIndexRename(current, targetPath, optimisticName)
+      setProjectIndexDataByPath((current) =>
+        applyProjectIndexRename(current, targetPath, optimisticName)
       )
 
       if (
@@ -710,12 +710,12 @@ export function useAppShellAgentMutations({
 
           if (confirmedName !== optimisticName) {
             setAgentsEvent((current) =>
-              updateAgentsEventDirectoryIndexes(current, (indexes) =>
-                applyDirectoryIndexRename(indexes, targetPath, confirmedName)
+              updateAgentsEventProjectIndexes(current, (indexes) =>
+                applyProjectIndexRename(indexes, targetPath, confirmedName)
               )
             )
-            setDirectoryIndexDataByPath((current) =>
-              applyDirectoryIndexRename(current, targetPath, confirmedName)
+            setProjectIndexDataByPath((current) =>
+              applyProjectIndexRename(current, targetPath, confirmedName)
             )
             setAgentState((current) =>
               current.agentFile === targetPath &&
@@ -728,19 +728,19 @@ export function useAppShellAgentMutations({
           toast.success("Renamed agent")
         } catch (error) {
           setAgentsEvent((current) =>
-            updateAgentsEventDirectoryIndexes(current, (indexes) =>
-              restoreDirectoryIndexesForDirectories(
+            updateAgentsEventProjectIndexes(current, (indexes) =>
+              restoreProjectIndexesForProjects(
                 indexes,
-                previousAgentsEvent?.directoryIndexes,
-                affectedEventDirectories
+                previousAgentsEvent?.projectIndexes,
+                affectedEventProjects
               )
             )
           )
-          setDirectoryIndexDataByPath((current) =>
-            restoreDirectoryIndexesForDirectories(
+          setProjectIndexDataByPath((current) =>
+            restoreProjectIndexesForProjects(
               current,
-              previousDirectoryIndexDataByPath,
-              affectedDirectories
+              previousProjectIndexDataByPath,
+              affectedProjects
             )
           )
           setAgentState((current) =>
@@ -758,11 +758,11 @@ export function useAppShellAgentMutations({
       return true
     },
     [
-      getDirectoryIndexDataByPath,
+      getProjectIndexDataByPath,
       getAgentsEvent,
       renameAgentMutation,
       agentStateRef,
-      setDirectoryIndexDataByPath,
+      setProjectIndexDataByPath,
       setAgentState,
       setAgentsEvent,
       viewerContextId,
@@ -790,68 +790,63 @@ export function useAppShellAgentMutations({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: ["pico", "directory-agents-index", viewerContextId],
+        queryKey: ["pico", "project-agents-index", viewerContextId],
         refetchType: "active",
       })
     },
   })
 
   const moveAgentPath = React.useCallback(
-    async (entry: AgentListEntry, directory: string) => {
+    async (entry: AgentListEntry, project: string) => {
       if (!viewerContextId || !entry.path) return false
 
-      const nextDirectory = directory.trim()
-      if (!nextDirectory) {
-        toast.error("Directory is required")
+      const nextProject = project.trim()
+      if (!nextProject) {
+        toast.error("Project is required")
         return false
       }
-      if (entry.cwd === nextDirectory) return false
+      if (entry.cwd === nextProject) return false
 
       const targetPath = entry.path
-      const previousDirectoryIndexDataByPath = getDirectoryIndexDataByPath()
+      const previousProjectIndexDataByPath = getProjectIndexDataByPath()
       const previousAgentsEvent = getAgentsEvent()
       const targetPaths = new Set([targetPath])
-      const affectedDirectories = uniqueDirectories([
-        ...directoriesWithAgentPaths(
-          previousDirectoryIndexDataByPath,
-          targetPaths
-        ),
-        ...(previousDirectoryIndexDataByPath[nextDirectory]
-          ? [nextDirectory]
-          : []),
+      const affectedProjects = uniqueProjects([
+        ...projectsWithAgentPaths(previousProjectIndexDataByPath, targetPaths),
+        ...(previousProjectIndexDataByPath[nextProject] ? [nextProject] : []),
       ])
-      const affectedEventDirectories = uniqueDirectories([
-        ...directoriesWithAgentPaths(
-          previousAgentsEvent?.directoryIndexes,
+      const affectedEventProjects = uniqueProjects([
+        ...projectsWithAgentPaths(
+          previousAgentsEvent?.projectIndexes,
           targetPaths
         ),
-        ...(previousAgentsEvent?.directoryIndexes?.[nextDirectory]
-          ? [nextDirectory]
+        ...(previousAgentsEvent?.projectIndexes?.[nextProject]
+          ? [nextProject]
           : []),
       ])
       const previousAgentCwd = agentStateRef.current.cwd
       const activeAgentMatches = agentStateRef.current.agentFile === targetPath
 
       setAgentsEvent((current) =>
-        updateAgentsEventDirectoryIndexes(current, (indexes) =>
-          applyDirectoryIndexMove(indexes, {
+        updateAgentsEventProjectIndexes(current, (indexes) =>
+          applyProjectIndexMove(indexes, {
             previousPath: targetPath,
-            nextCwd: nextDirectory,
+            nextCwd: nextProject,
             fallbackEntry: entry,
           })
         )
       )
-      setDirectoryIndexDataByPath((current) =>
-        applyDirectoryIndexMove(current, {
+      setProjectIndexDataByPath((current) =>
+        applyProjectIndexMove(current, {
           previousPath: targetPath,
-          nextCwd: nextDirectory,
+          nextCwd: nextProject,
           fallbackEntry: entry,
         })
       )
       if (activeAgentMatches) {
         setAgentState((current) =>
           current.agentFile === targetPath
-            ? { ...current, cwd: nextDirectory }
+            ? { ...current, cwd: nextProject }
             : current
         )
       }
@@ -860,7 +855,7 @@ export function useAppShellAgentMutations({
         try {
           const response = await moveAgentMutation.mutateAsync({
             path: targetPath,
-            cwd: nextDirectory,
+            cwd: nextProject,
           })
           const previousKey = agentListEntryKey({
             path: response.previousPath || targetPath,
@@ -871,8 +866,8 @@ export function useAppShellAgentMutations({
           })
 
           setAgentsEvent((current) =>
-            updateAgentsEventDirectoryIndexes(current, (indexes) =>
-              applyDirectoryIndexMove(indexes, {
+            updateAgentsEventProjectIndexes(current, (indexes) =>
+              applyProjectIndexMove(indexes, {
                 previousPath: response.previousPath || targetPath,
                 nextPath: response.path,
                 nextCwd: response.cwd,
@@ -883,8 +878,8 @@ export function useAppShellAgentMutations({
               })
             )
           )
-          setDirectoryIndexDataByPath((current) =>
-            applyDirectoryIndexMove(current, {
+          setProjectIndexDataByPath((current) =>
+            applyProjectIndexMove(current, {
               previousPath: response.previousPath || targetPath,
               nextPath: response.path,
               nextCwd: response.cwd,
@@ -921,23 +916,23 @@ export function useAppShellAgentMutations({
           toast.success("Moved agent")
         } catch (error) {
           setAgentsEvent((current) =>
-            updateAgentsEventDirectoryIndexes(current, (indexes) =>
-              restoreDirectoryIndexesForDirectories(
+            updateAgentsEventProjectIndexes(current, (indexes) =>
+              restoreProjectIndexesForProjects(
                 indexes,
-                previousAgentsEvent?.directoryIndexes,
-                affectedEventDirectories
+                previousAgentsEvent?.projectIndexes,
+                affectedEventProjects
               )
             )
           )
-          setDirectoryIndexDataByPath((current) =>
-            restoreDirectoryIndexesForDirectories(
+          setProjectIndexDataByPath((current) =>
+            restoreProjectIndexesForProjects(
               current,
-              previousDirectoryIndexDataByPath,
-              affectedDirectories
+              previousProjectIndexDataByPath,
+              affectedProjects
             )
           )
           setAgentState((current) =>
-            current.agentFile === targetPath && current.cwd === nextDirectory
+            current.agentFile === targetPath && current.cwd === nextProject
               ? { ...current, cwd: previousAgentCwd }
               : current
           )
@@ -950,11 +945,11 @@ export function useAppShellAgentMutations({
       return true
     },
     [
-      getDirectoryIndexDataByPath,
+      getProjectIndexDataByPath,
       getAgentsEvent,
       moveAgentMutation,
       agentStateRef,
-      setDirectoryIndexDataByPath,
+      setProjectIndexDataByPath,
       setPinnedSidebarAgentKeys,
       setSelectedSidebarAgentKeys,
       setAgentState,
@@ -991,7 +986,7 @@ export function useAppShellAgentMutations({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: ["pico", "directory-agents-index", viewerContextId],
+        queryKey: ["pico", "project-agents-index", viewerContextId],
         refetchType: "active",
       })
     },
@@ -1030,14 +1025,14 @@ export function useAppShellAgentMutations({
           return key ? [key] : []
         })
       )
-      const previousDirectoryIndexDataByPath = getDirectoryIndexDataByPath()
+      const previousProjectIndexDataByPath = getProjectIndexDataByPath()
       const previousAgentsEvent = getAgentsEvent()
-      const affectedDirectories = directoriesWithAgentPaths(
-        previousDirectoryIndexDataByPath,
+      const affectedProjects = projectsWithAgentPaths(
+        previousProjectIndexDataByPath,
         deletedPathSet
       )
-      const affectedEventDirectories = directoriesWithAgentPaths(
-        previousAgentsEvent?.directoryIndexes,
+      const affectedEventProjects = projectsWithAgentPaths(
+        previousAgentsEvent?.projectIndexes,
         deletedPathSet
       )
       const previousSelection = getSidebarSelection()
@@ -1047,12 +1042,12 @@ export function useAppShellAgentMutations({
       )
 
       setAgentsEvent((current) =>
-        updateAgentsEventDirectoryIndexes(current, (indexes) =>
-          applyDirectoryIndexDelete(indexes, deletedPathSet)
+        updateAgentsEventProjectIndexes(current, (indexes) =>
+          applyProjectIndexDelete(indexes, deletedPathSet)
         )
       )
-      setDirectoryIndexDataByPath((current) =>
-        applyDirectoryIndexDelete(current, deletedPathSet)
+      setProjectIndexDataByPath((current) =>
+        applyProjectIndexDelete(current, deletedPathSet)
       )
       setSelectedSidebarAgentKeys((current) =>
         current.filter((key) => !deletedKeys.has(key))
@@ -1079,19 +1074,19 @@ export function useAppShellAgentMutations({
           )
         } catch (error) {
           setAgentsEvent((current) =>
-            updateAgentsEventDirectoryIndexes(current, (indexes) =>
-              restoreDirectoryIndexesForDirectories(
+            updateAgentsEventProjectIndexes(current, (indexes) =>
+              restoreProjectIndexesForProjects(
                 indexes,
-                previousAgentsEvent?.directoryIndexes,
-                affectedEventDirectories
+                previousAgentsEvent?.projectIndexes,
+                affectedEventProjects
               )
             )
           )
-          setDirectoryIndexDataByPath((current) =>
-            restoreDirectoryIndexesForDirectories(
+          setProjectIndexDataByPath((current) =>
+            restoreProjectIndexesForProjects(
               current,
-              previousDirectoryIndexDataByPath,
-              affectedDirectories
+              previousProjectIndexDataByPath,
+              affectedProjects
             )
           )
 
@@ -1124,12 +1119,12 @@ export function useAppShellAgentMutations({
     },
     [
       deleteAgentMutation,
-      getDirectoryIndexDataByPath,
+      getProjectIndexDataByPath,
       getAgentsEvent,
       getSidebarSelection,
       optimisticallyClearActiveDeletedAgent,
       agentStateRef,
-      setDirectoryIndexDataByPath,
+      setProjectIndexDataByPath,
       setSelectedSidebarAgentKeys,
       setAgentsEvent,
       setSidebarAgentSelectionAnchor,

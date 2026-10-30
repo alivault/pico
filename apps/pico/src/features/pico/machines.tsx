@@ -119,11 +119,11 @@ export function isMachineAgentUnread(agent: MachineAgentSummary) {
   )
 }
 
-/** Count only the agents that the sidebar shows: those in its directories. */
+/** Count only the agents that the sidebar shows: those in its projects. */
 function agentCounts(machine: MachineInfo) {
-  const directories = new Set(machine.summary?.directories ?? [])
+  const projects = new Set(machine.summary?.projects ?? [])
   const agents = (machine.summary?.agents ?? []).filter((agent) =>
-    directories.has(agent.directory || agent.cwd)
+    projects.has(agent.project || agent.cwd)
   )
   return {
     // An agent that waits on a timer, a watch, or a job is not done yet.
@@ -479,7 +479,7 @@ export function SidebarMachineGroups({
   shownMachineId: string
   /** The live sidebar of the machine that shows. */
   shownContent: React.ReactNode
-  /** The directories of another machine, from its summary. */
+  /** The projects of another machine, from its summary. */
   renderContent: RenderMachine
   /** Icon buttons for the heading of a machine. */
   renderActions?: (machine: MachineInfo, shown: boolean) => React.ReactNode

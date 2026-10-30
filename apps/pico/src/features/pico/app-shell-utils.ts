@@ -457,11 +457,11 @@ export function updateStateFromSync(
   const cwd = Object.prototype.hasOwnProperty.call(sync, "cwd")
     ? sync.cwd
     : base.cwd
-  const directory = Object.prototype.hasOwnProperty.call(sync, "directory")
-    ? sync.directory
+  const project = Object.prototype.hasOwnProperty.call(sync, "project")
+    ? sync.project
     : Object.prototype.hasOwnProperty.call(sync, "cwd")
       ? undefined
-      : base.directory
+      : base.project
   const modified = Object.prototype.hasOwnProperty.call(sync, "modified")
     ? sync.modified
     : base.modified
@@ -524,7 +524,7 @@ export function updateStateFromSync(
     previous.firstMessage === firstMessage &&
     previous.agentFile === agentFile &&
     previous.cwd === cwd &&
-    previous.directory === directory &&
+    previous.project === project &&
     previous.modified === modified &&
     previous.model === model &&
     previous.thinkingLevel === thinkingLevel &&
@@ -555,7 +555,7 @@ export function updateStateFromSync(
     firstMessage,
     agentFile,
     cwd,
-    directory,
+    project,
     modified,
     model,
     thinkingLevel,

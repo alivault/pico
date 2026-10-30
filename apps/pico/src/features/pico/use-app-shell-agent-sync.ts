@@ -87,7 +87,7 @@ type UseAppShellAgentSyncOptions = {
   viewerContextId: string
   agentId?: string
   draftAgentLoadingOwnerKey: string | null
-  bootstrapSidebarDirectories: Array<string>
+  bootstrapSidebarProjects: Array<string>
   hideToolBlocksRef: React.RefObject<boolean>
   agentStore: AgentStateStore
   agentStateRef: React.RefObject<AgentState>
@@ -259,9 +259,9 @@ function samePendingMessages(
   return true
 }
 
-function sameDirectoryStates(
-  left: NonNullable<AgentsEvent["directoryStates"]> = [],
-  right: NonNullable<AgentsEvent["directoryStates"]> = []
+function sameProjectStates(
+  left: NonNullable<AgentsEvent["projectStates"]> = [],
+  right: NonNullable<AgentsEvent["projectStates"]> = []
 ) {
   if (left.length !== right.length) return false
 
@@ -320,19 +320,19 @@ function sameAgentListEntries(
   return true
 }
 
-function sameDirectoryIndexes(
-  left: AgentsEvent["directoryIndexes"],
-  right: AgentsEvent["directoryIndexes"]
+function sameProjectIndexes(
+  left: AgentsEvent["projectIndexes"],
+  right: AgentsEvent["projectIndexes"]
 ) {
   const leftEntries = Object.entries(left || {})
   const rightEntries = Object.entries(right || {})
 
   if (leftEntries.length !== rightEntries.length) return false
 
-  for (const [directory, leftSnapshot] of leftEntries) {
-    const rightSnapshot = right?.[directory]
+  for (const [project, leftSnapshot] of leftEntries) {
+    const rightSnapshot = right?.[project]
     if (!leftSnapshot || !rightSnapshot) return false
-    if (leftSnapshot.directory !== rightSnapshot.directory) return false
+    if (leftSnapshot.project !== rightSnapshot.project) return false
     if (leftSnapshot.totalCount !== rightSnapshot.totalCount) return false
     if (leftSnapshot.revision !== rightSnapshot.revision) return false
     if (!sameAgentListEntries(leftSnapshot.agents, rightSnapshot.agents)) {
@@ -351,12 +351,9 @@ function sameAgentsEvent(left: AgentsEvent | null, right: AgentsEvent | null) {
     left.activeAgentId === right.activeAgentId &&
     left.activeAgentKey === right.activeAgentKey &&
     left.activeAgentPath === right.activeAgentPath &&
-    sameStringArray(left.directories || [], right.directories || []) &&
-    sameDirectoryStates(
-      left.directoryStates || [],
-      right.directoryStates || []
-    ) &&
-    sameDirectoryIndexes(left.directoryIndexes, right.directoryIndexes)
+    sameStringArray(left.projects || [], right.projects || []) &&
+    sameProjectStates(left.projectStates || [], right.projectStates || []) &&
+    sameProjectIndexes(left.projectIndexes, right.projectIndexes)
   )
 }
 
@@ -473,7 +470,7 @@ function sameAgentStateExceptConversation(left: AgentState, right: AgentState) {
     left.firstMessage === right.firstMessage &&
     left.agentFile === right.agentFile &&
     left.cwd === right.cwd &&
-    left.directory === right.directory &&
+    left.project === right.project &&
     left.modified === right.modified &&
     left.model === right.model &&
     left.thinkingLevel === right.thinkingLevel &&
@@ -567,7 +564,7 @@ export function useAppShellAgentSync({
   viewerContextId,
   agentId,
   draftAgentLoadingOwnerKey,
-  bootstrapSidebarDirectories,
+  bootstrapSidebarProjects,
   hideToolBlocksRef,
   agentStore,
   agentStateRef,
@@ -1210,7 +1207,7 @@ export function useAppShellAgentSync({
         agentId: initialEventsAgentIdRef.current,
         searchParams: {
           lastEventId: eventsLastIdRef.current,
-          sidebarDirectory: bootstrapSidebarDirectories,
+          sidebarProject: bootstrapSidebarProjects,
         },
       })
     )
@@ -1238,7 +1235,7 @@ export function useAppShellAgentSync({
       gitInvalidationBatcher.clear()
     }
   }, [
-    bootstrapSidebarDirectories,
+    bootstrapSidebarProjects,
     eventsReconnectNonce,
     handleEventSourceError,
     handleEventSourceMessage,

@@ -7,41 +7,41 @@ import {
 } from "@/features/pico/app-shell-common"
 import {
   clearUnreadForActiveSidebarAgent,
-  fetchDirectoryAgentsIndexes,
+  fetchProjectAgentsIndexes,
   getRenderedSidebarAgentKeys,
   isOptimisticSidebarAgentEntry,
-  mergeDirectoryIndexData,
-  mergeDirectoryIndexDataPreservingOptimistic,
+  mergeProjectIndexData,
+  mergeProjectIndexDataPreservingOptimistic,
   mergeSidebarAgentStatusMap,
-  sameDirectoryIndexDataRecord,
+  sameProjectIndexDataRecord,
   sameAgentEntryRecord,
-  updateDirectoryIndexLoadingState,
+  updateProjectIndexLoadingState,
   useAppShellSidebarValue,
   type AppShellSidebarStore,
-  type DirectoryAgentsIndexData,
+  type ProjectAgentsIndexData,
 } from "@/features/pico/app-shell-sidebar-store"
 import type { AppShellAgentWorkspaceHandle } from "@/features/pico/app-shell-types"
-import { AppSidebar, createDirectoryAgentsStore } from "@/features/pico/sidebar"
+import { AppSidebar, createProjectAgentsStore } from "@/features/pico/sidebar"
 import {
   normalizeAgentSelectionKeys,
-  normalizeStoredDirectoryList,
+  normalizeStoredProjectList,
   PINNED_AGENTS_STORAGE_KEY,
   machineLocalStorageSetItem,
   agentListEntryKey,
-  SIDEBAR_DIRECTORIES_STORAGE_KEY,
+  SIDEBAR_PROJECTS_STORAGE_KEY,
 } from "@/lib/pico"
 import type { AgentListEntry } from "@/lib/pico/api"
 import { ArchivedAgentsDialog } from "@/features/pico/archived-agents-dialog"
 import { useMachineId } from "@/lib/pico/machine-context"
 import { onServerReconnect } from "@/lib/pico/server-connection"
 import {
-  filterDirectoryAgentsByStatus,
+  filterProjectAgentsByStatus,
   agentMatchesStatusFilter,
   useAgentStatusFilter,
 } from "@/features/pico/agent-status-filter"
 
 // Stored name: do not change.
-const PINNED_AGENT_STORE_DIRECTORY = "__pico_pinned_sessions__"
+const PINNED_AGENT_STORE_PROJECT = "__pico_pinned_sessions__"
 
 function findSidebarAgentSelectionKey(
   entriesByKey: Map<string, AgentListEntry>,
@@ -94,35 +94,35 @@ function useAppShellSidebarControllerView({
 }: AppShellSidebarControllerProps) {
   const machineId = useMachineId()
   const [archivedAgentsOpen, setArchivedAgentsOpen] = React.useState(false)
-  const [directoryAgentsStore] = React.useState(() =>
-    createDirectoryAgentsStore({}, {})
+  const [projectAgentsStore] = React.useState(() =>
+    createProjectAgentsStore({}, {})
   )
-  const baseSidebarDirectories = useAppShellSidebarValue(
+  const baseSidebarProjects = useAppShellSidebarValue(
     sidebarStore,
-    (snapshot) => snapshot.derived.baseSidebarDirectories,
+    (snapshot) => snapshot.derived.baseSidebarProjects,
     sameStringArray
   )
-  const directoryStateByPath = useAppShellSidebarValue(
+  const projectStateByPath = useAppShellSidebarValue(
     sidebarStore,
-    (snapshot) => snapshot.derived.directoryStateByPath,
+    (snapshot) => snapshot.derived.projectStateByPath,
     sameMapEntries
   )
   const emptySidebarStateText = useAppShellSidebarValue(
     sidebarStore,
     (snapshot) => snapshot.derived.emptySidebarStateText
   )
-  const searchedDirectoryAgents = useAppShellSidebarValue(
+  const searchedProjectAgents = useAppShellSidebarValue(
     sidebarStore,
-    (snapshot) => snapshot.derived.filteredDirectoryAgents,
+    (snapshot) => snapshot.derived.filteredProjectAgents,
     sameAgentEntryRecord
   )
   const allPinnedSidebarAgents = useAppShellSidebarValue(
     sidebarStore,
     (snapshot) => snapshot.derived.pinnedSidebarAgents
   )
-  const searchedDirectories = useAppShellSidebarValue(
+  const searchedProjects = useAppShellSidebarValue(
     sidebarStore,
-    (snapshot) => snapshot.derived.visibleDirectories,
+    (snapshot) => snapshot.derived.visibleProjects,
     sameStringArray
   )
   // A click on a count in the machine heading shows only the agents with
@@ -137,29 +137,29 @@ function useAppShellSidebarControllerView({
         : allPinnedSidebarAgents,
     [allPinnedSidebarAgents, statusFilter]
   )
-  const { visibleDirectories, filteredDirectoryAgents } = React.useMemo(() => {
+  const { visibleProjects, filteredProjectAgents } = React.useMemo(() => {
     if (!statusFilter)
       return {
-        visibleDirectories: searchedDirectories,
-        filteredDirectoryAgents: searchedDirectoryAgents,
+        visibleProjects: searchedProjects,
+        filteredProjectAgents: searchedProjectAgents,
       }
     const pinnedKeys = new Set(
       allPinnedSidebarAgents.map((entry) => agentListEntryKey(entry))
     )
-    const filtered = filterDirectoryAgentsByStatus(
-      searchedDirectories,
-      searchedDirectoryAgents,
+    const filtered = filterProjectAgentsByStatus(
+      searchedProjects,
+      searchedProjectAgents,
       statusFilter,
       (entry) => pinnedKeys.has(agentListEntryKey(entry))
     )
     return {
-      visibleDirectories: filtered.visibleDirectories,
-      filteredDirectoryAgents: filtered.filteredAgents,
+      visibleProjects: filtered.visibleProjects,
+      filteredProjectAgents: filtered.filteredAgents,
     }
   }, [
     allPinnedSidebarAgents,
-    searchedDirectories,
-    searchedDirectoryAgents,
+    searchedProjects,
+    searchedProjectAgents,
     statusFilter,
   ])
   const pinnedSidebarAgentKeys = pinnedSidebarAgents.flatMap((entry) => {
@@ -171,13 +171,13 @@ function useAppShellSidebarControllerView({
     (snapshot) => snapshot.derived.sidebarAgentEntriesByKey,
     sameMapEntries
   )
-  const directoryIndexDataByPath = useAppShellSidebarValue(
+  const projectIndexDataByPath = useAppShellSidebarValue(
     sidebarStore,
-    (snapshot) => snapshot.state.directoryIndexDataByPath
+    (snapshot) => snapshot.state.projectIndexDataByPath
   )
-  const directoryIndexLoading = useAppShellSidebarValue(
+  const projectIndexLoading = useAppShellSidebarValue(
     sidebarStore,
-    (snapshot) => snapshot.state.directoryIndexLoading
+    (snapshot) => snapshot.state.projectIndexLoading
   )
   const selectedSidebarAgentKeys = useAppShellSidebarValue(
     sidebarStore,
@@ -213,10 +213,7 @@ function useAppShellSidebarControllerView({
       left.event?.activeAgentId === right.event?.activeAgentId &&
       left.event?.activeAgentKey === right.event?.activeAgentKey &&
       left.event?.activeAgentPath === right.event?.activeAgentPath &&
-      sameStringArray(
-        left.event?.directories || [],
-        right.event?.directories || []
-      )
+      sameStringArray(left.event?.projects || [], right.event?.projects || [])
   )
   const agentsEvent = useAppShellSidebarValue(
     sidebarStore,
@@ -226,18 +223,17 @@ function useAppShellSidebarControllerView({
   const activeSidebarAgentKey = sidebarAgentsEventSnapshot.activeAgentKey
   const activeSidebarAgentPath = sidebarAgentsEventSnapshot.activeAgentPath
   const activeSidebarAgentStreaming = sidebarAgentsEventSnapshot.activeStreaming
-  const matchingAgentCount = visibleDirectories.reduce(
-    (total, directory) =>
-      total + (filteredDirectoryAgents[directory]?.length ?? 0),
+  const matchingAgentCount = visibleProjects.reduce(
+    (total, project) => total + (filteredProjectAgents[project]?.length ?? 0),
     0
   )
   const agentSearch = useAppShellSidebarValue(
     sidebarStore,
     (snapshot) => snapshot.state.agentSearch
   )
-  const sidebarDeferredDirectoryLoadingReady = useAppShellSidebarValue(
+  const sidebarDeferredProjectLoadingReady = useAppShellSidebarValue(
     sidebarStore,
-    (snapshot) => snapshot.state.sidebarDeferredDirectoryLoadingReady
+    (snapshot) => snapshot.state.sidebarDeferredProjectLoadingReady
   )
   const sidebarAgentSelectionAnchor = useAppShellSidebarValue(
     sidebarStore,
@@ -247,77 +243,76 @@ function useAppShellSidebarControllerView({
     signature: "",
     key: "",
   })
-  const directoryIndexRequestIdRef = React.useRef(0)
-  const directoryIndexRequestIdsByPathRef = React.useRef<
-    Record<string, number>
-  >({})
-  // Directories whose first load failed. The load effect skips them, else
+  const projectIndexRequestIdRef = React.useRef(0)
+  const projectIndexRequestIdsByPathRef = React.useRef<Record<string, number>>(
+    {}
+  )
+  // Projects whose first load failed. The load effect skips them, else
   // each failure starts the next request at once, in a loop. They load again
   // when the server answers again after a failure.
-  const failedDirectoryIndexesRef = React.useRef(new Set<string>())
-  const [directoryIndexRetryNonce, setDirectoryIndexRetryNonce] =
-    React.useState(0)
+  const failedProjectIndexesRef = React.useRef(new Set<string>())
+  const [projectIndexRetryNonce, setProjectIndexRetryNonce] = React.useState(0)
   React.useEffect(
     () =>
       onServerReconnect(() => {
-        if (failedDirectoryIndexesRef.current.size === 0) return
-        failedDirectoryIndexesRef.current.clear()
-        setDirectoryIndexRetryNonce((nonce) => nonce + 1)
+        if (failedProjectIndexesRef.current.size === 0) return
+        failedProjectIndexesRef.current.clear()
+        setProjectIndexRetryNonce((nonce) => nonce + 1)
       }),
     []
   )
-  const sidebarDirectoryAgentsSnapshotRef = React.useRef<{
+  const sidebarProjectAgentsSnapshotRef = React.useRef<{
     activeAgentId: string
     activeAgentKey: string
     activeAgentPath: string
     revisions: Record<string, string>
   } | null>(null)
 
-  const startDirectoryIndexRequest = (directories: Array<string>) => {
-    const requestId = directoryIndexRequestIdRef.current + 1
-    directoryIndexRequestIdRef.current = requestId
+  const startProjectIndexRequest = (projects: Array<string>) => {
+    const requestId = projectIndexRequestIdRef.current + 1
+    projectIndexRequestIdRef.current = requestId
 
-    for (const directory of directories) {
-      directoryIndexRequestIdsByPathRef.current[directory] = requestId
+    for (const project of projects) {
+      projectIndexRequestIdsByPathRef.current[project] = requestId
     }
 
     return requestId
   }
 
-  const getActiveDirectoryIndexRequestDirectories = (
-    directories: Array<string>,
+  const getActiveProjectIndexRequestProjects = (
+    projects: Array<string>,
     requestId: number
   ) =>
-    directories.filter(
-      (directory) =>
-        directoryIndexRequestIdsByPathRef.current[directory] === requestId
+    projects.filter(
+      (project) =>
+        projectIndexRequestIdsByPathRef.current[project] === requestId
     )
 
-  const clearDirectoryIndexRequestDirectories = (
-    directories: Array<string>,
+  const clearProjectIndexRequestProjects = (
+    projects: Array<string>,
     requestId: number
   ) => {
-    for (const directory of directories) {
-      if (directoryIndexRequestIdsByPathRef.current[directory] === requestId) {
-        delete directoryIndexRequestIdsByPathRef.current[directory]
+    for (const project of projects) {
+      if (projectIndexRequestIdsByPathRef.current[project] === requestId) {
+        delete projectIndexRequestIdsByPathRef.current[project]
       }
     }
   }
 
   React.useLayoutEffect(() => {
-    directoryAgentsStore.setData(
+    projectAgentsStore.setData(
       pinnedSidebarAgents.length > 0
         ? {
-            ...filteredDirectoryAgents,
-            [PINNED_AGENT_STORE_DIRECTORY]: pinnedSidebarAgents,
+            ...filteredProjectAgents,
+            [PINNED_AGENT_STORE_PROJECT]: pinnedSidebarAgents,
           }
-        : filteredDirectoryAgents,
-      directoryIndexLoading
+        : filteredProjectAgents,
+      projectIndexLoading
     )
   }, [
-    directoryIndexLoading,
-    directoryAgentsStore,
-    filteredDirectoryAgents,
+    projectIndexLoading,
+    projectAgentsStore,
+    filteredProjectAgents,
     pinnedSidebarAgents,
   ])
 
@@ -325,7 +320,7 @@ function useAppShellSidebarControllerView({
     let timeoutId = 0
     const frameId = window.requestAnimationFrame(() => {
       timeoutId = window.setTimeout(() => {
-        sidebarStore.setSidebarDeferredDirectoryLoadingReady(true)
+        sidebarStore.setSidebarDeferredProjectLoadingReady(true)
       }, 0)
     })
 
@@ -338,114 +333,111 @@ function useAppShellSidebarControllerView({
   }, [sidebarStore])
 
   React.useEffect(() => {
-    const sidebarDirectorySet = new Set(baseSidebarDirectories)
+    const sidebarProjectSet = new Set(baseSidebarProjects)
 
-    sidebarStore.setDirectoryIndexDataByPath((current) => {
-      const next: Record<string, DirectoryAgentsIndexData> = {}
+    sidebarStore.setProjectIndexDataByPath((current) => {
+      const next: Record<string, ProjectAgentsIndexData> = {}
 
-      for (const [directory, payload] of Object.entries(current)) {
-        if (!sidebarDirectorySet.has(directory)) continue
-        next[directory] = payload
+      for (const [project, payload] of Object.entries(current)) {
+        if (!sidebarProjectSet.has(project)) continue
+        next[project] = payload
       }
 
       return JSON.stringify(next) === JSON.stringify(current) ? current : next
     })
 
-    sidebarStore.setDirectoryIndexLoading((current) => {
+    sidebarStore.setProjectIndexLoading((current) => {
       const next: Record<string, boolean> = {}
 
-      for (const [directory, loading] of Object.entries(current)) {
-        if (!sidebarDirectorySet.has(directory)) continue
-        next[directory] = loading
+      for (const [project, loading] of Object.entries(current)) {
+        if (!sidebarProjectSet.has(project)) continue
+        next[project] = loading
       }
 
       return JSON.stringify(next) === JSON.stringify(current) ? current : next
     })
 
     const nextRequestIdsByPath: Record<string, number> = {}
-    for (const [directory, requestId] of Object.entries(
-      directoryIndexRequestIdsByPathRef.current
+    for (const [project, requestId] of Object.entries(
+      projectIndexRequestIdsByPathRef.current
     )) {
-      if (!sidebarDirectorySet.has(directory)) continue
-      nextRequestIdsByPath[directory] = requestId
+      if (!sidebarProjectSet.has(project)) continue
+      nextRequestIdsByPath[project] = requestId
     }
-    directoryIndexRequestIdsByPathRef.current = nextRequestIdsByPath
-  }, [baseSidebarDirectories, sidebarStore])
+    projectIndexRequestIdsByPathRef.current = nextRequestIdsByPath
+  }, [baseSidebarProjects, sidebarStore])
 
   React.useEffect(() => {
     if (!viewerContextId || !agentsEvent) return
 
-    const payloadDirectoryIndexes = agentsEvent.directoryIndexes || {}
-    const payloadDirectories = Object.keys(payloadDirectoryIndexes)
-    const payloadDirectorySet = new Set(payloadDirectories)
+    const payloadProjectIndexes = agentsEvent.projectIndexes || {}
+    const payloadProjects = Object.keys(payloadProjectIndexes)
+    const payloadProjectSet = new Set(payloadProjects)
 
     sidebarStore.setSidebarState((current) => {
-      const merged = payloadDirectories.length
-        ? mergeDirectoryIndexData(
-            current.directoryIndexDataByPath,
-            payloadDirectoryIndexes
+      const merged = payloadProjects.length
+        ? mergeProjectIndexData(
+            current.projectIndexDataByPath,
+            payloadProjectIndexes
           )
-        : current.directoryIndexDataByPath
-      const nextDirectoryIndexDataByPath = clearUnreadForActiveSidebarAgent(
+        : current.projectIndexDataByPath
+      const nextProjectIndexDataByPath = clearUnreadForActiveSidebarAgent(
         merged,
         {
           agentId: activeSidebarAgentId,
           agentPath: activeSidebarAgentPath,
         }
       )
-      const nextDirectoryIndexLoading = payloadDirectories.length
-        ? updateDirectoryIndexLoadingState(
-            current.directoryIndexLoading,
-            payloadDirectories,
+      const nextProjectIndexLoading = payloadProjects.length
+        ? updateProjectIndexLoadingState(
+            current.projectIndexLoading,
+            payloadProjects,
             false
           )
-        : current.directoryIndexLoading
+        : current.projectIndexLoading
 
-      const directoryIndexDataChanged = !sameDirectoryIndexDataRecord(
-        current.directoryIndexDataByPath,
-        nextDirectoryIndexDataByPath
+      const projectIndexDataChanged = !sameProjectIndexDataRecord(
+        current.projectIndexDataByPath,
+        nextProjectIndexDataByPath
       )
 
       if (
-        !directoryIndexDataChanged &&
-        nextDirectoryIndexLoading === current.directoryIndexLoading
+        !projectIndexDataChanged &&
+        nextProjectIndexLoading === current.projectIndexLoading
       ) {
         return current
       }
 
       return {
-        directoryIndexDataByPath: directoryIndexDataChanged
-          ? nextDirectoryIndexDataByPath
-          : current.directoryIndexDataByPath,
-        directoryIndexLoading: nextDirectoryIndexLoading,
+        projectIndexDataByPath: projectIndexDataChanged
+          ? nextProjectIndexDataByPath
+          : current.projectIndexDataByPath,
+        projectIndexLoading: nextProjectIndexLoading,
       }
     })
 
-    const previousSnapshot = sidebarDirectoryAgentsSnapshotRef.current
+    const previousSnapshot = sidebarProjectAgentsSnapshotRef.current
     const nextRevisions: Record<string, string> = {}
-    const directoriesToRefresh: Array<string> = []
+    const projectsToRefresh: Array<string> = []
 
-    for (const directory of baseSidebarDirectories) {
-      const nextRevision = directoryStateByPath.get(directory)?.revision || ""
-      const previousRevision = previousSnapshot?.revisions[directory] || ""
-      nextRevisions[directory] = nextRevision
+    for (const project of baseSidebarProjects) {
+      const nextRevision = projectStateByPath.get(project)?.revision || ""
+      const previousRevision = previousSnapshot?.revisions[project] || ""
+      nextRevisions[project] = nextRevision
 
-      if (payloadDirectorySet.has(directory)) {
+      if (payloadProjectSet.has(project)) {
         continue
       }
 
       if (
-        !Object.prototype.hasOwnProperty.call(
-          directoryIndexDataByPath,
-          directory
-        )
+        !Object.prototype.hasOwnProperty.call(projectIndexDataByPath, project)
       ) {
         continue
       }
 
       if (
-        directoryIndexLoading[directory] ||
-        directoryIndexRequestIdsByPathRef.current[directory]
+        projectIndexLoading[project] ||
+        projectIndexRequestIdsByPathRef.current[project]
       ) {
         continue
       }
@@ -456,83 +448,83 @@ function useAppShellSidebarControllerView({
 
       if (activeSidebarAgentStreaming) {
         // Keep the old revision, so the index refreshes when streaming stops.
-        nextRevisions[directory] = previousRevision
+        nextRevisions[project] = previousRevision
         continue
       }
 
-      directoriesToRefresh.push(directory)
+      projectsToRefresh.push(project)
     }
 
-    sidebarDirectoryAgentsSnapshotRef.current = {
+    sidebarProjectAgentsSnapshotRef.current = {
       activeAgentId: activeSidebarAgentId,
       activeAgentKey: activeSidebarAgentKey,
       activeAgentPath: activeSidebarAgentPath,
       revisions: nextRevisions,
     }
 
-    if (directoriesToRefresh.length === 0) {
+    if (projectsToRefresh.length === 0) {
       return
     }
 
-    const requestId = startDirectoryIndexRequest(directoriesToRefresh)
+    const requestId = startProjectIndexRequest(projectsToRefresh)
 
-    void fetchDirectoryAgentsIndexes({
+    void fetchProjectAgentsIndexes({
       machineId,
       viewerContextId,
-      directories: directoriesToRefresh,
+      projects: projectsToRefresh,
     })
       .then((response) => {
-        const activeDirectories = getActiveDirectoryIndexRequestDirectories(
-          directoriesToRefresh,
+        const activeProjects = getActiveProjectIndexRequestProjects(
+          projectsToRefresh,
           requestId
         )
-        if (activeDirectories.length === 0) return
-        clearDirectoryIndexRequestDirectories(activeDirectories, requestId)
+        if (activeProjects.length === 0) return
+        clearProjectIndexRequestProjects(activeProjects, requestId)
 
-        const activeDirectoryIndexes = Object.fromEntries(
-          activeDirectories.flatMap((directory) => {
-            const indexData = response.directoryIndexes[directory]
-            return indexData ? [[directory, indexData]] : []
+        const activeProjectIndexes = Object.fromEntries(
+          activeProjects.flatMap((project) => {
+            const indexData = response.projectIndexes[project]
+            return indexData ? [[project, indexData]] : []
           })
         )
 
         sidebarStore.setSidebarState((current) => {
-          const nextDirectoryIndexDataByPath =
-            Object.keys(activeDirectoryIndexes).length > 0
-              ? mergeDirectoryIndexDataPreservingOptimistic(
-                  current.directoryIndexDataByPath,
-                  activeDirectoryIndexes
+          const nextProjectIndexDataByPath =
+            Object.keys(activeProjectIndexes).length > 0
+              ? mergeProjectIndexDataPreservingOptimistic(
+                  current.projectIndexDataByPath,
+                  activeProjectIndexes
                 )
-              : current.directoryIndexDataByPath
-          const nextDirectoryIndexLoading = updateDirectoryIndexLoadingState(
-            current.directoryIndexLoading,
-            activeDirectories,
+              : current.projectIndexDataByPath
+          const nextProjectIndexLoading = updateProjectIndexLoadingState(
+            current.projectIndexLoading,
+            activeProjects,
             false
           )
 
           if (
-            nextDirectoryIndexDataByPath === current.directoryIndexDataByPath &&
-            nextDirectoryIndexLoading === current.directoryIndexLoading
+            nextProjectIndexDataByPath === current.projectIndexDataByPath &&
+            nextProjectIndexLoading === current.projectIndexLoading
           ) {
             return current
           }
 
           return {
-            directoryIndexDataByPath: nextDirectoryIndexDataByPath,
-            directoryIndexLoading: nextDirectoryIndexLoading,
+            projectIndexDataByPath: nextProjectIndexDataByPath,
+            projectIndexLoading: nextProjectIndexLoading,
           }
         })
       })
       .catch((error) => {
-        const activeDirectories = getActiveDirectoryIndexRequestDirectories(
-          directoriesToRefresh,
+        const activeProjects = getActiveProjectIndexRequestProjects(
+          projectsToRefresh,
           requestId
         )
-        if (activeDirectories.length === 0) return
-        clearDirectoryIndexRequestDirectories(activeDirectories, requestId)
+        if (activeProjects.length === 0) return
+        clearProjectIndexRequestProjects(activeProjects, requestId)
 
-        sidebarStore.setDirectoryIndexLoading((current) =>
-          updateDirectoryIndexLoadingState(current, activeDirectories, false)
+        sidebarStore.setProjectIndexLoading((current) =>
+          updateProjectIndexLoadingState(current, activeProjects, false)
         )
         toast.error(
           error instanceof Error
@@ -541,14 +533,14 @@ function useAppShellSidebarControllerView({
         )
       })
   }, [
-    baseSidebarDirectories,
-    directoryIndexDataByPath,
-    directoryIndexLoading,
+    baseSidebarProjects,
+    projectIndexDataByPath,
+    projectIndexLoading,
     activeSidebarAgentId,
     activeSidebarAgentKey,
     activeSidebarAgentPath,
     activeSidebarAgentStreaming,
-    directoryStateByPath,
+    projectStateByPath,
     agentsEvent,
     sidebarStore,
     viewerContextId,
@@ -623,88 +615,88 @@ function useAppShellSidebarControllerView({
   ])
 
   React.useEffect(() => {
-    if (!viewerContextId || !sidebarDeferredDirectoryLoadingReady) return
+    if (!viewerContextId || !sidebarDeferredProjectLoadingReady) return
 
-    const missingDirectories = baseSidebarDirectories.filter(
-      (directory) =>
+    const missingProjects = baseSidebarProjects.filter(
+      (project) =>
         !Object.prototype.hasOwnProperty.call(
-          directoryIndexDataByPath,
-          directory
+          projectIndexDataByPath,
+          project
         ) &&
-        !directoryIndexLoading[directory] &&
-        !directoryIndexRequestIdsByPathRef.current[directory] &&
-        !failedDirectoryIndexesRef.current.has(directory)
+        !projectIndexLoading[project] &&
+        !projectIndexRequestIdsByPathRef.current[project] &&
+        !failedProjectIndexesRef.current.has(project)
     )
 
-    if (missingDirectories.length === 0) {
+    if (missingProjects.length === 0) {
       return
     }
 
-    const requestId = startDirectoryIndexRequest(missingDirectories)
-    sidebarStore.setDirectoryIndexLoading((current) =>
-      updateDirectoryIndexLoadingState(current, missingDirectories, true)
+    const requestId = startProjectIndexRequest(missingProjects)
+    sidebarStore.setProjectIndexLoading((current) =>
+      updateProjectIndexLoadingState(current, missingProjects, true)
     )
 
-    void fetchDirectoryAgentsIndexes({
+    void fetchProjectAgentsIndexes({
       machineId,
       viewerContextId,
-      directories: missingDirectories,
+      projects: missingProjects,
     })
       .then((response) => {
-        const activeDirectories = getActiveDirectoryIndexRequestDirectories(
-          missingDirectories,
+        const activeProjects = getActiveProjectIndexRequestProjects(
+          missingProjects,
           requestId
         )
-        if (activeDirectories.length === 0) return
-        clearDirectoryIndexRequestDirectories(activeDirectories, requestId)
+        if (activeProjects.length === 0) return
+        clearProjectIndexRequestProjects(activeProjects, requestId)
 
-        const activeDirectoryIndexes = Object.fromEntries(
-          activeDirectories.flatMap((directory) => {
-            const indexData = response.directoryIndexes[directory]
-            return indexData ? [[directory, indexData]] : []
+        const activeProjectIndexes = Object.fromEntries(
+          activeProjects.flatMap((project) => {
+            const indexData = response.projectIndexes[project]
+            return indexData ? [[project, indexData]] : []
           })
         )
 
         sidebarStore.setSidebarState((current) => {
-          const nextDirectoryIndexDataByPath =
-            Object.keys(activeDirectoryIndexes).length > 0
-              ? mergeDirectoryIndexDataPreservingOptimistic(
-                  current.directoryIndexDataByPath,
-                  activeDirectoryIndexes
+          const nextProjectIndexDataByPath =
+            Object.keys(activeProjectIndexes).length > 0
+              ? mergeProjectIndexDataPreservingOptimistic(
+                  current.projectIndexDataByPath,
+                  activeProjectIndexes
                 )
-              : current.directoryIndexDataByPath
-          const nextDirectoryIndexLoading = updateDirectoryIndexLoadingState(
-            current.directoryIndexLoading,
-            activeDirectories,
+              : current.projectIndexDataByPath
+          const nextProjectIndexLoading = updateProjectIndexLoadingState(
+            current.projectIndexLoading,
+            activeProjects,
             false
           )
 
           if (
-            nextDirectoryIndexDataByPath === current.directoryIndexDataByPath &&
-            nextDirectoryIndexLoading === current.directoryIndexLoading
+            nextProjectIndexDataByPath === current.projectIndexDataByPath &&
+            nextProjectIndexLoading === current.projectIndexLoading
           ) {
             return current
           }
 
           return {
-            directoryIndexDataByPath: nextDirectoryIndexDataByPath,
-            directoryIndexLoading: nextDirectoryIndexLoading,
+            projectIndexDataByPath: nextProjectIndexDataByPath,
+            projectIndexLoading: nextProjectIndexLoading,
           }
         })
       })
       .catch((error) => {
-        const activeDirectories = getActiveDirectoryIndexRequestDirectories(
-          missingDirectories,
+        const activeProjects = getActiveProjectIndexRequestProjects(
+          missingProjects,
           requestId
         )
-        if (activeDirectories.length === 0) return
-        clearDirectoryIndexRequestDirectories(activeDirectories, requestId)
-        for (const directory of activeDirectories) {
-          failedDirectoryIndexesRef.current.add(directory)
+        if (activeProjects.length === 0) return
+        clearProjectIndexRequestProjects(activeProjects, requestId)
+        for (const project of activeProjects) {
+          failedProjectIndexesRef.current.add(project)
         }
 
-        sidebarStore.setDirectoryIndexLoading((current) =>
-          updateDirectoryIndexLoadingState(current, activeDirectories, false)
+        sidebarStore.setProjectIndexLoading((current) =>
+          updateProjectIndexLoadingState(current, activeProjects, false)
         )
         toast.error(
           error instanceof Error
@@ -713,11 +705,11 @@ function useAppShellSidebarControllerView({
         )
       })
   }, [
-    baseSidebarDirectories,
-    directoryIndexDataByPath,
-    directoryIndexLoading,
-    directoryIndexRetryNonce,
-    sidebarDeferredDirectoryLoadingReady,
+    baseSidebarProjects,
+    projectIndexDataByPath,
+    projectIndexLoading,
+    projectIndexRetryNonce,
+    sidebarDeferredProjectLoadingReady,
     sidebarStore,
     viewerContextId,
   ])
@@ -735,19 +727,19 @@ function useAppShellSidebarControllerView({
     )
   }, [sidebarAgentEntriesByKey, sidebarStore])
 
-  const reorderSidebarDirectories = (nextDirectories: Array<string>) => {
-    const normalizedNext = normalizeStoredDirectoryList(nextDirectories)
+  const reorderSidebarProjects = (nextProjects: Array<string>) => {
+    const normalizedNext = normalizeStoredProjectList(nextProjects)
     if (normalizedNext.length === 0) return
 
-    sidebarStore.setSidebarDirectories((current) => {
-      const previous = normalizeStoredDirectoryList(current)
+    sidebarStore.setSidebarProjects((current) => {
+      const previous = normalizeStoredProjectList(current)
       if (JSON.stringify(previous) === JSON.stringify(normalizedNext)) {
         return current
       }
 
       machineLocalStorageSetItem(
         machineId,
-        SIDEBAR_DIRECTORIES_STORAGE_KEY,
+        SIDEBAR_PROJECTS_STORAGE_KEY,
         JSON.stringify(normalizedNext)
       )
       return normalizedNext
@@ -854,17 +846,14 @@ function useAppShellSidebarControllerView({
     }
   }
 
-  const showRestoredAgentDirectory = (directory: string) => {
-    sidebarStore.setSidebarDirectories((current) => {
-      const normalizedCurrent = normalizeStoredDirectoryList(current)
-      if (normalizedCurrent.includes(directory)) return current
-      const next = normalizeStoredDirectoryList([
-        ...normalizedCurrent,
-        directory,
-      ])
+  const showRestoredAgentProject = (project: string) => {
+    sidebarStore.setSidebarProjects((current) => {
+      const normalizedCurrent = normalizeStoredProjectList(current)
+      if (normalizedCurrent.includes(project)) return current
+      const next = normalizeStoredProjectList([...normalizedCurrent, project])
       machineLocalStorageSetItem(
         machineId,
-        SIDEBAR_DIRECTORIES_STORAGE_KEY,
+        SIDEBAR_PROJECTS_STORAGE_KEY,
         JSON.stringify(next)
       )
       return next
@@ -878,8 +867,8 @@ function useAppShellSidebarControllerView({
         onOpenAgentsDialog={() => {
           agentWorkspaceRef.current?.openAgentsDialog()
         }}
-        visibleDirectories={visibleDirectories}
-        directoryAgentsStore={directoryAgentsStore}
+        visibleProjects={visibleProjects}
+        projectAgentsStore={projectAgentsStore}
         matchingAgentCount={matchingAgentCount}
         selectedAgentKeys={selectedSidebarAgentKeys}
         activeAgentId={activeSidebarAgentId || undefined}
@@ -889,8 +878,8 @@ function useAppShellSidebarControllerView({
           statusFilter ? "No agents with these states." : emptySidebarStateText
         }
         statusFilterActive={Boolean(statusFilter)}
-        onOpenAddDirectoryDialog={() => {
-          agentWorkspaceRef.current?.openAddDirectoryDialog()
+        onOpenAddProjectDialog={() => {
+          agentWorkspaceRef.current?.openAddProjectDialog()
         }}
         onAgentClick={handleSidebarAgentClick}
         onRenameAgent={(entry) => {
@@ -911,45 +900,43 @@ function useAppShellSidebarControllerView({
         onSetAgentUnread={(entry, unread) => {
           void agentWorkspaceRef.current?.setAgentUnread(entry, unread)
         }}
-        onMoveAgent={(entry, directory) => {
-          void agentWorkspaceRef.current?.moveAgentToDirectory(entry, directory)
+        onMoveAgent={(entry, project) => {
+          void agentWorkspaceRef.current?.moveAgentToProject(entry, project)
         }}
-        onMoveAgentAnyDirectory={(entry) => {
-          agentWorkspaceRef.current?.openMoveAgentDirectoryDialogForEntry(entry)
+        onMoveAgentAnyProject={(entry) => {
+          agentWorkspaceRef.current?.openMoveAgentProjectDialogForEntry(entry)
         }}
         onTogglePinnedAgent={togglePinnedAgent}
-        onCreateAgentInDirectory={(directory) => {
-          void agentWorkspaceRef.current?.createAgent(directory, {
+        onCreateAgentInProject={(project) => {
+          void agentWorkspaceRef.current?.createAgent(project, {
             closeMobileSidebar: true,
           })
         }}
-        onDeleteOldAgentsInDirectory={(directory) => {
-          agentWorkspaceRef.current?.openDeleteOldDirectoryAgentsDialog(
-            directory
-          )
+        onDeleteOldAgentsInProject={(project) => {
+          agentWorkspaceRef.current?.openDeleteOldProjectAgentsDialog(project)
         }}
         onMarkAgentsRead={(entries) => {
           void agentWorkspaceRef.current?.markAgentsRead(entries)
         }}
-        onRemoveDirectory={(directory) => {
-          sidebarStore.setSidebarDirectories((current) => {
-            const next = current.filter((entry) => entry !== directory)
+        onRemoveProject={(project) => {
+          sidebarStore.setSidebarProjects((current) => {
+            const next = current.filter((entry) => entry !== project)
             machineLocalStorageSetItem(
               machineId,
-              SIDEBAR_DIRECTORIES_STORAGE_KEY,
+              SIDEBAR_PROJECTS_STORAGE_KEY,
               JSON.stringify(next)
             )
             return next
           })
         }}
-        onReorderDirectories={reorderSidebarDirectories}
+        onReorderProjects={reorderSidebarProjects}
         onOpenArchivedAgents={() => setArchivedAgentsOpen(true)}
       />
       <ArchivedAgentsDialog
         open={archivedAgentsOpen}
         onOpenChange={setArchivedAgentsOpen}
         viewerContextId={viewerContextId}
-        onRestored={(result) => showRestoredAgentDirectory(result.directory)}
+        onRestored={(result) => showRestoredAgentProject(result.project)}
       />
     </>
   )

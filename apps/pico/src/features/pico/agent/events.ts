@@ -16,7 +16,7 @@ export type PicoEventMap = {
   /** Another device changed the shared sidebar layout in local storage. */
   "pico:sidebar-state": {
     machineId: string
-    changed: Array<"directories" | "pinnedAgentKeys" | "collapsedDirectories">
+    changed: Array<"projects" | "pinnedAgentKeys" | "collapsedProjects">
   }
   /** Open the agent settings dialog. */
   "pico:open-agent-settings": Record<string, never>
