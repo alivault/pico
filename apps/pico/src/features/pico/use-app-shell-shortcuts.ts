@@ -356,7 +356,7 @@ export function useAppShellShortcuts({
     const context = getShortcutContext(event)
 
     if (
-      context.currentTab !== "session" ||
+      context.currentTab !== "conversation" ||
       context.modalOpen ||
       event.defaultPrevented ||
       (isEditableTarget(event.target) && !isPromptTextareaTarget(event.target))

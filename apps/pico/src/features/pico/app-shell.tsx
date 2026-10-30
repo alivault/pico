@@ -311,7 +311,7 @@ function useAppShellSessionWorkspaceView({
   if (!appUiStoreRef.current) {
     appUiStoreRef.current = createPicoStore<AppShellUiState>(
       {
-        currentTab: "session",
+        currentTab: "conversation",
         gitPanelOpen: false,
         terminalPanelOpen: false,
         initialLoadingSessionId: sessionId || null,
@@ -1287,14 +1287,14 @@ function useAppShellSessionWorkspaceView({
     if (isMobile) {
       // On mobile, the Agent panel has its own top-level tab.
       if (pane === "agent") {
-        setCurrentTab((tab) => (tab === "agent" ? "session" : "agent"))
+        setCurrentTab((tab) => (tab === "agent" ? "conversation" : "agent"))
         return
       }
       if (pane === "files")
         setStoreField(rightSidebarStore, "fileActivePath", "")
       setRightSidebarActiveTab(rightSidebarStore, pane)
       setCurrentTab((tab) =>
-        tab === "git" && activeTab === pane ? "session" : "git"
+        tab === "git" && activeTab === pane ? "conversation" : "git"
       )
       return
     }
@@ -1461,7 +1461,7 @@ function useAppShellSessionWorkspaceView({
         current.currentTab === "git" ||
         current.currentTab === "agent" ||
         current.currentTab === "terminal"
-          ? "session"
+          ? "conversation"
           : current.currentTab,
       initialLoadingSessionId: sessionId
         ? current.initialLoadingSessionId
@@ -1476,7 +1476,7 @@ function useAppShellSessionWorkspaceView({
   React.useEffect(() => {
     if (isMobile) return
     setCurrentTab((tab) =>
-      tab === "git" || tab === "agent" || tab === "terminal" ? "session" : tab
+      tab === "git" || tab === "agent" || tab === "terminal" ? "conversation" : tab
     )
   }, [isMobile, setCurrentTab])
 
@@ -1768,7 +1768,7 @@ function useAppShellSessionWorkspaceView({
 
   const toggleGitPanel = () => {
     if (isMobile) {
-      setCurrentTab((tab) => (tab === "git" ? "session" : "git"))
+      setCurrentTab((tab) => (tab === "git" ? "conversation" : "git"))
       return
     }
     // The sidebar is open but hidden because the window is too narrow. Show
@@ -1795,7 +1795,7 @@ function useAppShellSessionWorkspaceView({
       return
     }
     if (isMobile) {
-      setCurrentTab((tab) => (tab === "terminal" ? "session" : "terminal"))
+      setCurrentTab((tab) => (tab === "terminal" ? "conversation" : "terminal"))
       return
     }
 
@@ -1804,7 +1804,7 @@ function useAppShellSessionWorkspaceView({
 
   const closeTerminalPanel = () => {
     if (isMobile) {
-      setCurrentTab((tab) => (tab === "terminal" ? "session" : tab))
+      setCurrentTab((tab) => (tab === "terminal" ? "conversation" : tab))
       return
     }
 
@@ -1885,8 +1885,8 @@ function useAppShellSessionWorkspaceView({
   }
 
   const focusPrompt = () => {
-    if (appUiStore.state.currentTab !== "session") {
-      setCurrentTab("session")
+    if (appUiStore.state.currentTab !== "conversation") {
+      setCurrentTab("conversation")
     }
 
     if (isMobile && (openMobile || openMobileSettled)) {
@@ -2106,7 +2106,7 @@ function useAppShellSessionWorkspaceView({
 
   const handleSelectSession = React.useCallback(
     (nextSessionId?: string, options?: SelectSessionNavigationOptions) => {
-      setCurrentTab((tab) => (tab === "git" ? "session" : tab))
+      setCurrentTab((tab) => (tab === "git" ? "conversation" : tab))
       syncSidebarSelectionForSession(nextSessionId, options)
       publishSidebarActiveSession({
         draft: !nextSessionId,
@@ -3717,7 +3717,7 @@ function useAppShellSessionWorkspaceView({
   })
 
   const shortcutStateRef = useLatestRef<AppShellShortcutState>({
-    currentTab: isMobile ? appUiStore.state.currentTab : "session",
+    currentTab: isMobile ? appUiStore.state.currentTab : "conversation",
     selectedSidebarSessions,
     sessionHasAvailableModels:
       sessionStateRef.current.availableModels.length > 0,

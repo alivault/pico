@@ -93,8 +93,8 @@ function AppShellTabsList({
 
   return (
     <TabsList className="no-scrollbar w-full justify-start gap-2 overflow-x-auto rounded-none border-b border-border/70 bg-background p-2 group-data-horizontal/tabs:h-auto md:hidden">
-      <TabsTrigger value="session" className={mobileTabTriggerClassName}>
-        Session
+      <TabsTrigger value="conversation" className={mobileTabTriggerClassName}>
+        Conversation
       </TabsTrigger>
       <TabsTrigger value="git" className={mobileTabTriggerClassName}>
         <GitTabStatusText viewerContextId={viewerContextId} cwd={cwd} />
@@ -734,12 +734,12 @@ function useAppShellTabsControllerView({
     }),
     { compare: shallowTerminalSession }
   )
-  const agentSessionId = useSelector(sessionStore, (sessionState) =>
+  const agentPaneSessionId = useSelector(sessionStore, (sessionState) =>
     sessionState.draft ? undefined : sessionState.sessionId
   )
   const showTabsList = isMobile || !isDraftSession || isSessionViewLoading
   const sessionVisibleClassName =
-    currentTab === "session"
+    currentTab === "conversation"
       ? "flex min-h-0 flex-1 flex-col"
       : "hidden min-h-0 flex-1 flex-col md:flex"
   const mobileGitClassName =
@@ -925,7 +925,7 @@ function useAppShellTabsControllerView({
                 <AgentPanel
                   active={currentTab === "agent"}
                   cwd={terminalSession.cwd}
-                  sessionId={agentSessionId}
+                  sessionId={agentPaneSessionId}
                   viewerContextId={viewerContextId}
                 />
               </React.Suspense>
@@ -1079,7 +1079,7 @@ function useAppShellTabsControllerView({
       className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
     >
       <JobFocusWatcher
-        sessionId={agentSessionId}
+        sessionId={agentPaneSessionId}
         viewerContextId={viewerContextId}
       />
       {isMobile ? header : null}
@@ -1107,7 +1107,7 @@ function useAppShellTabsControllerView({
             }}
           >
             <div
-              data-desktop-panel="session"
+              data-desktop-panel="conversation"
               className={`h-full min-h-0 min-w-0 shrink-0 overflow-hidden max-md:w-full! ${desktopTransitionClassName}`}
               style={{
                 width: desktopSideWorkspaceOpen
