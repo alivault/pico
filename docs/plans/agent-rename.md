@@ -1,6 +1,6 @@
 # Plan: Rename sessions to agents
 
-Status: phases 1 to 4 are done on branch `rename-agents`. The manual test ran on a copy of the real data directory: all agents, names, parents, worktrees, projects, and archived agents were there; create, rename, archive, restore, `spawn_subagent`, `agents wait`, `agents read`, and `agents send` worked. Not tested: compact, move to another project, and the hub with another machine. Not done: `~/.pi/agent/AGENTS.md` (change it at merge), the website deploy, and the release.
+Status: done. Released in v2.0.0 (2026-10-30). Not tested by hand: compact, move to another project, and the hub with another machine.
 
 ## Glossary
 
