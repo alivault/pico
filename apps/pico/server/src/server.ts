@@ -12,7 +12,7 @@ import { createApi } from "./api.ts"
 import { VERSION, type ServerPaths } from "./config.ts"
 import { Auth, UiRequests } from "./core/auth.ts"
 import { openRuntime, type Runtime } from "./core/runtime.ts"
-import { parseSessionId, Sessions } from "./core/agents.ts"
+import { parseAgentId, Agents } from "./core/agents.ts"
 import { Viewers } from "./core/viewers.ts"
 import { EventHub } from "./events.ts"
 import { HostBridge } from "./extensions/host.ts"
@@ -40,7 +40,7 @@ import { addHubRoutes, addMachineServerRoutes } from "./machines/routes.ts"
 export type PicoServer = {
   readonly server: Server
   readonly runtime: Runtime
-  readonly sessions: Sessions
+  readonly agents: Agents
   readonly machines: MachineManager
   port(): number
   /** Stop taking new work, wait for runs to finish (up to `timeoutMs`), and close. */
@@ -66,7 +66,7 @@ export async function startServer(options: {
   const runtime = await openRuntime(options.paths, host)
   const hub = new EventHub()
   const viewers = new Viewers(options.paths.viewersFile)
-  const sessions = new Sessions(runtime, hub, viewers)
+  const agents = new Agents(runtime, hub, viewers)
   const terminals = new Terminals({
     dataDir: options.paths.dataDir,
     ...(options.ptyHost
@@ -115,25 +115,25 @@ export async function startServer(options: {
         : "Type in its terminal"
     return { title: `${name} needs you`, body: prompt }
   }
-  const sessionLink = (sessionId: unknown, machineId?: string) => {
+  const agentLink = (agentId: unknown, machineId?: string) => {
     const base = runtime.settings.data.publicUrl.replace(/\/+$/, "")
     const query = new URLSearchParams()
     if (machineId) query.set("machine", machineId)
-    if (typeof sessionId === "string") query.set("session", sessionId)
+    if (typeof agentId === "string") query.set("session", agentId)
     const path = query.size ? `/?${query.toString()}` : "/"
     return base ? `${base}${path}` : path
   }
   /** Web Push for a remote session; the title names the machine. */
   const notifyFromRemote = ({ machine, payload }: RemoteEvent) => {
     const settings = runtime.settings.data
-    const id = typeof payload.sessionId === "string" ? payload.sessionId : ""
+    const id = typeof payload.agentId === "string" ? payload.agentId : ""
     const title =
       (typeof payload.title === "string" ? payload.title : undefined) ??
-      machine.summary?.sessions.find((session) => session.id === id)?.title ??
+      machine.summary?.agents.find((session) => session.id === id)?.title ??
       "Session"
     if (payload.type === "session_done" && payload.reason === "agent") {
       // The agent goes on when its timer, watch, or job fires.
-      if (!settings.notifyRunDone || payload.waiting) return
+      if (!settings.notifyTurnDone || payload.waiting) return
       void notifier.send(
         {
           title:
@@ -141,7 +141,7 @@ export async function startServer(options: {
               ? `Pico (${machine.label}): run failed`
               : `Pico (${machine.label}): run finished`,
           body: title,
-          url: sessionLink(id || undefined, machine.id),
+          url: agentLink(id || undefined, machine.id),
           tag: `done-${machine.id}-${id}`,
           level: payload.outcome === "error" ? "error" : "success",
         },
@@ -159,7 +159,7 @@ export async function startServer(options: {
             ? `Pico (${machine.label}): ${job.title}`
             : `Pico (${machine.label}): the agent asks a question`,
           body: job ? `${job.body} · ${title}` : title,
-          url: sessionLink(id || undefined, machine.id),
+          url: agentLink(id || undefined, machine.id),
           tag: `ask-${machine.id}-${id}`,
           level: "warning",
         },
@@ -175,15 +175,15 @@ export async function startServer(options: {
     const settings = runtime.settings.data
     if (payload.type === "session_done" && payload.reason === "agent") {
       // The agent goes on when its timer, watch, or job fires.
-      if (!settings.notifyRunDone || payload.waiting) return
+      if (!settings.notifyTurnDone || payload.waiting) return
       void notifier.send({
         title:
           payload.outcome === "error"
             ? "Pico: run failed"
             : "Pico: run finished",
         body: typeof payload.title === "string" ? payload.title : "Session",
-        url: sessionLink(payload.sessionId),
-        tag: `done-${String(payload.sessionId)}`,
+        url: agentLink(payload.agentId),
+        tag: `done-${String(payload.agentId)}`,
         level: payload.outcome === "error" ? "error" : "success",
       })
     } else if (
@@ -191,22 +191,22 @@ export async function startServer(options: {
       payload.needsInput === true
     ) {
       if (!settings.notifyNeedsInput) return
-      const id = typeof payload.sessionId === "string" ? payload.sessionId : ""
-      const title = sessions.has(id)
-        ? (sessions.list({}).find((item) => item.id === id)?.title ?? "Session")
+      const id = typeof payload.agentId === "string" ? payload.agentId : ""
+      const title = agents.has(id)
+        ? (agents.list({}).find((item) => item.id === id)?.title ?? "Session")
         : "Session"
       const job = jobNotice(payload)
       void notifier.send({
         title: job ? `Pico: ${job.title}` : "Pico: the agent asks a question",
         body: job ? `${job.body} · ${title}` : title,
-        url: sessionLink(payload.sessionId),
+        url: agentLink(payload.agentId),
         tag: `ask-${id}`,
         level: "warning",
       })
     }
   }
   host.bind({
-    sessions,
+    agents,
     events: hub,
     terminals,
     harness: runtime.harness,
@@ -216,7 +216,7 @@ export async function startServer(options: {
     browser,
     machines,
   })
-  await sessions.load()
+  await agents.load()
   await host.started()
   const ui = new UiRequests(hub)
   const auth = new Auth(runtime.models, ui, runtime.agentDir)
@@ -230,7 +230,7 @@ export async function startServer(options: {
     dataDir: options.paths.dataDir,
     host,
     notifier,
-    sessions,
+    agents,
     viewers,
     hub,
     auth,
@@ -243,9 +243,9 @@ export async function startServer(options: {
     listenHosts: () => [options.host],
     draining: () => draining,
   })
-  addMachineServerRoutes(router, { sessions, runtime, hub, viewers })
+  addMachineServerRoutes(router, { agents, runtime, hub, viewers })
   addHubRoutes(router, {
-    sessions,
+    agents,
     runtime,
     hub,
     viewers,
@@ -323,21 +323,21 @@ export async function startServer(options: {
   /** The terminal scope for a request, as the HTTP terminal routes compute it. */
   const terminalScope = (query: URLSearchParams) => {
     const contextId = query.get("context")?.trim() || "default"
-    const session = parseSessionId(
-      query.get("sessionPath") ?? query.get("session") ?? undefined
+    const session = parseAgentId(
+      query.get("agentPath") ?? query.get("session") ?? undefined
     )
-    const key = query.get("sessionKey")?.trim() || undefined
+    const key = query.get("agentKey")?.trim() || undefined
     const viewer = viewers.get(contextId)
     const scopeTarget =
       key ??
       session ??
-      viewer?.activeDraft?.sessionKey ??
-      viewer?.selectedSession ??
+      viewer?.activeDraft?.agentKey ??
+      viewer?.selectedAgent ??
       "default"
-    const current = sessions.current(session ?? viewer?.selectedSession)
+    const current = agents.current(session ?? viewer?.selectedAgent)
     const cwd =
-      current && sessions.has(current)
-        ? sessions.meta(current).cwd
+      current && agents.has(current)
+        ? agents.meta(current).cwd
         : // The same cwd as `baseCwd` in api.ts, so both scopes match.
           ((key?.startsWith("draft:") &&
           key.slice(6).trim() &&
@@ -463,9 +463,9 @@ export async function startServer(options: {
     terminals,
     jobs: () => runtime.extensions.jobs.liveJobs(),
     browser,
-    dropTranscripts: () => sessions.dropUnwatchedTranscripts(),
+    dropTranscripts: () => agents.dropUnwatchedTranscripts(),
     notifier,
-    sessionLink: (sessionId) => sessionLink(sessionId),
+    agentLink: (agentId) => agentLink(agentId),
   })
   pressure.start()
 
@@ -473,7 +473,7 @@ export async function startServer(options: {
   return {
     server,
     runtime,
-    sessions,
+    agents,
     machines,
     port: () => listeningPort,
     shutdown(shutdownOptions = {}) {
@@ -482,7 +482,7 @@ export async function startServer(options: {
         if (shutdownOptions.drain) {
           const deadline =
             Date.now() + (shutdownOptions.timeoutMs ?? 10 * 60_000)
-          while (sessions.activeRunCount() > 0 && Date.now() < deadline) {
+          while (agents.activeTurnCount() > 0 && Date.now() < deadline) {
             await new Promise((resolve) => setTimeout(resolve, 500))
           }
         }
@@ -497,7 +497,7 @@ export async function startServer(options: {
         for (const client of sockets.clients) client.terminate()
         server.closeAllConnections()
         await new Promise<void>((resolve) => server.close(() => resolve()))
-        await sessions.flushMeta()
+        await agents.flushMeta()
         viewers.flush()
         await runtime.close()
       })()

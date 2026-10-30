@@ -5,7 +5,7 @@
  * profile keeps still run without asking. Built-in profiles are below; the
  * `profiles` setting adds more or replaces one by name.
  *
- * Child sessions (sessions with a parent) get more limits: no `ask_user` or
+ * Child agents (agents with a parent) get more limits: no `ask_user` or
  * `spawn_session` unless the parent grants them, and a bash
  * guard (see `bashGuard`). The parent can add and remove tools for each child.
  *
@@ -43,7 +43,7 @@ export type ToolLimits = {
 }
 
 /** Tools that a child session does not get unless its parent grants them. */
-export const CHILD_DENIED_TOOLS = ["ask_user", "spawn_session"]
+export const SUBAGENT_DENIED_TOOLS = ["ask_user", "spawn_session"]
 
 const WRITE_TOOLS = [
   "write",
@@ -55,7 +55,7 @@ const WRITE_TOOLS = [
   "browser.eval",
   "spawn_session",
   "send_to_session",
-  "sessions.stop",
+  "agents.stop",
 ]
 
 export const BUILTIN_PROFILES: readonly Profile[] = [
@@ -66,12 +66,12 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
   {
     name: "builder",
     description:
-      "Build and change code: files, shell, git, and tests. No browser and no other sessions.",
+      "Build and change code: files, shell, git, and tests. No browser and no other agents.",
     removeTools: [
       "browser",
       "send_to_session",
-      "sessions.stop",
-      "sessions.archive",
+      "agents.stop",
+      "agents.archive",
     ],
     instructions:
       "You are a builder: make the change, run the checks and tests, and report what you changed and what you did not do.",
@@ -98,12 +98,12 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
   {
     name: "reviewer",
     description:
-      "Review changes: diffs, other sessions, pull requests, and tests. No file changes.",
+      "Review changes: diffs, other agents, pull requests, and tests. No file changes.",
     removeTools: WRITE_TOOLS.filter(
       (tool) => tool !== "bash" && tool !== "send_to_session"
     ),
     instructions:
-      "You are a reviewer: read the diff (git diff, gh pr diff, sessions read), run the tests, and report problems with file and line. Do not change files.",
+      "You are a reviewer: read the diff (git diff, gh pr diff, agents read), run the tests, and report problems with file and line. Do not change files.",
   },
   {
     name: "read-only",
@@ -172,7 +172,7 @@ export function removedNames(
   const removeNames = new Set([
     ...(profile?.removeTools ?? []),
     ...(options.limits?.remove ?? []),
-    ...(options.child ? CHILD_DENIED_TOOLS : []),
+    ...(options.child ? SUBAGENT_DENIED_TOOLS : []),
   ])
   for (const name of add) removeNames.delete(name)
   return removeNames
@@ -180,7 +180,7 @@ export function removedNames(
 
 /**
  * True when a session may not use `action` (`tool.action`, for example
- * `sessions.stop`). Profiles and limits remove actions by this name.
+ * `agents.stop`). Profiles and limits remove actions by this name.
  */
 export function actionRemoved(
   action: string,
@@ -238,7 +238,7 @@ export function resolveSelection(
   if (profile?.instructions) parts.push(profile.instructions)
   if (options.child)
     parts.push(
-      childInstructions(options.child.parent, profile, removed, options.limits)
+      subagentInstructions(options.child.parent, profile, removed, options.limits)
     )
   return {
     extensions,
@@ -247,7 +247,7 @@ export function resolveSelection(
   }
 }
 
-function childInstructions(
+function subagentInstructions(
   parent: string,
   profile: Profile | undefined,
   removed: string[],
@@ -299,7 +299,7 @@ export async function applyProfile(
 }
 
 // -----------------------------------------------------------------------------
-// The bash guard of child sessions
+// The bash guard of child agents
 
 /** Shell words of a command, split into simple commands at `;`, `&`, `|`, newlines, and `(`. */
 function simpleCommands(command: string) {

@@ -2,7 +2,7 @@
  * The host bridge: Pico services that extensions use.
  *
  * The runtime and its extensions open before the services that need the
- * runtime (sessions, terminals, the event hub). Extensions get this bridge at
+ * runtime (agents, terminals, the event hub). Extensions get this bridge at
  * creation and wait for `bind()` when they first need a service. A tool that
  * restart recovery runs early waits here until the server is ready.
  */
@@ -15,12 +15,12 @@ import type { BrowserManager } from "../services/browser.ts"
 import type { Notifier } from "../services/notify.ts"
 import type { Terminals } from "../services/terminal.ts"
 
-/** Session operations that extensions use. `Sessions` implements it. */
-export type HostSessions = {
+/** Session operations that extensions use. `Agents` implements it. */
+export type HostAgents = {
   has(id: string | undefined): id is string
   /** The visible session for an ID, after tree navigation replacements. */
   current(id: string | undefined): string | undefined
-  meta(id: string): HostSessionMeta
+  meta(id: string): HostAgentMeta
   isBusy(id: string): boolean
   /** The tool calls that run now in a session, oldest first. */
   runningTools(
@@ -50,16 +50,16 @@ export type HostSessions = {
   ): Promise<ToolLimits>
   /** Children that `spawn_session` made for a session. */
   children(id: string): string[]
-  /** Sessions for tools, newest activity first. */
-  list(filter: { parent?: string; directory?: string }): HostSessionSummary[]
+  /** Agents for tools, newest activity first. */
+  list(filter: { parent?: string; directory?: string }): HostAgentSummary[]
   rename(id: string, name: string): string
   /** Mark a session read or unread for every client. */
   setRead(id: string, read: boolean): void
   /** Hide a session. It stays on disk and `restore` shows it again. */
   archive(id: string): void
   restore(id: string): void
-  /** Archived sessions, most recently archived first. */
-  archivedSessions(): Array<{
+  /** Archived agents, most recently archived first. */
+  archivedAgents(): Array<{
     id: string
     title: string
     cwd: string
@@ -71,7 +71,7 @@ export type HostSessions = {
   extensionStateChanged(id: string, kind: string): void
 }
 
-export type HostSessionMeta = {
+export type HostAgentMeta = {
   cwd: string
   name?: string
   parent?: string
@@ -87,7 +87,7 @@ export type HostSessionMeta = {
   messageCount: number
 }
 
-export type HostSessionSummary = {
+export type HostAgentSummary = {
   id: string
   title: string
   cwd: string
@@ -121,7 +121,7 @@ export type HostCreateOptions = {
 export type HostEvents = {
   push(
     payload: { type: string; [key: string]: unknown },
-    target?: { contextId?: string; sessionId?: string }
+    target?: { contextId?: string; agentId?: string }
   ): unknown
 }
 
@@ -135,7 +135,7 @@ export type HostTerminals = Pick<
   | "readText"
   | "writeForAgent"
   | "device"
-  | "sessionShells"
+  | "agentShells"
   | "adoptJob"
   | "forgetJob"
   | "stats"
@@ -144,7 +144,7 @@ export type HostTerminals = Pick<
 >
 
 export type HostServices = {
-  sessions: HostSessions
+  agents: HostAgents
   events: HostEvents
   terminals: HostTerminals
   harness: Harness
@@ -171,12 +171,12 @@ export class HostBridge {
     for (const waiter of this.#waiters.splice(0)) waiter(services)
   }
 
-  /** Run startup work once the server is ready, for example after sessions load. */
+  /** Run startup work once the server is ready, for example after agents load. */
   onReady(listener: (services: HostServices) => void | Promise<void>) {
     this.#onReady.push(listener)
   }
 
-  /** Called by the server after sessions load. */
+  /** Called by the server after agents load. */
   async started() {
     const services = this.#services
     if (!services) return
@@ -212,12 +212,12 @@ export class HostBridge {
 }
 
 /** Public session IDs are `s<conversation id>`; see `core/agents.ts`. */
-export function sessionIdOf(conversationId: ConversationId) {
+export function agentIdOf(conversationId: ConversationId) {
   return `s${conversationId}`
 }
 
-export function conversationOf(sessionId: string): ConversationId {
+export function conversationOf(agentId: string): ConversationId {
   return Number(
-    sessionId.startsWith("s") ? sessionId.slice(1) : sessionId
+    agentId.startsWith("s") ? agentId.slice(1) : agentId
   ) as unknown as ConversationId
 }

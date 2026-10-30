@@ -209,9 +209,9 @@ void test("the SSE parser joins data lines and skips comments", () => {
   parser.push(': keepalive\n\nid: 3\ndata: {"a":')
   parser.push("1}\n\ndata: x\ndata: y\n\n")
   assert.deepEqual(events, ['{"a":1}', "x\ny"])
-  assert.equal(parseSummary({ sessions: "no" }), undefined)
+  assert.equal(parseSummary({ agents: "no" }), undefined)
   assert.equal(
-    parseSummary({ sessions: [{ id: "s1", busy: true }] })?.sessions[0]?.busy,
+    parseSummary({ agents: [{ id: "s1", busy: true }] })?.agents[0]?.busy,
     true
   )
 })
@@ -219,7 +219,7 @@ void test("the SSE parser joins data lines and skips comments", () => {
 void test("the offline cache follows state patches and session lists", () => {
   assert.deepEqual(
     applyStatePatch(
-      { type: "state_sync", sessionId: "s1", items: [1, 2, 3] },
+      { type: "state_sync", agentId: "s1", items: [1, 2, 3] },
       {
         type: "state_sync",
         itemsPatch: {
@@ -233,7 +233,7 @@ void test("the offline cache follows state patches and session lists", () => {
     ),
     {
       type: "state_sync",
-      sessionId: "s1",
+      agentId: "s1",
       items: [1, 9, 8, 3],
       isStreaming: true,
     }
@@ -248,27 +248,27 @@ void test("the offline cache follows state patches and session lists", () => {
 
   const cache = new OfflineCache()
   const observe = cache.observeStream("ctx")
-  observe({ type: "state_sync", sessionId: "s1", items: ["a"] })
+  observe({ type: "state_sync", agentId: "s1", items: ["a"] })
   observe({
     type: "state_sync",
     itemsPatch: { previousLength: 1, start: 1, deleteCount: 0, items: ["b"] },
   })
-  observe({ type: "sessions", directories: ["/p"] })
-  const [state, sessions] = cache.bootstrap("ctx", "s1")
+  observe({ type: "agents", directories: ["/p"] })
+  const [state, agents] = cache.bootstrap("ctx", "s1")
   assert.deepEqual(state?.items, ["a", "b"])
-  assert.deepEqual(sessions?.directories, ["/p"])
+  assert.deepEqual(agents?.directories, ["/p"])
   assert.deepEqual(cache.bootstrap("other", undefined), [])
 
   cache.putResponse("/api/a", "application/json", Buffer.from("{}"))
   assert.equal(cache.response("/api/a")?.body.toString(), "{}")
   assert.equal(cache.response("/api/b"), undefined)
   assert.deepEqual(
-    parseSummary({ sessions: [{ id: "s1", unreadBy: ["ctx", 3] }] })
-      ?.sessions[0]?.unreadBy,
+    parseSummary({ agents: [{ id: "s1", unreadBy: ["ctx", 3] }] })
+      ?.agents[0]?.unreadBy,
     ["ctx"]
   )
   assert.equal(
-    parseSummary({ sessions: [{ id: "s1", unread: true }] })?.sessions[0]
+    parseSummary({ agents: [{ id: "s1", unread: true }] })?.agents[0]
       ?.unread,
     true
   )
@@ -570,9 +570,9 @@ void test("a hub proxies HTTP, SSE, and terminals to a remote machine", async ()
     assert.ok(manifest.capabilities.features.includes("machine-hub"))
     const summary = (await (
       await fetch(`${hub.url}/m/m_remote/api/machine/summary`)
-    ).json()) as { ok: boolean; sessions: unknown[] }
+    ).json()) as { ok: boolean; agents: unknown[] }
     assert.equal(summary.ok, true)
-    assert.deepEqual(summary.sessions, [])
+    assert.deepEqual(summary.agents, [])
     assert.equal(
       (await fetch(`${hub.url}/m/m_remote/api/machine/session/read?id=s999`))
         .status,
@@ -638,7 +638,7 @@ void test("a hub proxies HTTP, SSE, and terminals to a remote machine", async ()
     // A terminal WebSocket through the proxy.
     const scope = new URLSearchParams({
       context: "t",
-      sessionKey: `draft:${remoteData}`,
+      agentKey: `draft:${remoteData}`,
     }).toString()
     const created = (await (
       await fetch(`${hub.url}/m/m_remote/api/terminal?${scope}`, {

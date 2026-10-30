@@ -272,7 +272,7 @@ async function setup(
         )
       if (
         !(await confirm(
-          `Pico ${versionOf(manifest) ?? "(unknown version)"} on ${profile.label} is too old. Update it to ${VERSION} with npm and restart it? Sessions continue after the restart.`
+          `Pico ${versionOf(manifest) ?? "(unknown version)"} on ${profile.label} is too old. Update it to ${VERSION} with npm and restart it? Agents continue after the restart.`
         ))
       )
         throw new Error("Canceled. Pico on the remote machine is not updated.")
@@ -469,7 +469,7 @@ export async function machineCommand(argv: string[], hubDir: string) {
         profiles().filter((entry) => entry.id !== profile.id)
       )
       log(
-        `Removed ${profile.label}. Pico and its sessions keep running on that machine.`
+        `Removed ${profile.label}. Pico and its agents keep running on that machine.`
       )
       return
     }

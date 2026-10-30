@@ -19,12 +19,12 @@ export type PicoSettingsData = {
   scratchSpillKb: number
   /** Files that git ignores which a new worktree gets a copy of, such as `.env*`. */
   worktreeCopy: string[]
-  /** Live child sessions that one session may have. */
-  maxChildSessions: number
+  /** Live child agents that one session may have. */
+  maxSubagents: number
   /** How deep `spawn_session` may nest. */
-  maxSpawnDepth: number
+  maxSubagentDepth: number
   /** Notify devices when a run finishes. */
-  notifyRunDone: boolean
+  notifyTurnDone: boolean
   /** Notify devices when the agent asks a question. */
   notifyNeedsInput: boolean
   /** An ntfy topic URL that gets the same notifications; empty is off. */
@@ -55,9 +55,9 @@ export const DEFAULT_SETTINGS: PicoSettingsData = {
   cacheRetention: "standard",
   scratchSpillKb: 0,
   worktreeCopy: [".env*"],
-  maxChildSessions: 6,
-  maxSpawnDepth: 3,
-  notifyRunDone: true,
+  maxSubagents: 6,
+  maxSubagentDepth: 3,
+  notifyTurnDone: true,
   notifyNeedsInput: true,
   ntfyUrl: "",
   publicUrl: "",

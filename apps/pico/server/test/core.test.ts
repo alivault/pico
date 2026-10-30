@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { writeFile } from "node:fs/promises"
+import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { test } from "node:test"
 
@@ -7,7 +7,7 @@ import { Viewers } from "../src/core/viewers.ts"
 import { EventHub, eventMatches } from "../src/events.ts"
 import {
   cleanupCandidate,
-  heuristicSessionName,
+  heuristicAgentName,
 } from "../src/extensions/auto-name.ts"
 import {
   messageImages,
@@ -23,12 +23,12 @@ import { tempDir } from "./support.ts"
 
 void test("automatic names remove filler and stay short", () => {
   assert.equal(
-    heuristicSessionName("Please help me with `SQLite` recovery!", 0),
+    heuristicAgentName("Please help me with `SQLite` recovery!", 0),
     "SQLite recovery"
   )
   assert.equal(cleanupCandidate('Title: "SQLite recovery"'), "SQLite recovery")
-  assert.equal(heuristicSessionName("", 1), "Image task")
-  assert.equal(heuristicSessionName("", 0), undefined)
+  assert.equal(heuristicAgentName("", 1), "Image task")
+  assert.equal(heuristicAgentName("", 0), undefined)
   assert.equal(
     cleanupCandidate("Title: Fix database restart.\nOther text"),
     "Fix database restart"
@@ -40,13 +40,13 @@ void test("automatic names remove filler and stay short", () => {
 
 void test("events are ordered, scoped, and bounded", () => {
   const hub = new EventHub()
-  const event = hub.push({ type: "conversation_delta" }, { sessionId: "s1" })
+  const event = hub.push({ type: "conversation_delta" }, { agentId: "s1" })
   assert.ok(event.sequence > hub.firstSequence)
   assert.equal(eventMatches(event, "viewer", "s1"), true)
   assert.equal(eventMatches(event, "viewer", "s2"), false)
   assert.equal(
     eventMatches(
-      hub.push({ type: "sessions" }, { contextId: "one" }),
+      hub.push({ type: "agents" }, { contextId: "one" }),
       "two",
       undefined
     ),
@@ -190,11 +190,11 @@ void test("read state is global and an open tab keeps its session read", async (
   const changes: string[] = []
   viewers.onReadChange((id, unread) => changes.push(`${id}:${unread}`))
 
-  viewers.selectSession("tab-a", "s1")
+  viewers.selectAgent("tab-a", "s1")
   viewers.markDone("s2")
   assert.deepEqual([...viewers.unread()], ["s2"])
   // Read in one tab: read in all of them.
-  viewers.selectSession("tab-b", "s2")
+  viewers.selectAgent("tab-b", "s2")
   assert.equal(viewers.isUnread("s2"), false)
 
   // A closed tab that showed s1 does not keep it read; an open one does.
@@ -217,7 +217,12 @@ void test("read state is global and an open tab keeps its session read", async (
 
   viewers.flush()
   assert.deepEqual([...new Viewers(file).unread()], ["s1"])
-  assert.equal(new Viewers(file).get("tab-b")?.selectedSession, "s2")
+  assert.equal(new Viewers(file).get("tab-b")?.selectedAgent, "s2")
+  // The file keeps the stored names.
+  const stored = JSON.parse(await readFile(file, "utf8")) as {
+    contexts: Record<string, { selectedSession?: string }>
+  }
+  assert.equal(stored.contexts["tab-b"]?.selectedSession, "s2")
 })
 
 void test("viewer contexts from before global read state keep the newest unread list", async () => {
@@ -237,6 +242,6 @@ void test("viewer contexts from before global read state keep the newest unread 
   )
   const viewers = new Viewers(file)
   assert.deepEqual([...viewers.unread()], ["s2"])
-  assert.equal(viewers.get("new")?.selectedSession, "s3")
-  assert.deepEqual(viewers.get("new")?.sidebarDirectories, ["/p"])
+  assert.equal(viewers.get("new")?.selectedAgent, "s3")
+  assert.deepEqual(viewers.get("new")?.sidebarProjects, ["/p"])
 })

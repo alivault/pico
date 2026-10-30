@@ -1,15 +1,26 @@
 /**
  * The sidebar layout that all devices share, in `~/.pico/sidebar.json`: the
- * added directories in order, the pinned sessions, and the collapsed
- * directories. Each change increases `revision`.
+ * added projects in order, the pinned agents, and the collapsed projects.
+ * Each change increases `revision`.
  */
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 
 export type SidebarStateData = {
-  directories: string[]
-  pinnedSessionKeys: string[]
-  collapsedDirectories: Record<string, true>
+  projects: string[]
+  pinnedAgentKeys: string[]
+  collapsedProjects: Record<string, true>
+}
+
+/**
+ * The fields in `sidebar.json`. Stored names: do not change. They are the
+ * names from before the rename of agents to agents.
+ */
+type StoredSidebarState = {
+  directories?: unknown
+  pinnedSessionKeys?: unknown
+  collapsedDirectories?: unknown
+  revision?: unknown
 }
 
 export type SidebarStateSnapshot = SidebarStateData & {
@@ -19,9 +30,9 @@ export type SidebarStateSnapshot = SidebarStateData & {
 }
 
 export type SidebarStateChange = Partial<{
-  directories: unknown
-  pinnedSessionKeys: unknown
-  collapsedDirectories: unknown
+  projects: unknown
+  pinnedAgentKeys: unknown
+  collapsedProjects: unknown
 }>
 
 /** Trimmed, unique, non-empty strings in their first order. */
@@ -38,13 +49,13 @@ export function normalizeStringList(value: unknown): string[] {
   return result
 }
 
-/** Only the collapsed directories; a false value is the same as absent. */
+/** Only the collapsed projects; a false value is the same as absent. */
 export function normalizeCollapsed(value: unknown): Record<string, true> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {}
   const result: Record<string, true> = {}
   for (const [key, collapsed] of Object.entries(value)) {
-    const directory = key.trim()
-    if (directory && collapsed) result[directory] = true
+    const project = key.trim()
+    if (project && collapsed) result[project] = true
   }
   return result
 }
@@ -62,7 +73,7 @@ export class SidebarState {
 
   constructor(file: string) {
     this.#file = file
-    let stored: Partial<SidebarStateData & { revision: number }> | undefined
+    let stored: StoredSidebarState | undefined
     try {
       stored = JSON.parse(readFileSync(file, "utf8")) as typeof stored
     } catch {
@@ -74,17 +85,17 @@ export class SidebarState {
         ? stored.revision
         : 0
     this.#data = {
-      directories: normalizeStringList(stored?.directories),
-      pinnedSessionKeys: normalizeStringList(stored?.pinnedSessionKeys),
-      collapsedDirectories: normalizeCollapsed(stored?.collapsedDirectories),
+      projects: normalizeStringList(stored?.directories),
+      pinnedAgentKeys: normalizeStringList(stored?.pinnedSessionKeys),
+      collapsedProjects: normalizeCollapsed(stored?.collapsedDirectories),
     }
   }
 
   snapshot(): SidebarStateSnapshot {
     return {
-      directories: [...this.#data.directories],
-      pinnedSessionKeys: [...this.#data.pinnedSessionKeys],
-      collapsedDirectories: { ...this.#data.collapsedDirectories },
+      projects: [...this.#data.projects],
+      pinnedAgentKeys: [...this.#data.pinnedAgentKeys],
+      collapsedProjects: { ...this.#data.collapsedProjects },
       revision: this.#revision,
       initialized: this.#initialized,
     }
@@ -93,14 +104,12 @@ export class SidebarState {
   /** Replace the given fields. */
   update(change: SidebarStateChange) {
     const next = { ...this.#data }
-    if (change.directories !== undefined)
-      next.directories = normalizeStringList(change.directories)
-    if (change.pinnedSessionKeys !== undefined)
-      next.pinnedSessionKeys = normalizeStringList(change.pinnedSessionKeys)
-    if (change.collapsedDirectories !== undefined)
-      next.collapsedDirectories = normalizeCollapsed(
-        change.collapsedDirectories
-      )
+    if (change.projects !== undefined)
+      next.projects = normalizeStringList(change.projects)
+    if (change.pinnedAgentKeys !== undefined)
+      next.pinnedAgentKeys = normalizeStringList(change.pinnedAgentKeys)
+    if (change.collapsedProjects !== undefined)
+      next.collapsedProjects = normalizeCollapsed(change.collapsedProjects)
     return this.#save(next)
   }
 
@@ -110,17 +119,17 @@ export class SidebarState {
    */
   merge(change: SidebarStateChange) {
     return this.#save({
-      directories: appendMissing(
-        this.#data.directories,
-        normalizeStringList(change.directories)
+      projects: appendMissing(
+        this.#data.projects,
+        normalizeStringList(change.projects)
       ),
-      pinnedSessionKeys: appendMissing(
-        this.#data.pinnedSessionKeys,
-        normalizeStringList(change.pinnedSessionKeys)
+      pinnedAgentKeys: appendMissing(
+        this.#data.pinnedAgentKeys,
+        normalizeStringList(change.pinnedAgentKeys)
       ),
-      collapsedDirectories: {
-        ...normalizeCollapsed(change.collapsedDirectories),
-        ...this.#data.collapsedDirectories,
+      collapsedProjects: {
+        ...normalizeCollapsed(change.collapsedProjects),
+        ...this.#data.collapsedProjects,
       },
     })
   }
@@ -131,10 +140,13 @@ export class SidebarState {
     this.#initialized = true
     mkdirSync(dirname(this.#file), { recursive: true })
     const temporary = `${this.#file}.tmp`
-    writeFileSync(
-      temporary,
-      JSON.stringify({ ...this.#data, revision: this.#revision }, null, 2)
-    )
+    const stored: StoredSidebarState = {
+      directories: this.#data.projects,
+      pinnedSessionKeys: this.#data.pinnedAgentKeys,
+      collapsedDirectories: this.#data.collapsedProjects,
+      revision: this.#revision,
+    }
+    writeFileSync(temporary, JSON.stringify(stored, null, 2))
     renameSync(temporary, this.#file)
     return this.snapshot()
   }

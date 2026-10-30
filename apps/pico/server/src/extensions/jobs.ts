@@ -31,7 +31,7 @@ import {
   type ToolExecutionApi,
 } from "@earendil-works/pi-durable"
 
-import { childCommandRefusal } from "../core/coding-tools.ts"
+import { subagentCommandRefusal } from "../core/coding-tools.ts"
 import {
   deleteJobLog,
   jobLogParts,
@@ -53,7 +53,7 @@ import { formatBytes, jobResources } from "../services/resources.ts"
 import { loginShell } from "../services/terminal.ts"
 import {
   conversationOf,
-  sessionIdOf,
+  agentIdOf,
   type HostBridge,
   type HostServices,
 } from "./host.ts"
@@ -138,7 +138,7 @@ export const JobIndexDoc = defineDoc<{ running: Record<string, number> }>({
   initial: () => ({ running: {} }),
 })
 
-const MAX_RUNNING_PER_SESSION = 8
+const MAX_RUNNING_PER_AGENT = 8
 const KEEP_FINISHED = 30
 /** Job logs older than this go at startup (see `deleteOldJobLogs`). */
 const OLD_LOG_MS = 7 * 24 * 60 * 60 * 1000
@@ -266,15 +266,15 @@ async function editRunningJob(
 }
 
 /** Send a steer to the session of a conversation, or its replacement (see `notifyAgent`). */
-async function notifySession(
+async function steerAgent(
   services: HostServices,
   conversationId: ConversationId,
   text: string,
   requestId: string
 ) {
   const current =
-    services.sessions.current(sessionIdOf(conversationId)) ??
-    sessionIdOf(conversationId)
+    services.agents.current(agentIdOf(conversationId)) ??
+    agentIdOf(conversationId)
   const conversation = await services.harness.conversation(
     conversationOf(current),
     BACKGROUND_CONTEXT
@@ -498,7 +498,7 @@ class JobRunner {
         },
         ignored: (prompt, secret) => {
           if (!job.notifyOnExit) return
-          void notifySession(
+          void steerAgent(
             services,
             conversationId,
             [
@@ -552,7 +552,7 @@ class JobRunner {
       )
         return
       live.reported = episode
-      await notifySession(
+      await steerAgent(
         services,
         conversationId,
         [
@@ -739,7 +739,7 @@ class JobRunner {
       name: live.job.name,
       command: live.job.command,
       startedAt: live.job.startedAt,
-      sessionId: sessionIdOf(live.conversationId),
+      agentId: agentIdOf(live.conversationId),
     }))
   }
 
@@ -833,7 +833,7 @@ class JobRunner {
       // A wait that saw the exit told the agent already.
       if (job.notifyOnExit && !stopped && !reported) {
         const output = await readJobLog(this.#dataDir, job.id, 40)
-        await notifySession(
+        await steerAgent(
           services,
           conversationId,
           [
@@ -964,7 +964,7 @@ class JobRunner {
     // Children that ignore SIGHUP live on in the job's scope: stop it.
     void stopScope(jobId)
     if (job?.notifyOnExit) {
-      await notifySession(
+      await steerAgent(
         services,
         conversationId,
         [
@@ -1036,13 +1036,13 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
   }
 
   /** Refuse a call that brings in the user from a child session. */
-  const childRefusal = (
+  const subagentRefusal = (
     services: HostServices,
     conversationId: ConversationId
   ) => {
-    const id = sessionIdOf(conversationId)
-    if (!services.sessions.has(id)) return undefined
-    const meta = services.sessions.meta(id)
+    const id = agentIdOf(conversationId)
+    if (!services.agents.has(id)) return undefined
+    const meta = services.agents.meta(id)
     if (!meta.parent || meta.limits?.add?.includes("ask_user")) return undefined
     return 'A child session cannot call the user. Ask your parent session: end your turn with a message that starts with "Question:".'
   }
@@ -1084,19 +1084,19 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       }
     }
     if (input.interactive) {
-      const refusal = childRefusal(services, api.conversationId)
+      const refusal = subagentRefusal(services, api.conversationId)
       if (refusal) return { error: refusal }
     }
     const jobs = await api.snapshot(JobsDoc, api.conversationId, context)
     const running = Object.values(jobs?.items ?? {}).filter(
       (job) => job.status === "running"
     )
-    if (running.length >= MAX_RUNNING_PER_SESSION)
+    if (running.length >= MAX_RUNNING_PER_AGENT)
       return {
         error: `This session already runs ${running.length} jobs. Stop one first.`,
       }
     const cwd = input.cwd?.trim() || (await cwdOf(api, context))
-    const refusal = await childCommandRefusal(
+    const refusal = await subagentCommandRefusal(
       host,
       api.conversationId,
       input.command,
@@ -1398,7 +1398,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     context: Context
   ) => {
     const services = await host.ready(context.abortSignal)
-    const refusal = childRefusal(services, api.conversationId)
+    const refusal = subagentRefusal(services, api.conversationId)
     if (refusal) return { error: refusal }
     if (job.status !== "running" || !runner.running(job.id))
       return { error: `Job ${job.id} does not run (${job.status}).` }
@@ -1508,8 +1508,8 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     }),
     async execute(args, api, context) {
       const services = await host.ready(context.abortSignal)
-      const sessionId = sessionIdOf(api.conversationId)
-      const shells = () => services.terminals.sessionShells(sessionId)
+      const agentId = agentIdOf(api.conversationId)
+      const shells = () => services.terminals.agentShells(agentId)
       // A user's terminal: "u-" and at least the 8 characters that list shows.
       const userShell = (id: string) =>
         id.startsWith("u-") && id.length >= 10

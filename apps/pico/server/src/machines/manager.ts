@@ -48,7 +48,7 @@ export type MachineState =
   | "disabled"
 
 /** One session in a machine summary. */
-export type SessionStatusSummary = {
+export type AgentStatusSummary = {
   id: string
   title: string
   cwd: string
@@ -70,12 +70,12 @@ export type SessionStatusSummary = {
   lastUserMessageAt?: number
 }
 
-/** What a server tells a hub about its sessions. */
+/** What a server tells a hub about its agents. */
 export type MachineSummary = {
   hostname: string
   version: string
   directories: string[]
-  sessions: SessionStatusSummary[]
+  agents: AgentStatusSummary[]
 }
 
 export type MachineInfo = {
@@ -92,7 +92,7 @@ export type MachineInfo = {
   retryAt?: number
   version?: string
   features?: string[]
-  /** The last known sessions; kept while the machine is offline. */
+  /** The last known agents; kept while the machine is offline. */
   summary?: MachineSummary
 }
 
@@ -154,7 +154,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function parseSummary(value: unknown): MachineSummary | undefined {
-  if (!isRecord(value) || !Array.isArray(value.sessions)) return undefined
+  if (!isRecord(value) || !Array.isArray(value.agents)) return undefined
   return {
     hostname: typeof value.hostname === "string" ? value.hostname : "",
     version: typeof value.version === "string" ? value.version : "",
@@ -163,7 +163,7 @@ export function parseSummary(value: unknown): MachineSummary | undefined {
           (entry): entry is string => typeof entry === "string"
         )
       : [],
-    sessions: value.sessions.flatMap((entry): SessionStatusSummary[] => {
+    agents: value.agents.flatMap((entry): AgentStatusSummary[] => {
       if (!isRecord(entry) || typeof entry.id !== "string") return []
       return [
         {

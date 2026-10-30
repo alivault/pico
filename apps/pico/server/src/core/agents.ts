@@ -1,5 +1,5 @@
 /**
- * Sessions on durable conversations.
+ * Agents on durable conversations.
  *
  * A Pico session is an ownerless durable conversation with a `pico.session`
  * document: its directory, name, summary, and labels. Navigating the session
@@ -40,8 +40,8 @@ import { resizeImage } from "@earendil-works/pi-coding-agent"
 
 import {
   cleanupCandidate,
-  generateSessionName,
-  heuristicSessionName,
+  generateAgentName,
+  heuristicAgentName,
 } from "../extensions/auto-name.ts"
 import {
   answerQuestion,
@@ -53,8 +53,8 @@ import {
 } from "../extensions/ask.ts"
 import type {
   HostCreateOptions,
-  HostSessions,
-  HostSessionSummary,
+  HostAgents,
+  HostAgentSummary,
 } from "../extensions/host.ts"
 import { updateTodo, type TodoChange } from "../extensions/todo.ts"
 import { JobsDoc, jobNeedingUser, type JobsState } from "../extensions/jobs.ts"
@@ -103,7 +103,7 @@ const ALL_THINKING_LEVELS: ModelThinkingLevel[] = [
   "max",
 ]
 
-export type SessionMeta = {
+export type AgentMeta = {
   cwd: string
   name?: string
   /** `auto` names may be refined; `user` names are never replaced. */
@@ -134,13 +134,13 @@ export type SessionMeta = {
   profile?: string
   /** Tool limits that the parent set for a child session. */
   limits?: ToolLimits
-  /** The sidebar directory, when it is not `cwd` (worktree sessions). */
+  /** The sidebar directory, when it is not `cwd` (worktree agents). */
   group?: string
   /** The git worktree that this session made and works in. */
   worktree?: { repoRoot: string; path: string; branch: string }
 }
 
-export const SessionDoc = defineDoc<SessionMeta>({
+export const AgentMetaDoc = defineDoc<AgentMeta>({
   kind: "pico.session",
   checkpointWhen: () => false,
   version: 1,
@@ -156,7 +156,7 @@ export const SessionDoc = defineDoc<SessionMeta>({
   }),
 })
 
-export type SessionListEntry = {
+export type AgentListEntry = {
   path: string
   id: string
   cwd: string
@@ -221,16 +221,16 @@ export function conversationIdOf(id: string): ConversationId {
   ) as unknown as ConversationId
 }
 
-export function sessionPath(id: string) {
+export function agentPath(id: string) {
   return `pico:${id}`
 }
 
-export function sessionKey(id: string) {
+export function agentKey(id: string) {
   return `session:${id}`
 }
 
 /** A session ID from a session ID, key, or path. */
-export function parseSessionId(value: string | undefined): string | undefined {
+export function parseAgentId(value: string | undefined): string | undefined {
   const trimmed = value?.trim()
   if (!trimmed) return undefined
   if (trimmed.startsWith("pico:")) return trimmed.slice(5)
@@ -410,11 +410,11 @@ function submissionIdFromPending(pendingId: string): SubmissionId {
   return id as unknown as SubmissionId
 }
 
-export class Sessions implements HostSessions {
+export class Agents implements HostAgents {
   readonly #runtime: Runtime
   readonly #hub: EventHub
   readonly #viewers: Viewers
-  readonly #metas = new Map<string, SessionMeta>()
+  readonly #metas = new Map<string, AgentMeta>()
   readonly #docs = new Map<string, Docs>()
   readonly #transcripts = new Map<string, Transcript>()
   readonly #loading = new Map<string, Promise<Transcript>>()
@@ -426,11 +426,11 @@ export class Sessions implements HostSessions {
   readonly #dirty = new Map<string, Dirty>()
   readonly #metaWrites = new Map<string, NodeJS.Timeout>()
   readonly #naming = new Set<string>()
-  /** Sessions whose agent waits for the user. */
+  /** Agents whose agent waits for the user. */
   readonly #needsInput = new Set<string>()
-  /** Sessions with an open `ask_user` question. */
+  /** Agents with an open `ask_user` question. */
   readonly #questionWaits = new Set<string>()
-  /** Sessions with a job that needs the user (see `jobNeedingUser`). */
+  /** Agents with a job that needs the user (see `jobNeedingUser`). */
   readonly #jobWaits = new Map<
     string,
     { jobId: string; name: string; prompt: string }
@@ -440,7 +440,7 @@ export class Sessions implements HostSessions {
   readonly #held = new Map<string, HeldItem[]>()
   #stateKinds: Set<string> | undefined
   #flushScheduled = false
-  #sessionsTimer: NodeJS.Timeout | undefined
+  #agentsTimer: NodeJS.Timeout | undefined
 
   constructor(runtime: Runtime, hub: EventHub, viewers: Viewers) {
     this.#runtime = runtime
@@ -451,13 +451,13 @@ export class Sessions implements HostSessions {
       if (!this.#metas.has(id)) return
       this.#hub.push({
         type: "session_status",
-        sessionId: id,
-        sessionKey: sessionKey(id),
-        sessionPath: sessionPath(id),
+        agentId: id,
+        agentKey: agentKey(id),
+        agentPath: agentPath(id),
         streaming: this.isBusy(id),
         unread,
       })
-      this.#scheduleSessionsBroadcast()
+      this.#scheduleAgentsBroadcast()
     })
   }
 
@@ -481,7 +481,7 @@ export class Sessions implements HostSessions {
     await Promise.all(
       ids.map(async (conversationId) => {
         const meta = await this.#harness.snapshot(
-          SessionDoc,
+          AgentMetaDoc,
           conversationId,
           ctx
         )
@@ -517,7 +517,7 @@ export class Sessions implements HostSessions {
     return id !== undefined && this.#metas.has(id)
   }
 
-  meta(id: string): SessionMeta {
+  meta(id: string): AgentMeta {
     const meta = this.#metas.get(id)
     if (!meta) throw notFound(`Unknown session: ${id}`)
     return meta
@@ -525,7 +525,7 @@ export class Sessions implements HostSessions {
 
   /** The visible session for an ID, following tree navigation replacements. */
   current(id: string | undefined): string | undefined {
-    let current = parseSessionId(id)
+    let current = parseAgentId(id)
     for (let hops = 0; current && hops < 100; hops += 1) {
       const meta = this.#metas.get(current)
       if (!meta) return undefined
@@ -554,7 +554,7 @@ export class Sessions implements HostSessions {
     return conversation
   }
 
-  activeRunCount() {
+  activeTurnCount() {
     let count = 0
     for (const busy of this.#busy.values()) if (busy) count += 1
     return count
@@ -684,7 +684,7 @@ export class Sessions implements HostSessions {
           // A session-wide document: every session may show it.
           this.#hub.push({
             type: "session_extensions",
-            sessionId: "*",
+            agentId: "*",
             kind: change.record.kind,
           })
           continue
@@ -765,7 +765,7 @@ export class Sessions implements HostSessions {
     const time =
       typeof message?.timestamp === "number" ? message.timestamp : Date.now()
     const text = messageText(message as never)
-    const change: Partial<SessionMeta> = {
+    const change: Partial<AgentMeta> = {
       messageCount: meta.messageCount + 1,
       lastMessageAt: time,
       modifiedAt: Date.now(),
@@ -786,8 +786,8 @@ export class Sessions implements HostSessions {
   /** Tell clients to read a session's Agent panel state again. */
   extensionStateChanged(id: string, kind: string) {
     this.#hub.push(
-      { type: "session_extensions", sessionId: id, ...(kind ? { kind } : {}) },
-      { sessionId: id }
+      { type: "session_extensions", agentId: id, ...(kind ? { kind } : {}) },
+      { agentId: id }
     )
   }
 
@@ -863,13 +863,13 @@ export class Sessions implements HostSessions {
     if (waiting === this.#needsInput.has(id)) return
     if (waiting) this.#needsInput.add(id)
     else this.#needsInput.delete(id)
-    this.#scheduleSessionsBroadcast()
+    this.#scheduleAgentsBroadcast()
     this.#hub.push(
       {
         type: "session_status",
-        sessionId: id,
-        sessionKey: sessionKey(id),
-        sessionPath: sessionPath(id),
+        agentId: id,
+        agentKey: agentKey(id),
+        agentPath: agentPath(id),
         streaming: this.isBusy(id),
         needsInput: waiting,
         ...(waiting && job
@@ -881,7 +881,7 @@ export class Sessions implements HostSessions {
             }
           : {}),
       },
-      { sessionId: id }
+      { agentId: id }
     )
     void this.publishStateIfWatched(id)
   }
@@ -901,22 +901,22 @@ export class Sessions implements HostSessions {
     if (waiting === this.#waiting.get(id)) return
     if (waiting) this.#waiting.set(id, waiting)
     else this.#waiting.delete(id)
-    this.#scheduleSessionsBroadcast()
+    this.#scheduleAgentsBroadcast()
     this.#hub.push(
       {
         type: "session_status",
-        sessionId: id,
-        sessionKey: sessionKey(id),
-        sessionPath: sessionPath(id),
+        agentId: id,
+        agentKey: agentKey(id),
+        agentPath: agentPath(id),
         streaming: this.isBusy(id),
         // An empty string tells clients that it waits on nothing.
         waiting: waiting ?? "",
       },
-      { sessionId: id }
+      { agentId: id }
     )
   }
 
-  list(filter: { parent?: string; directory?: string }): HostSessionSummary[] {
+  list(filter: { parent?: string; directory?: string }): HostAgentSummary[] {
     return [...this.#metas.entries()]
       .filter(
         ([id, meta]) =>
@@ -945,7 +945,7 @@ export class Sessions implements HostSessions {
       }))
   }
 
-  /** Visible sessions that `spawn_session` made for a session, oldest first. */
+  /** Visible agents that `spawn_session` made for a session, oldest first. */
   children(id: string): string[] {
     return [...this.#metas.entries()]
       .filter(
@@ -971,14 +971,14 @@ export class Sessions implements HostSessions {
     this.#dirty.clear()
     for (const [id, changes] of dirty) {
       try {
-        await this.#flushSession(id, changes)
+        await this.#flushAgent(id, changes)
       } catch (error) {
         console.error(`[pico] could not publish session ${id}:`, error)
       }
     }
   }
 
-  async #flushSession(id: string, changes: Dirty) {
+  async #flushAgent(id: string, changes: Dirty) {
     const docs = this.#docs.get(id) ?? {}
     const busy = docs.live?.run !== undefined
     const wasBusy = this.#busy.get(id) === true
@@ -994,19 +994,19 @@ export class Sessions implements HostSessions {
       this.#hub.push(
         {
           type: "session_status",
-          sessionId: id,
-          sessionKey: sessionKey(id),
-          sessionPath: sessionPath(id),
+          agentId: id,
+          agentKey: agentKey(id),
+          agentPath: agentPath(id),
           streaming: busy,
         },
-        { sessionId: id }
+        { agentId: id }
       )
-      this.#scheduleSessionsBroadcast()
+      this.#scheduleAgentsBroadcast()
     }
     if ((wasBusy && !busy) || (wasCompacting && !compacting && !busy)) {
       await this.#finished(id, wasBusy && !busy ? "agent" : "manual_compaction")
     }
-    if (changes.entries) this.#scheduleSessionsBroadcast()
+    if (changes.entries) this.#scheduleAgentsBroadcast()
     if (changes.extensions) this.extensionStateChanged(id, "")
 
     if (!this.#watched(id)) return
@@ -1033,8 +1033,8 @@ export class Sessions implements HostSessions {
       this.#streaming.set(id, next)
       if (operations.length === 0) return
       this.#hub.push(
-        { type: "conversation_delta", sessionId: id, operations },
-        { sessionId: id }
+        { type: "conversation_delta", agentId: id, operations },
+        { agentId: id }
       )
     }
   }
@@ -1072,9 +1072,9 @@ export class Sessions implements HostSessions {
       {
         type: "session_done",
         id: `done:${id}:${this.#hub.currentSequence + 1}`,
-        sessionId: id,
-        sessionKey: sessionKey(id),
-        sessionPath: sessionPath(id),
+        agentId: id,
+        agentKey: agentKey(id),
+        agentPath: agentPath(id),
         cwd: meta?.cwd,
         title: this.#title(id),
         reason,
@@ -1083,16 +1083,16 @@ export class Sessions implements HostSessions {
         // The agent goes on when its timer, watch, or job fires.
         ...(this.#waiting.has(id) ? { waiting: this.#waiting.get(id) } : {}),
       },
-      { sessionId: id }
+      { agentId: id }
     )
-    this.#scheduleSessionsBroadcast()
+    this.#scheduleAgentsBroadcast()
   }
 
-  #scheduleSessionsBroadcast() {
-    if (this.#sessionsTimer) return
-    this.#sessionsTimer = setTimeout(() => {
-      this.#sessionsTimer = undefined
-      this.#hub.push(this.sessionsPayload({ unread: this.#viewers.unread() }))
+  #scheduleAgentsBroadcast() {
+    if (this.#agentsTimer) return
+    this.#agentsTimer = setTimeout(() => {
+      this.#agentsTimer = undefined
+      this.#hub.push(this.agentsPayload({ unread: this.#viewers.unread() }))
     }, 200)
   }
 
@@ -1101,12 +1101,12 @@ export class Sessions implements HostSessions {
 
   #updateMeta(
     id: string,
-    change: Partial<SessionMeta>,
+    change: Partial<AgentMeta>,
     options: { persistAfterMs?: number } = {}
   ) {
     const meta = this.#metas.get(id)
     if (!meta) return
-    const next: SessionMeta = { ...meta, ...change }
+    const next: AgentMeta = { ...meta, ...change }
     for (const [key, value] of Object.entries(change)) {
       if (value === undefined) delete (next as Record<string, unknown>)[key]
     }
@@ -1136,7 +1136,7 @@ export class Sessions implements HostSessions {
     try {
       await this.#harness.commit(async (tx) => {
         const draft = (await tx.doc(
-          SessionDoc,
+          AgentMetaDoc,
           conversationId
         )) as unknown as Record<string, unknown>
         for (const key of Object.keys(draft)) {
@@ -1167,10 +1167,10 @@ export class Sessions implements HostSessions {
   // ---------------------------------------------------------------------------
   // Lists
 
-  summary(id: string, unread: Set<string>): SessionListEntry {
+  summary(id: string, unread: Set<string>): AgentListEntry {
     const meta = this.meta(id)
     return {
-      path: sessionPath(id),
+      path: agentPath(id),
       id,
       cwd: meta.cwd,
       ...(meta.name ? { name: meta.name } : {}),
@@ -1199,8 +1199,8 @@ export class Sessions implements HostSessions {
     return meta.group ?? meta.cwd
   }
 
-  /** Visible sessions of a directory, most recently active first. */
-  directorySessions(directory: string): string[] {
+  /** Visible agents of a directory, most recently active first. */
+  projectAgents(directory: string): string[] {
     return [...this.#metas.entries()]
       .filter(
         ([id, meta]) =>
@@ -1237,37 +1237,37 @@ export class Sessions implements HostSessions {
   }
 
   directoryIndex(directory: string, unread: Set<string>) {
-    const ids = this.directorySessions(directory)
+    const ids = this.projectAgents(directory)
     return {
       directory,
       totalCount: ids.length,
       revision: this.#revision(directory, ids, unread),
-      sessions: ids.map((id) => this.summary(id, unread)),
+      agents: ids.map((id) => this.summary(id, unread)),
     }
   }
 
-  sessionsPayload(options: {
-    activeSessionId?: string
+  agentsPayload(options: {
+    activeAgentId?: string
     directories?: string[]
     unread?: Set<string>
   }) {
     const unread = options.unread ?? new Set<string>()
     const directories = this.directories()
     const indexDirectories = new Set(options.directories ?? [])
-    if (options.activeSessionId && this.#metas.has(options.activeSessionId)) {
-      indexDirectories.add(this.directoryOf(options.activeSessionId))
+    if (options.activeAgentId && this.#metas.has(options.activeAgentId)) {
+      indexDirectories.add(this.directoryOf(options.activeAgentId))
     }
     const directoryIndexes: Record<
       string,
-      ReturnType<Sessions["directoryIndex"]>
+      ReturnType<Agents["directoryIndex"]>
     > = {}
     for (const directory of indexDirectories)
       directoryIndexes[directory] = this.directoryIndex(directory, unread)
     return {
-      type: "sessions",
+      type: "agents",
       directories,
       directoryStates: directories.map((path) => {
-        const ids = this.directorySessions(path)
+        const ids = this.projectAgents(path)
         return {
           path,
           totalCount: ids.length,
@@ -1275,11 +1275,11 @@ export class Sessions implements HostSessions {
         }
       }),
       directoryIndexes,
-      ...(options.activeSessionId && this.#metas.has(options.activeSessionId)
+      ...(options.activeAgentId && this.#metas.has(options.activeAgentId)
         ? {
-            activeSessionPath: sessionPath(options.activeSessionId),
-            activeSessionId: options.activeSessionId,
-            activeSessionKey: sessionKey(options.activeSessionId),
+            activeAgentPath: agentPath(options.activeAgentId),
+            activeAgentId: options.activeAgentId,
+            activeAgentKey: agentKey(options.activeAgentId),
           }
         : {}),
     }
@@ -1434,13 +1434,13 @@ export class Sessions implements HostSessions {
     const modelRef = agentState?.model ?? this.defaultModel()
     return {
       type: "state_sync",
-      sessionKey: sessionKey(id),
-      sessionId: id,
-      sessionFile: sessionPath(id),
-      ...(meta.name ? { sessionName: meta.name } : {}),
+      agentKey: agentKey(id),
+      agentId: id,
+      agentFile: agentPath(id),
+      ...(meta.name ? { agentName: meta.name } : {}),
       ...(meta.parent && this.#metas.has(meta.parent)
         ? {
-            parentSession: { id: meta.parent, title: this.#title(meta.parent) },
+            parentAgent: { id: meta.parent, title: this.#title(meta.parent) },
           }
         : {}),
       ...(meta.worktree ? { worktree: meta.worktree } : {}),
@@ -1492,7 +1492,7 @@ export class Sessions implements HostSessions {
     const modelRef = draft.model ?? this.defaultModel()
     return {
       type: "state_sync",
-      sessionKey: draft.sessionKey,
+      agentKey: draft.agentKey,
       cwd: draft.cwd,
       draft: true,
       streaming: false,
@@ -1515,7 +1515,7 @@ export class Sessions implements HostSessions {
   /** Send the session's state to the clients that show it. */
   async publishState(id: string, options: EditorContent = {}) {
     if (!this.#metas.has(id)) return
-    this.#hub.push(await this.stateSync(id, options), { sessionId: id })
+    this.#hub.push(await this.stateSync(id, options), { agentId: id })
   }
 
   async history(id: string, before: number | undefined, limit: number) {
@@ -1544,7 +1544,7 @@ export class Sessions implements HostSessions {
       : this.defaultThinkingLevel()
     const now = Date.now()
     const parent = options.parent ? this.#metas.get(options.parent) : undefined
-    const meta: SessionMeta = {
+    const meta: AgentMeta = {
       cwd,
       createdAt: now,
       modifiedAt: now,
@@ -1571,7 +1571,7 @@ export class Sessions implements HostSessions {
         ownership: { kind: "ownerless" },
         agent: { model, thinkingLevel, cwd },
         init: async (tx, conversationId) => {
-          Object.assign(await tx.doc(SessionDoc, conversationId), meta)
+          Object.assign(await tx.doc(AgentMetaDoc, conversationId), meta)
         },
       },
       ctx
@@ -1595,7 +1595,7 @@ export class Sessions implements HostSessions {
         this.#toolOptions(meta)
       )
     }
-    this.#scheduleSessionsBroadcast()
+    this.#scheduleAgentsBroadcast()
     if (options.parent) this.extensionStateChanged(options.parent, "children")
     return id
   }
@@ -1679,10 +1679,10 @@ export class Sessions implements HostSessions {
 
   /** Name an unnamed session from its first prompt: a heuristic now, the model's name soon. */
   #autoName(id: string, text: string, imageCount: number) {
-    const heuristic = heuristicSessionName(text, imageCount)
+    const heuristic = heuristicAgentName(text, imageCount)
     if (heuristic) {
       this.#updateMeta(id, { name: heuristic, nameSource: "auto" })
-      this.#scheduleSessionsBroadcast()
+      this.#scheduleAgentsBroadcast()
       void this.publishStateIfWatched(id)
     }
     if (this.#naming.has(id)) return
@@ -1692,13 +1692,13 @@ export class Sessions implements HostSessions {
         this.#hub.push(
           {
             type: "auto_session_naming_error",
-            sessionId: id,
+            agentId: id,
             cwd: this.#metas.get(id)?.cwd,
             promptPreview: preview(text),
             imageCount,
             refinementReason: `${error instanceof Error ? error.message : String(error)}. Kept the current title.`,
           },
-          { sessionId: id }
+          { agentId: id }
         )
       })
       .finally(() => this.#naming.delete(id))
@@ -1708,7 +1708,7 @@ export class Sessions implements HostSessions {
     const agentState = await this.#doc(id, "agent")
     const model = this.#model(agentState?.model ?? this.defaultModel())
     if (!model) throw new Error("No model selected")
-    const name = await generateSessionName(this.#runtime.models, model, {
+    const name = await generateAgentName(this.#runtime.models, model, {
       text,
       imageCount,
       cwd: this.meta(id).cwd,
@@ -1716,7 +1716,7 @@ export class Sessions implements HostSessions {
     const meta = this.#metas.get(id)
     if (!meta || (meta.name && meta.nameSource === "user")) return
     this.#updateMeta(id, { name, nameSource: "auto" })
-    this.#scheduleSessionsBroadcast()
+    this.#scheduleAgentsBroadcast()
     await this.publishStateIfWatched(id)
   }
 
@@ -1829,7 +1829,7 @@ export class Sessions implements HostSessions {
   }
 
   /** The child limits of a session, for `applyProfile`. */
-  #toolOptions(meta: SessionMeta) {
+  #toolOptions(meta: AgentMeta) {
     return {
       ...(meta.parent ? { child: { parent: meta.parent } } : {}),
       ...(meta.limits ? { limits: meta.limits } : {}),
@@ -2186,7 +2186,7 @@ export class Sessions implements HostSessions {
     if (!trimmed) throw badRequest("name is required")
     this.meta(id)
     this.#updateMeta(id, { name: trimmed, nameSource: "user" })
-    this.#scheduleSessionsBroadcast()
+    this.#scheduleAgentsBroadcast()
     void this.publishStateIfWatched(id)
     return trimmed
   }
@@ -2211,7 +2211,7 @@ export class Sessions implements HostSessions {
       const agentState = await this.#doc(id, "agent")
       const model = this.#model(agentState?.model ?? this.defaultModel())
       if (!model) throw new Error("No model selected")
-      name = await generateSessionName(this.#runtime.models, model, {
+      name = await generateAgentName(this.#runtime.models, model, {
         text,
         imageCount,
         cwd: meta.cwd,
@@ -2220,12 +2220,12 @@ export class Sessions implements HostSessions {
       reason = error instanceof Error ? error.message : String(error)
       source = "heuristic"
       const fallback =
-        heuristicSessionName(text, imageCount) ?? cleanupCandidate(text)
+        heuristicAgentName(text, imageCount) ?? cleanupCandidate(text)
       if (!fallback) throw badRequest(reason)
       name = fallback
     }
     this.#updateMeta(id, { name, nameSource: "auto" })
-    this.#scheduleSessionsBroadcast()
+    this.#scheduleAgentsBroadcast()
     void this.publishStateIfWatched(id)
     return { name, source, ...(reason ? { reason } : {}) }
   }
@@ -2241,7 +2241,7 @@ export class Sessions implements HostSessions {
       throw badRequest("Wait for the session to finish before archiving it.")
     this.#updateMeta(id, { archived: true, archivedAt: Date.now() })
     this.#viewers.forget(id)
-    this.#scheduleSessionsBroadcast()
+    this.#scheduleAgentsBroadcast()
   }
 
   /** Make an archived session visible again. */
@@ -2249,11 +2249,11 @@ export class Sessions implements HostSessions {
     const meta = this.meta(id)
     if (!meta.archived) return
     this.#updateMeta(id, { archived: undefined, archivedAt: undefined })
-    this.#scheduleSessionsBroadcast()
+    this.#scheduleAgentsBroadcast()
   }
 
-  /** Archived sessions, most recently archived first. */
-  archivedSessions() {
+  /** Archived agents, most recently archived first. */
+  archivedAgents() {
     return [...this.#metas.entries()]
       .filter(([, meta]) => meta.archived && !meta.replacedBy)
       .sort(
@@ -2275,19 +2275,19 @@ export class Sessions implements HostSessions {
     const conversation = await this.conversation(id)
     await conversation.configure({ cwd }, ctx)
     this.#updateMeta(id, { cwd, modifiedAt: Date.now() })
-    this.#scheduleSessionsBroadcast()
+    this.#scheduleAgentsBroadcast()
     void this.publishStateIfWatched(id)
     return { previousCwd: meta.cwd }
   }
 
-  /** Archive sessions of a directory not active since `olderThanMs`. */
+  /** Archive agents of a directory not active since `olderThanMs`. */
   cleanup(
     directory: string,
     olderThanMs: number,
     options: { dryRun: boolean; includeActive: boolean; activeIds: Set<string> }
   ) {
     const cutoff = Date.now() - olderThanMs
-    const matching = this.directorySessions(directory).filter((id) => {
+    const matching = this.projectAgents(directory).filter((id) => {
       if (!options.includeActive && options.activeIds.has(id)) return false
       if (this.isBusy(id)) return false
       return activity(this.meta(id)) < cutoff
@@ -2440,11 +2440,11 @@ export class Sessions implements HostSessions {
   async #forkConversation(
     source: string,
     at: string | undefined,
-    meta: Partial<SessionMeta>
+    meta: Partial<AgentMeta>
   ) {
     const sourceMeta = this.meta(source)
     const now = Date.now()
-    const base: SessionMeta = {
+    const base: AgentMeta = {
       cwd: sourceMeta.cwd,
       createdAt: now,
       modifiedAt: now,
@@ -2467,7 +2467,7 @@ export class Sessions implements HostSessions {
           },
           init: async (tx, id) => {
             Object.assign(
-              await tx.doc(SessionDoc, id),
+              await tx.doc(AgentMetaDoc, id),
               JSON.parse(JSON.stringify(base))
             )
           },
@@ -2488,7 +2488,7 @@ export class Sessions implements HostSessions {
           agent: { cwd: sourceMeta.cwd },
           init: async (tx, id) => {
             Object.assign(
-              await tx.doc(SessionDoc, id),
+              await tx.doc(AgentMetaDoc, id),
               JSON.parse(JSON.stringify(base))
             )
           },
@@ -2525,8 +2525,8 @@ export class Sessions implements HostSessions {
           }
         : {}
     )
-    this.#viewers.selectSession(contextId, forked)
-    this.#scheduleSessionsBroadcast()
+    this.#viewers.selectAgent(contextId, forked)
+    this.#scheduleAgentsBroadcast()
     this.#watchOnce(forked, editorContent(entry))
     return forked
   }
@@ -2545,8 +2545,8 @@ export class Sessions implements HostSessions {
         ...(meta.labels ? { labels: meta.labels } : {}),
       }
     )
-    this.#viewers.selectSession(contextId, cloned)
-    this.#scheduleSessionsBroadcast()
+    this.#viewers.selectAgent(contextId, cloned)
+    this.#scheduleAgentsBroadcast()
     this.#watchOnce(cloned)
     return cloned
   }
@@ -2610,10 +2610,10 @@ export class Sessions implements HostSessions {
     }
     this.extensionStateChanged(replacement, "children")
     for (const [contextId, context] of this.#viewers.all()) {
-      if (context.selectedSession === id)
-        this.#viewers.selectSession(contextId, replacement)
+      if (context.selectedAgent === id)
+        this.#viewers.selectAgent(contextId, replacement)
     }
-    this.#scheduleSessionsBroadcast()
+    this.#scheduleAgentsBroadcast()
     this.#watchOnce(replacement, editor)
     return {
       cancelled: false,
@@ -2627,7 +2627,7 @@ export class Sessions implements HostSessions {
   /** Publish a new session's first state with optional editor content. */
   #watchOnce(id: string, editor: EditorContent = {}) {
     void this.stateSync(id, editor).then((payload) => {
-      this.#hub.push(payload, { sessionId: id })
+      this.#hub.push(payload, { agentId: id })
     })
   }
 }
@@ -2651,7 +2651,7 @@ function editorContent(entry: EntryRecord): EditorContent {
   }
 }
 
-function activity(meta: SessionMeta) {
+function activity(meta: AgentMeta) {
   return meta.lastMessageAt ?? meta.modifiedAt ?? meta.createdAt
 }
 
@@ -2662,7 +2662,7 @@ function retryMessage(live: LiveState | undefined) {
   return `Retrying in ${seconds}s: ${retry.error}`
 }
 
-function summarize(entries: readonly EntryRecord[]): Partial<SessionMeta> {
+function summarize(entries: readonly EntryRecord[]): Partial<AgentMeta> {
   let messageCount = 0
   let firstMessage = ""
   let lastMessageAt: number | undefined

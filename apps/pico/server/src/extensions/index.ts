@@ -10,7 +10,7 @@ import { createBrowserExtension } from "./browser.ts"
 import type { HostBridge } from "./host.ts"
 import { createJobsExtension, type JobsExtension } from "./jobs.ts"
 import { createScratchpadExtension, type Scratchpad } from "./scratchpad.ts"
-import { createSessionsExtension } from "./agents.ts"
+import { createAgentsExtension } from "./agents.ts"
 import { createTodoExtension } from "./todo.ts"
 
 export type PicoExtensionOptions = {
@@ -36,7 +36,7 @@ export function createPicoExtensions(options: PicoExtensionOptions): {
       createAskExtension(),
       jobs.extension,
       scratchpad.extension,
-      createSessionsExtension(host),
+      createAgentsExtension(host),
       createBrowserExtension(host),
       createTodoExtension(),
     ],

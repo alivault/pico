@@ -8,7 +8,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context"
 import { createModels } from "@earendil-works/pi-ai"
 import { Harness, createRegistry } from "@earendil-works/pi-durable"
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
-import { SessionDoc, publicId } from "../src/core/agents.ts"
+import { AgentMetaDoc, publicId } from "../src/core/agents.ts"
 import { tempDir } from "./support.ts"
 
 // A 1×1 PNG.
@@ -30,7 +30,7 @@ void test("an open event stream follows session selection and moves its live wat
           ownership: { kind: "ownerless" },
           agent: { cwd: data },
           init: async (tx, id) => {
-            Object.assign(await tx.doc(SessionDoc, id), {
+            Object.assign(await tx.doc(AgentMetaDoc, id), {
               cwd: data,
               name,
               createdAt: Date.now(),
@@ -124,8 +124,8 @@ void test("an open event stream follows session selection and moves its live wat
           if (!line) continue
           const event = JSON.parse(line.slice(6)) as {
             type: string
-            sessionId?: string
-            sessionName?: string
+            agentId?: string
+            agentName?: string
             items?: Array<{ images?: Array<{ url: string }> }>
           }
           if (event.type === "state_sync") return event
@@ -136,14 +136,14 @@ void test("an open event stream follows session selection and moves its live wat
         buffer += decoder.decode(chunk.value, { stream: true })
       }
     }
-    assert.equal((await nextState()).sessionId, ids[0])
+    assert.equal((await nextState()).agentId, ids[0])
     const selection = await fetch(
       `${url}/api/session/select?context=browser&session=${ids[1]}`,
       { method: "POST" }
     )
     assert.equal(selection.status, 200)
     const selected = await nextState()
-    assert.equal(selected.sessionId, ids[1])
+    assert.equal(selected.agentId, ids[1])
     assert.equal(selected.items?.length, 1)
     // Images come as URLs, and the URL answers with the image bytes.
     const imageUrl = selected.items?.[0]?.images?.[0]?.url
@@ -163,7 +163,7 @@ void test("an open event stream follows session selection and moves its live wat
       body: JSON.stringify({ path: `pico:${ids[1]}`, name: "Renamed second" }),
     })
     assert.equal(renamed.status, 200)
-    assert.equal((await nextState()).sessionName, "Renamed second")
+    assert.equal((await nextState()).agentName, "Renamed second")
   } finally {
     clearTimeout(timeout)
     abort.abort()

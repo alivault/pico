@@ -8,7 +8,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context"
 import { createModels } from "@earendil-works/pi-ai"
 import { Harness, createRegistry } from "@earendil-works/pi-durable"
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
-import { SessionDoc, publicId } from "../src/core/agents.ts"
+import { AgentMetaDoc, publicId } from "../src/core/agents.ts"
 import { tempDir } from "./support.ts"
 
 void test("an archived session is listed and can be restored", async () => {
@@ -25,7 +25,7 @@ void test("an archived session is listed and can be restored", async () => {
         ownership: { kind: "ownerless" },
         agent: { cwd: data },
         init: async (tx, conversationId) => {
-          Object.assign(await tx.doc(SessionDoc, conversationId), {
+          Object.assign(await tx.doc(AgentMetaDoc, conversationId), {
             cwd: data,
             name: "Keep me",
             createdAt: Date.now(),
@@ -92,26 +92,26 @@ void test("an archived session is listed and can be restored", async () => {
       (
         (await (
           await fetch(
-            `${url}/api/directory-sessions?directory=${encodeURIComponent(data)}`
+            `${url}/api/directory-agents?directory=${encodeURIComponent(data)}`
           )
         ).json()) as { totalCount: number }
       ).totalCount
     const archived = async () =>
       (
-        (await (await fetch(`${url}/api/sessions/archived`)).json()) as {
-          sessions: Array<{
+        (await (await fetch(`${url}/api/agents/archived`)).json()) as {
+          agents: Array<{
             id: string
             directory: string
             archivedAt?: string
           }>
         }
-      ).sessions
+      ).agents
 
     assert.equal(await visibleCount(), 1)
     assert.deepEqual(await archived(), [])
 
     assert.equal(
-      (await post("/api/sessions/delete", { paths: [`pico:${id}`] })).status,
+      (await post("/api/agents/delete", { paths: [`pico:${id}`] })).status,
       200
     )
     assert.equal(await visibleCount(), 0)

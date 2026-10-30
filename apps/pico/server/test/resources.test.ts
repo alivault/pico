@@ -178,7 +178,7 @@ void test("idle shells close only when they run nothing but the shell", async ()
     terminals.write("scope:s1:/", busy.id, "sleep 30\r", 1)
     await sleep(500)
     assert.equal(await terminals.closeIdleShells(Date.now() + 1000), 1)
-    const left = terminals.sessionShells("s1").map((shell) => shell.id)
+    const left = terminals.agentShells("s1").map((shell) => shell.id)
     assert.deepEqual(left, [busy.id])
     assert.ok(!left.includes(idle.id))
   } finally {
@@ -206,7 +206,7 @@ void test("memory pressure frees idle things and names the heaviest jobs, one ti
             name: "big build",
             command: "sleep 30",
             startedAt: Date.now(),
-            sessionId: "s1",
+            agentId: "s1",
           },
         ],
         dropTranscripts: () => 2,
@@ -216,7 +216,7 @@ void test("memory pressure frees idle things and names the heaviest jobs, one ti
             return 1
           },
         } as never,
-        sessionLink: (sessionId) => `/?session=${sessionId}`,
+        agentLink: (agentId) => `/?session=${agentId}`,
       },
       async () => pressure
     )
@@ -243,7 +243,7 @@ void test("memory pressure frees idle things and names the heaviest jobs, one ti
           name: "big build",
           command: "sleep 30",
           startedAt: Date.now(),
-          sessionId: "s1",
+          agentId: "s1",
         },
       ],
     })

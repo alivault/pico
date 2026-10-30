@@ -32,7 +32,7 @@ function fakeHost(
   }
   const host = new HostBridge()
   host.bind({
-    sessions: {
+    agents: {
       has: (id: string | undefined) => id !== undefined && id in metas,
       meta: (id: string) => metas[id],
       list: () => [{ id: "s2", title: "Child" }],
@@ -65,13 +65,13 @@ void test("the watchdog tells the parent about an idle, silent call one time", a
   const host = fakeHost(sent)
   const start = 1_000_000
   const call = startBashCall({
-    sessionId: "s2",
+    agentId: "s2",
     callId: "call-1",
     command: "git rebase -i HEAD~3",
     now: start,
   })
   const parentCall = startBashCall({
-    sessionId: "s1",
+    agentId: "s1",
     callId: "call-2",
     command: "sleep 9999",
     now: start,
@@ -122,7 +122,7 @@ void test("the watchdog does not report a busy call", async () => {
   const sent: Array<{ id: string; message: string; requestId: string }> = []
   const host = fakeHost(sent)
   const call = startBashCall({
-    sessionId: "s2",
+    agentId: "s2",
     callId: "call-3",
     command: "make",
     now: 0,
@@ -146,7 +146,7 @@ void test("the watchdog does not report a busy call", async () => {
 void test("runningToolLines shows the tool, its time, and the bash command", () => {
   const now = 10 * 60_000
   const call = startBashCall({
-    sessionId: "s5",
+    agentId: "s5",
     callId: "c1",
     command: "git log -S foo\necho done",
     now: 0,

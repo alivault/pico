@@ -10,8 +10,8 @@ import { basename } from "node:path"
 
 import type { Api, Model, Models } from "@earendil-works/pi-ai"
 
-const MAX_SESSION_NAME_LENGTH = 48
-const MAX_SESSION_NAME_WORDS = 6
+const MAX_AGENT_NAME_LENGTH = 48
+const MAX_AGENT_NAME_WORDS = 6
 const MAX_PROMPT_CHARS = 1600
 const GENERATION_TIMEOUT_MS = 30_000
 const IMAGE_ONLY_NAME = "Image task"
@@ -67,9 +67,9 @@ function stripLeadingFiller(text: string) {
   return current
 }
 
-function truncateSessionName(
+function truncateAgentName(
   text: string,
-  maxLength = MAX_SESSION_NAME_LENGTH
+  maxLength = MAX_AGENT_NAME_LENGTH
 ) {
   if (text.length <= maxLength) return text
   const slice = text.slice(0, Math.max(0, maxLength - 1))
@@ -91,9 +91,9 @@ export function cleanupCandidate(raw: string | undefined): string | undefined {
   text = trimTrailingPunctuation(text)
   if (!text) return undefined
   const words = text.split(" ")
-  if (words.length > MAX_SESSION_NAME_WORDS)
-    text = words.slice(0, MAX_SESSION_NAME_WORDS).join(" ")
-  text = truncateSessionName(text)
+  if (words.length > MAX_AGENT_NAME_WORDS)
+    text = words.slice(0, MAX_AGENT_NAME_WORDS).join(" ")
+  text = truncateAgentName(text)
   return text || undefined
 }
 
@@ -108,7 +108,7 @@ function simplifyPromptForHeuristic(text: string) {
 }
 
 /** A name from the prompt text alone, available at once. */
-export function heuristicSessionName(
+export function heuristicAgentName(
   text: string,
   imageCount: number
 ): string | undefined {
@@ -137,7 +137,7 @@ function buildTitlePrompt(prompt: string, cwd: string, imageCount: number) {
  * Ask `model` for a name. Uses the session's own model: a catalog entry does
  * not guarantee account access, notably with subscriptions.
  */
-export async function generateSessionName(
+export async function generateAgentName(
   models: Models,
   model: Model<Api>,
   input: { text: string; imageCount: number; cwd: string },

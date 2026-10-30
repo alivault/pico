@@ -1,6 +1,6 @@
 /**
  * Machine profiles in `<data>/machines.json`: the SSH machines that a hub
- * shows next to its own sessions. A profile has no secrets. SSH uses the
+ * shows next to its own agents. A profile has no secrets. SSH uses the
  * user's own config, keys, and agent.
  *
  * A cache in `<data>/machines/<id>/cache.json` keeps what setup found on the

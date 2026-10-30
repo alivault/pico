@@ -25,7 +25,7 @@ type LiveJobs = () => Array<{
   name: string
   command: string
   startedAt: number
-  sessionId: string
+  agentId: string
 }>
 
 export type ResourceDeps = {
@@ -35,7 +35,7 @@ export type ResourceDeps = {
     name: string
     command: string
     startedAt: number
-    sessionId: string
+    agentId: string
   }>
   browser?: BrowserManager | undefined
 }
@@ -44,7 +44,7 @@ export type JobResource = {
   id: string
   name: string
   command: string
-  sessionId: string
+  agentId: string
   startedAt: number
   pid?: number
   /** The memory of the job and every process it started, in bytes. */
@@ -149,7 +149,7 @@ export function formatBytes(bytes: number | undefined) {
 export type PressureDeps = ResourceDeps & {
   dropTranscripts: () => number
   notifier?: Notifier | undefined
-  sessionLink: (sessionId: string) => string
+  agentLink: (agentId: string) => string
 }
 
 /** Watches memory pressure and frees what Pico can give back. */
@@ -220,7 +220,7 @@ export class MemoryPressure {
           body: `Jobs that use the most: ${heavy
             .map((job) => `${job.name} (${formatBytes(job.memory)})`)
             .join(", ")}. Pico does not stop them.`,
-          url: this.#deps.sessionLink(heavy[0]!.sessionId),
+          url: this.#deps.agentLink(heavy[0]!.agentId),
           tag: "memory-pressure",
           level: "warning",
         })

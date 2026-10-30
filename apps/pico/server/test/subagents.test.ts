@@ -3,7 +3,7 @@ import { test } from "node:test"
 
 import { bashGuard } from "../src/core/profiles.ts"
 import {
-  childMessageKind,
+  subagentMessageKind,
   isQuestion,
   reportMessage,
 } from "../src/extensions/agents.ts"
@@ -52,36 +52,36 @@ void test("the bash guard refuses sudo, pushes to main, and denied commands", as
   assert.equal(await guard("git reset --soft HEAD~1", "x", deny), undefined)
 })
 
-void test("child messages are marked as questions or finished work", () => {
+void test("subagent messages are marked as questions or finished work", () => {
   assert.ok(isQuestion("Question: use A or B?\nI recommend A.", false))
   assert.ok(isQuestion("**Question:** which one", false))
   assert.ok(isQuestion("Done the part.\nShould I also update the docs?", false))
   assert.ok(isQuestion("All done.", true))
   assert.ok(!isQuestion("All done. The tests pass.", false))
   assert.equal(
-    childMessageKind("Question: A or B?", false, "a job"),
+    subagentMessageKind("Question: A or B?", false, "a job"),
     "question"
   )
   assert.equal(
-    childMessageKind("Started the build.", false, "a job"),
+    subagentMessageKind("Started the build.", false, "a job"),
     "waiting"
   )
-  assert.equal(childMessageKind("All done.", false, undefined), "done")
+  assert.equal(subagentMessageKind("All done.", false, undefined), "done")
   const question = reportMessage({
     name: "s5",
     title: "Helper",
     answer: "Question: may I push?",
     needsInput: false,
-    child: true,
+    subagent: true,
   })
   assert.match(question, /^\[Child session s5: question\] Helper/)
-  assert.match(question, /send_to_session/)
+  assert.match(question, /agents send/)
   const done = reportMessage({
     name: "s5",
     title: "Helper",
     answer: "Changed two files.",
     needsInput: false,
-    child: true,
+    subagent: true,
   })
   assert.match(done, /^\[Child session s5: done\] Helper/)
 })

@@ -13,7 +13,7 @@ export type ServerEvent = {
   /** Only for this viewer context; absent goes to every context. */
   readonly contextId?: string
   /** The public session the event is about. */
-  readonly sessionId?: string
+  readonly agentId?: string
   readonly payload: ServerEventPayload
 }
 
@@ -36,13 +36,13 @@ export class EventHub {
 
   push(
     payload: ServerEventPayload,
-    target: { contextId?: string; sessionId?: string } = {}
+    target: { contextId?: string; agentId?: string } = {}
   ) {
     this.#sequence += 1
     const event: ServerEvent = {
       sequence: this.#sequence,
       ...(target.contextId ? { contextId: target.contextId } : {}),
-      ...(target.sessionId ? { sessionId: target.sessionId } : {}),
+      ...(target.agentId ? { agentId: target.agentId } : {}),
       payload,
     }
     if (payload.type === "state_sync") {
@@ -52,7 +52,7 @@ export class EventHub {
         if (
           old.payload.type === "state_sync" &&
           old.contextId === event.contextId &&
-          old.sessionId === event.sessionId
+          old.agentId === event.agentId
         ) {
           this.#events.splice(index, 1)
         }
@@ -93,7 +93,7 @@ export class EventHub {
 }
 
 /** Events that belong to the selected session only. */
-const SELECTED_SESSION_EVENTS = new Set([
+const SELECTED_AGENT_EVENTS = new Set([
   "state_sync",
   "conversation_delta",
   "user_message",
@@ -104,11 +104,11 @@ const SELECTED_SESSION_EVENTS = new Set([
 export function eventMatches(
   event: ServerEvent,
   contextId: string,
-  sessionId: string | undefined
+  agentId: string | undefined
 ) {
   if (event.contextId && event.contextId !== contextId) return false
-  if (event.sessionId && SELECTED_SESSION_EVENTS.has(event.payload.type)) {
-    return event.sessionId === sessionId
+  if (event.agentId && SELECTED_AGENT_EVENTS.has(event.payload.type)) {
+    return event.agentId === agentId
   }
   return true
 }

@@ -11,15 +11,15 @@ import type { Harness } from "@earendil-works/pi-durable"
 import { DEFAULT_SETTINGS } from "../src/core/settings.ts"
 import {
   HostBridge,
-  sessionIdOf,
+  agentIdOf,
   conversationOf,
   type HostServices,
-  type HostSessionMeta,
+  type HostAgentMeta,
 } from "../src/extensions/host.ts"
 import {
-  createSessionsExtension,
+  createAgentsExtension,
   lastAnswer,
-  normalizeSessionId,
+  normalizeAgentId,
   STOPPED_ANSWER,
   waitingOn,
 } from "../src/extensions/agents.ts"
@@ -48,11 +48,11 @@ function lastUser(messages: readonly Message[]) {
         .join("")
 }
 
-/** A small session store on the Harness, in place of Pico's `Sessions`. */
-function fakeSessions(harness: Harness) {
-  const metas = new Map<string, HostSessionMeta & { createdAt: number }>()
+/** A small session store on the Harness, in place of Pico's `Agents`. */
+function fakeAgents(harness: Harness) {
+  const metas = new Map<string, HostAgentMeta & { createdAt: number }>()
   const unread = new Set<string>()
-  const sessions = {
+  const agents = {
     has: (id: string | undefined): id is string => Boolean(id && metas.has(id)),
     current: (id: string | undefined) => id,
     meta: (id: string) => metas.get(id)!,
@@ -84,8 +84,8 @@ function fakeSessions(harness: Harness) {
         parent?: string
         spawnedByCall?: string
         name?: string
-        worktree?: HostSessionMeta["worktree"]
-        limits?: HostSessionMeta["limits"]
+        worktree?: HostAgentMeta["worktree"]
+        limits?: HostAgentMeta["limits"]
         profile?: string
       } = {}
     ) {
@@ -96,7 +96,7 @@ function fakeSessions(harness: Harness) {
         },
         ctx
       )
-      const id = sessionIdOf(conversation.id)
+      const id = agentIdOf(conversation.id)
       metas.set(id, {
         cwd,
         firstMessage: "",
@@ -163,7 +163,7 @@ function fakeSessions(harness: Harness) {
     restore: (id: string) => {
       delete metas.get(id)!.archived
     },
-    archivedSessions: () =>
+    archivedAgents: () =>
       [...metas.entries()]
         .filter(([, meta]) => meta.archived)
         .map(([id, meta]) => ({ id, title: id, cwd: meta.cwd })),
@@ -171,13 +171,13 @@ function fakeSessions(harness: Harness) {
     extensionStateChanged: () => undefined,
     availableModels: () => [{ id: "test", provider: "test" }],
   }
-  return { sessions, metas, unread }
+  return { agents, metas, unread }
 }
 
 function bind(host: HostBridge, harness: Harness, dataDir: string) {
-  const fake = fakeSessions(harness)
+  const fake = fakeAgents(harness)
   host.bind({
-    sessions: fake.sessions as unknown as HostServices["sessions"],
+    agents: fake.agents as unknown as HostServices["agents"],
     events: { push: () => undefined },
     terminals: {} as HostServices["terminals"],
     harness,
@@ -198,9 +198,9 @@ async function eventually<T>(read: () => Promise<T | undefined>, ms = 8000) {
 }
 
 void test("session ids normalize", () => {
-  assert.equal(normalizeSessionId("12"), "s12")
-  assert.equal(normalizeSessionId("pico:s12"), "s12")
-  assert.equal(normalizeSessionId(" s3 "), "s3")
+  assert.equal(normalizeAgentId("12"), "s12")
+  assert.equal(normalizeAgentId("pico:s12"), "s12")
+  assert.equal(normalizeAgentId(" s3 "), "s3")
 })
 
 void test("spawn_session starts a child and reports its answer back", async () => {
@@ -223,13 +223,13 @@ void test("spawn_session starts a child and reports its answer back", async () =
   }
   const harness = await openHarness(
     join(dir, "db.sqlite"),
-    [createSessionsExtension(host)],
+    [createAgentsExtension(host)],
     script,
     dir
   )
   const fake = bind(host, harness, dir)
   try {
-    const parent = await fake.sessions.create(dir)
+    const parent = await fake.agents.create(dir)
     const conversation = (await harness.conversation(
       conversationOf(parent),
       ctx
@@ -245,7 +245,7 @@ void test("spawn_session starts a child and reports its answer back", async () =
       return found ? JSON.stringify(found.model) : undefined
     })
     assert.match(report, /The answer is 42\./)
-    const children = fake.sessions.children(parent)
+    const children = fake.agents.children(parent)
     assert.equal(children.length, 1)
     assert.equal(fake.metas.get(children[0]!)?.name, "Helper")
     await conversation.waitForIdle(ctx)
@@ -289,13 +289,13 @@ void test("a child's question goes to the parent's follow-up queue, marked as a 
   }
   const harness = await openHarness(
     join(dir, "db.sqlite"),
-    [createSessionsExtension(host)],
+    [createAgentsExtension(host)],
     script,
     dir
   )
   const fake = bind(host, harness, dir)
   try {
-    const parent = await fake.sessions.create(dir)
+    const parent = await fake.agents.create(dir)
     const conversation = (await harness.conversation(
       conversationOf(parent),
       ctx
@@ -311,7 +311,7 @@ void test("a child's question goes to the parent's follow-up queue, marked as a 
       return found ? JSON.stringify(found.model) : undefined
     })
     assert.match(report, /SQLite or Postgres/)
-    const child = fake.sessions.children(parent)[0]!
+    const child = fake.agents.children(parent)[0]!
     const meta = fake.metas.get(child)!
     assert.equal(meta.profile, "builder")
     assert.deepEqual(meta.limits, {
@@ -339,7 +339,7 @@ void test("a child that waits on a job sends nothing until it is done", async ()
   }
   const harness = await openHarness(
     join(dir, "db.sqlite"),
-    [createSessionsExtension(host)],
+    [createAgentsExtension(host)],
     script,
     dir
   )
@@ -357,14 +357,14 @@ void test("a child that waits on a job sends nothing until it is done", async ()
         notifyOnExit: true,
       }
     }, ctx)
-  const create = fake.sessions.create.bind(fake.sessions)
-  fake.sessions.create = async (cwd, options) => {
+  const create = fake.agents.create.bind(fake.agents)
+  fake.agents.create = async (cwd, options) => {
     const id = await create(cwd, options)
     if (options?.parent) await setJob(id, "running")
     return id
   }
   try {
-    const parent = await fake.sessions.create(dir)
+    const parent = await fake.agents.create(dir)
     const conversation = (await harness.conversation(
       conversationOf(parent),
       ctx
@@ -377,7 +377,7 @@ void test("a child that waits on a job sends nothing until it is done", async ()
       )
     await conversation.submit({ type: "input", content: "delegate" }, ctx)
     const child = await eventually(
-      async () => fake.sessions.children(parent)[0]
+      async () => fake.agents.children(parent)[0]
     )
     const childConversation = (await harness.conversation(
       conversationOf(child),
@@ -421,7 +421,7 @@ void test("each message to a busy child gets its own answer back, one time", asy
     if (user.startsWith("Slow work"))
       return release
         ? { text: "The work is done." }
-        : { tools: [{ name: "sessions", arguments: { action: "list" } }] }
+        : { tools: [{ name: "agents", arguments: { action: "list" } }] }
     const fyi = /\] (FYI \d)/.exec(user)
     if (fyi) return { text: `Noted ${fyi[1]}.` }
     if (lastToolResult(messages)) return { text: "ok" }
@@ -441,13 +441,13 @@ void test("each message to a busy child gets its own answer back, one time", asy
   }
   const harness = await openHarness(
     join(dir, "db.sqlite"),
-    [createSessionsExtension(host)],
+    [createAgentsExtension(host)],
     script,
     dir
   )
   const fake = bind(host, harness, dir)
   try {
-    const parent = await fake.sessions.create(dir)
+    const parent = await fake.agents.create(dir)
     const conversation = (await harness.conversation(
       conversationOf(parent),
       ctx
@@ -466,7 +466,7 @@ void test("each message to a busy child gets its own answer back, one time", asy
             )?.[1]
         )
     await conversation.submit({ type: "input", content: "delegate" }, ctx)
-    child = await eventually(async () => fake.sessions.children(parent)[0])
+    child = await eventually(async () => fake.agents.children(parent)[0])
     await conversation.waitForIdle(ctx)
     // The child is still busy: both messages wait in its follow-up queue.
     for (const message of ["fyi 1", "fyi 2"]) {
@@ -490,7 +490,7 @@ void test("each message to a busy child gets its own answer back, one time", asy
   }
 })
 
-void test("spawn_session with wait returns the answer, and sessions read reads it", async () => {
+void test("spawn_session with wait returns the answer, and agents read reads it", async () => {
   const dir = await tempDir()
   const host = new HostBridge()
   let childId = ""
@@ -502,7 +502,7 @@ void test("spawn_session with wait returns the answer, and sessions read reads i
       childId = /session (s\d+)/.exec(result)?.[1] ?? ""
       return {
         tools: [
-          { name: "sessions", arguments: { action: "read", id: childId } },
+          { name: "agents", arguments: { action: "read", id: childId } },
         ],
       }
     }
@@ -518,13 +518,13 @@ void test("spawn_session with wait returns the answer, and sessions read reads i
   }
   const harness = await openHarness(
     join(dir, "db.sqlite"),
-    [createSessionsExtension(host)],
+    [createAgentsExtension(host)],
     script,
     dir
   )
   const fake = bind(host, harness, dir)
   try {
-    const parent = await fake.sessions.create(dir)
+    const parent = await fake.agents.create(dir)
     const conversation = (await harness.conversation(
       conversationOf(parent),
       ctx
@@ -617,28 +617,28 @@ void test("the answer of a stopped run is not an earlier answer", async () => {
   }
 })
 
-void test("agents mark sessions read and archive them", async () => {
+void test("agents mark agents read and archive them", async () => {
   const dir = await tempDir()
   const host = new HostBridge()
   let other = ""
   const script: Script = (messages) => {
     const step = messages.filter((m) => m.role === "toolResult").length
     const call = [
-      { name: "sessions", arguments: { action: "mark_read", ids: [other] } },
+      { name: "agents", arguments: { action: "mark_read", ids: [other] } },
       {
-        name: "sessions",
+        name: "agents",
         arguments: { action: "mark_unread", ids: [other] },
       },
       {
-        name: "sessions",
+        name: "agents",
         arguments: { action: "archive", ids: [other, "s999"] },
       },
       {
-        name: "sessions",
+        name: "agents",
         arguments: { action: "list", scope: "archived" },
       },
       {
-        name: "sessions",
+        name: "agents",
         arguments: { action: "restore", ids: [other] },
       },
     ][step]
@@ -646,14 +646,14 @@ void test("agents mark sessions read and archive them", async () => {
   }
   const harness = await openHarness(
     join(dir, "db.sqlite"),
-    [createSessionsExtension(host)],
+    [createAgentsExtension(host)],
     script,
     dir
   )
   const fake = bind(host, harness, dir)
   try {
-    const self = await fake.sessions.create(dir)
-    other = await fake.sessions.create(dir)
+    const self = await fake.agents.create(dir)
+    other = await fake.agents.create(dir)
     fake.unread.add(other)
     const conversation = (await harness.conversation(
       conversationOf(self),
@@ -690,20 +690,20 @@ void test("an agent cannot archive itself", async () => {
       : {
           tools: [
             {
-              name: "sessions",
+              name: "agents",
               arguments: { action: "archive", ids: [self] },
             },
           ],
         }
   const harness = await openHarness(
     join(dir, "db.sqlite"),
-    [createSessionsExtension(host)],
+    [createAgentsExtension(host)],
     script,
     dir
   )
   const fake = bind(host, harness, dir)
   try {
-    self = await fake.sessions.create(dir)
+    self = await fake.agents.create(dir)
     const conversation = (await harness.conversation(
       conversationOf(self),
       ctx
@@ -720,7 +720,7 @@ void test("an agent cannot archive itself", async () => {
   }
 })
 
-/** The user entries of a conversation that are reports of other sessions. */
+/** The user entries of a conversation that are reports of other agents. */
 async function reportsIn(harness: Harness, id: string) {
   const conversation = (await harness.conversation(conversationOf(id), ctx))!
   return (await conversation.context(ctx)).entries
@@ -729,7 +729,7 @@ async function reportsIn(harness: Harness, id: string) {
     .filter((text) => /^\[(Child session|Session) s\d+: /.test(text))
 }
 
-void test("sessions wait and the report give an answer one time", async () => {
+void test("agents wait and the report give an answer one time", async () => {
   const dir = await tempDir()
   const host = new HostBridge()
   let child = ""
@@ -739,7 +739,7 @@ void test("sessions wait and the report give an answer one time", async () => {
     if (user.startsWith("Name a color"))
       return release
         ? { text: "Blue." }
-        : { tools: [{ name: "sessions", arguments: { action: "list" } }] }
+        : { tools: [{ name: "agents", arguments: { action: "list" } }] }
     if (user.startsWith("[Child session")) return { text: "Got a report." }
     const result = lastToolResult(messages)
     if (result?.includes("Started child session")) {
@@ -748,7 +748,7 @@ void test("sessions wait and the report give an answer one time", async () => {
       return {
         tools: [
           {
-            name: "sessions",
+            name: "agents",
             arguments: { action: "wait", ids: [child], any: true },
           },
         ],
@@ -761,13 +761,13 @@ void test("sessions wait and the report give an answer one time", async () => {
   }
   const harness = await openHarness(
     join(dir, "db.sqlite"),
-    [createSessionsExtension(host)],
+    [createAgentsExtension(host)],
     script,
     dir
   )
   const fake = bind(host, harness, dir)
   try {
-    const parent = await fake.sessions.create(dir)
+    const parent = await fake.agents.create(dir)
     const conversation = (await harness.conversation(
       conversationOf(parent),
       ctx
@@ -818,20 +818,20 @@ void test("a child's message to its parent gets no report back", async () => {
   }
   const harness = await openHarness(
     join(dir, "db.sqlite"),
-    [createSessionsExtension(host)],
+    [createAgentsExtension(host)],
     script,
     dir
   )
   const fake = bind(host, harness, dir)
   try {
-    parent = await fake.sessions.create(dir)
+    parent = await fake.agents.create(dir)
     const conversation = (await harness.conversation(
       conversationOf(parent),
       ctx
     ))!
     await conversation.submit({ type: "input", content: "go" }, ctx)
     const child = await eventually(
-      async () => fake.sessions.children(parent)[0]
+      async () => fake.agents.children(parent)[0]
     )
     await eventually(async () =>
       (await reportsIn(harness, parent)).some((text) =>

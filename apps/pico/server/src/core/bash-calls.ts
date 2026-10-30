@@ -34,7 +34,7 @@ export type ProcessSample = {
 }
 
 export type BashCall = {
-  sessionId: string
+  agentId: string
   callId: string
   command: string
   marker: string
@@ -46,38 +46,38 @@ export type BashCall = {
 
 const calls = new Map<string, BashCall>()
 
-function key(sessionId: string, callId: string) {
-  return `${sessionId}\u0000${callId}`
+function key(agentId: string, callId: string) {
+  return `${agentId}\u0000${callId}`
 }
 
 /** Start to track a bash call. Returns the call; give it to `endBashCall`. */
 export function startBashCall(input: {
-  sessionId: string
+  agentId: string
   callId: string
   command: string
   now?: number
 }): BashCall {
   const now = input.now ?? Date.now()
   const call: BashCall = {
-    sessionId: input.sessionId,
+    agentId: input.agentId,
     callId: input.callId,
     command: input.command,
-    marker: `${input.sessionId}/${input.callId}/${now}`,
+    marker: `${input.agentId}/${input.callId}/${now}`,
     startedAt: now,
     lastOutputAt: now,
   }
-  calls.set(key(input.sessionId, input.callId), call)
+  calls.set(key(input.agentId, input.callId), call)
   return call
 }
 
 export function endBashCall(call: BashCall) {
-  const id = key(call.sessionId, call.callId)
+  const id = key(call.agentId, call.callId)
   if (calls.get(id) === call) calls.delete(id)
 }
 
 /** The running bash call of a session with this call ID. */
-export function bashCall(sessionId: string, callId: string) {
-  return calls.get(key(sessionId, callId))
+export function bashCall(agentId: string, callId: string) {
+  return calls.get(key(agentId, callId))
 }
 
 /** All running bash calls. */
@@ -197,7 +197,7 @@ export function almostIdle(before: ProcessSample, after: ProcessSample) {
 
 /** The message to the parent about a call that seems to hang. */
 export function stallMessage(input: {
-  sessionId: string
+  agentId: string
   title?: string
   command: string
   ranMs: number
@@ -211,15 +211,15 @@ export function stallMessage(input: {
         ? "none found"
         : input.pids.map((item) => `${item.pid} (${item.command})`).join(", ")
   return [
-    `Session ${input.sessionId}${input.title ? ` (${input.title})` : ""} may hang: one bash call has run for ${formatDuration(input.ranMs)}, with no new output for ${formatDuration(input.silentMs)}${input.pids === undefined ? "" : " and almost no CPU or I/O"}.`,
+    `Session ${input.agentId}${input.title ? ` (${input.title})` : ""} may hang: one bash call has run for ${formatDuration(input.ranMs)}, with no new output for ${formatDuration(input.silentMs)}${input.pids === undefined ? "" : " and almost no CPU or I/O"}.`,
     `Command: ${commandLine(input.command, 500)}`,
     `PIDs: ${pids}`,
-    `It may wait for input (an editor or a prompt). To stop the call, stop the session (sessions action stop) or kill the PIDs, then tell the session what to do.`,
+    `It may wait for input (an editor or a prompt). To stop the call, stop the session (agents action stop) or kill the PIDs, then tell the session what to do.`,
   ].join("\n")
 }
 
 /**
- * Look at the running calls one time: report the calls of child sessions
+ * Look at the running calls one time: report the calls of child agents
  * that seem to hang. Returns the reported calls.
  */
 export async function checkBashCalls(
@@ -236,8 +236,8 @@ export async function checkBashCalls(
   const stallMs = options.stallMs ?? STALL_MS
   const sample = options.sample ?? sampleProcesses
   const candidates = bashCalls().filter((call) => {
-    if (call.reported || !services.sessions.has(call.sessionId)) return false
-    if (!services.sessions.meta(call.sessionId).parent) return false
+    if (call.reported || !services.agents.has(call.agentId)) return false
+    if (!services.agents.meta(call.agentId).parent) return false
     // Start to sample one interval early, so a sample is there to compare.
     return now - call.lastOutputAt >= stallMs - CHECK_MS
   })
@@ -251,18 +251,18 @@ export async function checkBashCalls(
     const silentMs = now - call.lastOutputAt
     if (silentMs < stallMs) continue
     if (current && (!before || !almostIdle(before, current))) continue
-    const parent = services.sessions.meta(call.sessionId).parent
-    if (!parent || !services.sessions.has(parent)) continue
+    const parent = services.agents.meta(call.agentId).parent
+    if (!parent || !services.agents.has(parent)) continue
     call.reported = true
     reported.push(call)
-    const title = services.sessions
+    const title = services.agents
       .list({ parent })
-      .find((item) => item.id === call.sessionId)?.title
-    await services.sessions
+      .find((item) => item.id === call.agentId)?.title
+    await services.agents
       .followUp(
         parent,
         stallMessage({
-          sessionId: call.sessionId,
+          agentId: call.agentId,
           ...(title ? { title } : {}),
           command: call.command,
           ranMs: now - call.startedAt,
@@ -274,7 +274,7 @@ export async function checkBashCalls(
               }))
             : undefined,
         }),
-        `stall:${call.sessionId}:${call.callId}`
+        `stall:${call.agentId}:${call.callId}`
       )
       .catch((error: unknown) => {
         console.warn("[pico] could not report a stalled bash call:", error)

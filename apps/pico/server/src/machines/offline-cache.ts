@@ -14,7 +14,7 @@ const MAX_RESPONSES = 300
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 const MAX_TOTAL_BYTES = 24 * 1024 * 1024
 const MAX_CONTEXTS = 20
-const MAX_SESSIONS_PER_CONTEXT = 6
+const MAX_AGENTS_PER_CONTEXT = 6
 
 /** Whether the proxy may keep a copy of the answer to a GET request. */
 export function cacheableGet(path: string) {
@@ -70,7 +70,7 @@ export class OfflineCache {
   /** Context → session (or "draft") → the newest full state sync. */
   readonly #states = new Map<string, Map<string, Payload>>()
   /** Context → the newest session list payload. */
-  readonly #sessions = new Map<string, Payload>()
+  readonly #agents = new Map<string, Payload>()
 
   putResponse(key: string, type: string, body: Buffer) {
     if (body.length > MAX_RESPONSE_BYTES) return
@@ -117,10 +117,10 @@ export class OfflineCache {
   observeStream(contextId: string) {
     let current: Payload | undefined
     return (payload: Payload) => {
-      if (payload.type === "sessions") {
-        const previous = this.#sessions.get(contextId)
+      if (payload.type === "agents") {
+        const previous = this.#agents.get(contextId)
         this.#touch(
-          this.#sessions,
+          this.#agents,
           contextId,
           { ...previous, ...payload },
           MAX_CONTEXTS
@@ -134,22 +134,22 @@ export class OfflineCache {
       else if (current) current = { ...current, ...payload }
       if (!current) return
       const key =
-        typeof current.sessionId === "string" && current.sessionId
-          ? current.sessionId
+        typeof current.agentId === "string" && current.agentId
+          ? current.agentId
           : "draft"
-      const sessions = this.#states.get(contextId) ?? new Map()
-      this.#touch(sessions, key, current, MAX_SESSIONS_PER_CONTEXT)
-      this.#touch(this.#states, contextId, sessions, MAX_CONTEXTS)
+      const agents = this.#states.get(contextId) ?? new Map()
+      this.#touch(agents, key, current, MAX_AGENTS_PER_CONTEXT)
+      this.#touch(this.#states, contextId, agents, MAX_CONTEXTS)
     }
   }
 
   /** The events that start an offline stream; empty when nothing is known. */
-  bootstrap(contextId: string, sessionId: string | undefined) {
-    const sessions = this.#states.get(contextId)
+  bootstrap(contextId: string, agentId: string | undefined) {
+    const agents = this.#states.get(contextId)
     const state =
-      (sessionId ? sessions?.get(sessionId) : undefined) ??
-      (sessions ? [...sessions.values()].at(-1) : undefined)
-    const list = this.#sessions.get(contextId)
+      (agentId ? agents?.get(agentId) : undefined) ??
+      (agents ? [...agents.values()].at(-1) : undefined)
+    const list = this.#agents.get(contextId)
     return [state, list].filter((entry): entry is Payload => Boolean(entry))
   }
 }

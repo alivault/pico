@@ -15,7 +15,7 @@ import type {
 } from "@earendil-works/pi-durable"
 
 import { actionRemoved, findProfile } from "../core/profiles.ts"
-import { conversationOf, sessionIdOf, type HostBridge } from "./host.ts"
+import { conversationOf, agentIdOf, type HostBridge } from "./host.ts"
 
 /** A tool result with one text item. */
 export function textResult(
@@ -203,8 +203,8 @@ export async function notifyAgent(
 ) {
   const services = await host.ready(context.abortSignal)
   const current =
-    services.sessions.current(sessionIdOf(conversationId)) ??
-    sessionIdOf(conversationId)
+    services.agents.current(agentIdOf(conversationId)) ??
+    agentIdOf(conversationId)
   const target = await open(conversationOf(current))
   if (!target) return
   await target.submit(
@@ -255,9 +255,9 @@ export function deniedAction(
   action: string
 ) {
   const services = host.current
-  const id = sessionIdOf(conversationId)
-  if (!services?.sessions.has(id)) return undefined
-  const meta = services.sessions.meta(id)
+  const id = agentIdOf(conversationId)
+  if (!services?.agents.has(id)) return undefined
+  const meta = services.agents.meta(id)
   const profile = findProfile(meta.profile, services.settings().profiles)
   const removed = actionRemoved(
     action,

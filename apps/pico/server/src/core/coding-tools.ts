@@ -6,13 +6,13 @@
  * call, so a change to the setting applies without a restart.
  *
  * `guard` can refuse a command before it runs (the bash guard of child
- * sessions, see `profiles.ts`): it returns the reason.
+ * agents, see `profiles.ts`): it returns the reason.
  *
  * A bash call cannot wait for input: it runs with editors and pagers set to
  * programs that end at once, git prompts off, and stdin from `/dev/null` (the
  * execution environment starts the shell with stdin ignored). A call without
  * its own timeout stops after `DEFAULT_TIMEOUT_SECONDS`. `bash-calls.ts`
- * tracks each call, for the sessions tool and the watchdog of child sessions.
+ * tracks each call, for the agents tool and the watchdog of child agents.
  */
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
@@ -34,7 +34,7 @@ import {
 } from "@earendil-works/pi-durable/tools"
 
 import type { HostBridge } from "../extensions/host.ts"
-import { sessionIdOf } from "../extensions/host.ts"
+import { agentIdOf } from "../extensions/host.ts"
 import { endBashCall, ensureWatchdog, startBashCall } from "./bash-calls.ts"
 import { bashGuard } from "./profiles.ts"
 
@@ -105,19 +105,19 @@ async function currentBranch(dir: string) {
 }
 
 /**
- * Why a session may not run a command, or undefined. Only child sessions
- * (sessions with a parent) have a guard.
+ * Why a session may not run a command, or undefined. Only child agents
+ * (agents with a parent) have a guard.
  */
-export async function childCommandRefusal(
+export async function subagentCommandRefusal(
   host: HostBridge | undefined,
   conversationId: ConversationId,
   command: string,
   cwd: string
 ) {
-  const sessions = host?.current?.sessions
-  const id = sessionIdOf(conversationId)
-  if (!sessions?.has(id)) return undefined
-  const meta = sessions.meta(id)
+  const agents = host?.current?.agents
+  const id = agentIdOf(conversationId)
+  if (!agents?.has(id)) return undefined
+  const meta = agents.meta(id)
   if (!meta.parent) return undefined
   return bashGuard(command, {
     cwd,
@@ -139,7 +139,7 @@ export function createPicoCodingTools(options: {
   const markers = new WeakMap<ToolExecutionApi, string>()
   const bash = createBashTool({
     prepare: async (execution, api) => {
-      const refusal = await childCommandRefusal(
+      const refusal = await subagentCommandRefusal(
         options.host,
         api.conversationId,
         execution.command,
@@ -170,7 +170,7 @@ export function createPicoCodingTools(options: {
           const isDefault = args.timeout === undefined
           const timeout = args.timeout ?? defaultTimeout
           const call = startBashCall({
-            sessionId: sessionIdOf(api.conversationId),
+            agentId: agentIdOf(api.conversationId),
             callId: api.callId,
             command: args.command,
           })

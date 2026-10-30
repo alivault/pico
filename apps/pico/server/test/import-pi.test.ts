@@ -9,7 +9,7 @@ import { Harness, createRegistry } from "@earendil-works/pi-durable"
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
 
 import { importPiFile, readPiFile } from "../src/core/import-pi.ts"
-import { conversationIdOf, SessionDoc } from "../src/core/agents.ts"
+import { conversationIdOf, AgentMetaDoc } from "../src/core/agents.ts"
 import { tempDir } from "./support.ts"
 
 void test("Pi import preserves branches, edits, settings, and history without running work", async () => {
@@ -114,7 +114,7 @@ void test("Pi import preserves branches, edits, settings, and history without ru
     const result = await importPiFile(harness, source)
     assert.equal(result.entries, 8)
     assert.equal(result.branches, 2)
-    const id = conversationIdOf(result.sessionId)
+    const id = conversationIdOf(result.agentId)
     const conversation = await harness.conversation(id, ctx)
     assert.ok(conversation)
     const context = await conversation.context(ctx)
@@ -129,7 +129,7 @@ void test("Pi import preserves branches, edits, settings, and history without ru
     const agent = await conversation.agent(ctx)
     assert.equal(agent.model?.modelId, "test")
     assert.equal(agent.thinkingLevel, "high")
-    const meta = await harness.snapshot(SessionDoc, id, ctx)
+    const meta = await harness.snapshot(AgentMetaDoc, id, ctx)
     assert.equal(meta?.name, "Imported title")
     assert.equal(meta?.createdAt, Date.parse(timestamp))
     assert.ok(

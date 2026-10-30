@@ -20,7 +20,7 @@ import {
   type Harness,
 } from "@earendil-works/pi-durable"
 
-import { SessionDoc, publicId, type SessionMeta } from "./agents.ts"
+import { AgentMetaDoc, publicId, type AgentMeta } from "./agents.ts"
 import { messageText } from "./items.ts"
 
 const ImportDoc = defineDoc<{
@@ -127,7 +127,7 @@ function metadata(
   header: SessionHeader,
   path: SessionEntry[],
   name?: string
-): SessionMeta {
+): AgentMeta {
   const messages = path.filter((entry) => entry.type === "message")
   const users = messages.filter((entry) => entry.message.role === "user")
   const first = users[0]
@@ -267,7 +267,7 @@ export async function importPiFile(harness: Harness, source: string) {
       skipped: true,
       entries: 0,
       branches: 0,
-      sessionId: publicId(index.files[header.id].active as ConversationId),
+      agentId: publicId(index.files[header.id].active as ConversationId),
     }
   const root = await harness.createConversation(
     {
@@ -282,7 +282,7 @@ export async function importPiFile(harness: Harness, source: string) {
           entries: 0,
           complete: false,
         }
-        // No cwd in SessionDoc until complete: partially imported history stays hidden.
+        // No cwd in AgentMetaDoc until complete: partially imported history stays hidden.
       },
     },
     ctx
@@ -367,7 +367,7 @@ export async function importPiFile(harness: Harness, source: string) {
     )
   await harness.commit(async (tx) => {
     for (const branch of conversations.values()) {
-      const meta = await tx.doc(SessionDoc, branch.conversation.id)
+      const meta = await tx.doc(AgentMetaDoc, branch.conversation.id)
       Object.assign(
         meta,
         metadata(header, ancestry(branch.tip, originals), name),
@@ -389,7 +389,7 @@ export async function importPiFile(harness: Harness, source: string) {
     skipped: false,
     entries: entries.length,
     branches: conversations.size,
-    sessionId: publicId(current.id),
+    agentId: publicId(current.id),
   }
 }
 

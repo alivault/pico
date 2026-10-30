@@ -77,7 +77,7 @@ void test("server needs no token, refuses a second owner, and stops cleanly", as
         })
       ).json()) as {
         directories: string[]
-        pinnedSessionKeys: string[]
+        pinnedAgentKeys: string[]
         initialized: boolean
       }
     assert.equal((await sidebar("/api/sidebar-state")).initialized, false)
@@ -88,10 +88,10 @@ void test("server needs no token, refuses a second owner, and stops cleanly", as
     const merged = await sidebar("/api/sidebar-state/merge", {
       clientId: "two",
       directories: ["/b", "/a"],
-      pinnedSessionKeys: ["s1"],
+      pinnedAgentKeys: ["s1"],
     })
     assert.deepEqual(merged.directories, ["/a", "/b"])
-    assert.deepEqual((await sidebar("/api/sidebar-state")).pinnedSessionKeys, [
+    assert.deepEqual((await sidebar("/api/sidebar-state")).pinnedAgentKeys, [
       "s1",
     ])
     assert.ok(JSON.parse(await readFile(join(data, "sidebar.json"), "utf8")))

@@ -631,11 +631,11 @@ export class Terminals {
   }
 
   /** The user's shell terminals of a session (its terminal panel tabs). */
-  sessionShells(sessionId: string) {
+  agentShells(agentId: string) {
     return [...this.#terminals.values()]
       .filter(
         (terminal) =>
-          !terminal.shared && terminal.scopeKey.split(":")[1] === sessionId
+          !terminal.shared && terminal.scopeKey.split(":")[1] === agentId
       )
       .map((terminal) => ({
         id: terminal.id,

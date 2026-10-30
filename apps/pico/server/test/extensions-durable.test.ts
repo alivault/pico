@@ -66,15 +66,15 @@ async function userEntries(conversation: Conversation) {
     .map((entry) => JSON.stringify(entry.model))
 }
 
-/** Bind a host with stub sessions and real terminals. */
+/** Bind a host with stub agents and real terminals. */
 function bindHost(host: HostBridge, harness: Harness, dataDir: string) {
   const terminals = new Terminals({ dataDir })
   host.bind({
-    sessions: {
+    agents: {
       current: (id: string | undefined) => id,
       has: () => false,
       extensionStateChanged: () => undefined,
-    } as unknown as HostServices["sessions"],
+    } as unknown as HostServices["agents"],
     events: { push: () => undefined },
     terminals,
     harness,

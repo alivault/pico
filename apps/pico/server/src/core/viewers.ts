@@ -1,34 +1,46 @@
 /**
- * Viewer contexts: one per browser tab or window. A context selects a session
- * or a draft (a new session that has no prompt yet) and keeps its sidebar
- * directories. Contexts are saved, so a reload returns to the same place.
+ * Viewer contexts: one per browser tab or window. A context selects an agent
+ * or a draft (a new agent that has no prompt yet) and keeps its sidebar
+ * projects. Contexts are saved, so a reload returns to the same place.
  *
- * Read state is global: a session read in one tab or client is read in all of
+ * Read state is global: an agent read in one tab or client is read in all of
  * them. Agents can also change it.
  */
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 
 export type DraftSelection = {
-  sessionKey: string
+  agentKey: string
   cwd: string
   /** Model and thinking chosen before the first prompt. */
   model?: { provider: string; modelId: string }
   thinkingLevel?: string
-  /** Make a git worktree for the session when the first prompt creates it. */
+  /** Make a git worktree for the agent when the first prompt creates it. */
   worktree?: { branch?: string; base?: string }
-  /** The tool profile of the session that the first prompt creates. */
+  /** The tool profile of the agent that the first prompt creates. */
   profile?: string
 }
 
 export type ViewerContext = {
-  selectedSession?: string
+  selectedAgent?: string
   activeDraft?: DraftSelection
-  sidebarDirectories: string[]
+  sidebarProjects: string[]
   updatedAt: number
 }
 
-type StoredContext = Partial<ViewerContext> & { unread?: unknown }
+/**
+ * A context in the viewers file. Stored names: do not change. They are the
+ * names from before the rename of agents to agents.
+ */
+type StoredDraft = Omit<DraftSelection, "agentKey"> & { sessionKey?: string }
+
+type StoredContext = {
+  selectedSession?: string
+  activeDraft?: StoredDraft
+  sidebarDirectories?: unknown
+  updatedAt?: unknown
+  unread?: unknown
+}
 
 type StoredViewers = {
   version: 2
@@ -36,15 +48,41 @@ type StoredViewers = {
   unread: string[]
 }
 
-/** A session became read or unread. */
-export type ReadListener = (sessionId: string, unread: boolean) => void
+function draftFromStored(draft: StoredDraft | undefined) {
+  if (!draft || typeof draft !== "object") return undefined
+  const { sessionKey, ...rest } = draft
+  return typeof sessionKey === "string"
+    ? ({ ...rest, agentKey: sessionKey } as DraftSelection)
+    : undefined
+}
+
+function storedDraft(draft: DraftSelection): StoredDraft {
+  const { agentKey, ...rest } = draft
+  return { ...rest, sessionKey: agentKey }
+}
+
+function storedContext(context: ViewerContext): StoredContext {
+  return {
+    ...(context.selectedAgent
+      ? { selectedSession: context.selectedAgent }
+      : {}),
+    ...(context.activeDraft
+      ? { activeDraft: storedDraft(context.activeDraft) }
+      : {}),
+    sidebarDirectories: context.sidebarProjects,
+    updatedAt: context.updatedAt,
+  }
+}
+
+/** An agent became read or unread. */
+export type ReadListener = (agentId: string, unread: boolean) => void
 
 const MAX_CONTEXTS = 200
 
 export class Viewers {
   readonly #file: string
   readonly #contexts = new Map<string, ViewerContext>()
-  /** The sessions with a finished run that nobody has read. */
+  /** The agents with a finished turn that nobody has read. */
   readonly #unread = new Set<string>()
   /** The number of open event streams of each context. */
   readonly #attached = new Map<string, number>()
@@ -67,13 +105,14 @@ export class Viewers {
     ) as Record<string, StoredContext>
     for (const [id, context] of Object.entries(contexts)) {
       if (!context || typeof context !== "object") continue
+      const draft = draftFromStored(context.activeDraft)
       this.#contexts.set(id, {
-        ...(context.selectedSession
-          ? { selectedSession: context.selectedSession }
+        ...(typeof context.selectedSession === "string"
+          ? { selectedAgent: context.selectedSession }
           : {}),
-        ...(context.activeDraft ? { activeDraft: context.activeDraft } : {}),
-        sidebarDirectories: Array.isArray(context.sidebarDirectories)
-          ? context.sidebarDirectories
+        ...(draft ? { activeDraft: draft } : {}),
+        sidebarProjects: Array.isArray(context.sidebarDirectories)
+          ? (context.sidebarDirectories as string[])
           : [],
         updatedAt:
           typeof context.updatedAt === "number" ? context.updatedAt : 0,
@@ -81,7 +120,7 @@ export class Viewers {
     }
     const unread = current
       ? (stored as StoredViewers).unread
-      : // Before version 2, each context had its own unread sessions. Keep
+      : // Before version 2, each context had its own unread agents. Keep
         // those of the context used last: they are closest to what the user saw.
         Object.values(contexts)
           .filter((context) => context && typeof context === "object")
@@ -101,7 +140,7 @@ export class Viewers {
   #ensure(id: string): ViewerContext {
     let context = this.#contexts.get(id)
     if (!context) {
-      context = { sidebarDirectories: [], updatedAt: Date.now() }
+      context = { sidebarProjects: [], updatedAt: Date.now() }
       this.#contexts.set(id, context)
     }
     context.updatedAt = Date.now()
@@ -112,26 +151,25 @@ export class Viewers {
     return [...this.#contexts.entries()]
   }
 
-  /** A connecting event stream: remember the requested session and sidebar. */
+  /** A connecting event stream: remember the requested agent and sidebar. */
   connect(
     id: string,
-    selectedSession: string | undefined,
-    sidebarDirectories: string[]
+    selectedAgent: string | undefined,
+    sidebarProjects: string[]
   ) {
     const context = this.#ensure(id)
-    if (selectedSession) {
-      this.#setUnread(selectedSession, false)
-      context.selectedSession = selectedSession
+    if (selectedAgent) {
+      this.#setUnread(selectedAgent, false)
+      context.selectedAgent = selectedAgent
       delete context.activeDraft
     }
-    if (sidebarDirectories.length > 0)
-      context.sidebarDirectories = sidebarDirectories
+    if (sidebarProjects.length > 0) context.sidebarProjects = sidebarProjects
     this.#save()
     return context
   }
 
   /**
-   * An event stream of a context is open. A finished run is not unread while
+   * An event stream of a context is open. A finished turn is not unread while
    * an open tab shows it. Call the returned function when the stream closes.
    */
   attach(id: string) {
@@ -146,17 +184,17 @@ export class Viewers {
     }
   }
 
-  selectSession(id: string, sessionId: string) {
+  selectAgent(id: string, agentId: string) {
     const context = this.#ensure(id)
-    this.#setUnread(sessionId, false)
-    context.selectedSession = sessionId
+    this.#setUnread(agentId, false)
+    context.selectedAgent = agentId
     delete context.activeDraft
     this.#save()
   }
 
   selectDraft(id: string, draft: DraftSelection) {
     const context = this.#ensure(id)
-    delete context.selectedSession
+    delete context.selectedAgent
     context.activeDraft = draft
     this.#save()
   }
@@ -171,42 +209,42 @@ export class Viewers {
     this.#save()
   }
 
-  /** True when an open tab shows the session. */
-  isOnScreen(sessionId: string) {
+  /** True when an open tab shows the agent. */
+  isOnScreen(agentId: string) {
     for (const id of this.#attached.keys())
-      if (this.#contexts.get(id)?.selectedSession === sessionId) return true
+      if (this.#contexts.get(id)?.selectedAgent === agentId) return true
     return false
   }
 
-  /** A finished run is unread, unless an open tab shows it. */
-  markDone(sessionId: string) {
-    if (this.isOnScreen(sessionId)) return
-    this.#setUnread(sessionId, true)
+  /** A finished turn is unread, unless an open tab shows it. */
+  markDone(agentId: string) {
+    if (this.isOnScreen(agentId)) return
+    this.#setUnread(agentId, true)
     this.#save()
   }
 
-  /** Mark a session read or unread for all tabs and clients. */
-  setRead(sessionId: string, read: boolean) {
-    this.#setUnread(sessionId, !read)
+  /** Mark an agent read or unread for all tabs and clients. */
+  setRead(agentId: string, read: boolean) {
+    this.#setUnread(agentId, !read)
     this.#save()
   }
 
-  isUnread(sessionId: string) {
-    return this.#unread.has(sessionId)
+  isUnread(agentId: string) {
+    return this.#unread.has(agentId)
   }
 
   unread(): Set<string> {
     return new Set(this.#unread)
   }
 
-  #setUnread(sessionId: string, unread: boolean) {
-    if (this.#unread.has(sessionId) === unread) return
-    if (unread) this.#unread.add(sessionId)
-    else this.#unread.delete(sessionId)
-    for (const listener of this.#readListeners) listener(sessionId, unread)
+  #setUnread(agentId: string, unread: boolean) {
+    if (this.#unread.has(agentId) === unread) return
+    if (unread) this.#unread.add(agentId)
+    else this.#unread.delete(agentId)
+    for (const listener of this.#readListeners) listener(agentId, unread)
   }
 
-  /** Call `listener` after a change, for example of the unread sessions. */
+  /** Call `listener` after a change, for example of the unread agents. */
   subscribe(listener: () => void) {
     this.#listeners.add(listener)
     return () => {
@@ -214,7 +252,7 @@ export class Viewers {
     }
   }
 
-  /** Call `listener` when a session becomes read or unread. */
+  /** Call `listener` when an agent becomes read or unread. */
   onReadChange(listener: ReadListener) {
     this.#readListeners.add(listener)
     return () => {
@@ -222,11 +260,11 @@ export class Viewers {
     }
   }
 
-  /** Forget a session everywhere, for example after it was archived. */
-  forget(sessionId: string) {
-    this.#unread.delete(sessionId)
+  /** Forget an agent everywhere, for example after it was archived. */
+  forget(agentId: string) {
+    this.#unread.delete(agentId)
     for (const context of this.#contexts.values())
-      if (context.selectedSession === sessionId) delete context.selectedSession
+      if (context.selectedAgent === agentId) delete context.selectedAgent
     this.#save()
   }
 
@@ -250,7 +288,9 @@ export class Viewers {
       .slice(0, MAX_CONTEXTS)
     const stored: StoredViewers = {
       version: 2,
-      contexts: Object.fromEntries(entries),
+      contexts: Object.fromEntries(
+        entries.map(([id, context]) => [id, storedContext(context)])
+      ),
       unread: [...this.#unread],
     }
     try {

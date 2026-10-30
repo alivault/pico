@@ -15,7 +15,7 @@ import { Harness, createRegistry } from "@earendil-works/pi-durable"
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
 import { tempDir } from "./support.ts"
 
-void test("durable sessions run concurrently, deduplicate, queue, and persist", async () => {
+void test("durable agents run concurrently, deduplicate, queue, and persist", async () => {
   const directory = await tempDir("pico-durable-test-")
   const database = join(directory, "test.sqlite")
   let active = 0

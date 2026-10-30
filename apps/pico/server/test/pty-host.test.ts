@@ -243,11 +243,11 @@ void test("after a restart, the server takes over running jobs and records jobs 
     const terminals = server(dataDir)
     await terminals.start()
     host.bind({
-      sessions: {
+      agents: {
         current: (id: string | undefined) => id,
         has: () => false,
         extensionStateChanged: () => undefined,
-      } as unknown as HostServices["sessions"],
+      } as unknown as HostServices["agents"],
       events: { push: () => undefined },
       terminals,
       harness,

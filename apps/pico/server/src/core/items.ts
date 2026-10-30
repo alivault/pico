@@ -25,11 +25,11 @@ export type ConversationImage = { mimeType: string; url: string }
  * `details` is the image of an image tool's details (see `detailsImage`).
  */
 export function imagePath(
-  sessionId: string,
+  agentId: string,
   entryId: string,
   index: number | "details"
 ) {
-  return `/api/session-image/${encodeURIComponent(sessionId)}/${encodeURIComponent(entryId)}/${index}`
+  return `/api/session-image/${encodeURIComponent(agentId)}/${encodeURIComponent(entryId)}/${index}`
 }
 
 export type TextBlock = {
@@ -356,11 +356,11 @@ function messageImageUrls(
 
 /**
  * Build items from history entries, oldest first. Images become URLs of the
- * session `sessionId` (see `imagePath`).
+ * session `agentId` (see `imagePath`).
  */
 export function itemsFromEntries(
   entries: readonly EntryRecord[],
-  sessionId: string
+  agentId: string
 ): ConversationItem[] {
   const items: ConversationItem[] = []
   const tools = new Map<string, ToolLocation>()
@@ -370,7 +370,7 @@ export function itemsFromEntries(
     const entryId = String(entry.id)
     const key = `entry:${entryId}`
     const imageUrl = (index: number | "details") =>
-      imagePath(sessionId, entryId, index)
+      imagePath(agentId, entryId, index)
     if (isUserEntry(entry)) {
       const message = entry.model?.[0] as MessageLike | undefined
       items.push({

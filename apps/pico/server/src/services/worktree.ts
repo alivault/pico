@@ -1,7 +1,7 @@
 /**
- * Git worktrees for sessions.
+ * Git worktrees for agents.
  *
- * A session can work in its own worktree, so parallel sessions do not edit
+ * A session can work in its own worktree, so parallel agents do not edit
  * the same files. Worktrees go to `<data>/worktrees/<repository>/<slug>`,
  * outside the repository, so tools in one worktree do not see the others.
  */
@@ -130,12 +130,12 @@ export async function createWorktree(
   }
   const copied = await copyIgnoredFiles(root, path, options.copy ?? [])
   const inside = relative(root, cwd)
-  const sessionCwd =
+  const agentCwd =
     inside && !inside.startsWith("..") && !inside.startsWith(sep)
       ? join(path, inside)
       : path
-  await mkdir(sessionCwd, { recursive: true })
-  return { repoRoot: root, path, branch, cwd: sessionCwd, copied }
+  await mkdir(agentCwd, { recursive: true })
+  return { repoRoot: root, path, branch, cwd: agentCwd, copied }
 }
 
 export async function worktreeClean(path: string) {

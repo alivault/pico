@@ -8,10 +8,10 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context"
 import { createModels } from "@earendil-works/pi-ai"
 import { Harness, createRegistry } from "@earendil-works/pi-durable"
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
-import { SessionDoc, publicId } from "../src/core/agents.ts"
+import { AgentMetaDoc, publicId } from "../src/core/agents.ts"
 import { tempDir } from "./support.ts"
 
-void test("tree navigation keeps the child sessions under the session", async () => {
+void test("tree navigation keeps the child agents under the session", async () => {
   const data = await tempDir("pico-tree-children-test-")
   const harness = await Harness.open(
     await openNodeSqliteStorage(join(data, "pico.sqlite")),
@@ -34,7 +34,7 @@ void test("tree navigation keeps the child sessions under the session", async ()
         ownership: { kind: "ownerless" },
         agent: { cwd: data },
         init: async (tx, id) => {
-          Object.assign(await tx.doc(SessionDoc, id), meta("Parent"))
+          Object.assign(await tx.doc(AgentMetaDoc, id), meta("Parent"))
         },
       },
       ctx
@@ -52,7 +52,7 @@ void test("tree navigation keeps the child sessions under the session", async ()
         ownership: { kind: "ownerless" },
         agent: { cwd: data },
         init: async (tx, id) => {
-          Object.assign(await tx.doc(SessionDoc, id), {
+          Object.assign(await tx.doc(AgentMetaDoc, id), {
             ...meta("Child"),
             parent: parentId,
             depth: 1,
@@ -110,10 +110,10 @@ void test("tree navigation keeps the child sessions under the session", async ()
       (
         (await (
           await fetch(
-            `${url}/api/directory-sessions?limit=100&directory=${encodeURIComponent(data)}`
+            `${url}/api/directory-agents?limit=100&directory=${encodeURIComponent(data)}`
           )
-        ).json()) as { sessions: Array<{ id: string; parent?: string }> }
-      ).sessions
+        ).json()) as { agents: Array<{ id: string; parent?: string }> }
+      ).agents
 
     const tree = (await (
       await fetch(`${url}/api/session/tree?session=${parentId}`)
@@ -130,13 +130,13 @@ void test("tree navigation keeps the child sessions under the session", async ()
     )
     assert.equal(navigated.status, 200, await navigated.clone().text())
 
-    const sessions = await listed()
-    const replacement = sessions.find(
+    const agents = await listed()
+    const replacement = agents.find(
       (session) => session.id !== childId && session.id !== parentId
     )
-    assert.ok(replacement, JSON.stringify(sessions))
+    assert.ok(replacement, JSON.stringify(agents))
     assert.equal(
-      sessions.find((session) => session.id === childId)?.parent,
+      agents.find((session) => session.id === childId)?.parent,
       replacement.id
     )
   } finally {

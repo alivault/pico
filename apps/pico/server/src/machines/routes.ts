@@ -2,7 +2,7 @@
  * Machine routes.
  *
  * Every Pico server has the `/api/machine/*` routes. A hub uses them on a
- * remote server through SSH: a summary of the sessions, a stream of summary
+ * remote server through SSH: a summary of the agents, a stream of summary
  * events, and the session operations of the agent tools.
  *
  * The `/api/machines*` routes are the hub's own: the list of machines and
@@ -19,11 +19,11 @@ import {
 import { VERSION } from "../config.ts"
 import type { Runtime } from "../core/runtime.ts"
 import type { Viewers } from "../core/viewers.ts"
-import { conversationIdOf, type Sessions } from "../core/agents.ts"
+import { conversationIdOf, type Agents } from "../core/agents.ts"
 import type { EventHub } from "../events.ts"
 import {
   lastAnswerEntry,
-  normalizeSessionId,
+  normalizeAgentId,
   runningToolLines,
   transcriptText,
   waitingOn,
@@ -48,7 +48,7 @@ import {
 
 /** The events after which a summary can change. */
 const SUMMARY_EVENTS = new Set([
-  "sessions",
+  "agents",
   "session_status",
   "session_done",
   "sidebar_state",
@@ -65,19 +65,19 @@ function isNotifyEvent(payload: { type: string; [key: string]: unknown }) {
 }
 
 export function localSummary(
-  sessions: Sessions,
+  agents: Agents,
   runtime: Runtime,
   viewers: Viewers
 ): MachineSummary {
   return {
     hostname: hostname(),
     version: VERSION,
-    directories: runtime.sidebar.snapshot().directories,
-    sessions: sessions
+    directories: runtime.sidebar.snapshot().projects,
+    agents: agents
       .list({})
       .slice(0, 200)
       .map((session) => {
-        const meta = sessions.meta(session.id)
+        const meta = agents.meta(session.id)
         return {
           id: session.id,
           title: session.title,
@@ -116,7 +116,7 @@ function onSummaryChange(
   const unsubscribeHub = hub.subscribe((event) => {
     if (SUMMARY_EVENTS.has(event.payload.type)) schedule()
   })
-  // Read states change the unread sessions of a summary.
+  // Read states change the unread agents of a summary.
   const unsubscribeViewers = viewers.subscribe(schedule)
   return () => {
     unsubscribeHub()
@@ -126,7 +126,7 @@ function onSummaryChange(
 }
 
 function parseModel(
-  sessions: Sessions,
+  agents: Agents,
   value: string | undefined
 ): { provider: string; modelId: string } | undefined {
   const trimmed = value?.trim()
@@ -137,7 +137,7 @@ function parseModel(
       provider: trimmed.slice(0, slash),
       modelId: trimmed.slice(slash + 1),
     }
-  const match = sessions
+  const match = agents
     .availableModels()
     .find((candidate) => candidate.id === trimmed)
   if (!match?.provider) throw badRequest(`Unknown model: ${trimmed}`)
@@ -148,38 +148,38 @@ function parseModel(
 export function addMachineServerRoutes(
   router: Router,
   context: {
-    sessions: Sessions
+    agents: Agents
     runtime: Runtime
     hub: EventHub
     viewers: Viewers
   }
 ) {
-  const { sessions, runtime, hub, viewers } = context
+  const { agents, runtime, hub, viewers } = context
 
-  const requireSession = (value: unknown) => {
+  const requireAgent = (value: unknown) => {
     const text = typeof value === "string" ? value : ""
-    const id = sessions.current(normalizeSessionId(text))
-    if (!id || !sessions.has(id)) throw notFound(`Unknown session: ${text}`)
+    const id = agents.current(normalizeAgentId(text))
+    if (!id || !agents.has(id)) throw notFound(`Unknown session: ${text}`)
     return id
   }
 
-  const sessionInfo = (id: string) => {
-    const summary = sessions.list({}).find((entry) => entry.id === id)
-    const meta = sessions.meta(id)
+  const agentInfo = (id: string) => {
+    const summary = agents.list({}).find((entry) => entry.id === id)
+    const meta = agents.meta(id)
     return {
-      sessionId: id,
+      agentId: id,
       title: summary?.title ?? meta.name ?? id,
       cwd: meta.cwd,
-      busy: sessions.isBusy(id),
-      needsInput: sessions.needsInput(id),
-      running: runningToolLines(sessions, id),
+      busy: agents.isBusy(id),
+      needsInput: agents.needsInput(id),
+      running: runningToolLines(agents, id),
       ...(meta.worktree ? { worktree: meta.worktree } : {}),
     }
   }
 
   router.get("/api/machine/summary", () => ({
     ok: true,
-    ...localSummary(sessions, runtime, viewers),
+    ...localSummary(agents, runtime, viewers),
   }))
 
   router.get("/api/machine/events", (request, response) => {
@@ -187,7 +187,7 @@ export function addMachineServerRoutes(
     const send = () =>
       stream.send({
         type: "machine_summary",
-        summary: localSummary(sessions, runtime, viewers),
+        summary: localSummary(agents, runtime, viewers),
       })
     send()
     const stopSummary = onSummaryChange(hub, viewers, send)
@@ -205,15 +205,15 @@ export function addMachineServerRoutes(
   const waitingOf = (id: string) =>
     waitingOn(runtime.harness, conversationIdOf(id), BACKGROUND_CONTEXT)
 
-  router.get("/api/machine/sessions", async (request) => {
+  router.get("/api/machine/agents", async (request) => {
     const directory = stringField(request.query.get("directory"))
-    const list = sessions.list(directory ? { directory } : {}).slice(0, 50)
+    const list = agents.list(directory ? { directory } : {}).slice(0, 50)
     return {
       ok: true,
-      sessions: await Promise.all(
+      agents: await Promise.all(
         list.map(async (item) => {
           if (item.busy) {
-            const running = runningToolLines(sessions, item.id)
+            const running = runningToolLines(agents, item.id)
             return running.length > 0 ? { ...item, running } : item
           }
           if (item.needsInput) return item
@@ -239,19 +239,19 @@ export function addMachineServerRoutes(
     if (!goal) throw badRequest("goal is required")
     if (!requestId) throw badRequest("requestId is required")
     const marker = `hub:${requestId}`
-    let id = sessions
+    let id = agents
       .list({})
-      .find((entry) => sessions.meta(entry.id).spawnedByCall === marker)?.id
+      .find((entry) => agents.meta(entry.id).spawnedByCall === marker)?.id
     if (!id) {
       const requestedCwd = stringField(body.cwd)
       const cwd = await files.canonicalDirectory(
-        requestedCwd ?? runtime.sidebar.snapshot().directories[0] ?? homedir()
+        requestedCwd ?? runtime.sidebar.snapshot().projects[0] ?? homedir()
       )
-      const model = parseModel(sessions, stringField(body.model))
+      const model = parseModel(agents, stringField(body.model))
       const name = stringField(body.name)
       const thinking = stringField(body.thinking)
       const profile = stringField(body.profile)
-      id = await sessions.create(cwd, {
+      id = await agents.create(cwd, {
         spawnedByCall: marker,
         ...(model ? { model } : {}),
         ...(thinking ? { thinkingLevel: thinking } : {}),
@@ -259,12 +259,12 @@ export function addMachineServerRoutes(
         ...(name ? { name } : {}),
       })
     }
-    await sessions.prompt(id, {
+    await agents.prompt(id, {
       message: goal,
       images: [],
       requestId: `spawn:${marker}`,
     })
-    return { ok: true, ...sessionInfo(id) }
+    return { ok: true, ...agentInfo(id) }
   })
 
   router.post("/api/machine/session/prompt", async (request) => {
@@ -274,22 +274,22 @@ export function addMachineServerRoutes(
       mode?: unknown
       requestId?: unknown
     }>()
-    const id = requireSession(body.id)
+    const id = requireAgent(body.id)
     const message = stringField(body.message)
     const requestId = stringField(body.requestId)
     if (!message) throw badRequest("message is required")
     if (!requestId) throw badRequest("requestId is required")
-    await sessions.prompt(id, {
+    await agents.prompt(id, {
       message,
       images: [],
       streamingBehavior: body.mode === "steer" ? "steer" : "followUp",
       requestId: `hub:${requestId}`,
     })
-    return { ok: true, ...sessionInfo(id) }
+    return { ok: true, ...agentInfo(id) }
   })
 
   router.get("/api/machine/session/read", async (request) => {
-    const id = requireSession(request.query.get("id"))
+    const id = requireAgent(request.query.get("id"))
     const last = Number(request.query.get("last") ?? 6) || 6
     const text = await transcriptText(
       runtime.harness,
@@ -300,12 +300,12 @@ export function addMachineServerRoutes(
       },
       BACKGROUND_CONTEXT
     )
-    return { ok: true, ...sessionInfo(id), text: text ?? "" }
+    return { ok: true, ...agentInfo(id), text: text ?? "" }
   })
 
   // Wait (up to `timeoutMs`) until the session is idle; then its answer.
   router.get("/api/machine/session/wait", async (request) => {
-    const id = requireSession(request.query.get("id"))
+    const id = requireAgent(request.query.get("id"))
     const timeoutMs = Math.min(
       55_000,
       Math.max(0, Number(request.query.get("timeoutMs") ?? 25_000) || 0)
@@ -324,7 +324,7 @@ export function addMachineServerRoutes(
         idle = false
       }
     }
-    if (idle && sessions.isBusy(id)) idle = false
+    if (idle && agents.isBusy(id)) idle = false
     const answer = idle
       ? await lastAnswerEntry(
           runtime.harness,
@@ -334,7 +334,7 @@ export function addMachineServerRoutes(
       : undefined
     return {
       ok: true,
-      ...sessionInfo(id),
+      ...agentInfo(id),
       idle,
       ...(answer !== undefined ? { answer: answer.text } : {}),
       ...(answer?.id !== undefined ? { answerId: Number(answer.id) } : {}),
@@ -344,36 +344,36 @@ export function addMachineServerRoutes(
 
   router.post("/api/machine/session/stop", async (request) => {
     const body = await request.body<{ id?: unknown }>()
-    const id = requireSession(body.id)
-    await sessions.abort(id)
-    return { ok: true, ...sessionInfo(id) }
+    const id = requireAgent(body.id)
+    await agents.abort(id)
+    return { ok: true, ...agentInfo(id) }
   })
 
   // Read state is global, so a hub agent changes it for every client.
   router.post("/api/machine/session/read-state", async (request) => {
     const body = await request.body<{ id?: unknown; unread?: unknown }>()
-    const id = requireSession(body.id)
+    const id = requireAgent(body.id)
     viewers.setRead(id, body.unread !== true)
-    return { ok: true, sessionId: id, unread: body.unread === true }
+    return { ok: true, agentId: id, unread: body.unread === true }
   })
 
   router.post("/api/machine/session/archive", async (request) => {
     const body = await request.body<{ id?: unknown; restore?: unknown }>()
-    const id = requireSession(body.id)
-    if (body.restore === true) sessions.restore(id)
-    else sessions.archive(id)
-    return { ok: true, sessionId: id, archived: body.restore !== true }
+    const id = requireAgent(body.id)
+    if (body.restore === true) agents.restore(id)
+    else agents.archive(id)
+    return { ok: true, agentId: id, archived: body.restore !== true }
   })
 
-  router.get("/api/machine/sessions/archived", () => ({
+  router.get("/api/machine/agents/archived", () => ({
     ok: true,
-    sessions: sessions.archivedSessions().slice(0, 50),
+    agents: agents.archivedAgents().slice(0, 50),
   }))
 }
 
 /** The hub's view of its own runtime, as a machine. */
 export function localMachine(
-  sessions: Sessions,
+  agents: Agents,
   runtime: Runtime,
   viewers: Viewers,
   startedAt: number
@@ -387,7 +387,7 @@ export function localMachine(
     state: "online",
     since: startedAt,
     version: VERSION,
-    summary: localSummary(sessions, runtime, viewers),
+    summary: localSummary(agents, runtime, viewers),
   }
 }
 
@@ -401,7 +401,7 @@ function machineError(error: unknown): never {
 export function addHubRoutes(
   router: Router,
   context: {
-    sessions: Sessions
+    agents: Agents
     runtime: Runtime
     hub: EventHub
     viewers: Viewers
@@ -409,10 +409,10 @@ export function addHubRoutes(
     startedAt: number
   }
 ) {
-  const { sessions, runtime, hub, viewers, machines } = context
+  const { agents, runtime, hub, viewers, machines } = context
   const snapshot = () => ({
     machines: [
-      localMachine(sessions, runtime, viewers, context.startedAt),
+      localMachine(agents, runtime, viewers, context.startedAt),
       ...machines.list(),
     ],
     ...(machines.fileError ? { fileError: machines.fileError } : {}),
