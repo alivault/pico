@@ -64,6 +64,7 @@ import {
   allProfiles,
   applyProfile,
   findProfile,
+  removedNames,
   type ToolLimits,
 } from "./profiles.ts"
 import { removeWorktree } from "../services/worktree.ts"
@@ -511,9 +512,44 @@ export class Agents implements HostAgents {
         if (waiting) this.#waiting.set(id, waiting)
       })
     )
+    await this.#reapplyStaleProfiles()
     this.#harness.subscribeCommits((publication) => this.#observe(publication))
     // Continue turns an earlier process left unfinished.
     this.#harness.resume()
+  }
+
+  /**
+   * Apply the profile again where an agent still has a tool that its profile
+   * or limits remove. A conversation stores its removed tools by name, so a
+   * renamed tool (for example `spawn_session`, now `spawn_subagent`) comes
+   * back until the profile is applied again.
+   */
+  async #reapplyStaleProfiles() {
+    for (const [id, meta] of this.#metas) {
+      if (!meta.parent && !meta.profile && !meta.limits) continue
+      const profile = findProfile(
+        meta.profile,
+        this.#runtime.settings.data.profiles
+      )
+      const removed = removedNames(
+        profile?.name === "full" ? undefined : profile,
+        this.#toolOptions(meta)
+      )
+      const conversation = await this.#harness.conversation(
+        conversationIdOf(id),
+        ctx
+      )
+      if (!conversation) continue
+      const agentState = await conversation.agent(ctx)
+      if (!agentState.tools.some((tool) => removed.has(tool.name))) continue
+      await applyProfile(
+        conversation,
+        this.#runtime.registry,
+        profile?.name === "full" ? undefined : profile,
+        ctx,
+        this.#toolOptions(meta)
+      )
+    }
   }
 
   // ---------------------------------------------------------------------------

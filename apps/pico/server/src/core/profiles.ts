@@ -158,15 +158,32 @@ export function nameList(value: unknown) {
 
 type SelectionOptions = { subagent?: { parent: string }; limits?: ToolLimits }
 
+/**
+ * Tool and action names from before the agent rename. Limits stored in an
+ * agent's `pico.session` document and custom profiles in `settings.json` can
+ * still have them, so they are read as the new names.
+ */
+const RENAMED_TOOLS: Record<string, string> = {
+  spawn_session: "spawn_subagent",
+  send_to_session: "agents.send",
+  sessions: "agents",
+  "sessions.stop": "agents.stop",
+  "sessions.archive": "agents.archive",
+}
+
+function currentNames(names: readonly string[] | undefined) {
+  return (names ?? []).map((name) => RENAMED_TOOLS[name] ?? name)
+}
+
 /** The tool and action names that a profile and the limits take away. */
 export function removedNames(
   profile: Profile | undefined,
   options: SelectionOptions = {}
 ) {
-  const add = new Set(options.limits?.add ?? [])
+  const add = new Set(currentNames(options.limits?.add))
   const removeNames = new Set([
-    ...(profile?.removeTools ?? []),
-    ...(options.limits?.remove ?? []),
+    ...currentNames(profile?.removeTools),
+    ...currentNames(options.limits?.remove),
     ...(options.subagent ? SUBAGENT_DENIED_TOOLS : []),
   ])
   for (const name of add) removeNames.delete(name)
@@ -192,11 +209,11 @@ export function resolveSelection(
   options: SelectionOptions = {}
 ) {
   const snapshot = registry.snapshot()
-  const add = new Set(options.limits?.add ?? [])
+  const add = new Set(currentNames(options.limits?.add))
   const removeNames = removedNames(profile, options)
   let extensions: Extension[] | null = null
   if (profile?.extensions) {
-    const names = [...profile.extensions]
+    const names = currentNames(profile.extensions)
     // A tool that the parent adds brings its extension.
     for (const { tool, extension } of snapshot.tools())
       if (add.has(tool.name) && !names.includes(extension.name))
@@ -266,7 +283,7 @@ function subagentInstructions(
     `Bash refuses: ${deny.join(", ")}.`,
     "If you need a tool, a command, or a decision, do not wait and do not work around the limit. End your turn with a message that starts with `Question:`. Give the question, the options, and your recommendation. Your parent reads it and answers you, and it can give you more tools.",
     "When the work is done, end your turn with a short report of what you did. Your parent gets the end of your turn as a message, so do not also send the report with agents send.",
-    "If you end your turn to wait on a timer, a watch, or a job, your parent gets no message: it gets one when you end with a question or with done.",
+    "If you end your turn to wait on a job, your parent gets no message: it gets one when you end with a question or with done.",
   ]
     .filter(Boolean)
     .join(" ")

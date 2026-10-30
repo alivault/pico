@@ -129,3 +129,22 @@ void test("profiles and subagent limits name agents.send as an action", () => {
     })
   )
 })
+
+void test("tool names from before the rename work as the new names", () => {
+  const limits = {
+    remove: ["send_to_session", "sessions.stop"],
+    add: ["spawn_session"],
+  }
+  const options = { subagent: { parent: "s1" }, limits }
+  assert.ok(actionRemoved("agents.send", undefined, options))
+  assert.ok(actionRemoved("agents.stop", undefined, options))
+  // The parent gave the subagent spawn_session, so it keeps spawn_subagent.
+  assert.ok(!actionRemoved("spawn_subagent", undefined, options))
+  assert.ok(
+    actionRemoved("agents.archive", {
+      name: "custom",
+      description: "An old custom profile",
+      removeTools: ["sessions.archive"],
+    })
+  )
+})
