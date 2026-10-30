@@ -1,6 +1,6 @@
 /**
- * The HTTP API of the web client: session and prompt routes on the durable
- * session store, workspace routes (git, files, terminals, highlighting), and
+ * The HTTP API of the web client: agent and prompt routes on the durable
+ * agent store, workspace routes (git, files, terminals, highlighting), and
  * provider auth. Request and response shapes follow the client's contract.
  */
 import { homedir } from "node:os"
@@ -70,20 +70,20 @@ export type ApiContext = {
 
 type Target = {
   contextId: string
-  session?: string
+  agent?: string
   agentKey?: string
 }
 
 function target(request: Request): Target {
   const contextId = stringField(request.query.get("context")) ?? "default"
-  const session = parseAgentId(
+  const agent = parseAgentId(
     stringField(request.query.get("agentPath")) ??
-      stringField(request.query.get("session"))
+      stringField(request.query.get("agent"))
   )
   const key = stringField(request.query.get("agentKey"))
   return {
     contextId,
-    ...(session ? { session } : {}),
+    ...(agent ? { agent } : {}),
     ...(key ? { agentKey: key } : {}),
   }
 }
@@ -123,10 +123,10 @@ export function createApi(api: ApiContext) {
     }
   }
 
-  /** The visible session a request is about, if any. */
+  /** The visible agent a request is about, if any. */
   const agentOf = (request: Request): string | undefined => {
-    const { contextId, session } = target(request)
-    const selected = session ?? viewers.get(contextId)?.selectedAgent
+    const { contextId, agent } = target(request)
+    const selected = agent ?? viewers.get(contextId)?.selectedAgent
     const current = agents.current(selected)
     return current && agents.has(current) ? current : undefined
   }
@@ -134,10 +134,10 @@ export function createApi(api: ApiContext) {
   const requireAgent = (request: Request) => {
     const id = agentOf(request)
     if (!id) {
-      const requested = target(request).session
+      const requested = target(request).agent
       throw requested
-        ? notFound(`Unknown session: ${requested}`)
-        : badRequest("session is required")
+        ? notFound(`Unknown agent: ${requested}`)
+        : badRequest("agent is required")
     }
     return id
   }
@@ -146,11 +146,11 @@ export function createApi(api: ApiContext) {
     const id = agents.current(
       parseAgentId(typeof path === "string" ? path : undefined)
     )
-    if (!id || !agents.has(id)) throw badRequest("Unknown session path")
+    if (!id || !agents.has(id)) throw badRequest("Unknown agent path")
     return id
   }
 
-  /** The directory a request works in: its session's, its draft's, or the sidebar's first. */
+  /** The directory a request works in: its agent's, its draft's, or the sidebar's first project. */
   const baseCwd = (request: Request) => {
     const id = agentOf(request)
     if (id) return agents.meta(id).cwd
@@ -159,7 +159,7 @@ export function createApi(api: ApiContext) {
     if (fromKey) return fromKey
     const viewer = viewers.get(contextId)
     return (
-      viewer?.activeDraft?.cwd ?? viewer?.sidebarDirectories[0] ?? homedir()
+      viewer?.activeDraft?.cwd ?? viewer?.sidebarProjects[0] ?? homedir()
     )
   }
 
@@ -186,28 +186,28 @@ export function createApi(api: ApiContext) {
         "state_sync",
         "conversation_delta",
         "agents",
-        "session_status",
-        "session_done",
+        "agent_status",
+        "agent_done",
         "user_message",
         "request_error",
         "extension_error",
         "extension_ui_request",
         "extension_ui_dismiss",
         "git_changed",
-        "session_extensions",
+        "agent_extensions",
       ],
       endpoints: [],
       features: [
         "durable-agents",
-        "session-index",
+        "agent-index",
         "conversation",
         "paginated-conversation-history",
         "state-sync",
         "sse-replay",
         "prompt",
         "prompt-queue",
-        "session-mutations",
-        "session-tree",
+        "agent-mutations",
+        "conversation-tree",
         "model-selection",
         "thinking-selection",
         "compaction",
@@ -234,7 +234,7 @@ export function createApi(api: ApiContext) {
         "ask-user",
         "background-jobs",
         "scratchpad",
-        "child-agents",
+        "subagents",
         "worktrees",
         "push-notifications",
         "browser",
@@ -268,13 +268,13 @@ export function createApi(api: ApiContext) {
   })
 
   // ---------------------------------------------------------------------------
-  // Session lists
+  // Agent lists
 
-  router.get("/api/directory-agents", (request) => {
-    const directory = stringField(request.query.get("directory"))
-    if (!directory) throw badRequest("directory is required")
+  router.get("/api/project-agents", (request) => {
+    const project = stringField(request.query.get("project"))
+    if (!project) throw badRequest("project is required")
     const unread = viewers.unread()
-    const ids = agents.projectAgents(directory)
+    const ids = agents.projectAgents(project)
     const offset = Math.min(
       ids.length,
       Math.max(0, Number(request.query.get("offset") ?? 0) || 0)
@@ -285,7 +285,7 @@ export function createApi(api: ApiContext) {
     )
     return {
       ok: true,
-      directory,
+      project,
       totalCount: ids.length,
       offset,
       limit,
@@ -295,38 +295,38 @@ export function createApi(api: ApiContext) {
     }
   })
 
-  router.get("/api/directory-agents-index", (request) => {
-    const directory = stringField(request.query.get("directory"))
-    if (!directory) throw badRequest("directory is required")
+  router.get("/api/project-agents-index", (request) => {
+    const project = stringField(request.query.get("project"))
+    if (!project) throw badRequest("project is required")
     return {
       ok: true,
-      ...agents.projectIndex(directory, viewers.unread()),
+      ...agents.projectIndex(project, viewers.unread()),
     }
   })
 
-  router.get("/api/directory-agents-indexes", (request) => {
-    const directories = request.query
-      .getAll("directory")
+  router.get("/api/project-agents-indexes", (request) => {
+    const projects = request.query
+      .getAll("project")
       .map((value) => value.trim())
       .filter(Boolean)
-    if (directories.length === 0)
-      throw badRequest("at least one directory is required")
+    if (projects.length === 0)
+      throw badRequest("at least one project is required")
     const unread = viewers.unread()
     return {
       ok: true,
-      directories,
-      directoryIndexes: Object.fromEntries(
-        directories.map((directory) => [
-          directory,
-          agents.projectIndex(directory, unread),
+      projects,
+      projectIndexes: Object.fromEntries(
+        projects.map((project) => [
+          project,
+          agents.projectIndex(project, unread),
         ])
       ),
     }
   })
 
-  router.post("/api/directory-agents/cleanup", async (request) => {
+  router.post("/api/project-agents/cleanup", async (request) => {
     const body = await request.body<{
-      directory?: string
+      project?: string
       olderThanMs?: number
       dryRun?: boolean
       includeActiveAgent?: boolean
@@ -334,8 +334,8 @@ export function createApi(api: ApiContext) {
     const olderThanMs = Number(body.olderThanMs)
     if (!Number.isFinite(olderThanMs) || olderThanMs <= 0)
       throw badRequest("olderThanMs must be greater than zero")
-    const directory = await files.resolveDirectory(
-      String(body.directory ?? ""),
+    const project = await files.resolveDirectory(
+      String(body.project ?? ""),
       baseCwd(request)
     )
     const activeIds = new Set(
@@ -346,14 +346,14 @@ export function createApi(api: ApiContext) {
         )
     )
     const dryRun = body.dryRun !== false
-    const result = agents.cleanup(directory, olderThanMs, {
+    const result = agents.cleanup(project, olderThanMs, {
       dryRun,
       includeActive: Boolean(body.includeActiveAgent),
       activeIds,
     })
     return {
       ok: true,
-      directory,
+      project,
       cutoff: result.cutoff,
       dryRun,
       deletedAgentIds: result.deleted,
@@ -362,9 +362,9 @@ export function createApi(api: ApiContext) {
   })
 
   // ---------------------------------------------------------------------------
-  // Session selection and prompts
+  // Agent selection and prompts
 
-  router.post("/api/session/new", async (request) => {
+  router.post("/api/agent/new", async (request) => {
     const body = await request.body<{ cwd?: string }>()
     const { contextId } = target(request)
     const cwd = body.cwd
@@ -375,7 +375,7 @@ export function createApi(api: ApiContext) {
     return { ok: true, draft: true, agentKey: key, cwd }
   })
 
-  router.post("/api/session/select", async (request) => {
+  router.post("/api/agent/select", async (request) => {
     const { contextId } = target(request)
     const id = requireAgent(request)
     viewers.selectAgent(contextId, id)
@@ -408,10 +408,10 @@ export function createApi(api: ApiContext) {
         throw badRequest(`invalid streaming behavior: ${behavior}`)
       }
       ensureAcceptingWork()
-      const { contextId, session, agentKey: queryKey } = target(request)
+      const { contextId, agent, agentKey: queryKey } = target(request)
       const draftKey = queryKey ?? stringField(body.draftOwnerKey)
-      let id = session ? agents.current(session) : undefined
-      if (session && !id) throw notFound(`Unknown session: ${session}`)
+      let id = agent ? agents.current(agent) : undefined
+      if (agent && !id) throw notFound(`Unknown agent: ${agent}`)
       // A retry after a draft was admitted must reach the same conversation
       // so durable can deduplicate its clientRequestId, not create a new one.
       const viewerBeforeAdmission = viewers.get(contextId)
@@ -656,19 +656,17 @@ export function createApi(api: ApiContext) {
     async function (request: Request) {
       const body = await request.body<{
         clientId?: unknown
-        directories?: unknown
+        projects?: unknown
         pinnedAgentKeys?: unknown
-        collapsedDirectories?: unknown
+        collapsedProjects?: unknown
       }>()
       const change = {
-        ...(body.directories !== undefined
-          ? { directories: body.directories }
-          : {}),
+        ...(body.projects !== undefined ? { projects: body.projects } : {}),
         ...(body.pinnedAgentKeys !== undefined
           ? { pinnedAgentKeys: body.pinnedAgentKeys }
           : {}),
-        ...(body.collapsedDirectories !== undefined
-          ? { collapsedDirectories: body.collapsedDirectories }
+        ...(body.collapsedProjects !== undefined
+          ? { collapsedProjects: body.collapsedProjects }
           : {}),
       }
       const state =
@@ -828,19 +826,19 @@ export function createApi(api: ApiContext) {
   // An image of a saved message (`imagePath` in core/items.ts). History
   // entries do not change, so the browser can keep the image for good.
   router.get(
-    "/api/session-image/:session/:entry/:index",
+    "/api/agent-image/:agent/:entry/:index",
     async (request, response) => {
-      const { session, entry } = request.params
+      const { agent, entry } = request.params
       const index =
         request.params.index === "details"
           ? "details"
           : Number(request.params.index)
       if (
-        !agents.has(session) ||
+        !agents.has(agent) ||
         (index !== "details" && (!Number.isInteger(index) || index < 0))
       )
         throw notFound("Unknown image")
-      const image = await agents.image(session, entry!, index)
+      const image = await agents.image(agent, entry!, index)
       if (!image) throw notFound("Unknown image")
       response.writeHead(200, {
         // Only raster types: an SVG opened from this origin could run script.
@@ -1096,11 +1094,11 @@ export function createApi(api: ApiContext) {
   // Terminals
 
   const terminalScope = (request: Request) => {
-    const { contextId, session, agentKey: key } = target(request)
+    const { contextId, agent, agentKey: key } = target(request)
     const viewer = viewers.get(contextId)
     const scopeTarget =
       key ??
-      session ??
+      agent ??
       viewer?.activeDraft?.agentKey ??
       viewer?.selectedAgent ??
       "default"
@@ -1268,9 +1266,9 @@ export function createApi(api: ApiContext) {
   })
 
   // ---------------------------------------------------------------------------
-  // Session operations
+  // Agent operations
 
-  router.get("/api/session/history", async (request) => {
+  router.get("/api/agent/history", async (request) => {
     const id = requireAgent(request)
     const before = queryNumber(request, "before")
     const limit = Math.min(
@@ -1280,7 +1278,7 @@ export function createApi(api: ApiContext) {
     return agents.history(id, before, limit)
   })
 
-  router.post("/api/session/answer", async (request) => {
+  router.post("/api/agent/answer", async (request) => {
     const id = requireAgent(request)
     const body = await request.body<{
       questionId?: unknown
@@ -1308,7 +1306,7 @@ export function createApi(api: ApiContext) {
     return { ok: true }
   })
 
-  router.post("/api/session/todo", async (request) => {
+  router.post("/api/agent/todo", async (request) => {
     const id = requireAgent(request)
     const body = await request.body<Record<string, unknown>>()
     const op = stringField(body.op)
@@ -1344,7 +1342,7 @@ export function createApi(api: ApiContext) {
     return { ok: true, items: await agents.changeTodo(id, change) }
   })
 
-  router.post("/api/session/job/stop", async (request) => {
+  router.post("/api/agent/job/stop", async (request) => {
     const id = requireAgent(request)
     const body = await request.body<{ jobId?: unknown }>()
     const jobId = stringField(body.jobId)
@@ -1361,7 +1359,7 @@ export function createApi(api: ApiContext) {
     return { ok: true }
   })
 
-  router.get("/api/session/job/log", async (request) => {
+  router.get("/api/agent/job/log", async (request) => {
     requireAgent(request)
     const jobId = stringField(request.query.get("jobId"))
     if (!jobId) throw badRequest("jobId is required")
@@ -1375,7 +1373,7 @@ export function createApi(api: ApiContext) {
     return { ok: true, jobId, text }
   })
 
-  router.get("/api/session/scratch", async (request) => {
+  router.get("/api/agent/scratch", async (request) => {
     const id = requireAgent(request)
     const scratchId = stringField(request.query.get("id"))
     if (!scratchId) throw badRequest("id is required")
@@ -1387,7 +1385,7 @@ export function createApi(api: ApiContext) {
     return { ok: true, id: scratchId, text }
   })
 
-  router.get("/api/session/instructions", async (request) => {
+  router.get("/api/agent/instructions", async (request) => {
     const id = requireAgent(request)
     const path = stringField(request.query.get("path"))
     if (!path) throw badRequest("path is required")
@@ -1506,7 +1504,7 @@ export function createApi(api: ApiContext) {
       change.compactAtTokens !== undefined &&
       change.compactAtTokens !== runtime.settings.data.compactAtTokens
     runtime.settings.update(change as never)
-    // The context usage of each session shows the compaction level.
+    // The context usage of each agent shows the compaction level.
     if (compactAtChanged) await agents.publishWatchedStates()
     return { ok: true, ...agentSettings(runtime) }
   })
@@ -1604,7 +1602,7 @@ export function createApi(api: ApiContext) {
     }
   })
 
-  router.post("/api/session/profile", async (request) => {
+  router.post("/api/agent/profile", async (request) => {
     const body = await request.body<{ profile?: unknown; cwd?: unknown }>()
     const name = stringField(body.profile) ?? "full"
     const id = agentOf(request)
@@ -1655,7 +1653,7 @@ export function createApi(api: ApiContext) {
     return { ok: true, profiles: agents.profiles(), custom: clean }
   })
 
-  router.get("/api/session/extensions", async (request) => {
+  router.get("/api/agent/extensions", async (request) => {
     const id = requireAgent(request)
     return {
       ok: true,
@@ -1664,7 +1662,7 @@ export function createApi(api: ApiContext) {
     }
   })
 
-  router.post("/api/session/rename", async (request) => {
+  router.post("/api/agent/rename", async (request) => {
     const body = await request.body<{ path?: string; name?: string }>()
     const name = agents.rename(
       agentFromPath(body.path),
@@ -1673,7 +1671,7 @@ export function createApi(api: ApiContext) {
     return { ok: true, name }
   })
 
-  router.post("/api/session/name", async (request) => {
+  router.post("/api/agent/name", async (request) => {
     const body = await request.body<{ path?: string }>()
     return {
       ok: true,
@@ -1681,7 +1679,7 @@ export function createApi(api: ApiContext) {
     }
   })
 
-  router.post("/api/session/delete", async (request) => {
+  router.post("/api/agent/delete", async (request) => {
     const body = await request.body<{
       path?: string
       removeWorktree?: boolean
@@ -1694,7 +1692,7 @@ export function createApi(api: ApiContext) {
     return { ok: true }
   })
 
-  router.get("/api/session/draft-worktree", async (request) => {
+  router.get("/api/agent/draft-worktree", async (request) => {
     const { contextId } = target(request)
     const draft = viewers.get(contextId)?.activeDraft
     const cwd = stringField(request.query.get("cwd")) ?? draft?.cwd
@@ -1706,7 +1704,7 @@ export function createApi(api: ApiContext) {
     }
   })
 
-  router.post("/api/session/draft-worktree", async (request) => {
+  router.post("/api/agent/draft-worktree", async (request) => {
     const body = await request.body<{
       cwd?: string
       enabled?: boolean
@@ -1752,18 +1750,18 @@ export function createApi(api: ApiContext) {
     agents: agents.archivedAgents(),
   }))
 
-  router.post("/api/session/restore", async (request) => {
+  router.post("/api/agent/restore", async (request) => {
     const body = await request.body<{ path?: string }>()
     const id = agentFromPath(body.path)
     agents.restore(id)
     return {
       ok: true,
       path: agentPath(id),
-      directory: agents.projectOf(id),
+      project: agents.projectOf(id),
     }
   })
 
-  router.post("/api/session/move", async (request) => {
+  router.post("/api/agent/move", async (request) => {
     const body = await request.body<{ path?: string; cwd?: string }>()
     const id = agentFromPath(body.path)
     const cwd = await files.canonicalDirectory(String(body.cwd ?? ""))
@@ -1778,7 +1776,7 @@ export function createApi(api: ApiContext) {
     }
   })
 
-  router.post("/api/session/read-state", async (request) => {
+  router.post("/api/agent/read-state", async (request) => {
     const body = await request.body<{ path?: string; unread?: boolean }>()
     const id = agentFromPath(body.path)
     const unread = Boolean(body.unread)
@@ -1787,11 +1785,11 @@ export function createApi(api: ApiContext) {
     return { ok: true, path: agentPath(id), unread }
   })
 
-  router.get("/api/session/tree", async (request) =>
+  router.get("/api/agent/tree", async (request) =>
     agents.tree(requireAgent(request))
   )
 
-  router.post("/api/session/tree", async (request) => {
+  router.post("/api/agent/tree", async (request) => {
     const body = await request.body<{ targetId?: string }>()
     const targetId = stringField(body.targetId)
     if (!targetId) throw badRequest("targetId is required")
@@ -1801,14 +1799,14 @@ export function createApi(api: ApiContext) {
     }
   })
 
-  router.post("/api/session/tree/label", async (request) => {
+  router.post("/api/agent/tree/label", async (request) => {
     const body = await request.body<{ entryId?: string; label?: string }>()
     const entryId = stringField(body.entryId)
     if (!entryId) throw badRequest("entryId is required")
     const id = requireAgent(request)
     if (agents.isBusy(id))
       throw badRequest(
-        "Wait for the session to finish before changing a label."
+        "Wait for the agent to finish before changing a label."
       )
     agents.setLabel(
       id,
@@ -1818,12 +1816,12 @@ export function createApi(api: ApiContext) {
     return agents.tree(id)
   })
 
-  router.get("/api/session/fork", async (request) => ({
+  router.get("/api/agent/fork", async (request) => ({
     ok: true,
     messages: await agents.forkMessages(requireAgent(request)),
   }))
 
-  router.post("/api/session/fork", async (request) => {
+  router.post("/api/agent/fork", async (request) => {
     const body = await request.body<{ entryId?: string }>()
     const entryId = stringField(body.entryId)
     if (!entryId) throw badRequest("entryId is required")
@@ -1840,7 +1838,7 @@ export function createApi(api: ApiContext) {
     }
   })
 
-  router.post("/api/session/clone", async (request) => {
+  router.post("/api/agent/clone", async (request) => {
     const id = requireAgent(request)
     const cloned = await agents.clone(id, target(request).contextId)
     return {
@@ -1922,8 +1920,8 @@ type Item = unknown
 
 /**
  * One viewer context's event stream: a bootstrap (missed events, the selected
- * session's state, the session list), then live events for that context and
- * its selected session. State syncs are sent as patches against the items the
+ * agent's state, the agent list), then live events for that context and
+ * its selected agent. State syncs are sent as patches against the items the
  * client already has.
  */
 function streamEvents(
@@ -1933,10 +1931,10 @@ function streamEvents(
 ) {
   const { agents, viewers, hub } = api
   const contextId = stringField(request.query.get("context")) ?? "default"
-  const pinned = parseAgentId(stringField(request.query.get("session")))
+  const pinned = parseAgentId(stringField(request.query.get("agent")))
   const queryKey = stringField(request.query.get("agentKey"))
-  const sidebarDirectories = request.query
-    .getAll("sidebarDirectory")
+  const sidebarProjects = request.query
+    .getAll("sidebarProject")
     .map((value) => value.trim())
     .filter(Boolean)
   const header = request.raw.headers["last-event-id"]
@@ -1955,7 +1953,7 @@ function streamEvents(
   let previousHistoryOffset: unknown
   let itemsChangedByDelta = false
 
-  // The URL session initializes this viewer. Later selections must follow
+  // The URL agent initializes this viewer. Later selections must follow
   // the viewer too: the client keeps the same EventSource when switching.
   const currentAgent = () => {
     const selected = viewers.get(contextId)?.selectedAgent
@@ -1971,8 +1969,8 @@ function streamEvents(
 
   const deliver = (event: ServerEvent) => {
     if (!stream || stream.isClosed) return
-    const session = currentAgent()
-    if (!eventMatches(event, contextId, session)) return
+    const agent = currentAgent()
+    if (!eventMatches(event, contextId, agent)) return
     const payload = event.payload
     if (payload.type === "state_sync") {
       const items = Array.isArray(payload.items)
@@ -2018,25 +2016,25 @@ function streamEvents(
     const viewer = viewers.connect(
       contextId,
       pinned ? agents.current(pinned) : undefined,
-      sidebarDirectories
+      sidebarProjects
     )
     if (!pinned && !viewer.selectedAgent && queryKey?.startsWith("draft:")) {
       const cwd = draftCwdFromKey(queryKey) ?? homedir()
       if (viewer.activeDraft?.agentKey !== queryKey)
         viewers.selectDraft(contextId, { agentKey: queryKey, cwd })
     }
-    const session = currentAgent()
-    const statePayload = session
-      ? await agents.stateSync(session)
+    const agent = currentAgent()
+    const statePayload = agent
+      ? await agents.stateSync(agent)
       : await agents.draftStateSync(
           viewers.get(contextId)?.activeDraft ?? {
             agentKey: "draft:default",
-            cwd: viewer.sidebarDirectories[0] ?? homedir(),
+            cwd: viewer.sidebarProjects[0] ?? homedir(),
           }
         )
     const agentsPayload = agents.agentsPayload({
-      ...(session ? { activeAgentId: session } : {}),
-      directories: sidebarDirectories,
+      ...(agent ? { activeAgentId: agent } : {}),
+      projects: sidebarProjects,
       unread: viewers.unread(),
     })
     stream = new SseStream(request.raw, response)
@@ -2060,20 +2058,20 @@ function streamEvents(
             !api.ui.has(String(event.payload.id))
           )
             continue
-          if (eventMatches(event, contextId, session))
+          if (eventMatches(event, contextId, agent))
             stream.send(event.payload, event.sequence)
         }
       }
     }
-    liveAgent = session
-    bindWatch(session)
+    liveAgent = agent
+    bindWatch(agent)
     previousItems = Array.isArray(statePayload.items) ? statePayload.items : []
     stream.send(statePayload)
     stream.send(agentsPayload)
     ready = true
     for (const event of pending.splice(0)) {
       // The bootstrap already holds the state these carried.
-      if (event.payload.type === "state_sync" && event.agentId === session)
+      if (event.payload.type === "state_sync" && event.agentId === agent)
         continue
       if (event.payload.type === "conversation_delta") continue
       deliver(event)

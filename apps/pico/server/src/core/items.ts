@@ -29,7 +29,7 @@ export function imagePath(
   entryId: string,
   index: number | "details"
 ) {
-  return `/api/session-image/${encodeURIComponent(agentId)}/${encodeURIComponent(entryId)}/${index}`
+  return `/api/agent-image/${encodeURIComponent(agentId)}/${encodeURIComponent(entryId)}/${index}`
 }
 
 export type TextBlock = {

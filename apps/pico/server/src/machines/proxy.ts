@@ -130,7 +130,7 @@ export class MachineProxy {
       const query = new URLSearchParams(route.search)
       const events = cache.bootstrap(
         query.get("context")?.trim() || "default",
-        query.get("session")?.trim() || undefined
+        query.get("agent")?.trim() || undefined
       )
       if (events.length === 0) return false
       const stream = new SseStream(request, response)

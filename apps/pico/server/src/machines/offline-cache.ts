@@ -3,7 +3,7 @@
  *
  * While a machine is online, the proxy keeps copies of small JSON answers to
  * GET requests and follows the event streams of the browsers: the newest
- * state of each open session and the session lists. When the machine goes
+ * state of each open agent and the agent lists. When the machine goes
  * offline, the proxy answers from these copies, so the page shows the last
  * state, also after a reload. The copies are in memory only.
  */
@@ -67,9 +67,9 @@ export function applyStatePatch(
 export class OfflineCache {
   readonly #responses = new Map<string, { type: string; body: Buffer }>()
   #bytes = 0
-  /** Context → session (or "draft") → the newest full state sync. */
+  /** Context → agent (or "draft") → the newest full state sync. */
   readonly #states = new Map<string, Map<string, Payload>>()
-  /** Context → the newest session list payload. */
+  /** Context → the newest agent list payload. */
   readonly #agents = new Map<string, Payload>()
 
   putResponse(key: string, type: string, body: Buffer) {

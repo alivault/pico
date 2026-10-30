@@ -3,7 +3,7 @@
  *
  * Every Pico server has the `/api/machine/*` routes. A hub uses them on a
  * remote server through SSH: a summary of the agents, a stream of summary
- * events, and the session operations of the agent tools.
+ * events, and the agent operations of the agent tools.
  *
  * The `/api/machines*` routes are the hub's own: the list of machines and
  * their states for the client, and changes to the profiles.
@@ -49,18 +49,18 @@ import {
 /** The events after which a summary can change. */
 const SUMMARY_EVENTS = new Set([
   "agents",
-  "session_status",
-  "session_done",
+  "agent_status",
+  "agent_done",
   "sidebar_state",
 ])
 
 /** The events that a hub sends a push notification for. */
 function isNotifyEvent(payload: { type: string; [key: string]: unknown }) {
   return (
-    (payload.type === "session_done" &&
+    (payload.type === "agent_done" &&
       payload.reason === "agent" &&
       !payload.waiting) ||
-    (payload.type === "session_status" && payload.needsInput === true)
+    (payload.type === "agent_status" && payload.needsInput === true)
   )
 }
 
@@ -72,24 +72,24 @@ export function localSummary(
   return {
     hostname: hostname(),
     version: VERSION,
-    directories: runtime.sidebar.snapshot().projects,
+    projects: runtime.sidebar.snapshot().projects,
     agents: agents
       .list({})
       .slice(0, 200)
-      .map((session) => {
-        const meta = agents.meta(session.id)
+      .map((agent) => {
+        const meta = agents.meta(agent.id)
         return {
-          id: session.id,
-          title: session.title,
-          cwd: session.cwd,
-          directory: meta.group ?? session.cwd,
-          busy: session.busy,
-          needsInput: session.needsInput,
-          ...(session.waiting ? { waiting: session.waiting } : {}),
-          ...(viewers.isUnread(session.id) ? { unread: true } : {}),
-          ...(session.parent ? { parent: session.parent } : {}),
-          ...(session.lastMessageAt
-            ? { lastMessageAt: session.lastMessageAt }
+          id: agent.id,
+          title: agent.title,
+          cwd: agent.cwd,
+          project: meta.group ?? agent.cwd,
+          busy: agent.busy,
+          needsInput: agent.needsInput,
+          ...(agent.waiting ? { waiting: agent.waiting } : {}),
+          ...(viewers.isUnread(agent.id) ? { unread: true } : {}),
+          ...(agent.parent ? { parent: agent.parent } : {}),
+          ...(agent.lastMessageAt
+            ? { lastMessageAt: agent.lastMessageAt }
             : {}),
           ...(meta.lastUserMessageAt
             ? { lastUserMessageAt: meta.lastUserMessageAt }
@@ -159,7 +159,7 @@ export function addMachineServerRoutes(
   const requireAgent = (value: unknown) => {
     const text = typeof value === "string" ? value : ""
     const id = agents.current(normalizeAgentId(text))
-    if (!id || !agents.has(id)) throw notFound(`Unknown session: ${text}`)
+    if (!id || !agents.has(id)) throw notFound(`Unknown agent: ${text}`)
     return id
   }
 
@@ -201,13 +201,13 @@ export function addMachineServerRoutes(
     return HANDLED
   })
 
-  /** What an idle session waits on: a timer, a watch, or a job. */
+  /** What an idle agent waits on: a timer, a watch, or a job. */
   const waitingOf = (id: string) =>
     waitingOn(runtime.harness, conversationIdOf(id), BACKGROUND_CONTEXT)
 
   router.get("/api/machine/agents", async (request) => {
-    const directory = stringField(request.query.get("directory"))
-    const list = agents.list(directory ? { directory } : {}).slice(0, 50)
+    const project = stringField(request.query.get("project"))
+    const list = agents.list(project ? { project } : {}).slice(0, 50)
     return {
       ok: true,
       agents: await Promise.all(
@@ -224,7 +224,7 @@ export function addMachineServerRoutes(
     }
   })
 
-  router.post("/api/machine/session/spawn", async (request) => {
+  router.post("/api/machine/agent/spawn", async (request) => {
     const body = await request.body<{
       goal?: unknown
       name?: unknown
@@ -267,7 +267,7 @@ export function addMachineServerRoutes(
     return { ok: true, ...agentInfo(id) }
   })
 
-  router.post("/api/machine/session/prompt", async (request) => {
+  router.post("/api/machine/agent/prompt", async (request) => {
     const body = await request.body<{
       id?: unknown
       message?: unknown
@@ -288,7 +288,7 @@ export function addMachineServerRoutes(
     return { ok: true, ...agentInfo(id) }
   })
 
-  router.get("/api/machine/session/read", async (request) => {
+  router.get("/api/machine/agent/read", async (request) => {
     const id = requireAgent(request.query.get("id"))
     const last = Number(request.query.get("last") ?? 6) || 6
     const text = await transcriptText(
@@ -303,8 +303,8 @@ export function addMachineServerRoutes(
     return { ok: true, ...agentInfo(id), text: text ?? "" }
   })
 
-  // Wait (up to `timeoutMs`) until the session is idle; then its answer.
-  router.get("/api/machine/session/wait", async (request) => {
+  // Wait (up to `timeoutMs`) until the agent is idle; then its answer.
+  router.get("/api/machine/agent/wait", async (request) => {
     const id = requireAgent(request.query.get("id"))
     const timeoutMs = Math.min(
       55_000,
@@ -342,7 +342,7 @@ export function addMachineServerRoutes(
     }
   })
 
-  router.post("/api/machine/session/stop", async (request) => {
+  router.post("/api/machine/agent/stop", async (request) => {
     const body = await request.body<{ id?: unknown }>()
     const id = requireAgent(body.id)
     await agents.abort(id)
@@ -350,14 +350,14 @@ export function addMachineServerRoutes(
   })
 
   // Read state is global, so a hub agent changes it for every client.
-  router.post("/api/machine/session/read-state", async (request) => {
+  router.post("/api/machine/agent/read-state", async (request) => {
     const body = await request.body<{ id?: unknown; unread?: unknown }>()
     const id = requireAgent(body.id)
     viewers.setRead(id, body.unread !== true)
     return { ok: true, agentId: id, unread: body.unread === true }
   })
 
-  router.post("/api/machine/session/archive", async (request) => {
+  router.post("/api/machine/agent/archive", async (request) => {
     const body = await request.body<{ id?: unknown; restore?: unknown }>()
     const id = requireAgent(body.id)
     if (body.restore === true) agents.restore(id)

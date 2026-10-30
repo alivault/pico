@@ -47,21 +47,21 @@ export type MachineState =
   | "attention"
   | "disabled"
 
-/** One session in a machine summary. */
+/** One agent in a machine summary. */
 export type AgentStatusSummary = {
   id: string
   title: string
   cwd: string
-  /** The sidebar directory of the session. */
-  directory: string
+  /** The sidebar project of the agent. */
+  project: string
   busy: boolean
   needsInput: boolean
-  /** What an idle session waits on: timers, watches, or jobs. */
+  /** What an idle agent waits on: timers, watches, or jobs. */
   waiting?: string
-  /** Nobody has read the last run yet. Read state is the same for all clients. */
+  /** Nobody has read the last turn yet. Read state is the same for all clients. */
   unread?: boolean
   /**
-   * The viewer contexts that did not see the last run yet. Only from servers
+   * The viewer contexts that did not see the last turn yet. Only from servers
    * before global read state.
    */
   unreadBy?: string[]
@@ -74,7 +74,7 @@ export type AgentStatusSummary = {
 export type MachineSummary = {
   hostname: string
   version: string
-  directories: string[]
+  projects: string[]
   agents: AgentStatusSummary[]
 }
 
@@ -158,8 +158,8 @@ export function parseSummary(value: unknown): MachineSummary | undefined {
   return {
     hostname: typeof value.hostname === "string" ? value.hostname : "",
     version: typeof value.version === "string" ? value.version : "",
-    directories: Array.isArray(value.directories)
-      ? value.directories.filter(
+    projects: Array.isArray(value.projects)
+      ? value.projects.filter(
           (entry): entry is string => typeof entry === "string"
         )
       : [],
@@ -170,9 +170,9 @@ export function parseSummary(value: unknown): MachineSummary | undefined {
           id: entry.id,
           title: typeof entry.title === "string" ? entry.title : entry.id,
           cwd: typeof entry.cwd === "string" ? entry.cwd : "",
-          directory:
-            typeof entry.directory === "string"
-              ? entry.directory
+          project:
+            typeof entry.project === "string"
+              ? entry.project
               : typeof entry.cwd === "string"
                 ? entry.cwd
                 : "",

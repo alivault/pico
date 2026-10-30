@@ -119,27 +119,29 @@ export async function startServer(options: {
     const base = runtime.settings.data.publicUrl.replace(/\/+$/, "")
     const query = new URLSearchParams()
     if (machineId) query.set("machine", machineId)
+    // The page's search parameter; old notifications keep their links.
+    // Stored name: do not change.
     if (typeof agentId === "string") query.set("session", agentId)
     const path = query.size ? `/?${query.toString()}` : "/"
     return base ? `${base}${path}` : path
   }
-  /** Web Push for a remote session; the title names the machine. */
+  /** Web Push for a remote agent; the title names the machine. */
   const notifyFromRemote = ({ machine, payload }: RemoteEvent) => {
     const settings = runtime.settings.data
     const id = typeof payload.agentId === "string" ? payload.agentId : ""
     const title =
       (typeof payload.title === "string" ? payload.title : undefined) ??
-      machine.summary?.agents.find((session) => session.id === id)?.title ??
-      "Session"
-    if (payload.type === "session_done" && payload.reason === "agent") {
+      machine.summary?.agents.find((agent) => agent.id === id)?.title ??
+      "Agent"
+    if (payload.type === "agent_done" && payload.reason === "agent") {
       // The agent goes on when its timer, watch, or job fires.
       if (!settings.notifyTurnDone || payload.waiting) return
       void notifier.send(
         {
           title:
             payload.outcome === "error"
-              ? `Pico (${machine.label}): run failed`
-              : `Pico (${machine.label}): run finished`,
+              ? `Pico (${machine.label}): turn failed`
+              : `Pico (${machine.label}): turn finished`,
           body: title,
           url: agentLink(id || undefined, machine.id),
           tag: `done-${machine.id}-${id}`,
@@ -148,7 +150,7 @@ export async function startServer(options: {
         { ntfy: false }
       )
     } else if (
-      payload.type === "session_status" &&
+      payload.type === "agent_status" &&
       payload.needsInput === true
     ) {
       if (!settings.notifyNeedsInput) return
@@ -173,28 +175,28 @@ export async function startServer(options: {
     [key: string]: unknown
   }) => {
     const settings = runtime.settings.data
-    if (payload.type === "session_done" && payload.reason === "agent") {
+    if (payload.type === "agent_done" && payload.reason === "agent") {
       // The agent goes on when its timer, watch, or job fires.
       if (!settings.notifyTurnDone || payload.waiting) return
       void notifier.send({
         title:
           payload.outcome === "error"
-            ? "Pico: run failed"
-            : "Pico: run finished",
-        body: typeof payload.title === "string" ? payload.title : "Session",
+            ? "Pico: turn failed"
+            : "Pico: turn finished",
+        body: typeof payload.title === "string" ? payload.title : "Agent",
         url: agentLink(payload.agentId),
         tag: `done-${String(payload.agentId)}`,
         level: payload.outcome === "error" ? "error" : "success",
       })
     } else if (
-      payload.type === "session_status" &&
+      payload.type === "agent_status" &&
       payload.needsInput === true
     ) {
       if (!settings.notifyNeedsInput) return
       const id = typeof payload.agentId === "string" ? payload.agentId : ""
       const title = agents.has(id)
-        ? (agents.list({}).find((item) => item.id === id)?.title ?? "Session")
-        : "Session"
+        ? (agents.list({}).find((item) => item.id === id)?.title ?? "Agent")
+        : "Agent"
       const job = jobNotice(payload)
       void notifier.send({
         title: job ? `Pico: ${job.title}` : "Pico: the agent asks a question",
@@ -323,18 +325,18 @@ export async function startServer(options: {
   /** The terminal scope for a request, as the HTTP terminal routes compute it. */
   const terminalScope = (query: URLSearchParams) => {
     const contextId = query.get("context")?.trim() || "default"
-    const session = parseAgentId(
-      query.get("agentPath") ?? query.get("session") ?? undefined
+    const agent = parseAgentId(
+      query.get("agentPath") ?? query.get("agent") ?? undefined
     )
     const key = query.get("agentKey")?.trim() || undefined
     const viewer = viewers.get(contextId)
     const scopeTarget =
       key ??
-      session ??
+      agent ??
       viewer?.activeDraft?.agentKey ??
       viewer?.selectedAgent ??
       "default"
-    const current = agents.current(session ?? viewer?.selectedAgent)
+    const current = agents.current(agent ?? viewer?.selectedAgent)
     const cwd =
       current && agents.has(current)
         ? agents.meta(current).cwd
@@ -345,7 +347,7 @@ export async function startServer(options: {
             ? key.slice(6).trim()
             : undefined) ??
           viewer?.activeDraft?.cwd ??
-          viewer?.sidebarDirectories[0] ??
+          viewer?.sidebarProjects[0] ??
           homedir())
     return `${contextId}:${scopeTarget}:${cwd}`
   }
