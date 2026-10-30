@@ -1426,12 +1426,12 @@ export class Sessions implements HostSessions {
     const { committed, streaming } = await this.items(id)
     const live = await this.#doc(id, "live")
     const inbox = await this.#doc(id, "inbox")
-    const agent = await this.#doc(id, "agent")
+    const agentState = await this.#doc(id, "agent")
     const busy = live?.run !== undefined
     const offset = Math.max(0, committed.length - INITIAL_HISTORY_ITEMS)
     const items = committed.slice(offset)
     if (streaming) items.push(streaming)
-    const modelRef = agent?.model ?? this.defaultModel()
+    const modelRef = agentState?.model ?? this.defaultModel()
     return {
       type: "state_sync",
       sessionKey: sessionKey(id),
@@ -1460,7 +1460,7 @@ export class Sessions implements HostSessions {
       historyTotalCount: committed.length,
       hideThinkingBlock: this.#runtime.settings.data.hideThinkingBlock,
       ...(modelRef ? { model: this.#modelOption(modelRef) } : {}),
-      thinkingLevel: agent?.thinkingLevel ?? this.defaultThinkingLevel(),
+      thinkingLevel: agentState?.thinkingLevel ?? this.defaultThinkingLevel(),
       availableThinkingLevels: this.thinkingLevels(modelRef),
       availableModels: this.availableModels(),
       availableSkills: await this.#skills(meta.cwd),
@@ -1629,8 +1629,8 @@ export class Sessions implements HostSessions {
     const conversation = await this.conversation(id)
     if (input.thinkingLevel) {
       const level = this.validateThinkingLevel(input.thinkingLevel)
-      const agent = await this.#doc(id, "agent")
-      if (agent?.thinkingLevel !== level)
+      const agentState = await this.#doc(id, "agent")
+      if (agentState?.thinkingLevel !== level)
         await conversation.configure({ thinkingLevel: level }, ctx)
     }
     const resources = await this.#runtime.resources.get(meta.cwd)
@@ -1705,8 +1705,8 @@ export class Sessions implements HostSessions {
   }
 
   async #refineName(id: string, text: string, imageCount: number) {
-    const agent = await this.#doc(id, "agent")
-    const model = this.#model(agent?.model ?? this.defaultModel())
+    const agentState = await this.#doc(id, "agent")
+    const model = this.#model(agentState?.model ?? this.defaultModel())
     if (!model) throw new Error("No model selected")
     const name = await generateSessionName(this.#runtime.models, model, {
       text,
@@ -2147,9 +2147,9 @@ export class Sessions implements HostSessions {
       throw badRequest(`Unknown model: ${provider}/${modelId}`)
     const conversation = await this.conversation(id)
     await conversation.configure({ model: { provider, modelId } }, ctx)
-    const agent = await conversation.agent(ctx)
+    const agentState = await conversation.agent(ctx)
     const levels = this.thinkingLevels({ provider, modelId })
-    if (!levels.includes(agent.thinkingLevel)) {
+    if (!levels.includes(agentState.thinkingLevel)) {
       const level = levels.includes("medium")
         ? "medium"
         : (levels.at(-1) ?? "off")
@@ -2169,11 +2169,11 @@ export class Sessions implements HostSessions {
   }
 
   async agentState(id: string) {
-    const agent = await this.#doc(id, "agent")
-    const model = agent?.model ?? this.defaultModel()
+    const agentState = await this.#doc(id, "agent")
+    const model = agentState?.model ?? this.defaultModel()
     return {
       model: this.#modelOption(model),
-      thinkingLevel: agent?.thinkingLevel ?? this.defaultThinkingLevel(),
+      thinkingLevel: agentState?.thinkingLevel ?? this.defaultThinkingLevel(),
       availableThinkingLevels: this.thinkingLevels(model),
     }
   }
@@ -2208,8 +2208,8 @@ export class Sessions implements HostSessions {
     let source: "llm" | "heuristic" = "llm"
     let reason: string | undefined
     try {
-      const agent = await this.#doc(id, "agent")
-      const model = this.#model(agent?.model ?? this.defaultModel())
+      const agentState = await this.#doc(id, "agent")
+      const model = this.#model(agentState?.model ?? this.defaultModel())
       if (!model) throw new Error("No model selected")
       name = await generateSessionName(this.#runtime.models, model, {
         text,
@@ -2454,14 +2454,14 @@ export class Sessions implements HostSessions {
     }
     let conversationId: ConversationId
     if (at === undefined) {
-      const agent = await this.#doc(source, "agent")
+      const agentState = await this.#doc(source, "agent")
       const conversation = await this.#harness.createConversation(
         {
           ownership: { kind: "ownerless" },
           agent: {
-            ...(agent?.model ? { model: agent.model } : {}),
-            ...(agent?.thinkingLevel
-              ? { thinkingLevel: agent.thinkingLevel }
+            ...(agentState?.model ? { model: agentState.model } : {}),
+            ...(agentState?.thinkingLevel
+              ? { thinkingLevel: agentState.thinkingLevel }
               : {}),
             cwd: sourceMeta.cwd,
           },

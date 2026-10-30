@@ -1041,9 +1041,9 @@ export function createSessionsExtension(host: HostBridge) {
           return errorResult(
             `This session already has ${live} running child sessions. Wait for one or stop one.`
           )
-        const agent = await api.snapshot(AgentDoc, api.conversationId, context)
+        const agentState = await api.snapshot(AgentDoc, api.conversationId, context)
         const requested = parseModel(args.model)
-        let model = agent?.model as
+        let model = agentState?.model as
           | { provider: string; modelId: string }
           | undefined
         if (typeof requested === "object") model = requested

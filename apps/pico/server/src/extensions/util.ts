@@ -48,8 +48,8 @@ export function posixShell(preferred = process.env.SHELL) {
 
 /** The working directory of the calling conversation. */
 export async function cwdOf(api: ToolExecutionApi, context: Context) {
-  const agent = await api.agent(context)
-  return agent.cwd ?? api.env?.cwd ?? homedir()
+  const agentState = await api.agent(context)
+  return agentState.cwd ?? api.env?.cwd ?? homedir()
 }
 
 /** JSON-safe copy of a value, for documents and details. */
