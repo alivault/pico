@@ -22,7 +22,7 @@ function sample(cpuMs: number, io: number, at = 0): ProcessSample {
   }
 }
 
-/** A host with a parent `s1` and a child `s2`; `followUp` records messages. */
+/** A host with a parent `s1` and a subagent `s2`; `followUp` records messages. */
 function fakeHost(
   sent: Array<{ id: string; message: string; requestId: string }>
 ) {
