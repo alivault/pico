@@ -93,7 +93,7 @@ function NewAgentWorktreeToggleView({
         title={
           enabled
             ? "The new agent gets its own git worktree"
-            : "The new agent works in this directory"
+            : "The new agent works in the project directory"
         }
       >
         <PopoverTrigger
