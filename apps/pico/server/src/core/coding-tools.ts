@@ -6,7 +6,9 @@
  * call, so a change to the setting applies without a restart.
  *
  * `guard` can refuse a command before it runs (the bash guard of
- * subagents, see `profiles.ts`): it returns the reason.
+ * subagents, see `profiles.ts`): it returns the reason. An agent whose
+ * profile has `bash: "sandbox"` runs each command in the sandbox of
+ * `sandbox.ts`; without the sandbox, it cannot use bash.
  *
  * A bash call cannot wait for input: it runs with editors and pagers set to
  * programs that end at once, git prompts off, and stdin from `/dev/null` (the
@@ -36,7 +38,8 @@ import {
 import type { HostBridge } from "../extensions/host.ts"
 import { agentIdOf } from "../extensions/host.ts"
 import { endBashCall, ensureWatchdog, startBashCall } from "./bash-calls.ts"
-import { bashGuard } from "./profiles.ts"
+import { bashGuard, findProfile } from "./profiles.ts"
+import { sandboxAvailable, sandboxExecution } from "./sandbox.ts"
 
 const run = promisify(execFile)
 
@@ -128,6 +131,18 @@ export async function subagentCommandRefusal(
   })
 }
 
+/** Whether an agent's profile runs bash in the sandbox. */
+export function bashSandboxed(
+  host: HostBridge | undefined,
+  conversationId: ConversationId
+) {
+  const current = host?.current
+  const id = agentIdOf(conversationId)
+  if (!current?.agents.has(id)) return false
+  const name = current.agents.meta(id).profile
+  return findProfile(name, current.settings().profiles)?.bash === "sandbox"
+}
+
 export function createPicoCodingTools(options: {
   images?: ReadToolOptions["images"]
   shellPrefix: () => string | undefined
@@ -152,6 +167,13 @@ export function createPicoCodingTools(options: {
       const prefix = options.shellPrefix()
       if (prefix) execution.command = `${prefix}\n${execution.command}`
       execution.env = { ...execution.env, ...NON_INTERACTIVE_ENV }
+      if (bashSandboxed(options.host, api.conversationId)) {
+        if (!(await sandboxAvailable()))
+          throw new Error(
+            "This agent's profile runs bash only in a sandbox, and the sandbox needs bubblewrap (bwrap) on Linux, which is not available here. Use read and the other tools, or ask the user for another profile."
+          )
+        await sandboxExecution(execution)
+      }
       const marker = markers.get(api)
       if (marker) execution.env.PICO_TOOL_CALL = marker
     },

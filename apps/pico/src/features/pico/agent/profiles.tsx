@@ -42,6 +42,7 @@ type Profile = {
   extensions?: Array<string>
   removeTools?: Array<string>
   instructions?: string
+  bash?: "sandbox"
 }
 
 /** A profile name for display: "read-only" shows as "Read-only". */
@@ -288,8 +289,9 @@ function ProfilesSettings({ viewerContextId }: { viewerContextId: string }) {
         </ul>
         <div className="text-xs text-muted-foreground">
           Your own profiles, as JSON: <code>extensions</code> (exactly these),{" "}
-          <code>removeTools</code>, and <code>instructions</code>. A profile
-          with a built-in name replaces it.
+          <code>removeTools</code>, <code>instructions</code>, and{" "}
+          <code>"bash": "sandbox"</code> (bash with a read-only filesystem and
+          no network). A profile with a built-in name replaces it.
         </div>
         <Textarea
           className={cn("min-h-28 font-mono text-xs")}

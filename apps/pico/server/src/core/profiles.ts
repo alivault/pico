@@ -12,6 +12,11 @@
  * A name with a dot, such as `browser.eval`, is an action of a tool. The
  * tool checks it with `actionRemoved`, so a profile can keep a tool and take
  * away only the actions that change things.
+ *
+ * A profile with `bash: "sandbox"` runs each bash call in a sandbox with a
+ * read-only filesystem and no network (see `sandbox.ts`). The `read-only` and
+ * `reviewer` profiles keep bash only in that sandbox, so a model cannot change
+ * files with a script instead of the edit tool.
  */
 import type { Context } from "@earendil-works/chord"
 import type {
@@ -30,6 +35,8 @@ export type Profile = {
   removeTools?: string[]
   /** Text added to the system prompt. */
   instructions?: string
+  /** `sandbox`: bash runs with a read-only filesystem and no network. */
+  bash?: "sandbox"
 }
 
 /** The tool limits of one agent, kept in its metadata. */
@@ -57,6 +64,9 @@ const WRITE_TOOLS = [
   "agents.send",
   "agents.stop",
 ]
+
+const SANDBOX_INSTRUCTIONS =
+  "Bash runs in a sandbox with no network. The filesystem is read-only; writes in the repository and in caches (for example a test build) work, but they are gone when the command ends."
 
 export const BUILTIN_PROFILES: readonly Profile[] = [
   {
@@ -93,20 +103,20 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
   {
     name: "reviewer",
     description:
-      "Review changes: diffs, other agents, pull requests, and tests. No file changes.",
+      "Review changes: diffs, other agents, and tests. No file changes; bash runs in a sandbox without network.",
     removeTools: WRITE_TOOLS.filter(
       (tool) => tool !== "bash" && tool !== "agents.send"
     ),
-    instructions:
-      "You are a reviewer: read the diff (git diff, gh pr diff, agents read), run the tests, and report problems with file and line. Do not change files.",
+    bash: "sandbox",
+    instructions: `You are a reviewer: read the diff (git diff, agents read), run the tests, and report problems with file and line. Do not change files. ${SANDBOX_INSTRUCTIONS}`,
   },
   {
     name: "read-only",
     description:
-      "Read and analyze code, with git history, tests, and the web. No file changes.",
+      "Read and analyze code, with git history, tests, and the web tools. No file changes; bash runs in a sandbox without network.",
     removeTools: WRITE_TOOLS.filter((tool) => tool !== "bash"),
-    instructions:
-      "You are in read-only mode: do not change files or the repository. Use bash only for commands that do not change anything.",
+    bash: "sandbox",
+    instructions: `You are in read-only mode: do not change files or the repository. ${SANDBOX_INSTRUCTIONS}`,
   },
 ]
 

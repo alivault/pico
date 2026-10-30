@@ -63,7 +63,9 @@ pnpm start import-pi         # import Pi sessions as agents (stop Pico first)
   report their exit, terminals, subagents in git worktrees, browser
   automation, code mode, web access, and MCP.
 - **Tool profiles.** `full`, `builder`, `researcher`, `reviewer`,
-  `read-only`, or your own.
+  `read-only`, or your own. In `reviewer` and `read-only`, bash runs in a
+  bubblewrap sandbox (Linux): the filesystem is read-only and there is no
+  network, so the agent cannot change files with a script.
 - **Safe subagents.** A subagent gets a tool profile from its parent. It has
   no `ask_user` or `spawn_subagent` unless the parent grants them, and its
   bash refuses `git push` to main, `sudo`, and the commands that the parent

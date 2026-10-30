@@ -1645,6 +1645,7 @@ export function createApi(api: ApiContext) {
         ...(typeof profile.instructions === "string"
           ? { instructions: profile.instructions }
           : {}),
+        ...(profile.bash === "sandbox" ? { bash: "sandbox" } : {}),
       }
     }
     runtime.settings.update({ profiles: clean as never })

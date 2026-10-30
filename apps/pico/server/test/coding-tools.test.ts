@@ -1,10 +1,12 @@
 import assert from "node:assert/strict"
 import { existsSync } from "node:fs"
-import { mkdir, writeFile } from "node:fs/promises"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { test } from "node:test"
 
 import { createPicoCodingTools } from "../src/core/coding-tools.ts"
+import { sandboxAvailable } from "../src/core/sandbox.ts"
+import type { HostBridge } from "../src/extensions/host.ts"
 import {
   ctx,
   lastToolResult,
@@ -18,8 +20,22 @@ async function runBash(
   dir: string,
   prefix: string | undefined,
   command: string,
-  options: { defaultTimeout?: number; timeout?: number } = {}
+  options: { defaultTimeout?: number; timeout?: number; profile?: string } = {}
 ) {
+  // A host that knows one agent, with the profile of the test.
+  const host = (
+    options.profile
+      ? {
+          current: {
+            agents: {
+              has: () => true,
+              meta: () => ({ profile: options.profile }),
+            },
+            settings: () => ({ profiles: {} }),
+          },
+        }
+      : undefined
+  ) as HostBridge | undefined
   let result: string | undefined
   let step = 0
   const harness = await openHarness(
@@ -27,6 +43,7 @@ async function runBash(
     [
       createPicoCodingTools({
         shellPrefix: () => prefix,
+        ...(host ? { host } : {}),
         ...(options.defaultTimeout === undefined
           ? {}
           : { defaultTimeout: options.defaultTimeout }),
@@ -138,3 +155,22 @@ void test("a timeout of the call replaces the default timeout", async () => {
   })
   assert.match(output, /finished/)
 })
+
+void test(
+  "a read-only agent's bash cannot keep a file change",
+  { skip: !(await sandboxAvailable()) && "bubblewrap is not available" },
+  async () => {
+    const dir = await tempDir()
+    await writeFile(join(dir, "file.txt"), "before\n")
+    const command =
+      "python3 -c \"open('file.txt', 'w').write('after')\" && cat file.txt"
+    assert.match(
+      await runBash(dir, "set -u", command, { profile: "read-only" }),
+      /after/
+    )
+    assert.equal(await readFile(join(dir, "file.txt"), "utf8"), "before\n")
+    // The builder profile has no sandbox: its change stays.
+    await runBash(dir, undefined, command, { profile: "builder" })
+    assert.equal(await readFile(join(dir, "file.txt"), "utf8"), "after")
+  }
+)
