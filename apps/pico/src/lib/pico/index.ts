@@ -1,12 +1,12 @@
 export {
   AUTO_SCROLL_ENABLED_STORAGE_KEY,
   CENTER_MESSAGES_STORAGE_KEY,
-  COLLAPSED_DIRECTORIES_STORAGE_KEY,
-  DRAFT_DIRECTORY_STORAGE_KEY,
+  COLLAPSED_PROJECTS_STORAGE_KEY,
+  DRAFT_PROJECT_STORAGE_KEY,
   HIDE_TOOL_BLOCKS_STORAGE_KEY,
-  PINNED_SESSIONS_STORAGE_KEY,
-  RECENT_DIRECTORIES_LIMIT,
-  RECENT_DIRECTORIES_STORAGE_KEY,
+  PINNED_AGENTS_STORAGE_KEY,
+  RECENT_PROJECTS_LIMIT,
+  RECENT_PROJECTS_STORAGE_KEY,
   RIGHT_SIDEBAR_ACTIVE_TAB_STORAGE_KEY,
   RIGHT_SIDEBAR_FILE_TREE_WIDTH_STORAGE_KEY,
   RIGHT_SIDEBAR_HISTORY_HEIGHT_STORAGE_KEY,
@@ -16,32 +16,32 @@ export {
   TERMINAL_PANEL_HEIGHT_STORAGE_KEY,
   TERMINAL_PANEL_OPEN_STORAGE_KEY,
   TERMINAL_TABS_STORAGE_KEY,
-  SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
-  SESSION_DONE_SOUND_ENABLED_STORAGE_KEY,
-  SIDEBAR_DIRECTORIES_STORAGE_KEY,
+  AGENT_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY,
+  AGENT_DONE_SOUND_ENABLED_STORAGE_KEY,
+  SIDEBAR_PROJECTS_STORAGE_KEY,
   APPLIED_THEME_STORAGE_KEY,
   THEME_COLOR_MODE_STORAGE_KEY,
   THEME_STORAGE_KEY,
   VIEWER_CONTEXT_STORAGE_KEY,
   createContextId,
-  normalizeSessionSelectionKeys,
-  normalizeStoredDirectoryList,
+  normalizeAgentSelectionKeys,
+  normalizeStoredProjectList,
   promptDraftKey,
   promptDraftKeyMatchesOwner,
   readStoredAutoScrollEnabled,
   readStoredCenterMessages,
-  readStoredCollapsedDirectories,
-  readStoredDraftDirectory,
+  readStoredCollapsedProjects,
+  readStoredDraftProject,
   readStoredHideToolBlocks,
-  readStoredPinnedSessionKeys,
+  readStoredPinnedAgentKeys,
   readStoredPromptDraft,
-  readStoredRecentDirectories,
+  readStoredRecentProjects,
   readStoredRightSidebarOpen,
   readStoredTerminalPanelOpen,
   readStoredTerminalTabs,
-  readStoredSessionDoneDesktopNotificationsEnabled,
-  readStoredSessionDoneSoundEnabled,
-  readStoredSidebarDirectories,
+  readStoredAgentDoneDesktopNotificationsEnabled,
+  readStoredAgentDoneSoundEnabled,
+  readStoredSidebarProjects,
   readStoredTheme,
   readStoredThemeColorMode,
   rememberStoredPromptDraft,
@@ -50,7 +50,7 @@ export {
   safeLocalStorageSetItem,
   machineLocalStorageGetItem,
   machineLocalStorageSetItem,
-  sessionListEntryKey,
+  agentListEntryKey,
 } from "@/lib/pico/storage"
 export type { StoredTerminalTabsState } from "@/lib/pico/storage"
 export {
@@ -81,15 +81,15 @@ export type {
 export {
   buildItemsFromSync,
   createCompactionSummaryItem,
-  createInitialSessionState,
+  createInitialAgentState,
   normalizePromptImage,
   previewUrlForImage,
   sameContextUsage,
 } from "@/lib/pico/sync"
 export { flattenTree } from "@/lib/pico/tree"
 
-export const INITIAL_DIRECTORY_SESSION_RENDER_COUNT = 5
-export const DIRECTORY_SESSION_LOAD_MORE_COUNT = 5
+export const INITIAL_PROJECT_AGENT_RENDER_COUNT = 5
+export const PROJECT_AGENT_LOAD_MORE_COUNT = 5
 
 export type StreamingBehavior = "followUp" | "steer"
 
@@ -100,7 +100,7 @@ export type PromptImage = {
   previewUrl: string
 }
 
-export type SessionSummary = {
+export type AgentSummary = {
   path?: string
   id?: string
   cwd?: string
@@ -111,19 +111,19 @@ export type SessionSummary = {
   unread?: boolean
 }
 
-export type DirectoryState = {
+export type ProjectState = {
   path: string
   totalCount: number
   revision: string
 }
 
 export type PromptDraftTarget = {
-  sessionId?: string
-  sessionFile?: string
+  agentId?: string
+  agentFile?: string
   cwd?: string
 }
 
-export type SessionEntryIdentity = {
+export type AgentEntryIdentity = {
   path?: string
   id?: string
 }
@@ -201,7 +201,7 @@ export type ToolBlock = {
 
 /**
  * An image in the conversation. `url` is a server path on the machine of the
- * session (give it to `machineApiUrl`), or a `data:` URL for a prompt that the
+ * agent (give it to `machineApiUrl`), or a `data:` URL for a prompt that the
  * server has not saved yet.
  */
 export type ConversationImage = { mimeType: string; url: string }
@@ -285,18 +285,18 @@ export type ConversationDeltaOperation =
 
 export type ConversationDeltaEvent = {
   type: "conversation_delta"
-  sessionId: string
+  agentId: string
   operations: Array<ConversationDeltaOperation>
 }
 
-export type SessionUiState = {
+export type AgentUiState = {
   statuses: Record<string, string>
   title?: string
   editorText?: string
   workingMessage?: string
 }
 
-export type SessionState = {
+export type AgentState = {
   connected: boolean
   replaying: boolean
   streaming: boolean
@@ -306,14 +306,14 @@ export type SessionState = {
   items: Array<ConversationItem>
   historyOffset: number
   historyTotalCount: number
-  sessionId?: string
-  sessionKey?: string
-  sessionName?: string
+  agentId?: string
+  agentKey?: string
+  agentName?: string
   firstMessage: string
-  sessionFile?: string
+  agentFile?: string
   cwd?: string
-  /** The sidebar directory, when it is not `cwd` (worktree sessions). */
-  directory?: string
+  /** The sidebar project, when it is not `cwd` (worktree agents). */
+  project?: string
   modified?: string
   model?: ModelOption
   thinkingLevel: string
@@ -331,7 +331,7 @@ export type SessionState = {
     backgroundAt?: number
     [key: string]: unknown
   }
-  uiState: SessionUiState
+  uiState: AgentUiState
   uiRequest?: UiRequest
 }
 
@@ -367,7 +367,7 @@ type PendingUserMessagePayload = UnknownRecord & {
 export type StateSyncPayload = {
   type: "state_sync"
   activationRevision?: number
-  sessionKey?: string
+  agentKey?: string
   items?: Array<ConversationItem>
   itemsPatch?: ConversationItemsPatch
   messages?: Array<MessagePayload>
@@ -378,30 +378,30 @@ export type StateSyncPayload = {
   streamingMessage?: MessagePayload
   historyOffset?: number
   historyTotalCount?: number
-  contextUsage?: SessionState["contextUsage"]
+  contextUsage?: AgentState["contextUsage"]
   hideThinkingBlock?: boolean
   model?: ModelOption
   thinkingLevel?: string
   availableThinkingLevels?: Array<string>
   availableModels?: Array<ModelOption>
   availableSkills?: Array<SkillOption>
-  sessionId?: string
-  sessionFile?: string
-  sessionName?: string
+  agentId?: string
+  agentFile?: string
+  agentName?: string
   firstMessage?: string
   cwd?: string
-  directory?: string
+  project?: string
   modified?: string
-  uiState?: SessionUiState & {
+  uiState?: AgentUiState & {
     /** Images to put in the composer, sent one time, for example after a fork. */
     editorImages?: Array<{ mimeType: string; data: string }>
   }
 }
 
-export type SessionsPayload = {
-  type: "sessions"
-  directories?: Array<string>
-  directoryStates?: Array<DirectoryState>
+export type AgentsPayload = {
+  type: "agents"
+  projects?: Array<string>
+  projectStates?: Array<ProjectState>
 }
 
 export type TreeNode = {
@@ -449,10 +449,8 @@ export type FlatTreeNode = {
   node: TreeNode
 }
 
-export function getSessionTitle(
-  summary?: Pick<SessionSummary, "title" | "name">
-) {
+export function getAgentTitle(summary?: Pick<AgentSummary, "title" | "name">) {
   if (summary?.title?.trim()) return summary.title.trim()
   if (summary?.name?.trim()) return summary.name.trim()
-  return "New session"
+  return "New agent"
 }

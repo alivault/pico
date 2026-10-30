@@ -1,8 +1,8 @@
 import {
-  createInitialSessionState,
+  createInitialAgentState,
   type ConversationItem,
   type PromptImage,
-  type SessionState,
+  type AgentState,
   type StreamingBehavior,
 } from "@/lib/pico"
 import type { GitCommitDiffMode } from "@/lib/pico/api"
@@ -76,7 +76,7 @@ export function isComposerDiffLineComment(
 }
 
 export type AppShellComposerSnapshot = {
-  activeSessionId?: string
+  activeAgentId?: string
   awaitingFirstTurn: boolean
   canStartPendingQueue: boolean
   centerMessages: boolean
@@ -164,7 +164,7 @@ export function sameAppShellComposerSnapshot(
   right: AppShellComposerSnapshot
 ) {
   return (
-    left.activeSessionId === right.activeSessionId &&
+    left.activeAgentId === right.activeAgentId &&
     left.awaitingFirstTurn === right.awaitingFirstTurn &&
     left.canStartPendingQueue === right.canStartPendingQueue &&
     left.centerMessages === right.centerMessages &&
@@ -189,7 +189,7 @@ export function sameAppShellComposerSnapshot(
 }
 
 export type AppShellComposerActions = {
-  abortSession: () => void | Promise<unknown>
+  abortAgent: () => void | Promise<unknown>
   onPickImages: (files: FileList | Array<File> | null) => void | Promise<void>
   onRemoveComposerImage: (index: number) => void
   removeLineComment: (id: string) => void
@@ -204,7 +204,7 @@ export type AppShellComposerActions = {
   ) => void | Promise<unknown>
   /**
    * Hold the queue for an edit. Resolves a function that resumes the held
-   * session, or null when the queue must stay paused.
+   * agent, or null when the queue must stay paused.
    */
   holdPendingQueue: () => Promise<(() => void) | null>
   startPendingQueue: () => void | Promise<unknown>
@@ -219,17 +219,17 @@ export type AppShellComposerActions = {
   ) => void | Promise<unknown>
   syncComposerDraft: (value: string) => void
   /**
-   * Start a new session in a directory of another machine. The prompt draft
+   * Start a new agent in a project of another machine. The prompt draft
    * and images move to that machine's composer.
    */
-  moveDraftToMachine: (machineId: string, directory: string) => void
+  moveDraftToMachine: (machineId: string, project: string) => void
 }
 
 export function createInitialAppShellComposerSnapshot(
   viewerContextId: string
 ): AppShellComposerSnapshot {
   return {
-    activeSessionId: undefined,
+    activeAgentId: undefined,
     awaitingFirstTurn: false,
     canStartPendingQueue: false,
     centerMessages: true,
@@ -247,19 +247,19 @@ export function createInitialAppShellComposerSnapshot(
   }
 }
 
-export function createOptimisticDraftSessionState(options: {
-  previous: SessionState
+export function createOptimisticDraftAgentState(options: {
+  previous: AgentState
   cwd?: string
   ownerKey: string
-}): SessionState {
+}): AgentState {
   const nextCwd = options.cwd?.trim() || options.previous.cwd?.trim() || ""
-  const base = createInitialSessionState()
+  const base = createInitialAgentState()
 
   return {
     ...base,
     connected: options.previous.connected,
     draft: true,
-    sessionKey: `optimistic:${options.ownerKey}`,
+    agentKey: `optimistic:${options.ownerKey}`,
     cwd: nextCwd || undefined,
     model: options.previous.model,
     thinkingLevel: options.previous.thinkingLevel,

@@ -36,16 +36,16 @@ import { useMachineId } from "@/lib/pico/machine-context"
 import { hubUrl, LOCAL_MACHINE_ID, openMachine } from "@/lib/pico/machine"
 import { cn } from "@/lib/utils"
 import {
-  setSessionStatusFilter,
-  toggleSessionStatusFilter,
-  useSessionStatusFilter,
-  type SessionStatusFilter,
-} from "@/features/pico/session-status-filter"
+  setAgentStatusFilter,
+  toggleAgentStatusFilter,
+  useAgentStatusFilter,
+  type AgentStatusFilter,
+} from "@/features/pico/agent-status-filter"
 import {
   useMachines,
   viewerContextIdForSummaries,
   type MachineInfo,
-  type MachineSessionSummary,
+  type MachineAgentSummary,
   type MachineState,
 } from "@/features/pico/machine-store"
 
@@ -109,37 +109,37 @@ export function MachineStateDot({
   )
 }
 
-/** A finished run that nobody has read yet. */
-export function isMachineSessionUnread(session: MachineSessionSummary) {
+/** A finished turn that nobody has read yet. */
+export function isMachineAgentUnread(agent: MachineAgentSummary) {
   return (
-    !session.busy &&
-    !session.needsInput &&
-    (session.unread ??
-      Boolean(session.unreadBy?.includes(viewerContextIdForSummaries())))
+    !agent.busy &&
+    !agent.needsInput &&
+    (agent.unread ??
+      Boolean(agent.unreadBy?.includes(viewerContextIdForSummaries())))
   )
 }
 
-/** Count only the sessions that the sidebar shows: those in its directories. */
-function sessionCounts(machine: MachineInfo) {
-  const directories = new Set(machine.summary?.directories ?? [])
-  const sessions = (machine.summary?.sessions ?? []).filter((session) =>
-    directories.has(session.directory || session.cwd)
+/** Count only the agents that the sidebar shows: those in its projects. */
+function agentCounts(machine: MachineInfo) {
+  const projects = new Set(machine.summary?.projects ?? [])
+  const agents = (machine.summary?.agents ?? []).filter((agent) =>
+    projects.has(agent.project || agent.cwd)
   )
   return {
-    // A session that waits on a timer, a watch, or a job is not done yet.
-    working: sessions.filter(
-      (session) => (session.busy || session.waiting) && !session.needsInput
+    // An agent that waits on a timer, a watch, or a job is not done yet.
+    working: agents.filter(
+      (agent) => (agent.busy || agent.waiting) && !agent.needsInput
     ).length,
-    waiting: sessions.filter((session) => session.needsInput).length,
-    done: sessions.filter(
-      (session) => !session.waiting && isMachineSessionUnread(session)
+    waiting: agents.filter((agent) => agent.needsInput).length,
+    done: agents.filter(
+      (agent) => !agent.waiting && isMachineAgentUnread(agent)
     ).length,
   }
 }
 
 /**
- * A count in a machine heading. A click shows only the sessions with that
- * state; a second click shows all sessions again.
+ * A count in a machine heading. A click shows only the agents with that
+ * state; a second click shows all agents again.
  */
 function MachineCountButton({
   machine,
@@ -150,18 +150,18 @@ function MachineCountButton({
   children,
 }: {
   machine: MachineInfo
-  filter: SessionStatusFilter
+  filter: AgentStatusFilter
   count: number
   title: string
   className?: string
   children: React.ReactNode
 }) {
-  const active = Boolean(useSessionStatusFilter(machine.id)?.includes(filter))
+  const active = Boolean(useAgentStatusFilter(machine.id)?.includes(filter))
   // The active filter keeps its button at 0, so you can remove it.
   if (count === 0 && !active) return null
   return (
     <TitleTooltip
-      title={active ? `Show all sessions` : `Show only ${title.toLowerCase()}`}
+      title={active ? `Show all agents` : `Show only ${title.toLowerCase()}`}
     >
       <Button
         variant="ghost"
@@ -176,7 +176,7 @@ function MachineCountButton({
         )}
         onClick={() => {
           setMachinesCollapsed([machine.id], false)
-          toggleSessionStatusFilter(machine.id, filter)
+          toggleAgentStatusFilter(machine.id, filter)
         }}
       >
         {children}
@@ -187,11 +187,11 @@ function MachineCountButton({
 }
 
 function MachineCounts({ machine }: { machine: MachineInfo }) {
-  const { working, waiting, done } = sessionCounts(machine)
+  const { working, waiting, done } = agentCounts(machine)
   const online = machine.state === "online"
-  // A machine that goes offline shows all its sessions again.
+  // A machine that goes offline shows all its agents again.
   React.useEffect(() => {
-    if (!online) setSessionStatusFilter(machine.id, null)
+    if (!online) setAgentStatusFilter(machine.id, null)
   }, [machine.id, online])
   if (!online) {
     return (
@@ -308,7 +308,7 @@ function MachineGroupLabel({
       </CollapsibleTrigger>
       {/* The counts are buttons, so they are not in the trigger. In a
           narrow sidebar, the machine of this page has no room for its
-          counts next to its icon buttons. The session rows still show
+          counts next to its icon buttons. The agent rows still show
           their state. */}
       {attention ? null : (
         <span
@@ -479,7 +479,7 @@ export function SidebarMachineGroups({
   shownMachineId: string
   /** The live sidebar of the machine that shows. */
   shownContent: React.ReactNode
-  /** The directories of another machine, from its summary. */
+  /** The projects of another machine, from its summary. */
   renderContent: RenderMachine
   /** Icon buttons for the heading of a machine. */
   renderActions?: (machine: MachineInfo, shown: boolean) => React.ReactNode
@@ -513,7 +513,7 @@ function useNow(active: boolean) {
 }
 
 /**
- * A notice above the session when the machine of this page is not online.
+ * A notice above the agent when the machine of this page is not online.
  * The page keeps the last state that it has; requests fail at once.
  */
 export function MachineConnectionBanner() {
@@ -690,7 +690,7 @@ function MachineRow({ machine }: { machine: MachineInfo }) {
               onClick={() => {
                 if (
                   window.confirm(
-                    `Remove ${machine.label} from this hub? Pico and its sessions keep running on ${machine.label}.`
+                    `Remove ${machine.label} from this hub? Pico and its agents keep running on ${machine.label}.`
                   )
                 )
                   void machineAction(machine.id, "remove")
@@ -719,8 +719,8 @@ function MachinesDialog({
         <DialogHeader>
           <DialogTitle>Machines</DialogTitle>
           <DialogDescription>
-            Sessions of other computers, over SSH. Each machine runs its own
-            Pico; its sessions continue when this hub is offline.
+            Agents of other computers, over SSH. Each machine runs its own Pico;
+            its agents continue when this hub is offline.
           </DialogDescription>
         </DialogHeader>
         {!loaded ? (

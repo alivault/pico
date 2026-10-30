@@ -4,9 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "@/lib/pico/toast"
 
 import type {
-  ArchivedSessionEntry,
-  ArchivedSessionsResponse,
-  RestoreSessionResponse,
+  ArchivedAgentEntry,
+  ArchivedAgentsResponse,
+  RestoreAgentResponse,
 } from "@/lib/pico/api"
 import { Button } from "@/components/ui/button"
 import {
@@ -36,8 +36,8 @@ import { picoQueryKeys } from "@/features/pico/query-keys"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useMachineId } from "@/lib/pico/machine-context"
 
-type ArchivedSessionsData = Extract<ArchivedSessionsResponse, { ok: true }>
-type RestoreSessionData = Extract<RestoreSessionResponse, { ok: true }>
+type ArchivedAgentsData = Extract<ArchivedAgentsResponse, { ok: true }>
+type RestoreAgentData = Extract<RestoreAgentResponse, { ok: true }>
 
 const archivedDateFormat = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
@@ -50,25 +50,25 @@ function formatArchivedAt(value?: string) {
   return Number.isNaN(date.getTime()) ? "" : archivedDateFormat.format(date)
 }
 
-function shortDirectory(directory: string) {
-  const parts = directory.split("/").filter(Boolean)
-  return parts.length > 2 ? `…/${parts.slice(-2).join("/")}` : directory
+function shortProject(project: string) {
+  const parts = project.split("/").filter(Boolean)
+  return parts.length > 2 ? `…/${parts.slice(-2).join("/")}` : project
 }
 
-type ArchivedSessionsDialogProps = {
+type ArchivedAgentsDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   viewerContextId: string
-  /** Called after a restore, so the sidebar can show the directory. */
-  onRestored?: (result: RestoreSessionData) => void
+  /** Called after a restore, so the sidebar can show the project. */
+  onRestored?: (result: RestoreAgentData) => void
 }
 
-export function ArchivedSessionsDialog({
+export function ArchivedAgentsDialog({
   open,
   onOpenChange,
   viewerContextId,
   onRestored,
-}: ArchivedSessionsDialogProps) {
+}: ArchivedAgentsDialogProps) {
   const machineId = useMachineId()
   const isMobile = useIsMobile()
   const queryClient = useQueryClient()
@@ -79,10 +79,10 @@ export function ArchivedSessionsDialog({
   }, [open])
 
   const archivedQuery = useQuery({
-    queryKey: picoQueryKeys.archivedSessions(viewerContextId),
+    queryKey: picoQueryKeys.archivedAgents(viewerContextId),
     queryFn: () =>
-      fetchJson<ArchivedSessionsData>(
-        buildRequestUrl("/api/sessions/archived", {
+      fetchJson<ArchivedAgentsData>(
+        buildRequestUrl("/api/agents/archived", {
           machineId,
           contextId: viewerContextId,
         })
@@ -93,8 +93,8 @@ export function ArchivedSessionsDialog({
 
   const restoreMutation = useMutation({
     mutationFn: (path: string) =>
-      fetchJson<RestoreSessionData>(
-        buildRequestUrl("/api/session/restore", {
+      fetchJson<RestoreAgentData>(
+        buildRequestUrl("/api/agent/restore", {
           machineId,
           contextId: viewerContextId,
         }),
@@ -108,37 +108,37 @@ export function ArchivedSessionsDialog({
       onRestored?.(result)
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: picoQueryKeys.archivedSessions(viewerContextId),
+          queryKey: picoQueryKeys.archivedAgents(viewerContextId),
         }),
         queryClient.invalidateQueries({
-          queryKey: picoQueryKeys.directorySessionsIndex(
+          queryKey: picoQueryKeys.projectAgentsIndex(
             viewerContextId,
-            result.directory
+            result.project
           ),
         }),
       ])
     },
   })
 
-  const restore = async (session: ArchivedSessionEntry) => {
-    if (!session.path) return
+  const restore = async (agent: ArchivedAgentEntry) => {
+    if (!agent.path) return
     try {
-      await restoreMutation.mutateAsync(session.path)
-      toast.success(`Restored "${session.title || "New session"}"`)
+      await restoreMutation.mutateAsync(agent.path)
+      toast.success(`Restored "${agent.title || "New agent"}"`)
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to restore session"
+        error instanceof Error ? error.message : "Failed to restore agent"
       )
     }
   }
 
-  const sessions = archivedQuery.data?.sessions ?? []
+  const agents = archivedQuery.data?.agents ?? []
   const query = filter.trim().toLowerCase()
-  const visibleSessions = query
-    ? sessions.filter((session) =>
-        `${session.title}\n${session.directory}`.toLowerCase().includes(query)
+  const visibleAgents = query
+    ? agents.filter((agent) =>
+        `${agent.title}\n${agent.project}`.toLowerCase().includes(query)
       )
-    : sessions
+    : agents
   const restoringPath = restoreMutation.isPending
     ? restoreMutation.variables
     : undefined
@@ -155,10 +155,10 @@ export function ArchivedSessionsDialog({
       <p className="py-10 text-center text-sm text-destructive">
         {archivedQuery.error instanceof Error
           ? archivedQuery.error.message
-          : "Failed to load archived sessions"}
+          : "Failed to load archived agents"}
       </p>
     )
-  } else if (visibleSessions.length === 0) {
+  } else if (visibleAgents.length === 0) {
     list = (
       <Empty className="py-10">
         <EmptyHeader>
@@ -166,7 +166,7 @@ export function ArchivedSessionsDialog({
             <ArchiveIcon />
           </EmptyMedia>
           <EmptyTitle>
-            {query ? "No matching sessions" : "No archived sessions"}
+            {query ? "No matching agents" : "No archived agents"}
           </EmptyTitle>
         </EmptyHeader>
       </Empty>
@@ -174,32 +174,32 @@ export function ArchivedSessionsDialog({
   } else {
     list = (
       <ul className="divide-y divide-border/70">
-        {visibleSessions.map((session) => {
-          const archivedAt = formatArchivedAt(session.archivedAt)
+        {visibleAgents.map((agent) => {
+          const archivedAt = formatArchivedAt(agent.archivedAt)
           return (
             <li
-              key={session.path || session.id}
+              key={agent.path || agent.id}
               className="flex items-center gap-3 py-2"
             >
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">
-                  {session.title || "New session"}
+                  {agent.title || "New agent"}
                 </div>
                 <div
                   className="truncate text-xs text-muted-foreground"
-                  title={session.directory}
+                  title={agent.project}
                 >
-                  {shortDirectory(session.directory)}
+                  {shortProject(agent.project)}
                   {archivedAt ? ` · Archived ${archivedAt}` : ""}
                 </div>
               </div>
               <Button
                 variant="outline"
                 size="sm"
-                disabled={restoreMutation.isPending || !session.path}
-                onClick={() => void restore(session)}
+                disabled={restoreMutation.isPending || !agent.path}
+                onClick={() => void restore(agent)}
               >
-                {restoringPath === session.path ? (
+                {restoringPath === agent.path ? (
                   <Spinner />
                 ) : (
                   <ArchiveRestoreIcon />
@@ -215,12 +215,12 @@ export function ArchivedSessionsDialog({
 
   const body = (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-      {sessions.length > 0 ? (
+      {agents.length > 0 ? (
         <Input
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
-          placeholder="Filter archived sessions…"
-          aria-label="Filter archived sessions"
+          placeholder="Filter archived agents…"
+          aria-label="Filter archived agents"
           type="search"
           autoComplete="off"
           data-1p-ignore="true"
@@ -232,14 +232,14 @@ export function ArchivedSessionsDialog({
       <div className="max-h-[60svh] min-h-0 overflow-y-auto">{list}</div>
     </div>
   )
-  const description = "Restore a session to show it in the sidebar again."
+  const description = "Restore an agent to show it in the sidebar again."
 
   if (isMobile) {
     return (
       <Drawer open={open} onOpenChange={onOpenChange} autoFocus={false}>
         <DrawerContent>
           <DrawerHeader>
-            <DrawerTitle>Archived sessions</DrawerTitle>
+            <DrawerTitle>Archived agents</DrawerTitle>
             <DrawerDescription>{description}</DrawerDescription>
           </DrawerHeader>
           <div className="flex min-h-0 flex-col px-4 pb-4">{body}</div>
@@ -252,7 +252,7 @@ export function ArchivedSessionsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Archived sessions</DialogTitle>
+          <DialogTitle>Archived agents</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         {body}

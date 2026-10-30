@@ -56,7 +56,7 @@ import {
   useMessageJumpValue,
   type MessageJumpStateStore,
 } from "@/features/pico/use-app-shell-message-scroll"
-import { picoSessionScopeKey } from "@/features/pico/query-keys"
+import { picoAgentScopeKey } from "@/features/pico/query-keys"
 import {
   MessageScroller,
   MessageScrollerContent,
@@ -69,7 +69,7 @@ import {
   useSelector,
   type PicoStore,
 } from "@/features/pico/tanstack-store-utils"
-import type { SessionState } from "@/lib/pico"
+import type { AgentState } from "@/lib/pico"
 
 export type AppShellConversationFrameHandle = {
   jumpToNextMessage: () => void
@@ -260,28 +260,28 @@ function ConversationJumpButtons({
   )
 }
 
-type AppShellConversationSessionState = Pick<
-  SessionState,
+type AppShellConversationAgentState = Pick<
+  AgentState,
   | "cwd"
   | "draft"
   | "historyOffset"
   | "historyTotalCount"
-  | "sessionFile"
-  | "sessionId"
+  | "agentFile"
+  | "agentId"
   | "streaming"
 >
 
-function useAppShellConversationSessionState(store: PicoStore<SessionState>) {
+function useAppShellConversationAgentState(store: PicoStore<AgentState>) {
   return useSelector(
     store,
-    (sessionState) => ({
-      cwd: sessionState.cwd,
-      draft: sessionState.draft,
-      historyOffset: sessionState.historyOffset,
-      historyTotalCount: sessionState.historyTotalCount,
-      sessionFile: sessionState.sessionFile,
-      sessionId: sessionState.sessionId,
-      streaming: sessionState.streaming,
+    (agentState) => ({
+      cwd: agentState.cwd,
+      draft: agentState.draft,
+      historyOffset: agentState.historyOffset,
+      historyTotalCount: agentState.historyTotalCount,
+      agentFile: agentState.agentFile,
+      agentId: agentState.agentId,
+      streaming: agentState.streaming,
     }),
     { compare: shallowRecordEqual }
   )
@@ -336,10 +336,10 @@ type AppShellConversationFrameProps = {
   conversationItemsStore: ConversationItemsStore
   emptyState: React.ReactNode
   isLoadingOlderHistory: boolean
-  isSessionViewLoading: boolean
+  isAgentViewLoading: boolean
   onLoadOlderHistory: () => Promise<void>
   ref?: React.Ref<AppShellConversationFrameHandle>
-  sessionState: AppShellConversationSessionState
+  agentState: AppShellConversationAgentState
   viewportElementRef?: React.RefObject<HTMLElement | null>
 }
 
@@ -393,17 +393,17 @@ function usePreservedScrollWhileHidden(
 function AppShellConversationFrame(props: AppShellConversationFrameProps) {
   const viewportElementRef = React.useRef<HTMLElement | null>(null)
   usePreservedScrollWhileHidden(viewportElementRef)
-  // Remount the scroller for each session so the opening position applies
-  // again and no follow state leaks between sessions.
-  // The key also changes when the session view finishes loading, because
+  // Remount the scroller for each agent so the opening position applies
+  // again and no follow state leaks between agents.
+  // The key also changes when the agent view finishes loading, because
   // the scroller treats rows that arrive later as new turns.
-  const sessionScrollKey = `${picoSessionScopeKey(props.sessionState) || "none"}:${
-    props.isSessionViewLoading ? "loading" : "ready"
+  const agentScrollKey = `${picoAgentScopeKey(props.agentState) || "none"}:${
+    props.isAgentViewLoading ? "loading" : "ready"
   }`
 
   return (
     <MessageScrollerProvider
-      key={sessionScrollKey}
+      key={agentScrollKey}
       autoScroll={props.autoScrollEnabled}
       defaultScrollPosition="end"
       scrollPreviousItemPeek={64}
@@ -422,10 +422,10 @@ function AppShellConversationScroller({
   conversationItemsStore,
   emptyState,
   isLoadingOlderHistory,
-  isSessionViewLoading,
+  isAgentViewLoading,
   onLoadOlderHistory,
   ref,
-  sessionState,
+  agentState,
   viewportElementRef,
 }: AppShellConversationFrameProps) {
   const {
@@ -472,7 +472,7 @@ function AppShellConversationScroller({
           !centerMessages && "pr-16 md:pr-[66px]"
         )}
       >
-        {sessionState.historyOffset > 0 && !isSessionViewLoading ? (
+        {agentState.historyOffset > 0 && !isAgentViewLoading ? (
           <ConversationEarlierMessages
             isLoading={isLoadingOlderHistory}
             onLoad={onLoadOlderHistory}
@@ -480,26 +480,26 @@ function AppShellConversationScroller({
           />
         ) : null}
         <MessageScrollerContent
-          aria-busy={sessionState.streaming}
+          aria-busy={agentState.streaming}
           className="gap-4 py-4"
         >
-          {isSessionViewLoading ? null : children}
+          {isAgentViewLoading ? null : children}
         </MessageScrollerContent>
       </MessageScrollerViewport>
 
       {emptyState}
 
-      {!isSessionViewLoading ? (
+      {!isAgentViewLoading ? (
         <ConversationJumpButtons
           centerMessages={centerMessages}
           conversationItemsStore={conversationItemsStore}
-          draft={sessionState.draft}
+          draft={agentState.draft}
           jumpStateStore={jumpStateStore}
           onFirst={scrollConversationToTop}
           onLatest={scrollConversationToBottom}
           onNext={jumpToNextMessage}
           onPrevious={jumpToPreviousMessage}
-          streaming={sessionState.streaming}
+          streaming={agentState.streaming}
         />
       ) : null}
     </MessageScroller>
@@ -813,9 +813,9 @@ function AppShellConversationEmptyState({
   conversationItemsStore,
   draft,
   cwd,
-  isSessionViewLoading,
+  isAgentViewLoading,
   isSubmitting,
-  onCreateSession,
+  onCreateAgent,
   streaming,
   viewerContextId,
   workingStateStore,
@@ -824,9 +824,9 @@ function AppShellConversationEmptyState({
   conversationItemsStore: ConversationItemsStore
   draft: boolean
   cwd?: string
-  isSessionViewLoading: boolean
+  isAgentViewLoading: boolean
   isSubmitting: boolean
-  onCreateSession: () => void
+  onCreateAgent: () => void
   streaming: boolean
   viewerContextId: string
   workingStateStore: PicoStore<AppShellWorkingState | null>
@@ -845,7 +845,7 @@ function AppShellConversationEmptyState({
         }
       : null)
   const showConversationLoadingState = Boolean(
-    isSessionViewLoading ||
+    isAgentViewLoading ||
     (!draft &&
       !hasMessages &&
       (isSubmitting ||
@@ -853,8 +853,8 @@ function AppShellConversationEmptyState({
         streaming ||
         Boolean(displayedWorkingState)))
   )
-  const conversationLoadingLabel = isSessionViewLoading
-    ? "Loading session…"
+  const conversationLoadingLabel = isAgentViewLoading
+    ? "Loading agent…"
     : displayedWorkingState && !displayedWorkingState.done
       ? displayedWorkingState.label
       : "Loading…"
@@ -876,12 +876,12 @@ function AppShellConversationEmptyState({
     <Empty className="absolute inset-0">
       <EmptyHeader>
         <EmptyTitle>
-          {draft ? "New session" : "Start a new conversation"}
+          {draft ? "New agent" : "Start a new conversation"}
         </EmptyTitle>
         <EmptyDescription>
           {draft
             ? undefined
-            : "This is the native Pico session view backed by the new TypeScript runtime."}
+            : "This is the native Pico agent view backed by the new TypeScript runtime."}
         </EmptyDescription>
       </EmptyHeader>
       {draft ? (
@@ -893,7 +893,7 @@ function AppShellConversationEmptyState({
         </EmptyContent>
       ) : (
         <EmptyContent>
-          <Button onClick={onCreateSession}>New session</Button>
+          <Button onClick={onCreateAgent}>New agent</Button>
         </EmptyContent>
       )}
     </Empty>
@@ -944,20 +944,20 @@ function AppShellConversationMessageStack({
   centerMessages,
   conversationItemsStore,
   hideToolBlocks,
-  sessionStore,
+  agentStore,
   workingFooter,
   workingStateStore,
 }: {
   centerMessages: boolean
   conversationItemsStore: ConversationItemsStore
   hideToolBlocks: boolean
-  sessionStore: PicoStore<SessionState>
+  agentStore: PicoStore<AgentState>
   workingFooter: React.ReactNode
   workingStateStore: PicoStore<AppShellWorkingState | null>
 }) {
   const hideThinking = useSelector(
-    sessionStore,
-    (sessionState) => sessionState.hideThinkingBlock
+    agentStore,
+    (agentState) => agentState.hideThinkingBlock
   )
   const compacting = useSelector(
     workingStateStore,
@@ -979,19 +979,19 @@ function AppShellConversationMessageStack({
   )
 }
 
-export const AppShellSessionConversation = React.memo(
-  function AppShellSessionConversation({
+export const AppShellAgentConversation = React.memo(
+  function AppShellAgentConversation({
     awaitingFirstTurn,
     conversationFrameRef,
     conversationItemsStore,
     displaySettingsStore,
     isLoadingOlderHistory,
-    isSessionViewLoading,
+    isAgentViewLoading,
     isSubmitting,
     onCancelCompaction,
-    onCreateSession,
+    onCreateAgent,
     onLoadOlderHistory,
-    sessionStore,
+    agentStore,
     viewerContextId,
     workingStateStore,
   }: {
@@ -1000,26 +1000,26 @@ export const AppShellSessionConversation = React.memo(
     conversationItemsStore: ConversationItemsStore
     displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
     isLoadingOlderHistory: boolean
-    isSessionViewLoading: boolean
+    isAgentViewLoading: boolean
     isSubmitting: boolean
     onCancelCompaction: () => void
-    onCreateSession: () => void
+    onCreateAgent: () => void
     onLoadOlderHistory: () => Promise<void>
-    sessionStore: PicoStore<SessionState>
+    agentStore: PicoStore<AgentState>
     viewerContextId: string
     workingStateStore: PicoStore<AppShellWorkingState | null>
   }) {
-    const sessionState = useAppShellConversationSessionState(sessionStore)
+    const agentState = useAppShellConversationAgentState(agentStore)
     const { autoScrollEnabled, centerMessages, hideToolBlocks } =
       useSelector(displaySettingsStore)
     const hideThinking = useSelector(
-      sessionStore,
-      (currentSessionState) => currentSessionState.hideThinkingBlock
+      agentStore,
+      (currentAgentState) => currentAgentState.hideThinkingBlock
     )
 
     React.useLayoutEffect(() => {
-      conversationItemsStore.setItems(sessionStore.state.items)
-    }, [conversationItemsStore, hideThinking, hideToolBlocks, sessionStore])
+      conversationItemsStore.setItems(agentStore.state.items)
+    }, [conversationItemsStore, hideThinking, hideToolBlocks, agentStore])
 
     return (
       <AppShellConversationFrame
@@ -1028,19 +1028,19 @@ export const AppShellSessionConversation = React.memo(
         centerMessages={centerMessages}
         conversationItemsStore={conversationItemsStore}
         isLoadingOlderHistory={isLoadingOlderHistory}
-        isSessionViewLoading={isSessionViewLoading}
+        isAgentViewLoading={isAgentViewLoading}
         onLoadOlderHistory={onLoadOlderHistory}
-        sessionState={sessionState}
+        agentState={agentState}
         emptyState={
           <AppShellConversationEmptyState
             awaitingFirstTurn={awaitingFirstTurn}
             conversationItemsStore={conversationItemsStore}
-            cwd={sessionState.cwd}
-            draft={sessionState.draft}
-            isSessionViewLoading={isSessionViewLoading}
+            cwd={agentState.cwd}
+            draft={agentState.draft}
+            isAgentViewLoading={isAgentViewLoading}
             isSubmitting={isSubmitting}
-            onCreateSession={onCreateSession}
-            streaming={sessionState.streaming}
+            onCreateAgent={onCreateAgent}
+            streaming={agentState.streaming}
             viewerContextId={viewerContextId}
             workingStateStore={workingStateStore}
           />
@@ -1050,7 +1050,7 @@ export const AppShellSessionConversation = React.memo(
           centerMessages={centerMessages}
           conversationItemsStore={conversationItemsStore}
           hideToolBlocks={hideToolBlocks}
-          sessionStore={sessionStore}
+          agentStore={agentStore}
           workingFooter={
             <AppShellConversationWorkingFooter
               centerMessages={centerMessages}

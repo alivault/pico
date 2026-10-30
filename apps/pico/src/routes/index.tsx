@@ -10,7 +10,7 @@ import { PicoAppShell } from "@/features/pico/app-shell"
 import { MachinesDialogController } from "@/features/pico/machines"
 import { ServerUnreachableOverlay } from "@/features/pico/server-unreachable-overlay"
 import { WindowSidebar } from "@/features/pico/window-sidebar"
-import type { SelectSessionNavigationOptions } from "@/features/pico/app-shell-types"
+import type { SelectAgentNavigationOptions } from "@/features/pico/app-shell-types"
 import {
   LOCAL_MACHINE_ID,
   normalizeMachineId,
@@ -21,7 +21,7 @@ import { queryClientForMachine } from "@/lib/pico/query-client"
 import { useServerConnection } from "@/lib/pico/server-connection"
 
 const indexSearchSchema = z.object({
-  session: z.string().optional(),
+  agent: z.string().optional(),
   /** A remote machine of the hub; see `lib/pico/machine.ts`. */
   machine: z.string().optional(),
 })
@@ -31,20 +31,20 @@ export const Route = createFileRoute("/")({
   component: App,
 })
 
-/** The session that the app shell of each opened machine shows. */
-type MachineWorkspaces = Record<string, { sessionId?: string }>
+/** The agent that the app shell of each opened machine shows. */
+type MachineWorkspaces = Record<string, { agentId?: string }>
 
-function machineSearch(machineId: string, sessionId: string | undefined) {
+function machineSearch(machineId: string, agentId: string | undefined) {
   return {
     ...(machineId === LOCAL_MACHINE_ID ? {} : { machine: machineId }),
-    ...(sessionId ? { session: sessionId } : {}),
+    ...(agentId ? { agent: agentId } : {}),
   }
 }
 
 /**
  * The page keeps an app shell for each machine that it opened, like a
  * terminal multiplexer keeps a pane for each machine. The URL selects the
- * machine and the session that show. The shells of the other machines stay
+ * machine and the agent that show. The shells of the other machines stay
  * mounted in a hidden `Activity`: they keep their state (the composer text,
  * the right sidebar, open files), and their effects (the event stream,
  * window listeners) stop until they show again.
@@ -54,35 +54,35 @@ function machineSearch(machineId: string, sessionId: string | undefined) {
  * the machines dialog. Each shell owns only its machine's state.
  */
 function App() {
-  const { session, machine: machineParam } = Route.useSearch()
+  const { agent, machine: machineParam } = Route.useSearch()
   const navigate = Route.useNavigate()
   const shownMachine = normalizeMachineId(machineParam)
   const serverUnreachable = useServerConnection() === "unreachable"
 
   const [workspaces, setWorkspaces] = React.useState<MachineWorkspaces>(() => ({
-    [shownMachine]: { sessionId: session },
+    [shownMachine]: { agentId: agent },
   }))
-  // The URL is the source of the shown machine and session: a click in the
+  // The URL is the source of the shown machine and agent: a click in the
   // sidebar and the back and forward buttons both change it.
   if (
     !(shownMachine in workspaces) ||
-    workspaces[shownMachine]?.sessionId !== session
+    workspaces[shownMachine]?.agentId !== agent
   ) {
     setWorkspaces((current) => ({
       ...current,
-      [shownMachine]: { sessionId: session },
+      [shownMachine]: { agentId: agent },
     }))
   }
 
   React.useEffect(() => {
-    setMachineNavigator((nextMachine, nextSession) => {
-      void navigate({ search: machineSearch(nextMachine, nextSession) })
+    setMachineNavigator((nextMachine, nextAgent) => {
+      void navigate({ search: machineSearch(nextMachine, nextAgent) })
     })
     return () => setMachineNavigator(undefined)
   }, [navigate])
 
   // A click on a push notification asks the service worker to open its
-  // session in this tab without a page load (see `public/sw.js`).
+  // agent in this tab without a page load (see `public/sw.js`).
   React.useEffect(() => {
     if (typeof navigator === "undefined" || !("serviceWorker" in navigator))
       return
@@ -98,7 +98,7 @@ function App() {
       void navigate({
         search: machineSearch(
           normalizeMachineId(params.get("machine") ?? undefined),
-          params.get("session") ?? undefined
+          params.get("agent") ?? undefined
         ),
       })
     }
@@ -107,28 +107,28 @@ function App() {
       navigator.serviceWorker.removeEventListener("message", onMessage)
   }, [navigate])
 
-  const selectSession = (
+  const selectAgent = (
     machineId: string,
-    nextSessionId: string | undefined,
-    options: SelectSessionNavigationOptions | undefined
+    nextAgentId: string | undefined,
+    options: SelectAgentNavigationOptions | undefined
   ) => {
-    const nextRouteSessionId = nextSessionId || undefined
-    // A hidden shell changes its own session (for example when a request
+    const nextRouteAgentId = nextAgentId || undefined
+    // A hidden shell changes its own agent (for example when a request
     // that started before the switch ends). It does not take the page back.
     if (machineId !== shownMachine) {
       setWorkspaces((current) =>
-        current[machineId]?.sessionId === nextRouteSessionId
+        current[machineId]?.agentId === nextRouteAgentId
           ? current
-          : { ...current, [machineId]: { sessionId: nextRouteSessionId } }
+          : { ...current, [machineId]: { agentId: nextRouteAgentId } }
       )
       return
     }
-    if (nextRouteSessionId === session) return
+    if (nextRouteAgentId === agent) return
 
     void navigate({
       search: (previous) => ({
         ...previous,
-        session: nextRouteSessionId,
+        agent: nextRouteAgentId,
       }),
       replace: options?.replace ?? false,
     })
@@ -149,11 +149,11 @@ function App() {
             >
               <MachineShell machineId={machineId}>
                 <PicoAppShell
-                  sessionId={
-                    machineId === shownMachine ? session : workspace.sessionId
+                  agentId={
+                    machineId === shownMachine ? agent : workspace.agentId
                   }
-                  onSelectSession={(nextSessionId, options) =>
-                    selectSession(machineId, nextSessionId, options)
+                  onSelectAgent={(nextAgentId, options) =>
+                    selectAgent(machineId, nextAgentId, options)
                   }
                 />
               </MachineShell>

@@ -14,7 +14,7 @@ import {
 
 /**
  * The machines of the hub: the local runtime and the SSH machines. The hub
- * sends their states and session summaries on `/api/machines/events`. The
+ * sends their states and agent summaries on `/api/machines/events`. The
  * page shows one machine at a time (see `routes/index.tsx`); the sidebar
  * shows the other machines from their summaries.
  */
@@ -26,16 +26,16 @@ export type MachineState =
   | "attention"
   | "disabled"
 
-export type MachineSessionSummary = {
+export type MachineAgentSummary = {
   id: string
   title: string
   cwd: string
-  directory: string
+  project: string
   busy: boolean
   needsInput: boolean
-  /** What an idle session waits on: timers, watches, or jobs. */
+  /** What an idle agent waits on: timers, watches, or jobs. */
   waiting?: string
-  /** Nobody has read the last run yet. The same for all clients. */
+  /** Nobody has read the last turn yet. The same for all clients. */
   unread?: boolean
   /** Servers before global read state: the viewer contexts that did not see it. */
   unreadBy?: Array<string>
@@ -65,8 +65,8 @@ export type MachineInfo = {
   summary?: {
     hostname: string
     version: string
-    directories: Array<string>
-    sessions: Array<MachineSessionSummary>
+    projects: Array<string>
+    agents: Array<MachineAgentSummary>
   }
 }
 

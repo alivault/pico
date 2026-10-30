@@ -6,9 +6,9 @@ import { usePicoEvent } from "@/features/pico/agent/events"
 import { toast } from "@/lib/pico/toast"
 
 import {
-  AppShellAddDirectoryDialogController,
-  type AppShellAddDirectoryDialogHandle,
-} from "@/features/pico/app-shell-add-directory-dialog"
+  AppShellAddProjectDialogController,
+  type AppShellAddProjectDialogHandle,
+} from "@/features/pico/app-shell-add-project-dialog"
 import {
   AppShellAuthDialogController,
   type AppShellAuthDialogHandle,
@@ -19,9 +19,9 @@ import {
 } from "@/features/pico/app-shell-command-palette"
 import type { AppCommand } from "@/features/pico/app-shell-command-palette"
 import {
-  AppShellSessionsDialogController,
-  type AppShellSessionsDialogHandle,
-} from "@/features/pico/app-shell-sessions-dialog"
+  AppShellAgentsDialogController,
+  type AppShellAgentsDialogHandle,
+} from "@/features/pico/app-shell-agents-dialog"
 import {
   AppShellSettingsDialogController,
   type AppShellSettingsDialogHandle,
@@ -44,25 +44,25 @@ import { useAppShellSidebarValue } from "@/features/pico/app-shell-sidebar-store
 import type {
   AppShellDisplaySettingsState,
   AppShellNotificationState,
-  SelectSessionNavigationOptions,
+  SelectAgentNavigationOptions,
 } from "@/features/pico/app-shell-types"
 import { GitCommitDialogController } from "@/features/pico/right-sidebar-git-commit-dialog"
 import type { GitCommitDialogControllerHandle } from "@/features/pico/right-sidebar-types"
 import {
-  DeleteOldDirectorySessionsDialogController,
-  DeleteSessionsDialogController,
-  ForkSessionDialogController,
-  RenameSessionDialogController,
-  type DeleteOldDirectorySessionsDialogHandle,
-  type DeleteSessionsDialogHandle,
-  type ForkSessionDialogHandle,
-  type RenameSessionDialogHandle,
-} from "@/features/pico/app-shell-session-dialogs"
+  DeleteOldProjectAgentsDialogController,
+  DeleteAgentsDialogController,
+  ForkAgentDialogController,
+  RenameAgentDialogController,
+  type DeleteOldProjectAgentsDialogHandle,
+  type DeleteAgentsDialogHandle,
+  type ForkAgentDialogHandle,
+  type RenameAgentDialogHandle,
+} from "@/features/pico/app-shell-agent-dialogs"
 import {
   useSelector,
   type PicoStore,
 } from "@/features/pico/tanstack-store-utils"
-import type { SessionState, ThemeColorMode, ThemeFamily } from "@/lib/pico"
+import type { AgentState, ThemeColorMode, ThemeFamily } from "@/lib/pico"
 import { isApiErrorResponse } from "@/lib/pico/api"
 import type {
   DirectorySearchResponse,
@@ -71,64 +71,64 @@ import type {
 import { useMachineId } from "@/lib/pico/machine-context"
 
 type AppShellFloatingControllersProps = {
-  activeSessionId?: string
-  addDirectoryDialogRef: React.RefObject<AppShellAddDirectoryDialogHandle | null>
-  addDirectoryOpenRef: React.RefObject<boolean>
-  addDirectoryPath: React.ComponentProps<
-    typeof AppShellAddDirectoryDialogController
-  >["onAddDirectoryPath"]
-  baseSidebarDirectories: Array<string>
+  activeAgentId?: string
+  addProjectDialogRef: React.RefObject<AppShellAddProjectDialogHandle | null>
+  addProjectOpenRef: React.RefObject<boolean>
+  addProjectPath: React.ComponentProps<
+    typeof AppShellAddProjectDialogController
+  >["onAddProjectPath"]
+  baseSidebarProjects: Array<string>
   commandPaletteCommandsRef: React.RefObject<() => Array<AppCommand>>
   commandPaletteOpenRef: React.RefObject<boolean>
   commandPaletteRef: React.RefObject<AppShellCommandPaletteHandle | null>
-  currentSessionQueryScope: string
+  currentAgentQueryScope: string
   currentTheme: ThemeFamily
   currentThemeColorMode: ThemeColorMode
   authDialogRef: React.RefObject<AppShellAuthDialogHandle | null>
   authOpenRef: React.RefObject<boolean>
-  deleteDialogRef: React.RefObject<DeleteSessionsDialogHandle | null>
+  deleteDialogRef: React.RefObject<DeleteAgentsDialogHandle | null>
   deleteOpenRef: React.RefObject<boolean>
-  deleteSessions: React.ComponentProps<
-    typeof DeleteSessionsDialogController
-  >["onDeleteSession"]
-  deleteOldDirectorySessionsDialogRef: React.RefObject<DeleteOldDirectorySessionsDialogHandle | null>
-  deleteOldDirectorySessionsOpenRef: React.RefObject<boolean>
+  deleteAgents: React.ComponentProps<
+    typeof DeleteAgentsDialogController
+  >["onDeleteAgent"]
+  deleteOldProjectAgentsDialogRef: React.RefObject<DeleteOldProjectAgentsDialogHandle | null>
+  deleteOldProjectAgentsOpenRef: React.RefObject<boolean>
   notificationStore: PicoStore<AppShellNotificationState>
-  forkDialogRef: React.RefObject<ForkSessionDialogHandle | null>
+  forkDialogRef: React.RefObject<ForkAgentDialogHandle | null>
   forkOpenRef: React.RefObject<boolean>
   gitCommitDialogRef: React.RefObject<GitCommitDialogControllerHandle | null>
   gitCommitOpenRef: React.RefObject<boolean>
   displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
-  knownDirectories: Array<string>
-  moveSessionDirectoryDialogRef: React.RefObject<AppShellAddDirectoryDialogHandle | null>
-  moveSessionDirectoryOpenRef: React.RefObject<boolean>
-  moveSessionDirectoryTargetToPath: React.ComponentProps<
-    typeof AppShellAddDirectoryDialogController
-  >["onAddDirectoryPath"]
+  knownProjects: Array<string>
+  moveAgentProjectDialogRef: React.RefObject<AppShellAddProjectDialogHandle | null>
+  moveAgentProjectOpenRef: React.RefObject<boolean>
+  moveAgentProjectTargetToPath: React.ComponentProps<
+    typeof AppShellAddProjectDialogController
+  >["onAddProjectPath"]
   onAutoScrollEnabledChange: (enabled: boolean) => void
   onCenterMessagesChange: (centered: boolean) => void
   onHideThinkingBlocksChange: (hidden: boolean) => void
   onHideToolBlocksChange: (hidden: boolean) => void
-  onSessionDoneDesktopNotificationsEnabledChange: (enabled: boolean) => void
-  onSessionDoneSoundEnabledChange: (enabled: boolean) => void
-  onSessionDialogSelect: (
-    sessionId?: string,
-    options?: SelectSessionNavigationOptions
+  onAgentDoneDesktopNotificationsEnabledChange: (enabled: boolean) => void
+  onAgentDoneSoundEnabledChange: (enabled: boolean) => void
+  onAgentDialogSelect: (
+    agentId?: string,
+    options?: SelectAgentNavigationOptions
   ) => void
   onThemeChange: (value: ThemeFamily) => void
   onThemeColorModeChange: (value: ThemeColorMode) => void
   onThemePreviewChange: (value: ThemeFamily, colorMode: ThemeColorMode) => void
-  recentDirectoriesStore: PicoStore<Array<string>>
-  renameDialogRef: React.RefObject<RenameSessionDialogHandle | null>
+  recentProjectsStore: PicoStore<Array<string>>
+  renameDialogRef: React.RefObject<RenameAgentDialogHandle | null>
   renameOpenRef: React.RefObject<boolean>
-  renameSessionPath: React.ComponentProps<
-    typeof RenameSessionDialogController
-  >["onRenameSession"]
-  sessionCwd?: string
-  sessionsDialogDirectory: string
-  sessionsDialogRef: React.RefObject<AppShellSessionsDialogHandle | null>
-  sessionsOpenRef: React.RefObject<boolean>
-  sessionStore: PicoStore<SessionState>
+  renameAgentPath: React.ComponentProps<
+    typeof RenameAgentDialogController
+  >["onRenameAgent"]
+  agentCwd?: string
+  agentsDialogProject: string
+  agentsDialogRef: React.RefObject<AppShellAgentsDialogHandle | null>
+  agentsOpenRef: React.RefObject<boolean>
+  agentStore: PicoStore<AgentState>
   settingsDialogRef: React.RefObject<AppShellSettingsDialogHandle | null>
   settingsOpenRef: React.RefObject<boolean>
   sidebarStore: AppShellSidebarStore
@@ -164,97 +164,93 @@ const AppShellCommandPaletteHost = React.memo(
   }
 )
 
-const AppShellSessionsDialogHost = React.memo(
-  function AppShellSessionsDialogHost({
-    activeSessionId,
-    knownDirectories,
-    sessionsDialogDirectory,
-    sessionsDialogRef,
-    sessionsOpenRef,
+const AppShellAgentsDialogHost = React.memo(function AppShellAgentsDialogHost({
+  activeAgentId,
+  knownProjects,
+  agentsDialogProject,
+  agentsDialogRef,
+  agentsOpenRef,
+  sidebarStore,
+  viewerContextId,
+  deleteAgents,
+  onAgentDialogSelect,
+  renameAgentPath,
+}: Pick<
+  AppShellFloatingControllersProps,
+  | "activeAgentId"
+  | "knownProjects"
+  | "agentsDialogProject"
+  | "agentsDialogRef"
+  | "agentsOpenRef"
+  | "sidebarStore"
+  | "viewerContextId"
+  | "deleteAgents"
+  | "onAgentDialogSelect"
+  | "renameAgentPath"
+>) {
+  const agentsDialogSnapshot = useAppShellSidebarValue(
     sidebarStore,
-    viewerContextId,
-    deleteSessions,
-    onSessionDialogSelect,
-    renameSessionPath,
-  }: Pick<
-    AppShellFloatingControllersProps,
-    | "activeSessionId"
-    | "knownDirectories"
-    | "sessionsDialogDirectory"
-    | "sessionsDialogRef"
-    | "sessionsOpenRef"
-    | "sidebarStore"
-    | "viewerContextId"
-    | "deleteSessions"
-    | "onSessionDialogSelect"
-    | "renameSessionPath"
-  >) {
-    const sessionsDialogSnapshot = useAppShellSidebarValue(
-      sidebarStore,
-      (snapshot) => ({
-        activeSessionId:
-          snapshot.state.sessionsEvent?.activeSessionId || activeSessionId,
-        activeSessionPath:
-          snapshot.state.sessionsEvent?.activeSessionPath || "",
-        directorySessionsByPath: snapshot.derived.sidebarDirectoryIndexes,
-        sessionStatusByKey: snapshot.state.sidebarSessionStatusByKey,
-      })
-    )
+    (snapshot) => ({
+      activeAgentId: snapshot.state.agentsEvent?.activeAgentId || activeAgentId,
+      activeAgentPath: snapshot.state.agentsEvent?.activeAgentPath || "",
+      projectAgentsByPath: snapshot.derived.sidebarProjectIndexes,
+      agentStatusByKey: snapshot.state.sidebarAgentStatusByKey,
+    })
+  )
 
-    return (
-      <AppShellSessionsDialogController
-        ref={sessionsDialogRef}
-        openStateRef={sessionsOpenRef}
-        viewerContextId={viewerContextId}
-        currentDirectory={sessionsDialogDirectory}
-        knownDirectories={knownDirectories}
-        directorySessionsByPath={sessionsDialogSnapshot.directorySessionsByPath}
-        sessionStatusByKey={sessionsDialogSnapshot.sessionStatusByKey}
-        activeSessionId={sessionsDialogSnapshot.activeSessionId}
-        activeSessionPath={sessionsDialogSnapshot.activeSessionPath}
-        onSelectSession={onSessionDialogSelect}
-        onRenameSession={renameSessionPath}
-        onDeleteSession={deleteSessions}
-        onError={(error) => {
-          toast.error(
-            error instanceof Error ? error.message : "Failed to load sessions"
-          )
-        }}
-      />
-    )
-  }
-)
+  return (
+    <AppShellAgentsDialogController
+      ref={agentsDialogRef}
+      openStateRef={agentsOpenRef}
+      viewerContextId={viewerContextId}
+      currentProject={agentsDialogProject}
+      knownProjects={knownProjects}
+      projectAgentsByPath={agentsDialogSnapshot.projectAgentsByPath}
+      agentStatusByKey={agentsDialogSnapshot.agentStatusByKey}
+      activeAgentId={agentsDialogSnapshot.activeAgentId}
+      activeAgentPath={agentsDialogSnapshot.activeAgentPath}
+      onSelectAgent={onAgentDialogSelect}
+      onRenameAgent={renameAgentPath}
+      onDeleteAgent={deleteAgents}
+      onError={(error) => {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to load agents"
+        )
+      }}
+    />
+  )
+})
 
-const AppShellAddDirectoryDialogHost = React.memo(
-  function AppShellAddDirectoryDialogHost({
-    addDirectoryDialogRef,
-    addDirectoryOpenRef,
-    activeSessionId,
-    addDirectoryPath,
-    baseSidebarDirectories,
-    knownDirectories,
-    recentDirectoriesStore,
-    sessionCwd,
-    sessionStore,
+const AppShellAddProjectDialogHost = React.memo(
+  function AppShellAddProjectDialogHost({
+    addProjectDialogRef,
+    addProjectOpenRef,
+    activeAgentId,
+    addProjectPath,
+    baseSidebarProjects,
+    knownProjects,
+    recentProjectsStore,
+    agentCwd,
+    agentStore,
     viewerContextId,
   }: Pick<
     AppShellFloatingControllersProps,
-    | "activeSessionId"
-    | "addDirectoryDialogRef"
-    | "addDirectoryOpenRef"
-    | "addDirectoryPath"
-    | "baseSidebarDirectories"
-    | "knownDirectories"
-    | "recentDirectoriesStore"
-    | "sessionCwd"
-    | "sessionStore"
+    | "activeAgentId"
+    | "addProjectDialogRef"
+    | "addProjectOpenRef"
+    | "addProjectPath"
+    | "baseSidebarProjects"
+    | "knownProjects"
+    | "recentProjectsStore"
+    | "agentCwd"
+    | "agentStore"
     | "viewerContextId"
   >) {
     const machineId = useMachineId()
-    const recentDirectories = useSelector(recentDirectoriesStore)
-    const useForNewSession = useSelector(
-      sessionStore,
-      (sessionState) => sessionState.draft && sessionState.items.length === 0
+    const recentProjects = useSelector(recentProjectsStore)
+    const useForNewAgent = useSelector(
+      agentStore,
+      (agentState) => agentState.draft && agentState.items.length === 0
     )
     const requestPathCompletions = useStableEvent(async (prefix: string) => {
       if (!viewerContextId) return []
@@ -263,7 +259,7 @@ const AppShellAddDirectoryDialogHost = React.memo(
         buildRequestUrl("/api/path-completions", {
           machineId,
           contextId: viewerContextId,
-          sessionId: activeSessionId,
+          agentId: activeAgentId,
         }),
         {
           method: "POST",
@@ -280,7 +276,7 @@ const AppShellAddDirectoryDialogHost = React.memo(
         buildRequestUrl("/api/directory-search", {
           machineId,
           contextId: viewerContextId,
-          sessionId: activeSessionId,
+          agentId: activeAgentId,
         }),
         {
           method: "POST",
@@ -292,15 +288,15 @@ const AppShellAddDirectoryDialogHost = React.memo(
     })
 
     return (
-      <AppShellAddDirectoryDialogController
-        ref={addDirectoryDialogRef}
-        openStateRef={addDirectoryOpenRef}
-        openedDirectories={baseSidebarDirectories}
-        currentDirectory={sessionCwd}
-        recentDirectories={recentDirectories}
-        knownDirectories={knownDirectories}
-        useForNewSession={useForNewSession}
-        onAddDirectoryPath={addDirectoryPath}
+      <AppShellAddProjectDialogController
+        ref={addProjectDialogRef}
+        openStateRef={addProjectOpenRef}
+        openedProjects={baseSidebarProjects}
+        currentDirectory={agentCwd}
+        recentProjects={recentProjects}
+        knownProjects={knownProjects}
+        useForNewAgent={useForNewAgent}
+        onAddProjectPath={addProjectPath}
         onRequestPathCompletions={requestPathCompletions}
         onSearchDirectories={searchDirectories}
       />
@@ -308,31 +304,31 @@ const AppShellAddDirectoryDialogHost = React.memo(
   }
 )
 
-const AppShellMoveSessionDirectoryDialogHost = React.memo(
-  function AppShellMoveSessionDirectoryDialogHost({
-    activeSessionId,
-    baseSidebarDirectories,
-    knownDirectories,
-    moveSessionDirectoryDialogRef,
-    moveSessionDirectoryOpenRef,
-    moveSessionDirectoryTargetToPath,
-    recentDirectoriesStore,
-    sessionCwd,
+const AppShellMoveAgentProjectDialogHost = React.memo(
+  function AppShellMoveAgentProjectDialogHost({
+    activeAgentId,
+    baseSidebarProjects,
+    knownProjects,
+    moveAgentProjectDialogRef,
+    moveAgentProjectOpenRef,
+    moveAgentProjectTargetToPath,
+    recentProjectsStore,
+    agentCwd,
     viewerContextId,
   }: Pick<
     AppShellFloatingControllersProps,
-    | "activeSessionId"
-    | "baseSidebarDirectories"
-    | "knownDirectories"
-    | "moveSessionDirectoryDialogRef"
-    | "moveSessionDirectoryOpenRef"
-    | "moveSessionDirectoryTargetToPath"
-    | "recentDirectoriesStore"
-    | "sessionCwd"
+    | "activeAgentId"
+    | "baseSidebarProjects"
+    | "knownProjects"
+    | "moveAgentProjectDialogRef"
+    | "moveAgentProjectOpenRef"
+    | "moveAgentProjectTargetToPath"
+    | "recentProjectsStore"
+    | "agentCwd"
     | "viewerContextId"
   >) {
     const machineId = useMachineId()
-    const recentDirectories = useSelector(recentDirectoriesStore)
+    const recentProjects = useSelector(recentProjectsStore)
     const requestPathCompletions = useStableEvent(async (prefix: string) => {
       if (!viewerContextId) return []
 
@@ -340,7 +336,7 @@ const AppShellMoveSessionDirectoryDialogHost = React.memo(
         buildRequestUrl("/api/path-completions", {
           machineId,
           contextId: viewerContextId,
-          sessionId: activeSessionId,
+          agentId: activeAgentId,
         }),
         {
           method: "POST",
@@ -357,7 +353,7 @@ const AppShellMoveSessionDirectoryDialogHost = React.memo(
         buildRequestUrl("/api/directory-search", {
           machineId,
           contextId: viewerContextId,
-          sessionId: activeSessionId,
+          agentId: activeAgentId,
         }),
         {
           method: "POST",
@@ -369,15 +365,15 @@ const AppShellMoveSessionDirectoryDialogHost = React.memo(
     })
 
     return (
-      <AppShellAddDirectoryDialogController
-        ref={moveSessionDirectoryDialogRef}
-        openStateRef={moveSessionDirectoryOpenRef}
-        openedDirectories={baseSidebarDirectories}
-        currentDirectory={sessionCwd}
-        recentDirectories={recentDirectories}
-        knownDirectories={knownDirectories}
-        useForMoveSession
-        onAddDirectoryPath={moveSessionDirectoryTargetToPath}
+      <AppShellAddProjectDialogController
+        ref={moveAgentProjectDialogRef}
+        openStateRef={moveAgentProjectOpenRef}
+        openedProjects={baseSidebarProjects}
+        currentDirectory={agentCwd}
+        recentProjects={recentProjects}
+        knownProjects={knownProjects}
+        useForMoveAgent
+        onAddProjectPath={moveAgentProjectTargetToPath}
         onRequestPathCompletions={requestPathCompletions}
         onSearchDirectories={searchDirectories}
       />
@@ -385,120 +381,117 @@ const AppShellMoveSessionDirectoryDialogHost = React.memo(
   }
 )
 
-const AppShellRenameSessionDialogHost = React.memo(
-  function AppShellRenameSessionDialogHost({
+const AppShellRenameAgentDialogHost = React.memo(
+  function AppShellRenameAgentDialogHost({
     renameDialogRef,
     renameOpenRef,
-    renameSessionPath,
+    renameAgentPath,
     viewerContextId,
   }: Pick<
     AppShellFloatingControllersProps,
-    | "renameDialogRef"
-    | "renameOpenRef"
-    | "renameSessionPath"
-    | "viewerContextId"
+    "renameDialogRef" | "renameOpenRef" | "renameAgentPath" | "viewerContextId"
   >) {
     return (
-      <RenameSessionDialogController
+      <RenameAgentDialogController
         ref={renameDialogRef}
         openStateRef={renameOpenRef}
         viewerContextId={viewerContextId}
-        onRenameSession={renameSessionPath}
+        onRenameAgent={renameAgentPath}
       />
     )
   }
 )
 
-const AppShellDeleteSessionsDialogHost = React.memo(
-  function AppShellDeleteSessionsDialogHost({
+const AppShellDeleteAgentsDialogHost = React.memo(
+  function AppShellDeleteAgentsDialogHost({
     deleteDialogRef,
     deleteOpenRef,
-    deleteSessions,
+    deleteAgents,
   }: Pick<
     AppShellFloatingControllersProps,
-    "deleteDialogRef" | "deleteOpenRef" | "deleteSessions"
+    "deleteDialogRef" | "deleteOpenRef" | "deleteAgents"
   >) {
     return (
-      <DeleteSessionsDialogController
+      <DeleteAgentsDialogController
         ref={deleteDialogRef}
         openStateRef={deleteOpenRef}
-        onDeleteSession={deleteSessions}
+        onDeleteAgent={deleteAgents}
       />
     )
   }
 )
 
-const AppShellDeleteOldDirectorySessionsDialogHost = React.memo(
-  function AppShellDeleteOldDirectorySessionsDialogHost({
-    deleteOldDirectorySessionsDialogRef,
-    deleteOldDirectorySessionsOpenRef,
+const AppShellDeleteOldProjectAgentsDialogHost = React.memo(
+  function AppShellDeleteOldProjectAgentsDialogHost({
+    deleteOldProjectAgentsDialogRef,
+    deleteOldProjectAgentsOpenRef,
     viewerContextId,
   }: Pick<
     AppShellFloatingControllersProps,
-    | "deleteOldDirectorySessionsDialogRef"
-    | "deleteOldDirectorySessionsOpenRef"
+    | "deleteOldProjectAgentsDialogRef"
+    | "deleteOldProjectAgentsOpenRef"
     | "viewerContextId"
   >) {
     return (
-      <DeleteOldDirectorySessionsDialogController
-        ref={deleteOldDirectorySessionsDialogRef}
-        openStateRef={deleteOldDirectorySessionsOpenRef}
+      <DeleteOldProjectAgentsDialogController
+        ref={deleteOldProjectAgentsDialogRef}
+        openStateRef={deleteOldProjectAgentsOpenRef}
         viewerContextId={viewerContextId}
       />
     )
   }
 )
 
-const AppShellForkSessionDialogHost = React.memo(
-  function AppShellForkSessionDialogHost({
-    activeSessionId,
-    currentSessionQueryScope,
+const AppShellForkAgentDialogHost = React.memo(
+  function AppShellForkAgentDialogHost({
+    activeAgentId,
+    currentAgentQueryScope,
     forkDialogRef,
     forkOpenRef,
     viewerContextId,
   }: Pick<
     AppShellFloatingControllersProps,
-    | "activeSessionId"
-    | "currentSessionQueryScope"
+    | "activeAgentId"
+    | "currentAgentQueryScope"
     | "forkDialogRef"
     | "forkOpenRef"
     | "viewerContextId"
   >) {
     return (
-      <ForkSessionDialogController
+      <ForkAgentDialogController
         ref={forkDialogRef}
         openStateRef={forkOpenRef}
         viewerContextId={viewerContextId}
-        sessionScopeKey={currentSessionQueryScope}
-        sessionId={activeSessionId}
+        agentScopeKey={currentAgentQueryScope}
+        agentId={activeAgentId}
       />
     )
   }
 )
 
 const AppShellTreeDialogHost = React.memo(function AppShellTreeDialogHost({
-  activeSessionId,
-  currentSessionQueryScope,
-  sessionStore,
+  activeAgentId,
+  currentAgentQueryScope,
+  agentStore,
   treeDialogRef,
   treeOpenRef,
   viewerContextId,
 }: Pick<
   AppShellFloatingControllersProps,
-  | "activeSessionId"
-  | "currentSessionQueryScope"
-  | "sessionStore"
+  | "activeAgentId"
+  | "currentAgentQueryScope"
+  | "agentStore"
   | "treeDialogRef"
   | "treeOpenRef"
   | "viewerContextId"
 >) {
   const treeSummaryAvailable = useSelector(
-    sessionStore,
-    (sessionState) => sessionState.availableModels.length > 0
+    agentStore,
+    (agentState) => agentState.availableModels.length > 0
   )
-  const activeSessionStreaming = useSelector(
-    sessionStore,
-    (sessionState) => sessionState.streaming
+  const activeAgentStreaming = useSelector(
+    agentStore,
+    (agentState) => agentState.streaming
   )
 
   return (
@@ -506,10 +499,10 @@ const AppShellTreeDialogHost = React.memo(function AppShellTreeDialogHost({
       ref={treeDialogRef}
       openStateRef={treeOpenRef}
       viewerContextId={viewerContextId}
-      sessionScopeKey={currentSessionQueryScope}
-      sessionId={activeSessionId}
+      agentScopeKey={currentAgentQueryScope}
+      agentId={activeAgentId}
       treeSummaryAvailable={treeSummaryAvailable}
-      activeSessionStreaming={activeSessionStreaming}
+      activeAgentStreaming={activeAgentStreaming}
     />
   )
 })
@@ -525,12 +518,12 @@ const AppShellSettingsDialogHost = React.memo(
     onCenterMessagesChange,
     onHideThinkingBlocksChange,
     onHideToolBlocksChange,
-    onSessionDoneDesktopNotificationsEnabledChange,
-    onSessionDoneSoundEnabledChange,
+    onAgentDoneDesktopNotificationsEnabledChange,
+    onAgentDoneSoundEnabledChange,
     onThemeChange,
     onThemeColorModeChange,
     onThemePreviewChange,
-    sessionStore,
+    agentStore,
     settingsDialogRef,
     settingsOpenRef,
     systemTheme,
@@ -546,34 +539,34 @@ const AppShellSettingsDialogHost = React.memo(
     | "onCenterMessagesChange"
     | "onHideThinkingBlocksChange"
     | "onHideToolBlocksChange"
-    | "onSessionDoneDesktopNotificationsEnabledChange"
-    | "onSessionDoneSoundEnabledChange"
+    | "onAgentDoneDesktopNotificationsEnabledChange"
+    | "onAgentDoneSoundEnabledChange"
     | "onThemeChange"
     | "onThemeColorModeChange"
     | "onThemePreviewChange"
-    | "sessionStore"
+    | "agentStore"
     | "settingsDialogRef"
     | "settingsOpenRef"
     | "systemTheme"
     | "viewerContextId"
   >) {
     const hideThinkingBlocks = useSelector(
-      sessionStore,
-      (sessionState) => sessionState.hideThinkingBlock
+      agentStore,
+      (agentState) => agentState.hideThinkingBlock
     )
     const { autoScrollEnabled, centerMessages, hideToolBlocks } =
       useSelector(displaySettingsStore)
     const {
       desktopNotificationPermission,
-      sessionDoneDesktopNotificationsEnabled,
-      sessionDoneSoundEnabled,
+      agentDoneDesktopNotificationsEnabled,
+      agentDoneSoundEnabled,
     } = useSelector(
       notificationStore,
       (state) => ({
         desktopNotificationPermission: state.desktopNotificationPermission,
-        sessionDoneDesktopNotificationsEnabled:
-          state.sessionDoneDesktopNotificationsEnabled,
-        sessionDoneSoundEnabled: state.sessionDoneSoundEnabled,
+        agentDoneDesktopNotificationsEnabled:
+          state.agentDoneDesktopNotificationsEnabled,
+        agentDoneSoundEnabled: state.agentDoneSoundEnabled,
       }),
       { compare: shallowRecordEqual }
     )
@@ -611,13 +604,13 @@ const AppShellSettingsDialogHost = React.memo(
           onCenterMessagesChange={onCenterMessagesChange}
           autoScrollEnabled={autoScrollEnabled}
           onAutoScrollEnabledChange={onAutoScrollEnabledChange}
-          sessionDoneSoundEnabled={sessionDoneSoundEnabled}
-          onSessionDoneSoundEnabledChange={onSessionDoneSoundEnabledChange}
-          sessionDoneDesktopNotificationsEnabled={
-            sessionDoneDesktopNotificationsEnabled
+          agentDoneSoundEnabled={agentDoneSoundEnabled}
+          onAgentDoneSoundEnabledChange={onAgentDoneSoundEnabledChange}
+          agentDoneDesktopNotificationsEnabled={
+            agentDoneDesktopNotificationsEnabled
           }
-          onSessionDoneDesktopNotificationsEnabledChange={
-            onSessionDoneDesktopNotificationsEnabledChange
+          onAgentDoneDesktopNotificationsEnabledChange={
+            onAgentDoneDesktopNotificationsEnabledChange
           }
           desktopNotificationPermission={desktopNotificationPermission}
           onLoginProviders={() => openAuthFromSettings("login")}
@@ -630,14 +623,14 @@ const AppShellSettingsDialogHost = React.memo(
 
 const AppShellUiRequestDialogHost = React.memo(
   function AppShellUiRequestDialogHost({
-    activeSessionId,
+    activeAgentId,
     authDialogRef,
     uiRequestDialogRef,
     uiRequestOpenRef,
     viewerContextId,
   }: Pick<
     AppShellFloatingControllersProps,
-    | "activeSessionId"
+    | "activeAgentId"
     | "authDialogRef"
     | "uiRequestDialogRef"
     | "uiRequestOpenRef"
@@ -648,7 +641,7 @@ const AppShellUiRequestDialogHost = React.memo(
         ref={uiRequestDialogRef}
         openStateRef={uiRequestOpenRef}
         viewerContextId={viewerContextId}
-        sessionId={activeSessionId}
+        agentId={activeAgentId}
         onAuthBack={() => authDialogRef.current?.open("login")}
       />
     )
@@ -657,53 +650,53 @@ const AppShellUiRequestDialogHost = React.memo(
 
 export const AppShellFloatingControllers = React.memo(
   function AppShellFloatingControllers({
-    activeSessionId,
-    addDirectoryDialogRef,
-    addDirectoryOpenRef,
-    addDirectoryPath,
-    baseSidebarDirectories,
+    activeAgentId,
+    addProjectDialogRef,
+    addProjectOpenRef,
+    addProjectPath,
+    baseSidebarProjects,
     commandPaletteCommandsRef,
     commandPaletteOpenRef,
     commandPaletteRef,
-    currentSessionQueryScope,
+    currentAgentQueryScope,
     currentTheme,
     currentThemeColorMode,
     authDialogRef,
     authOpenRef,
     deleteDialogRef,
     deleteOpenRef,
-    deleteSessions,
-    deleteOldDirectorySessionsDialogRef,
-    deleteOldDirectorySessionsOpenRef,
+    deleteAgents,
+    deleteOldProjectAgentsDialogRef,
+    deleteOldProjectAgentsOpenRef,
     notificationStore,
     forkDialogRef,
     forkOpenRef,
     gitCommitDialogRef,
     gitCommitOpenRef,
     displaySettingsStore,
-    knownDirectories,
-    moveSessionDirectoryDialogRef,
-    moveSessionDirectoryOpenRef,
-    moveSessionDirectoryTargetToPath,
+    knownProjects,
+    moveAgentProjectDialogRef,
+    moveAgentProjectOpenRef,
+    moveAgentProjectTargetToPath,
     onAutoScrollEnabledChange,
     onCenterMessagesChange,
     onHideThinkingBlocksChange,
     onHideToolBlocksChange,
-    onSessionDoneDesktopNotificationsEnabledChange,
-    onSessionDoneSoundEnabledChange,
-    onSessionDialogSelect,
+    onAgentDoneDesktopNotificationsEnabledChange,
+    onAgentDoneSoundEnabledChange,
+    onAgentDialogSelect,
     onThemeChange,
     onThemeColorModeChange,
     onThemePreviewChange,
-    recentDirectoriesStore,
+    recentProjectsStore,
     renameDialogRef,
     renameOpenRef,
-    renameSessionPath,
-    sessionCwd,
-    sessionsDialogDirectory,
-    sessionsDialogRef,
-    sessionsOpenRef,
-    sessionStore,
+    renameAgentPath,
+    agentCwd,
+    agentsDialogProject,
+    agentsDialogRef,
+    agentsOpenRef,
+    agentStore,
     settingsDialogRef,
     settingsOpenRef,
     sidebarStore,
@@ -726,87 +719,85 @@ export const AppShellFloatingControllers = React.memo(
           ref={gitCommitDialogRef}
           openStateRef={gitCommitOpenRef}
           viewerContextId={viewerContextId}
-          cwd={sessionCwd}
+          cwd={agentCwd}
         />
 
         <AppShellAuthDialogController
           ref={authDialogRef}
           openStateRef={authOpenRef}
           viewerContextId={viewerContextId}
-          sessionId={activeSessionId}
+          agentId={activeAgentId}
         />
 
-        <AppShellSessionsDialogHost
-          activeSessionId={activeSessionId}
-          knownDirectories={knownDirectories}
-          sessionsDialogDirectory={sessionsDialogDirectory}
-          sessionsDialogRef={sessionsDialogRef}
-          sessionsOpenRef={sessionsOpenRef}
+        <AppShellAgentsDialogHost
+          activeAgentId={activeAgentId}
+          knownProjects={knownProjects}
+          agentsDialogProject={agentsDialogProject}
+          agentsDialogRef={agentsDialogRef}
+          agentsOpenRef={agentsOpenRef}
           sidebarStore={sidebarStore}
           viewerContextId={viewerContextId}
-          deleteSessions={deleteSessions}
-          onSessionDialogSelect={onSessionDialogSelect}
-          renameSessionPath={renameSessionPath}
+          deleteAgents={deleteAgents}
+          onAgentDialogSelect={onAgentDialogSelect}
+          renameAgentPath={renameAgentPath}
         />
 
-        <AppShellAddDirectoryDialogHost
-          activeSessionId={activeSessionId}
-          addDirectoryDialogRef={addDirectoryDialogRef}
-          addDirectoryOpenRef={addDirectoryOpenRef}
-          addDirectoryPath={addDirectoryPath}
-          baseSidebarDirectories={baseSidebarDirectories}
-          knownDirectories={knownDirectories}
-          recentDirectoriesStore={recentDirectoriesStore}
-          sessionCwd={sessionCwd}
-          sessionStore={sessionStore}
+        <AppShellAddProjectDialogHost
+          activeAgentId={activeAgentId}
+          addProjectDialogRef={addProjectDialogRef}
+          addProjectOpenRef={addProjectOpenRef}
+          addProjectPath={addProjectPath}
+          baseSidebarProjects={baseSidebarProjects}
+          knownProjects={knownProjects}
+          recentProjectsStore={recentProjectsStore}
+          agentCwd={agentCwd}
+          agentStore={agentStore}
           viewerContextId={viewerContextId}
         />
 
-        <AppShellMoveSessionDirectoryDialogHost
-          activeSessionId={activeSessionId}
-          baseSidebarDirectories={baseSidebarDirectories}
-          knownDirectories={knownDirectories}
-          moveSessionDirectoryDialogRef={moveSessionDirectoryDialogRef}
-          moveSessionDirectoryOpenRef={moveSessionDirectoryOpenRef}
-          moveSessionDirectoryTargetToPath={moveSessionDirectoryTargetToPath}
-          recentDirectoriesStore={recentDirectoriesStore}
-          sessionCwd={sessionCwd}
+        <AppShellMoveAgentProjectDialogHost
+          activeAgentId={activeAgentId}
+          baseSidebarProjects={baseSidebarProjects}
+          knownProjects={knownProjects}
+          moveAgentProjectDialogRef={moveAgentProjectDialogRef}
+          moveAgentProjectOpenRef={moveAgentProjectOpenRef}
+          moveAgentProjectTargetToPath={moveAgentProjectTargetToPath}
+          recentProjectsStore={recentProjectsStore}
+          agentCwd={agentCwd}
           viewerContextId={viewerContextId}
         />
 
-        <AppShellRenameSessionDialogHost
+        <AppShellRenameAgentDialogHost
           renameDialogRef={renameDialogRef}
           renameOpenRef={renameOpenRef}
-          renameSessionPath={renameSessionPath}
+          renameAgentPath={renameAgentPath}
           viewerContextId={viewerContextId}
         />
 
-        <AppShellDeleteSessionsDialogHost
+        <AppShellDeleteAgentsDialogHost
           deleteDialogRef={deleteDialogRef}
           deleteOpenRef={deleteOpenRef}
-          deleteSessions={deleteSessions}
+          deleteAgents={deleteAgents}
         />
 
-        <AppShellDeleteOldDirectorySessionsDialogHost
-          deleteOldDirectorySessionsDialogRef={
-            deleteOldDirectorySessionsDialogRef
-          }
-          deleteOldDirectorySessionsOpenRef={deleteOldDirectorySessionsOpenRef}
+        <AppShellDeleteOldProjectAgentsDialogHost
+          deleteOldProjectAgentsDialogRef={deleteOldProjectAgentsDialogRef}
+          deleteOldProjectAgentsOpenRef={deleteOldProjectAgentsOpenRef}
           viewerContextId={viewerContextId}
         />
 
-        <AppShellForkSessionDialogHost
-          activeSessionId={activeSessionId}
-          currentSessionQueryScope={currentSessionQueryScope}
+        <AppShellForkAgentDialogHost
+          activeAgentId={activeAgentId}
+          currentAgentQueryScope={currentAgentQueryScope}
           forkDialogRef={forkDialogRef}
           forkOpenRef={forkOpenRef}
           viewerContextId={viewerContextId}
         />
 
         <AppShellTreeDialogHost
-          activeSessionId={activeSessionId}
-          currentSessionQueryScope={currentSessionQueryScope}
-          sessionStore={sessionStore}
+          activeAgentId={activeAgentId}
+          currentAgentQueryScope={currentAgentQueryScope}
+          agentStore={agentStore}
           treeDialogRef={treeDialogRef}
           treeOpenRef={treeOpenRef}
           viewerContextId={viewerContextId}
@@ -822,14 +813,14 @@ export const AppShellFloatingControllers = React.memo(
           onCenterMessagesChange={onCenterMessagesChange}
           onHideThinkingBlocksChange={onHideThinkingBlocksChange}
           onHideToolBlocksChange={onHideToolBlocksChange}
-          onSessionDoneDesktopNotificationsEnabledChange={
-            onSessionDoneDesktopNotificationsEnabledChange
+          onAgentDoneDesktopNotificationsEnabledChange={
+            onAgentDoneDesktopNotificationsEnabledChange
           }
-          onSessionDoneSoundEnabledChange={onSessionDoneSoundEnabledChange}
+          onAgentDoneSoundEnabledChange={onAgentDoneSoundEnabledChange}
           onThemeChange={onThemeChange}
           onThemeColorModeChange={onThemeColorModeChange}
           onThemePreviewChange={onThemePreviewChange}
-          sessionStore={sessionStore}
+          agentStore={agentStore}
           settingsDialogRef={settingsDialogRef}
           settingsOpenRef={settingsOpenRef}
           systemTheme={systemTheme}
@@ -837,7 +828,7 @@ export const AppShellFloatingControllers = React.memo(
         />
 
         <AppShellUiRequestDialogHost
-          activeSessionId={activeSessionId}
+          activeAgentId={activeAgentId}
           authDialogRef={authDialogRef}
           uiRequestDialogRef={uiRequestDialogRef}
           uiRequestOpenRef={uiRequestOpenRef}

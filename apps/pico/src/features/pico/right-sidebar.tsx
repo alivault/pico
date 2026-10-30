@@ -1011,7 +1011,7 @@ function CommitDiffContent({
 export function RightSidebar({
   viewerContextId,
   cwd,
-  sessionId,
+  agentId,
   active,
   activeFilePath = "",
   activeTab: controlledActiveTab,
@@ -1140,7 +1140,7 @@ export function RightSidebar({
     setActiveTab(tab)
   }
 
-  const agentBusy = useAgentBusy(viewerContextId, sessionId)
+  const agentBusy = useAgentBusy(viewerContextId, agentId)
 
   // On mobile, the Agent panel has its own top-level tab.
   const leaveAgentTabEffectEvent = React.useEffectEvent(() => {
@@ -1218,7 +1218,7 @@ export function RightSidebar({
             active={active && activeTab === "agent"}
             cwd={normalizedCwd}
             onOpenFile={(path) => openFile(path, { pin: true })}
-            sessionId={sessionId}
+            agentId={agentId}
             viewerContextId={viewerContextId}
           />
         </div>

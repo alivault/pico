@@ -24,9 +24,9 @@ import {
 import { emitPicoEvent } from "@/features/pico/agent/events"
 import { FADE_UNDER_ACTIONS, REVEAL_ON_HOVER } from "@/features/pico/agent/todo"
 import {
-  postSessionJson,
-  useSessionExtensions,
-} from "@/features/pico/agent/session-extensions"
+  postAgentJson,
+  useAgentExtensions,
+} from "@/features/pico/agent/agent-extensions"
 import {
   errorText,
   IconAction,
@@ -43,7 +43,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
 
-export type ChildSession = {
+export type Subagent = {
   id: string
   title: string
   cwd: string
@@ -55,29 +55,29 @@ export type ChildSession = {
   lastMessageAt?: number
 }
 
-function stopSession(
+function stopAgent(
   machineId: string,
   viewerContextId: string,
-  sessionId: string
+  agentId: string
 ) {
-  void postSessionJson(
+  void postAgentJson(
     machineId,
     viewerContextId,
-    sessionId,
+    agentId,
     "/api/abort",
     {}
   ).catch((error: unknown) => toast.error(errorText(error)))
 }
 
-function ChildStatus({ child }: { child: ChildSession }) {
-  if (child.needsInput)
+function SubagentStatus({ subagent }: { subagent: Subagent }) {
+  if (subagent.needsInput)
     return (
       <MessageCircleQuestionIcon
         className="size-4 shrink-0 text-amber-500"
         aria-label="Waiting for you"
       />
     )
-  if (child.busy) return <Spinner size="xs" aria-label="Working" />
+  if (subagent.busy) return <Spinner size="xs" aria-label="Working" />
   return (
     <span
       className="size-2 shrink-0 rounded-full bg-emerald-500"
@@ -86,20 +86,20 @@ function ChildStatus({ child }: { child: ChildSession }) {
   )
 }
 
-function childStatusText(child: ChildSession, now: number) {
-  if (child.needsInput) return "Waiting for your answer"
-  if (child.busy) return "Working"
-  return child.lastMessageAt
-    ? `Done ${relativeTime(child.lastMessageAt, now)}`
+function subagentStatusText(subagent: Subagent, now: number) {
+  if (subagent.needsInput) return "Waiting for your answer"
+  if (subagent.busy) return "Working"
+  return subagent.lastMessageAt
+    ? `Done ${relativeTime(subagent.lastMessageAt, now)}`
     : "Idle"
 }
 
-function ChildRow({
-  child,
+function SubagentRow({
+  subagent,
   now,
   viewerContextId,
 }: {
-  child: ChildSession
+  subagent: Subagent
   now: number
   viewerContextId: string
 }) {
@@ -111,39 +111,39 @@ function ChildRow({
     >
       <button
         type="button"
-        aria-label={`Open ${child.title}`}
+        aria-label={`Open ${subagent.title}`}
         className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-1.5 py-1.5 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         onClick={() =>
-          emitPicoEvent("pico:open-session", { sessionId: child.id })
+          emitPicoEvent("pico:open-agent", { agentId: subagent.id })
         }
       >
         <span className="mt-1 flex size-4 shrink-0 items-center justify-center">
-          <ChildStatus child={child} />
+          <SubagentStatus subagent={subagent} />
         </span>
         <ItemContent
-          className={cn("min-w-0", child.busy && FADE_UNDER_ACTIONS)}
+          className={cn("min-w-0", subagent.busy && FADE_UNDER_ACTIONS)}
           style={
-            child.busy
+            subagent.busy
               ? ({ "--actions-width": "1.75rem" } as React.CSSProperties)
               : undefined
           }
         >
-          <ItemTitle className="block truncate">{child.title}</ItemTitle>
+          <ItemTitle className="block truncate">{subagent.title}</ItemTitle>
           <ItemDescription className="truncate">
-            {childStatusText(child, now)}
+            {subagentStatusText(subagent, now)}
           </ItemDescription>
-          {child.worktreeBranch ? (
+          {subagent.worktreeBranch ? (
             <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
               <GitForkIcon
                 className="size-3 shrink-0"
                 aria-label="Worktree branch"
               />
-              <span className="truncate">{child.worktreeBranch}</span>
+              <span className="truncate">{subagent.worktreeBranch}</span>
             </span>
           ) : null}
         </ItemContent>
       </button>
-      {child.busy ? (
+      {subagent.busy ? (
         <ItemActions
           className={cn(
             "absolute top-0.5 right-1 group-focus-within/row:opacity-100",
@@ -151,10 +151,10 @@ function ChildRow({
           )}
         >
           <IconAction
-            label="Stop the child session"
+            label="Stop the subagent"
             icon={<SquareIcon />}
             tone="destructive"
-            onClick={() => stopSession(machineId, viewerContextId, child.id)}
+            onClick={() => stopAgent(machineId, viewerContextId, subagent.id)}
           />
         </ItemActions>
       ) : null}
@@ -162,18 +162,18 @@ function ChildRow({
   )
 }
 
-function childrenFrom(state: Record<string, unknown>) {
-  return (state.children as Array<ChildSession> | undefined) ?? []
+function subagentsFrom(state: Record<string, unknown>) {
+  return (state.subagents as Array<Subagent> | undefined) ?? []
 }
 
-function ChildrenSection({ state, viewerContextId }: AgentSectionProps) {
+function SubagentsSection({ state, viewerContextId }: AgentSectionProps) {
   const now = useNow()
   return (
     <ItemGroup className="gap-0.5">
-      {childrenFrom(state).map((child) => (
-        <ChildRow
-          key={child.id}
-          child={child}
+      {subagentsFrom(state).map((subagent) => (
+        <SubagentRow
+          key={subagent.id}
+          subagent={subagent}
           now={now}
           viewerContextId={viewerContextId}
         />
@@ -182,60 +182,63 @@ function ChildrenSection({ state, viewerContextId }: AgentSectionProps) {
   )
 }
 
-function ChildrenActions({ state, viewerContextId }: AgentSectionProps) {
+function SubagentsActions({ state, viewerContextId }: AgentSectionProps) {
   const machineId = useMachineId()
-  const busy = childrenFrom(state).filter((child) => child.busy)
+  const busy = subagentsFrom(state).filter((subagent) => subagent.busy)
   if (busy.length < 2) return null
   return (
     <IconAction
-      label={`Stop all ${busy.length} child sessions`}
+      label={`Stop all ${busy.length} subagents`}
       icon={<SquareIcon />}
       tone="destructive"
       onClick={() => {
-        for (const child of busy)
-          stopSession(machineId, viewerContextId, child.id)
+        for (const subagent of busy)
+          stopAgent(machineId, viewerContextId, subagent.id)
       }}
     />
   )
 }
 
 registerAgentSection({
+  // Stored name (the open state of the section): do not change.
   key: "children",
-  title: "Child sessions",
+  title: "Subagents",
   order: 40,
   summary(state) {
-    const children = childrenFrom(state)
-    const working = children.filter((child) => child.busy).length
+    const subagents = subagentsFrom(state)
+    const working = subagents.filter((subagent) => subagent.busy).length
     return working ? `${working} working` : undefined
   },
   visible: (state) =>
-    Array.isArray(state.children) && state.children.length > 0,
+    Array.isArray(state.subagents) && state.subagents.length > 0,
   busy: (state) =>
-    childrenFrom(state).some((child) => child.busy || child.needsInput),
-  Actions: ChildrenActions,
-  Component: ChildrenSection,
+    subagentsFrom(state).some(
+      (subagent) => subagent.busy || subagent.needsInput
+    ),
+  Actions: SubagentsActions,
+  Component: SubagentsSection,
 })
 
 type SpawnDetails = {
-  sessionId: string
+  agentId: string
   title?: string
   status?: "running" | "done"
   worktree?: { branch: string; path: string }
 }
 
 function SpawnCard({ block }: ToolRendererProps) {
-  const { viewerContextId, sessionId } = useToolRenderContext()
+  const { viewerContextId, agentId } = useToolRenderContext()
   const details = toolDetails<SpawnDetails>(block)
   const args = toolArgs(block)
-  const query = useSessionExtensions(viewerContextId, sessionId)
-  const live = (query.data?.children as Array<ChildSession> | undefined)?.find(
-    (child) => child.id === details.sessionId
+  const query = useAgentExtensions(viewerContextId, agentId)
+  const live = (query.data?.subagents as Array<Subagent> | undefined)?.find(
+    (subagent) => subagent.id === details.agentId
   )
   const title =
     live?.title ??
     details.title ??
     (typeof args.name === "string" ? args.name : undefined) ??
-    "Child session"
+    "Subagent"
   const goal = typeof args.goal === "string" ? args.goal : ""
   return (
     <div className="space-y-2 rounded-xl border bg-muted/20 p-3 text-sm">
@@ -243,17 +246,17 @@ function SpawnCard({ block }: ToolRendererProps) {
         <UsersIcon className="size-4 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate font-medium">{title}</span>
         {live ? (
-          <ChildStatus child={live} />
+          <SubagentStatus subagent={live} />
         ) : block.running ? (
           <Spinner size="xs" />
         ) : null}
-        {details.sessionId ? (
+        {details.agentId ? (
           <Button
             size="sm"
             variant="outline"
             onClick={() =>
-              emitPicoEvent("pico:open-session", {
-                sessionId: details.sessionId!,
+              emitPicoEvent("pico:open-agent", {
+                agentId: details.agentId!,
               })
             }
           >
@@ -278,11 +281,19 @@ function SpawnCard({ block }: ToolRendererProps) {
   )
 }
 
-registerToolRenderer("spawn_session", { Card: SpawnCard })
+registerToolRenderer("spawn_subagent", { Card: SpawnCard })
 
-registerToolRenderer("sessions", {
+registerToolRenderer("agents", {
   summary(block) {
     const args = toolArgs(block)
+    const action = typeof args.action === "string" ? args.action : ""
+    if (action === "send") {
+      // The send action shows its target and message, as the old
+      // send_to_session tool did.
+      const id = typeof args.id === "string" ? args.id : ""
+      const message = typeof args.message === "string" ? args.message : ""
+      return [action, id, message].filter(Boolean).join(" · ")
+    }
     const ids = Array.isArray(args.ids)
       ? args.ids.join(", ")
       : typeof args.id === "string"
@@ -290,30 +301,8 @@ registerToolRenderer("sessions", {
         : typeof args.scope === "string"
           ? args.scope
           : ""
-    return [
-      typeof args.action === "string" ? args.action : "",
-      ids,
-      args.any === true ? "any" : "",
-    ]
+    return [action, ids, args.any === true ? "any" : ""]
       .filter(Boolean)
       .join(" · ")
   },
 })
-
-// send_to_session, and the old session tools in earlier transcripts.
-for (const name of [
-  "send_to_session",
-  "read_session",
-  "stop_session",
-  "wait_for_sessions",
-]) {
-  registerToolRenderer(name, {
-    summary(block) {
-      const args = toolArgs(block)
-      if (Array.isArray(args.ids)) return args.ids.join(", ")
-      const id = typeof args.id === "string" ? args.id : ""
-      const message = typeof args.message === "string" ? args.message : ""
-      return [id, message].filter(Boolean).join(" · ")
-    },
-  })
-}

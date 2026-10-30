@@ -2,16 +2,16 @@ import * as React from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "@/lib/pico/toast"
 
-import type { PromptImage, SessionState, StreamingBehavior } from "@/lib/pico"
+import type { PromptImage, AgentState, StreamingBehavior } from "@/lib/pico"
 import type {
   DirectoryResolveResponse,
   PendingMessagesResponse,
   PromptResponse,
-  SessionNewResponse,
+  AgentNewResponse,
   SimpleOkResponse,
 } from "@/lib/pico/api"
 
-import { resolveNewSessionCwd } from "@/features/pico/app-shell-common"
+import { resolveNewAgentCwd } from "@/features/pico/app-shell-common"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import {
   enqueueOfflinePrompt,
@@ -19,7 +19,7 @@ import {
   removeOfflinePrompt,
   type OfflinePromptQueueItem,
 } from "@/features/pico/offline-prompt-queue"
-import { picoQueryKeys, picoSessionScopeKey } from "@/features/pico/query-keys"
+import { picoQueryKeys, picoAgentScopeKey } from "@/features/pico/query-keys"
 import {
   useSelector,
   type PicoStore,
@@ -35,10 +35,10 @@ import {
 } from "@/features/pico/pending-queue"
 import { MachineOfflineError } from "@/lib/pico/machine"
 import {
-  DRAFT_DIRECTORY_STORAGE_KEY,
-  SIDEBAR_DIRECTORIES_STORAGE_KEY,
+  DRAFT_PROJECT_STORAGE_KEY,
+  SIDEBAR_PROJECTS_STORAGE_KEY,
   normalizePromptImage,
-  normalizeStoredDirectoryList,
+  normalizeStoredProjectList,
   promptDraftKey,
   promptDraftKeyMatchesOwner,
   machineLocalStorageSetItem,
@@ -46,11 +46,11 @@ import {
 import { useMachineId } from "@/lib/pico/machine-context"
 
 type DirectoryResolveData = Extract<DirectoryResolveResponse, { ok: true }>
-type SessionNewData = Extract<SessionNewResponse, { ok: true }>
+type AgentNewData = Extract<AgentNewResponse, { ok: true }>
 
-type NewSessionPromptTarget = {
+type NewAgentPromptTarget = {
   ownerKey: string
-  sessionKey: string
+  agentKey: string
   cwd?: string
 }
 
@@ -65,7 +65,7 @@ type PendingDraftPrompt = {
   images: Array<PromptImage>
   streamingBehavior?: StreamingBehavior
   optimisticId?: string
-  optimisticSidebarSessionId?: string
+  optimisticSidebarAgentId?: string
 }
 
 type PendingDraftFollowUp = {
@@ -82,7 +82,7 @@ type PendingComposerMessage = {
   streamingBehavior: "steer" | "followUp"
 }
 
-type SessionStateStore = PicoStore<SessionState>
+type AgentStateStore = PicoStore<AgentState>
 
 function pendingMessagesFromResponse(
   response: PendingMessagesResponse
@@ -103,11 +103,11 @@ function pendingMessagesFromResponse(
 
 type UseAppShellPromptMutationsOptions = {
   viewerContextId: string
-  activeSessionId?: string
-  defaultNewSessionDirectory?: string
-  sessionStore: SessionStateStore
-  sessionStateRef: React.RefObject<SessionState>
-  draftSessionLoadingOwnerKey: string | null
+  activeAgentId?: string
+  defaultNewAgentProject?: string
+  agentStore: AgentStateStore
+  agentStateRef: React.RefObject<AgentState>
+  draftAgentLoadingOwnerKey: string | null
   pendingDraftPrompt: PendingDraftPrompt | null
   pendingDraftFollowUps: Array<PendingDraftFollowUp>
   awaitingFirstTurn: boolean
@@ -118,14 +118,14 @@ type UseAppShellPromptMutationsOptions = {
   composerSkillRef: React.RefObject<string | undefined>
   replaceComposerDraft: (
     value: string,
-    target?: SessionState,
+    target?: AgentState,
     options?: {
       forceSync?: boolean
     }
   ) => void
   lastSyncedEditorTextRef: React.RefObject<string>
-  rememberRecentDirectory: (directory: string) => void
-  prefetchDirectorySessionsIndex: (directory: string) => void
+  rememberRecentProject: (project: string) => void
+  prefetchProjectAgentsIndex: (project: string) => void
   addOptimisticUserMessage: (options: {
     message: string
     images: Array<PromptImage>
@@ -133,23 +133,23 @@ type UseAppShellPromptMutationsOptions = {
     streamingBehavior?: StreamingBehavior
   }) => string
   removeOptimisticUserMessage: (pendingId: string | undefined) => void
-  addOptimisticSidebarSession: (options?: {
+  addOptimisticSidebarAgent: (options?: {
     id?: string
     cwd?: string
     lastMessagePreview?: string
   }) => string | undefined
-  removeOptimisticSidebarSession: (optimisticId: string | undefined) => void
-  bindOptimisticSidebarSession: (
+  removeOptimisticSidebarAgent: (optimisticId: string | undefined) => void
+  bindOptimisticSidebarAgent: (
     optimisticId: string | undefined,
-    session: { sessionId?: string; sessionPath?: string }
+    agent: { agentId?: string; agentPath?: string }
   ) => void
-  updateOptimisticSidebarSessionPreview: (options: {
+  updateOptimisticSidebarAgentPreview: (options: {
     preview: string
-    optimisticSidebarSessionId?: string
+    optimisticSidebarAgentId?: string
   }) => void
-  setSidebarDirectories: React.Dispatch<React.SetStateAction<Array<string>>>
-  setStoredDraftDirectory: React.Dispatch<React.SetStateAction<string>>
-  setDraftSessionLoadingOwnerKey: React.Dispatch<
+  setSidebarProjects: React.Dispatch<React.SetStateAction<Array<string>>>
+  setStoredDraftProject: React.Dispatch<React.SetStateAction<string>>
+  setDraftAgentLoadingOwnerKey: React.Dispatch<
     React.SetStateAction<string | null>
   >
   setPendingDraftPrompt: React.Dispatch<
@@ -169,32 +169,32 @@ type UseAppShellPromptMutationsOptions = {
   setComposerImages: React.Dispatch<React.SetStateAction<Array<PromptImage>>>
 }
 
-type PromptMutationSessionSnapshot = {
+type PromptMutationAgentSnapshot = {
   assistantOutputSignature: string
   cwd?: string
   draft: boolean
-  sessionFile?: string
-  sessionId?: string
-  sessionKey?: string
+  agentFile?: string
+  agentId?: string
+  agentKey?: string
   streaming: boolean
 }
 
-function samePromptMutationSessionSnapshot(
-  left: PromptMutationSessionSnapshot,
-  right: PromptMutationSessionSnapshot
+function samePromptMutationAgentSnapshot(
+  left: PromptMutationAgentSnapshot,
+  right: PromptMutationAgentSnapshot
 ) {
   return (
     left.assistantOutputSignature === right.assistantOutputSignature &&
     left.cwd === right.cwd &&
     left.draft === right.draft &&
-    left.sessionFile === right.sessionFile &&
-    left.sessionId === right.sessionId &&
-    left.sessionKey === right.sessionKey &&
+    left.agentFile === right.agentFile &&
+    left.agentId === right.agentId &&
+    left.agentKey === right.agentKey &&
     left.streaming === right.streaming
   )
 }
 
-function sessionAssistantOutputSignature(items: SessionState["items"]) {
+function agentAssistantOutputSignature(items: AgentState["items"]) {
   let outputCount = 0
   let lastOutputKey = ""
 
@@ -214,21 +214,19 @@ function sessionAssistantOutputSignature(items: SessionState["items"]) {
   return `${outputCount}:${lastOutputKey}`
 }
 
-function usePromptMutationSessionSnapshot(store: SessionStateStore) {
+function usePromptMutationAgentSnapshot(store: AgentStateStore) {
   return useSelector(
     store,
-    (sessionState) => ({
-      assistantOutputSignature: sessionAssistantOutputSignature(
-        sessionState.items
-      ),
-      cwd: sessionState.cwd,
-      draft: sessionState.draft,
-      sessionFile: sessionState.sessionFile,
-      sessionId: sessionState.sessionId,
-      sessionKey: sessionState.sessionKey,
-      streaming: sessionState.streaming,
+    (agentState) => ({
+      assistantOutputSignature: agentAssistantOutputSignature(agentState.items),
+      cwd: agentState.cwd,
+      draft: agentState.draft,
+      agentFile: agentState.agentFile,
+      agentId: agentState.agentId,
+      agentKey: agentState.agentKey,
+      streaming: agentState.streaming,
     }),
-    { compare: samePromptMutationSessionSnapshot }
+    { compare: samePromptMutationAgentSnapshot }
   )
 }
 
@@ -288,51 +286,50 @@ function isOfflinePromptSubmissionError(error: unknown) {
   )
 }
 
-function buildCurrentSessionRequestUrl(
+function buildCurrentAgentRequestUrl(
   path: string,
   {
     machineId,
     contextId,
-    sessionState,
-    fallbackSessionId,
-    targetSessionKey,
+    agentState,
+    fallbackAgentId,
+    targetAgentKey,
   }: {
     machineId: string
     contextId: string
-    sessionState: SessionState
-    fallbackSessionId?: string
-    targetSessionKey?: string
+    agentState: AgentState
+    fallbackAgentId?: string
+    targetAgentKey?: string
   }
 ) {
-  if (targetSessionKey) {
+  if (targetAgentKey) {
     return buildRequestUrl(path, {
       machineId,
       contextId,
-      searchParams: { sessionKey: targetSessionKey },
+      searchParams: { agentKey: targetAgentKey },
     })
   }
 
-  const sessionKey =
-    sessionState.sessionKey &&
-    !sessionState.sessionKey.startsWith("optimistic:")
-      ? sessionState.sessionKey
+  const agentKey =
+    agentState.agentKey && !agentState.agentKey.startsWith("optimistic:")
+      ? agentState.agentKey
       : undefined
-  // Drafts do not expose a stable session id yet. During a new-session
-  // transition, callbacks can still carry the previous route session id as a
+  // Drafts do not expose a stable agent id yet. During a new-agent
+  // transition, callbacks can still carry the previous route agent id as a
   // fallback; never use that previous id while the current snapshot is a draft.
-  const shouldUseSessionKey = Boolean(
-    sessionKey && (sessionState.draft || !sessionState.sessionId)
+  const shouldUseAgentKey = Boolean(
+    agentKey && (agentState.draft || !agentState.agentId)
   )
-  const sessionId =
-    shouldUseSessionKey || sessionState.draft
+  const agentId =
+    shouldUseAgentKey || agentState.draft
       ? undefined
-      : (sessionState.sessionId ?? fallbackSessionId)
+      : (agentState.agentId ?? fallbackAgentId)
 
   return buildRequestUrl(path, {
     machineId,
     contextId,
-    sessionId,
-    searchParams: shouldUseSessionKey ? { sessionKey } : undefined,
+    agentId,
+    searchParams: shouldUseAgentKey ? { agentKey } : undefined,
   })
 }
 
@@ -343,9 +340,9 @@ function buildOfflinePromptRequestUrl(
   return buildRequestUrl("/api/prompt", {
     machineId,
     contextId: item.contextId,
-    sessionId: item.targetSessionKey ? undefined : item.sessionId,
-    searchParams: item.targetSessionKey
-      ? { sessionKey: item.targetSessionKey }
+    agentId: item.targetAgentKey ? undefined : item.agentId,
+    searchParams: item.targetAgentKey
+      ? { agentKey: item.targetAgentKey }
       : undefined,
   })
 }
@@ -365,11 +362,11 @@ function buildOfflinePromptBody(item: OfflinePromptQueueItem) {
 
 export function useAppShellPromptMutations({
   viewerContextId,
-  activeSessionId,
-  defaultNewSessionDirectory,
-  sessionStore,
-  sessionStateRef,
-  draftSessionLoadingOwnerKey,
+  activeAgentId,
+  defaultNewAgentProject,
+  agentStore,
+  agentStateRef,
+  draftAgentLoadingOwnerKey,
   pendingDraftPrompt,
   pendingDraftFollowUps,
   awaitingFirstTurn,
@@ -380,17 +377,17 @@ export function useAppShellPromptMutations({
   composerSkillRef,
   replaceComposerDraft,
   lastSyncedEditorTextRef,
-  rememberRecentDirectory,
-  prefetchDirectorySessionsIndex,
+  rememberRecentProject,
+  prefetchProjectAgentsIndex,
   addOptimisticUserMessage,
   removeOptimisticUserMessage,
-  addOptimisticSidebarSession,
-  removeOptimisticSidebarSession,
-  bindOptimisticSidebarSession,
-  updateOptimisticSidebarSessionPreview,
-  setSidebarDirectories,
-  setStoredDraftDirectory,
-  setDraftSessionLoadingOwnerKey,
+  addOptimisticSidebarAgent,
+  removeOptimisticSidebarAgent,
+  bindOptimisticSidebarAgent,
+  updateOptimisticSidebarAgentPreview,
+  setSidebarProjects,
+  setStoredDraftProject,
+  setDraftAgentLoadingOwnerKey,
   setPendingDraftPrompt,
   setPendingDraftFollowUps,
   setPendingMessages,
@@ -401,12 +398,10 @@ export function useAppShellPromptMutations({
 }: UseAppShellPromptMutationsOptions) {
   const machineId = useMachineId()
   const queryClient = useQueryClient()
-  const draftSessionLoadingOwnerKeyRef = React.useRef(
-    draftSessionLoadingOwnerKey
-  )
-  const pendingNewSessionPromptTargetRef =
-    React.useRef<NewSessionPromptTarget | null>(null)
-  const newSessionRequestNonceRef = React.useRef(0)
+  const draftAgentLoadingOwnerKeyRef = React.useRef(draftAgentLoadingOwnerKey)
+  const pendingNewAgentPromptTargetRef =
+    React.useRef<NewAgentPromptTarget | null>(null)
+  const newAgentRequestNonceRef = React.useRef(0)
   const pendingDraftPromptRef = React.useRef(pendingDraftPrompt)
   const pendingDraftFollowUpsRef = React.useRef(pendingDraftFollowUps)
   const pendingMessagesRef = React.useRef(pendingMessages)
@@ -414,14 +409,14 @@ export function useAppShellPromptMutations({
   const awaitingFirstTurnAssistantOutputSignatureRef = React.useRef<
     string | null
   >(null)
-  const sessionSnapshot = usePromptMutationSessionSnapshot(sessionStore)
+  const agentSnapshot = usePromptMutationAgentSnapshot(agentStore)
   const flushPendingDraftPromptRef = React.useRef<
-    (ownerKey: string, targetSessionKey?: string) => Promise<boolean>
+    (ownerKey: string, targetAgentKey?: string) => Promise<boolean>
   >(async () => false)
 
   React.useEffect(() => {
-    draftSessionLoadingOwnerKeyRef.current = draftSessionLoadingOwnerKey
-  }, [draftSessionLoadingOwnerKey])
+    draftAgentLoadingOwnerKeyRef.current = draftAgentLoadingOwnerKey
+  }, [draftAgentLoadingOwnerKey])
 
   React.useEffect(() => {
     pendingDraftPromptRef.current = pendingDraftPrompt
@@ -476,7 +471,7 @@ export function useAppShellPromptMutations({
     [updatePendingMessages]
   )
 
-  const addDirectoryMutation = useMutation({
+  const addProjectMutation = useMutation({
     mutationFn: async (requestedPath: string) => {
       if (!viewerContextId) {
         throw new Error("Viewer context unavailable")
@@ -486,7 +481,7 @@ export function useAppShellPromptMutations({
         buildRequestUrl("/api/directory/resolve", {
           machineId,
           contextId: viewerContextId,
-          sessionId: activeSessionId,
+          agentId: activeAgentId,
         }),
         {
           method: "POST",
@@ -497,7 +492,7 @@ export function useAppShellPromptMutations({
     },
     onSuccess: async (response) => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.directorySessionsIndex(
+        queryKey: picoQueryKeys.projectAgentsIndex(
           viewerContextId,
           response.path
         ),
@@ -523,12 +518,12 @@ export function useAppShellPromptMutations({
       }
 
       removeOptimisticUserMessage(nextPrompt.optimisticId)
-      removeOptimisticSidebarSession(nextPrompt.optimisticSidebarSessionId)
+      removeOptimisticSidebarAgent(nextPrompt.optimisticSidebarAgentId)
       for (const followUp of pendingDraftFollowUpsRef.current) {
         removeOptimisticUserMessage(followUp.optimisticId)
       }
 
-      pendingNewSessionPromptTargetRef.current = null
+      pendingNewAgentPromptTargetRef.current = null
       pendingDraftPromptRef.current = null
       pendingDraftFollowUpsRef.current = []
       setPendingDraftPrompt(null)
@@ -540,7 +535,7 @@ export function useAppShellPromptMutations({
     },
     [
       applyPendingDraftPromptToComposer,
-      removeOptimisticSidebarSession,
+      removeOptimisticSidebarAgent,
       removeOptimisticUserMessage,
       setAwaitingFirstTurn,
       setPendingDraftFollowUps,
@@ -548,54 +543,54 @@ export function useAppShellPromptMutations({
     ]
   )
 
-  const addDirectoryPath = React.useCallback(
+  const addProjectPath = React.useCallback(
     async (path: string) => {
       if (!viewerContextId) return false
       const requestedPath = path.trim()
       if (!requestedPath) return false
 
       try {
-        const response = await addDirectoryMutation.mutateAsync(requestedPath)
-        setSidebarDirectories((current) => {
-          const next = normalizeStoredDirectoryList([...current, response.path])
+        const response = await addProjectMutation.mutateAsync(requestedPath)
+        setSidebarProjects((current) => {
+          const next = normalizeStoredProjectList([...current, response.path])
           machineLocalStorageSetItem(
             machineId,
-            SIDEBAR_DIRECTORIES_STORAGE_KEY,
+            SIDEBAR_PROJECTS_STORAGE_KEY,
             JSON.stringify(next)
           )
           return next
         })
-        rememberRecentDirectory(response.path)
-        prefetchDirectorySessionsIndex(response.path)
+        rememberRecentProject(response.path)
+        prefetchProjectAgentsIndex(response.path)
         return response.path
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "Failed to add directory"
+          error instanceof Error ? error.message : "Failed to add project"
         )
         return false
       }
     },
     [
-      addDirectoryMutation,
-      prefetchDirectorySessionsIndex,
-      rememberRecentDirectory,
-      setSidebarDirectories,
+      addProjectMutation,
+      prefetchProjectAgentsIndex,
+      rememberRecentProject,
+      setSidebarProjects,
       viewerContextId,
     ]
   )
 
-  const createSessionRequest = React.useCallback(
+  const createAgentRequest = React.useCallback(
     async ({ cwd }: { cwd?: string }) => {
       if (!viewerContextId) {
         throw new Error("Viewer context unavailable")
       }
 
-      return await fetchJson<SessionNewData>(
-        buildCurrentSessionRequestUrl("/api/session/new", {
+      return await fetchJson<AgentNewData>(
+        buildCurrentAgentRequestUrl("/api/agent/new", {
           machineId,
           contextId: viewerContextId,
-          sessionState: sessionStateRef.current,
-          fallbackSessionId: activeSessionId,
+          agentState: agentStateRef.current,
+          fallbackAgentId: activeAgentId,
         }),
         {
           method: "POST",
@@ -604,99 +599,98 @@ export function useAppShellPromptMutations({
         }
       )
     },
-    [activeSessionId, sessionStateRef, viewerContextId]
+    [activeAgentId, agentStateRef, viewerContextId]
   )
 
-  const createSession = React.useCallback(
+  const createAgent = React.useCallback(
     async (cwdOverride?: string) => {
       if (!viewerContextId) return false
 
-      const nextCwd = resolveNewSessionCwd({
+      const nextCwd = resolveNewAgentCwd({
         cwdOverride,
-        defaultDirectory: defaultNewSessionDirectory,
-        currentCwd: sessionStateRef.current.cwd,
+        defaultProject: defaultNewAgentProject,
+        currentCwd: agentStateRef.current.cwd,
       })
       if (nextCwd) {
-        rememberRecentDirectory(nextCwd)
+        rememberRecentProject(nextCwd)
         machineLocalStorageSetItem(
           machineId,
-          DRAFT_DIRECTORY_STORAGE_KEY,
+          DRAFT_PROJECT_STORAGE_KEY,
           nextCwd
         )
-        setStoredDraftDirectory(nextCwd)
+        setStoredDraftProject(nextCwd)
       }
       const ownerKey = promptDraftKey({ cwd: nextCwd })
-      draftSessionLoadingOwnerKeyRef.current = ownerKey
-      setDraftSessionLoadingOwnerKey(ownerKey)
+      draftAgentLoadingOwnerKeyRef.current = ownerKey
+      setDraftAgentLoadingOwnerKey(ownerKey)
       awaitingFirstTurnAssistantOutputSignatureRef.current = null
       awaitingFirstTurnRef.current = false
       setAwaitingFirstTurn(false)
       pendingMessagesRef.current = []
       setPendingMessages((current) => (current.length === 0 ? current : []))
 
-      const requestNonce = newSessionRequestNonceRef.current + 1
-      newSessionRequestNonceRef.current = requestNonce
+      const requestNonce = newAgentRequestNonceRef.current + 1
+      newAgentRequestNonceRef.current = requestNonce
 
       try {
-        const response = await createSessionRequest({ cwd: nextCwd })
-        if (newSessionRequestNonceRef.current !== requestNonce) {
+        const response = await createAgentRequest({ cwd: nextCwd })
+        if (newAgentRequestNonceRef.current !== requestNonce) {
           return true
         }
 
-        pendingNewSessionPromptTargetRef.current = {
+        pendingNewAgentPromptTargetRef.current = {
           ownerKey,
-          sessionKey: response.sessionKey,
+          agentKey: response.agentKey,
           cwd: response.cwd,
         }
-        if (draftSessionLoadingOwnerKeyRef.current === ownerKey) {
-          draftSessionLoadingOwnerKeyRef.current = null
-          setDraftSessionLoadingOwnerKey((current) =>
+        if (draftAgentLoadingOwnerKeyRef.current === ownerKey) {
+          draftAgentLoadingOwnerKeyRef.current = null
+          setDraftAgentLoadingOwnerKey((current) =>
             current === ownerKey ? null : current
           )
         }
         if (pendingDraftPromptRef.current?.ownerKey === ownerKey) {
-          void flushPendingDraftPromptRef.current(ownerKey, response.sessionKey)
+          void flushPendingDraftPromptRef.current(ownerKey, response.agentKey)
         }
         return true
       } catch (error) {
-        if (newSessionRequestNonceRef.current !== requestNonce) {
+        if (newAgentRequestNonceRef.current !== requestNonce) {
           return true
         }
 
-        if (draftSessionLoadingOwnerKeyRef.current === ownerKey) {
-          draftSessionLoadingOwnerKeyRef.current = null
+        if (draftAgentLoadingOwnerKeyRef.current === ownerKey) {
+          draftAgentLoadingOwnerKeyRef.current = null
         }
-        setDraftSessionLoadingOwnerKey((current) =>
+        setDraftAgentLoadingOwnerKey((current) =>
           current === ownerKey ? null : current
         )
-        if (pendingNewSessionPromptTargetRef.current?.ownerKey === ownerKey) {
-          pendingNewSessionPromptTargetRef.current = null
+        if (pendingNewAgentPromptTargetRef.current?.ownerKey === ownerKey) {
+          pendingNewAgentPromptTargetRef.current = null
         }
         restorePendingDraftPrompt(ownerKey)
         toast.error(
-          error instanceof Error ? error.message : "Failed to create session"
+          error instanceof Error ? error.message : "Failed to create agent"
         )
         return false
       }
     },
     [
-      createSessionRequest,
-      defaultNewSessionDirectory,
-      rememberRecentDirectory,
+      createAgentRequest,
+      defaultNewAgentProject,
+      rememberRecentProject,
       restorePendingDraftPrompt,
-      sessionStateRef,
+      agentStateRef,
       setAwaitingFirstTurn,
-      setDraftSessionLoadingOwnerKey,
+      setDraftAgentLoadingOwnerKey,
       setPendingMessages,
-      setStoredDraftDirectory,
+      setStoredDraftProject,
       viewerContextId,
     ]
   )
 
   const queuePendingDraftPrompt = React.useCallback(
     (streamingBehavior?: StreamingBehavior, ownerKeyOverride?: string) => {
-      const ownerKey =
-        ownerKeyOverride || draftSessionLoadingOwnerKeyRef.current
+      const ownerKey = ownerKeyOverride || draftAgentLoadingOwnerKeyRef.current
       if (!ownerKey) return false
 
       const message = buildComposerPromptMessage({
@@ -720,7 +714,7 @@ export function useAppShellPromptMutations({
           images,
           queued: false,
         })
-        const optimisticSidebarSessionId = addOptimisticSidebarSession({
+        const optimisticSidebarAgentId = addOptimisticSidebarAgent({
           lastMessagePreview: sidebarPreview,
         })
         const nextPrompt = {
@@ -729,22 +723,22 @@ export function useAppShellPromptMutations({
           images,
           streamingBehavior,
           optimisticId,
-          optimisticSidebarSessionId,
+          optimisticSidebarAgentId,
         } satisfies PendingDraftPrompt
         pendingDraftPromptRef.current = nextPrompt
         setPendingDraftPrompt(nextPrompt)
         awaitingFirstTurnRef.current = true
         setAwaitingFirstTurn(true)
-        toast.info("Prompt will send when the new session is ready.")
+        toast.info("Prompt will send when the new agent is ready.")
       } else {
         const queuedStreamingBehavior =
           normalizeQueuedStreamingBehavior(streamingBehavior)
         const optimisticId = createLocalPendingId()
-        updateOptimisticSidebarSessionPreview({
-          ...(currentPendingPrompt.optimisticSidebarSessionId
+        updateOptimisticSidebarAgentPreview({
+          ...(currentPendingPrompt.optimisticSidebarAgentId
             ? {
-                optimisticSidebarSessionId:
-                  currentPendingPrompt.optimisticSidebarSessionId,
+                optimisticSidebarAgentId:
+                  currentPendingPrompt.optimisticSidebarAgentId,
               }
             : {}),
           preview: sidebarPreview,
@@ -770,7 +764,7 @@ export function useAppShellPromptMutations({
       return true
     },
     [
-      addOptimisticSidebarSession,
+      addOptimisticSidebarAgent,
       addOptimisticUserMessage,
       composerLineCommentsRef,
       composerImagesRef,
@@ -783,7 +777,7 @@ export function useAppShellPromptMutations({
       setComposerImages,
       setPendingDraftFollowUps,
       setPendingDraftPrompt,
-      updateOptimisticSidebarSessionPreview,
+      updateOptimisticSidebarAgentPreview,
     ]
   )
 
@@ -795,7 +789,7 @@ export function useAppShellPromptMutations({
       pendingId,
       clientRequestId,
       thinkingLevel,
-      targetSessionKey,
+      targetAgentKey,
       draftTarget,
     }: {
       message: string
@@ -804,7 +798,7 @@ export function useAppShellPromptMutations({
       pendingId?: string
       clientRequestId?: string
       thinkingLevel?: string
-      targetSessionKey?: string
+      targetAgentKey?: string
       draftTarget?: PromptDraftTargetContext
     }) => {
       if (!viewerContextId) {
@@ -812,12 +806,12 @@ export function useAppShellPromptMutations({
       }
 
       return await fetchJson<PromptResponse>(
-        buildCurrentSessionRequestUrl("/api/prompt", {
+        buildCurrentAgentRequestUrl("/api/prompt", {
           machineId,
           contextId: viewerContextId,
-          sessionState: sessionStateRef.current,
-          fallbackSessionId: activeSessionId,
-          targetSessionKey,
+          agentState: agentStateRef.current,
+          fallbackAgentId: activeAgentId,
+          targetAgentKey,
         }),
         {
           method: "POST",
@@ -837,9 +831,9 @@ export function useAppShellPromptMutations({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.sessionTree(
+        queryKey: picoQueryKeys.agentTree(
           viewerContextId,
-          picoSessionScopeKey(sessionStateRef.current)
+          picoAgentScopeKey(agentStateRef.current)
         ),
         refetchType: "active",
       })
@@ -926,14 +920,14 @@ export function useAppShellPromptMutations({
       options?: {
         forceFirstPrompt?: boolean
         optimisticId?: string
-        optimisticSidebarSessionId?: string
-        targetSessionKey?: string
+        optimisticSidebarAgentId?: string
+        targetAgentKey?: string
         targetDraftOwnerKey?: string
         targetDraftCwd?: string
       }
     ) => {
       if (!viewerContextId) return false
-      if (draftSessionLoadingOwnerKeyRef.current) {
+      if (draftAgentLoadingOwnerKeyRef.current) {
         return queuePendingDraftPrompt(streamingBehavior)
       }
 
@@ -947,49 +941,47 @@ export function useAppShellPromptMutations({
       }).trim()
       if (!message && composerImagesRef.current.length === 0) return false
 
-      const currentSessionState = sessionStateRef.current
-      const pendingNewSessionPromptTarget =
-        pendingNewSessionPromptTargetRef.current
-      const currentDraftOwnerKey = currentSessionState.draft
-        ? promptDraftKey(currentSessionState)
+      const currentAgentState = agentStateRef.current
+      const pendingNewAgentPromptTarget = pendingNewAgentPromptTargetRef.current
+      const currentDraftOwnerKey = currentAgentState.draft
+        ? promptDraftKey(currentAgentState)
         : ""
-      const implicitTargetSessionKey =
-        !options?.targetSessionKey &&
-        currentSessionState.draft &&
-        pendingNewSessionPromptTarget &&
+      const implicitTargetAgentKey =
+        !options?.targetAgentKey &&
+        currentAgentState.draft &&
+        pendingNewAgentPromptTarget &&
         promptDraftKeyMatchesOwner(
           currentDraftOwnerKey,
-          pendingNewSessionPromptTarget.ownerKey
+          pendingNewAgentPromptTarget.ownerKey
         )
-          ? pendingNewSessionPromptTarget.sessionKey
+          ? pendingNewAgentPromptTarget.agentKey
           : undefined
-      const targetSessionKey =
-        options?.targetSessionKey || implicitTargetSessionKey
-      const targetDraft = currentSessionState.draft
+      const targetAgentKey = options?.targetAgentKey || implicitTargetAgentKey
+      const targetDraft = currentAgentState.draft
         ? {
             ownerKey:
               options?.targetDraftOwnerKey ||
-              (targetSessionKey &&
-              pendingNewSessionPromptTarget?.sessionKey === targetSessionKey
-                ? pendingNewSessionPromptTarget.ownerKey
+              (targetAgentKey &&
+              pendingNewAgentPromptTarget?.agentKey === targetAgentKey
+                ? pendingNewAgentPromptTarget.ownerKey
                 : currentDraftOwnerKey),
             cwd:
               options?.targetDraftCwd ||
-              (targetSessionKey &&
-              pendingNewSessionPromptTarget?.sessionKey === targetSessionKey
-                ? pendingNewSessionPromptTarget.cwd || currentSessionState.cwd
-                : currentSessionState.cwd),
+              (targetAgentKey &&
+              pendingNewAgentPromptTarget?.agentKey === targetAgentKey
+                ? pendingNewAgentPromptTarget.cwd || currentAgentState.cwd
+                : currentAgentState.cwd),
           }
         : undefined
 
       if (
-        currentSessionState.draft &&
-        currentSessionState.sessionKey?.startsWith("optimistic:") &&
-        !targetSessionKey
+        currentAgentState.draft &&
+        currentAgentState.agentKey?.startsWith("optimistic:") &&
+        !targetAgentKey
       ) {
-        if (!draftSessionLoadingOwnerKeyRef.current && currentDraftOwnerKey) {
-          draftSessionLoadingOwnerKeyRef.current = currentDraftOwnerKey
-          setDraftSessionLoadingOwnerKey(currentDraftOwnerKey)
+        if (!draftAgentLoadingOwnerKeyRef.current && currentDraftOwnerKey) {
+          draftAgentLoadingOwnerKeyRef.current = currentDraftOwnerKey
+          setDraftAgentLoadingOwnerKey(currentDraftOwnerKey)
         }
         return queuePendingDraftPrompt(streamingBehavior, currentDraftOwnerKey)
       }
@@ -997,8 +989,8 @@ export function useAppShellPromptMutations({
       const treatAsQueuedPrompt = options?.forceFirstPrompt
         ? false
         : Boolean(
-            currentSessionState.streaming ||
-            currentSessionState.compacting ||
+            currentAgentState.streaming ||
+            currentAgentState.compacting ||
             awaitingFirstTurnRef.current
           )
       const normalizedStreamingBehavior = treatAsQueuedPrompt
@@ -1015,7 +1007,7 @@ export function useAppShellPromptMutations({
 
       if (!treatAsQueuedPrompt) {
         awaitingFirstTurnAssistantOutputSignatureRef.current =
-          sessionAssistantOutputSignature(currentSessionState.items)
+          agentAssistantOutputSignature(currentAgentState.items)
         awaitingFirstTurnRef.current = true
         setAwaitingFirstTurn(true)
       }
@@ -1029,16 +1021,16 @@ export function useAppShellPromptMutations({
               images: submittedImages,
               queued: false,
             }))
-      const optimisticSidebarSessionId =
-        options?.optimisticSidebarSessionId ??
-        (!treatAsQueuedPrompt && currentSessionState.draft
-          ? addOptimisticSidebarSession({
+      const optimisticSidebarAgentId =
+        options?.optimisticSidebarAgentId ??
+        (!treatAsQueuedPrompt && currentAgentState.draft
+          ? addOptimisticSidebarAgent({
               lastMessagePreview: sidebarPreview,
             })
           : undefined)
 
-      updateOptimisticSidebarSessionPreview({
-        ...(optimisticSidebarSessionId ? { optimisticSidebarSessionId } : {}),
+      updateOptimisticSidebarAgentPreview({
+        ...(optimisticSidebarAgentId ? { optimisticSidebarAgentId } : {}),
         preview: sidebarPreview,
       })
 
@@ -1068,8 +1060,8 @@ export function useAppShellPromptMutations({
           streamingBehavior: normalizedStreamingBehavior,
           pendingId: queuedPendingId,
           clientRequestId,
-          thinkingLevel: currentSessionState.thinkingLevel,
-          targetSessionKey,
+          thinkingLevel: currentAgentState.thinkingLevel,
+          targetAgentKey,
           draftTarget: targetDraft,
         })
         if (
@@ -1079,22 +1071,21 @@ export function useAppShellPromptMutations({
         ) {
           removeOptimisticPendingMessage(queuedPendingId)
         }
-        // The response names the session that got the prompt. Move the
+        // The response names the agent that got the prompt. Move the
         // sidebar placeholder to it now. The state sync can come late or
-        // not show the change from draft to session, and then the
+        // not show the change from draft to agent, and then the
         // placeholder stays next to the real entry.
-        if (optimisticSidebarSessionId && "sessionId" in response) {
-          bindOptimisticSidebarSession(optimisticSidebarSessionId, {
-            sessionId: response.sessionId,
-            sessionPath: response.sessionPath,
+        if (optimisticSidebarAgentId && "agentId" in response) {
+          bindOptimisticSidebarAgent(optimisticSidebarAgentId, {
+            agentId: response.agentId,
+            agentPath: response.agentPath,
           })
         }
         if (
-          targetSessionKey &&
-          pendingNewSessionPromptTargetRef.current?.sessionKey ===
-            targetSessionKey
+          targetAgentKey &&
+          pendingNewAgentPromptTargetRef.current?.agentKey === targetAgentKey
         ) {
-          pendingNewSessionPromptTargetRef.current = null
+          pendingNewAgentPromptTargetRef.current = null
         }
         if (!shouldOptimisticallyClearComposer) {
           replaceComposerDraft("")
@@ -1104,26 +1095,26 @@ export function useAppShellPromptMutations({
         }
         return true
       } catch (error) {
-        const queueSessionKey =
-          targetSessionKey ||
-          (currentSessionState.sessionKey &&
-          !currentSessionState.sessionKey.startsWith("optimistic:") &&
-          (currentSessionState.draft || !currentSessionState.sessionId)
-            ? currentSessionState.sessionKey
+        const queueAgentKey =
+          targetAgentKey ||
+          (currentAgentState.agentKey &&
+          !currentAgentState.agentKey.startsWith("optimistic:") &&
+          (currentAgentState.draft || !currentAgentState.agentId)
+            ? currentAgentState.agentKey
             : undefined)
-        const queueSessionId = queueSessionKey
+        const queueAgentId = queueAgentKey
           ? undefined
-          : (currentSessionState.sessionId ?? activeSessionId)
+          : (currentAgentState.agentId ?? activeAgentId)
         if (
           isOfflinePromptSubmissionError(error) &&
-          (queueSessionKey || queueSessionId)
+          (queueAgentKey || queueAgentId)
         ) {
           await enqueueOfflinePrompt(machineId, {
             id: clientRequestId,
             contextId: viewerContextId,
             createdAt: Date.now(),
-            sessionId: queueSessionId,
-            targetSessionKey: queueSessionKey,
+            agentId: queueAgentId,
+            targetAgentKey: queueAgentKey,
             message,
             images: submittedImages.map((image) => ({
               type: "image",
@@ -1133,7 +1124,7 @@ export function useAppShellPromptMutations({
             streamingBehavior: normalizedStreamingBehavior,
             pendingId: queuedPendingId,
             clientRequestId,
-            thinkingLevel: currentSessionState.thinkingLevel,
+            thinkingLevel: currentAgentState.thinkingLevel,
             draftOwnerKey: targetDraft?.ownerKey,
             draftCwd: targetDraft?.cwd,
           })
@@ -1141,7 +1132,7 @@ export function useAppShellPromptMutations({
             removeOptimisticPendingMessage(queuedPendingId)
           }
           removeOptimisticUserMessage(optimisticId)
-          removeOptimisticSidebarSession(optimisticSidebarSessionId)
+          removeOptimisticSidebarAgent(optimisticSidebarAgentId)
           if (!treatAsQueuedPrompt) {
             awaitingFirstTurnAssistantOutputSignatureRef.current = null
             awaitingFirstTurnRef.current = false
@@ -1155,7 +1146,7 @@ export function useAppShellPromptMutations({
           removeOptimisticPendingMessage(queuedPendingId)
         }
         removeOptimisticUserMessage(optimisticId)
-        removeOptimisticSidebarSession(optimisticSidebarSessionId)
+        removeOptimisticSidebarAgent(optimisticSidebarAgentId)
         if (!treatAsQueuedPrompt) {
           awaitingFirstTurnAssistantOutputSignatureRef.current = null
           awaitingFirstTurnRef.current = false
@@ -1190,11 +1181,11 @@ export function useAppShellPromptMutations({
       }
     },
     [
-      activeSessionId,
+      activeAgentId,
       addOptimisticPendingMessage,
-      addOptimisticSidebarSession,
+      addOptimisticSidebarAgent,
       addOptimisticUserMessage,
-      bindOptimisticSidebarSession,
+      bindOptimisticSidebarAgent,
       composerLineCommentsRef,
       composerImagesRef,
       composerSkillRef,
@@ -1202,27 +1193,24 @@ export function useAppShellPromptMutations({
       lastSyncedEditorTextRef,
       promptMutation,
       queuePendingDraftPrompt,
-      sessionStateRef,
+      agentStateRef,
       removeOptimisticPendingMessage,
-      removeOptimisticSidebarSession,
+      removeOptimisticSidebarAgent,
       removeOptimisticUserMessage,
       replaceComposerDraft,
       setAwaitingFirstTurn,
       setComposerLineComments,
       setComposerImages,
-      setDraftSessionLoadingOwnerKey,
+      setDraftAgentLoadingOwnerKey,
       setIsSubmitting,
-      updateOptimisticSidebarSessionPreview,
+      updateOptimisticSidebarAgentPreview,
       viewerContextId,
     ]
   )
 
   const flushPendingDraftFollowUps = React.useCallback(
-    async (
-      targetSessionKey?: string,
-      draftTarget?: PromptDraftTargetContext
-    ) => {
-      if (draftSessionLoadingOwnerKeyRef.current) {
+    async (targetAgentKey?: string, draftTarget?: PromptDraftTargetContext) => {
+      if (draftAgentLoadingOwnerKeyRef.current) {
         return false
       }
 
@@ -1252,8 +1240,8 @@ export function useAppShellPromptMutations({
             streamingBehavior: followUp.streamingBehavior,
             pendingId: followUp.optimisticId,
             clientRequestId: createClientPromptRequestId(),
-            thinkingLevel: sessionStateRef.current.thinkingLevel,
-            targetSessionKey,
+            thinkingLevel: agentStateRef.current.thinkingLevel,
+            targetAgentKey,
             draftTarget,
           })
         } catch (error) {
@@ -1281,7 +1269,7 @@ export function useAppShellPromptMutations({
       composerTextRef,
       promptMutation,
       removeOptimisticUserMessage,
-      sessionStateRef,
+      agentStateRef,
       replaceComposerDraft,
       setComposerImages,
       setPendingDraftFollowUps,
@@ -1289,25 +1277,25 @@ export function useAppShellPromptMutations({
   )
 
   const flushPendingDraftPrompt = React.useCallback(
-    async (ownerKey: string, targetSessionKey?: string) => {
+    async (ownerKey: string, targetAgentKey?: string) => {
       const nextPrompt = pendingDraftPromptRef.current
       if (
         !nextPrompt ||
         nextPrompt.ownerKey !== ownerKey ||
-        draftSessionLoadingOwnerKeyRef.current
+        draftAgentLoadingOwnerKeyRef.current
       ) {
         return false
       }
 
-      const pendingTarget = pendingNewSessionPromptTargetRef.current
-      const resolvedTargetSessionKey =
-        targetSessionKey ||
+      const pendingTarget = pendingNewAgentPromptTargetRef.current
+      const resolvedTargetAgentKey =
+        targetAgentKey ||
         (pendingTarget?.ownerKey === ownerKey
-          ? pendingTarget.sessionKey
+          ? pendingTarget.agentKey
           : undefined)
       const resolvedDraftTarget = {
         ownerKey,
-        cwd: pendingTarget?.cwd || sessionStateRef.current.cwd,
+        cwd: pendingTarget?.cwd || agentStateRef.current.cwd,
       }
 
       pendingDraftPromptRef.current = null
@@ -1316,36 +1304,36 @@ export function useAppShellPromptMutations({
       const sent = await submitPrompt(nextPrompt.streamingBehavior, {
         forceFirstPrompt: true,
         optimisticId: nextPrompt.optimisticId,
-        optimisticSidebarSessionId: nextPrompt.optimisticSidebarSessionId,
-        targetSessionKey: resolvedTargetSessionKey,
+        optimisticSidebarAgentId: nextPrompt.optimisticSidebarAgentId,
+        targetAgentKey: resolvedTargetAgentKey,
         targetDraftOwnerKey: resolvedDraftTarget.ownerKey,
         targetDraftCwd: resolvedDraftTarget.cwd,
       })
       if (!sent) {
-        removeOptimisticSidebarSession(nextPrompt.optimisticSidebarSessionId)
+        removeOptimisticSidebarAgent(nextPrompt.optimisticSidebarAgentId)
         for (const followUp of pendingDraftFollowUpsRef.current) {
           removeOptimisticUserMessage(followUp.optimisticId)
         }
         pendingDraftFollowUpsRef.current = []
         setPendingDraftFollowUps([])
-        if (pendingNewSessionPromptTargetRef.current?.ownerKey === ownerKey) {
-          pendingNewSessionPromptTargetRef.current = null
+        if (pendingNewAgentPromptTargetRef.current?.ownerKey === ownerKey) {
+          pendingNewAgentPromptTargetRef.current = null
         }
         return false
       }
       await flushPendingDraftFollowUps(
-        resolvedTargetSessionKey,
+        resolvedTargetAgentKey,
         resolvedDraftTarget
       )
-      if (pendingNewSessionPromptTargetRef.current?.ownerKey === ownerKey) {
-        pendingNewSessionPromptTargetRef.current = null
+      if (pendingNewAgentPromptTargetRef.current?.ownerKey === ownerKey) {
+        pendingNewAgentPromptTargetRef.current = null
       }
       return true
     },
     [
       applyPendingDraftPromptToComposer,
       flushPendingDraftFollowUps,
-      removeOptimisticSidebarSession,
+      removeOptimisticSidebarAgent,
       removeOptimisticUserMessage,
       setPendingDraftFollowUps,
       setPendingDraftPrompt,
@@ -1356,49 +1344,42 @@ export function useAppShellPromptMutations({
   flushPendingDraftPromptRef.current = flushPendingDraftPrompt
 
   React.useEffect(() => {
-    if (!draftSessionLoadingOwnerKey) return
-    const currentSessionState = sessionStateRef.current
-    if (currentSessionState.sessionKey?.startsWith("optimistic:")) {
+    if (!draftAgentLoadingOwnerKey) return
+    const currentAgentState = agentStateRef.current
+    if (currentAgentState.agentKey?.startsWith("optimistic:")) {
       return
     }
 
-    const currentOwnerKey = promptDraftKey(currentSessionState)
+    const currentOwnerKey = promptDraftKey(currentAgentState)
     if (
-      !currentSessionState.draft ||
-      !promptDraftKeyMatchesOwner(currentOwnerKey, draftSessionLoadingOwnerKey)
+      !currentAgentState.draft ||
+      !promptDraftKeyMatchesOwner(currentOwnerKey, draftAgentLoadingOwnerKey)
     ) {
       return
     }
 
-    const targetSessionKey = currentSessionState.sessionKey?.startsWith(
-      "optimistic:"
-    )
+    const targetAgentKey = currentAgentState.agentKey?.startsWith("optimistic:")
       ? undefined
-      : currentSessionState.sessionKey
-    if (targetSessionKey) {
-      pendingNewSessionPromptTargetRef.current = {
-        ownerKey: draftSessionLoadingOwnerKey,
-        sessionKey: targetSessionKey,
-        cwd: currentSessionState.cwd,
+      : currentAgentState.agentKey
+    if (targetAgentKey) {
+      pendingNewAgentPromptTargetRef.current = {
+        ownerKey: draftAgentLoadingOwnerKey,
+        agentKey: targetAgentKey,
+        cwd: currentAgentState.cwd,
       }
     }
 
-    draftSessionLoadingOwnerKeyRef.current = null
-    setDraftSessionLoadingOwnerKey(null)
-    if (
-      pendingDraftPromptRef.current?.ownerKey === draftSessionLoadingOwnerKey
-    ) {
-      void flushPendingDraftPrompt(
-        draftSessionLoadingOwnerKey,
-        targetSessionKey
-      )
+    draftAgentLoadingOwnerKeyRef.current = null
+    setDraftAgentLoadingOwnerKey(null)
+    if (pendingDraftPromptRef.current?.ownerKey === draftAgentLoadingOwnerKey) {
+      void flushPendingDraftPrompt(draftAgentLoadingOwnerKey, targetAgentKey)
     }
   }, [
-    draftSessionLoadingOwnerKey,
+    draftAgentLoadingOwnerKey,
     flushPendingDraftPrompt,
-    sessionSnapshot,
-    sessionStateRef,
-    setDraftSessionLoadingOwnerKey,
+    agentSnapshot,
+    agentStateRef,
+    setDraftAgentLoadingOwnerKey,
   ])
 
   React.useEffect(() => {
@@ -1408,11 +1389,11 @@ export function useAppShellPromptMutations({
       awaitingFirstTurnAssistantOutputSignatureRef.current
     const assistantOutputStarted =
       baselineAssistantOutputSignature !== null &&
-      sessionSnapshot.assistantOutputSignature !==
+      agentSnapshot.assistantOutputSignature !==
         baselineAssistantOutputSignature
 
     if (
-      sessionStateRef.current.streaming ||
+      agentStateRef.current.streaming ||
       assistantOutputStarted ||
       pendingMessages.length > 0
     ) {
@@ -1423,24 +1404,24 @@ export function useAppShellPromptMutations({
   }, [
     awaitingFirstTurn,
     pendingMessages.length,
-    sessionSnapshot.assistantOutputSignature,
-    sessionSnapshot.streaming,
-    sessionStateRef,
+    agentSnapshot.assistantOutputSignature,
+    agentSnapshot.streaming,
+    agentStateRef,
     setAwaitingFirstTurn,
   ])
 
-  const abortSessionMutation = useMutation({
+  const abortAgentMutation = useMutation({
     mutationFn: async () => {
       if (!viewerContextId) {
         throw new Error("Viewer context unavailable")
       }
 
       return await fetchJson<SimpleOkResponse>(
-        buildCurrentSessionRequestUrl("/api/abort", {
+        buildCurrentAgentRequestUrl("/api/abort", {
           machineId,
           contextId: viewerContextId,
-          sessionState: sessionStateRef.current,
-          fallbackSessionId: activeSessionId,
+          agentState: agentStateRef.current,
+          fallbackAgentId: activeAgentId,
         }),
         {
           method: "POST",
@@ -1449,25 +1430,25 @@ export function useAppShellPromptMutations({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.sessionTree(
+        queryKey: picoQueryKeys.agentTree(
           viewerContextId,
-          picoSessionScopeKey(sessionStateRef.current)
+          picoAgentScopeKey(agentStateRef.current)
         ),
         refetchType: "active",
       })
     },
   })
 
-  const abortSession = React.useCallback(async () => {
+  const abortAgent = React.useCallback(async () => {
     if (!viewerContextId) return
     try {
-      await abortSessionMutation.mutateAsync()
+      await abortAgentMutation.mutateAsync()
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to abort session"
+        error instanceof Error ? error.message : "Failed to abort agent"
       )
     }
-  }, [abortSessionMutation, viewerContextId])
+  }, [abortAgentMutation, viewerContextId])
 
   const savePendingQueueMutation = useMutation({
     mutationFn: async ({
@@ -1484,11 +1465,11 @@ export function useAppShellPromptMutations({
       }
 
       return await fetchJson<PendingMessagesResponse & { missed?: number }>(
-        buildCurrentSessionRequestUrl("/api/pending-messages/reorder", {
+        buildCurrentAgentRequestUrl("/api/pending-messages/reorder", {
           machineId,
           contextId: viewerContextId,
-          sessionState: sessionStateRef.current,
-          fallbackSessionId: activeSessionId,
+          agentState: agentStateRef.current,
+          fallbackAgentId: activeAgentId,
         }),
         {
           method: "POST",
@@ -1526,9 +1507,9 @@ export function useAppShellPromptMutations({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.sessionTree(
+        queryKey: picoQueryKeys.agentTree(
           viewerContextId,
-          picoSessionScopeKey(sessionStateRef.current)
+          picoAgentScopeKey(agentStateRef.current)
         ),
         refetchType: "active",
       })
@@ -1592,7 +1573,7 @@ export function useAppShellPromptMutations({
 
   /**
    * Hold the queue for an edit. Resolves a function that resumes the held
-   * session, also after a switch to another session, or null when the queue
+   * agent, also after a switch to another agent, or null when the queue
    * must stay paused.
    */
   const holdPendingQueue = React.useCallback(async (): Promise<
@@ -1600,22 +1581,22 @@ export function useAppShellPromptMutations({
   > => {
     if (!viewerContextId) return null
     const startUrl = () =>
-      buildCurrentSessionRequestUrl("/api/pending-messages/start", {
+      buildCurrentAgentRequestUrl("/api/pending-messages/start", {
         machineId,
         contextId: viewerContextId,
-        sessionState: sessionStateRef.current,
-        fallbackSessionId: activeSessionId,
+        agentState: agentStateRef.current,
+        fallbackAgentId: activeAgentId,
       })
     const heldStartUrl = startUrl()
     try {
       const response = await fetchJson<
         PendingMessagesResponse & { wasPaused?: boolean }
       >(
-        buildCurrentSessionRequestUrl("/api/pending-messages/hold", {
+        buildCurrentAgentRequestUrl("/api/pending-messages/hold", {
           machineId,
           contextId: viewerContextId,
-          sessionState: sessionStateRef.current,
-          fallbackSessionId: activeSessionId,
+          agentState: agentStateRef.current,
+          fallbackAgentId: activeAgentId,
         }),
         { method: "POST" }
       )
@@ -1634,7 +1615,7 @@ export function useAppShellPromptMutations({
           method: "POST",
         })
           .then((startResponse) => {
-            // Show the result only while the held session is still shown.
+            // Show the result only while the held agent is still shown.
             if (startUrl() !== heldStartUrl) return
             const startedMessages = pendingMessagesFromResponse(startResponse)
             if (startedMessages) updatePendingMessages(() => startedMessages)
@@ -1649,9 +1630,9 @@ export function useAppShellPromptMutations({
       return null
     }
   }, [
-    activeSessionId,
+    activeAgentId,
     machineId,
-    sessionStateRef,
+    agentStateRef,
     updatePendingMessages,
     viewerContextId,
   ])
@@ -1663,20 +1644,20 @@ export function useAppShellPromptMutations({
       }
 
       return await fetchJson<PendingMessagesResponse>(
-        buildCurrentSessionRequestUrl("/api/pending-messages/start", {
+        buildCurrentAgentRequestUrl("/api/pending-messages/start", {
           machineId,
           contextId: viewerContextId,
-          sessionState: sessionStateRef.current,
-          fallbackSessionId: activeSessionId,
+          agentState: agentStateRef.current,
+          fallbackAgentId: activeAgentId,
         }),
         { method: "POST" }
       )
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.sessionTree(
+        queryKey: picoQueryKeys.agentTree(
           viewerContextId,
-          picoSessionScopeKey(sessionStateRef.current)
+          picoAgentScopeKey(agentStateRef.current)
         ),
         refetchType: "active",
       })
@@ -1710,9 +1691,9 @@ export function useAppShellPromptMutations({
   ])
 
   return {
-    abortSession,
-    addDirectoryPath,
-    createSession,
+    abortAgent,
+    addProjectPath,
+    createAgent,
     holdPendingQueue,
     savePendingQueue,
     startPendingQueue,

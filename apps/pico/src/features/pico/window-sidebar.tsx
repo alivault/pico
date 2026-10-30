@@ -6,10 +6,7 @@ import {
 } from "@/components/ui/sidebar"
 import { SidebarMachineGroups } from "@/features/pico/machines"
 import type { MachineInfo } from "@/features/pico/machine-store"
-import {
-  DirectoryActions,
-  OtherMachineDirectories,
-} from "@/features/pico/sidebar"
+import { ProjectActions, OtherMachineProjects } from "@/features/pico/sidebar"
 import { sidebarSlotRef } from "@/features/pico/sidebar-slots"
 import { openMachine, queueMachineAction } from "@/lib/pico/machine"
 import { MachineProvider } from "@/lib/pico/machine-context"
@@ -21,8 +18,8 @@ import { MachineProvider } from "@/lib/pico/machine-context"
  * Herdr, each machine has the same heading and the same buttons.
  *
  * The shell of the shown machine fills the slots of its machine (see
- * `sidebar-slots.ts`): the search button, its live directories, and its
- * footer. The other machines show their directories from their hub
+ * `sidebar-slots.ts`): the search button, its live projects, and its
+ * footer. The other machines show their projects from their hub
  * summaries.
  */
 export function WindowSidebar({ shownMachineId }: { shownMachineId: string }) {
@@ -49,11 +46,11 @@ export function WindowSidebar({ shownMachineId }: { shownMachineId: string }) {
           }
           renderContent={(machine) => (
             <MachineProvider machineId={machine.id}>
-              <OtherMachineDirectories machine={machine} />
+              <OtherMachineProjects machine={machine} />
             </MachineProvider>
           )}
           renderActions={(machine, shown) => (
-            <MachineDirectoryActions machine={machine} shown={shown} />
+            <MachineProjectActions machine={machine} shown={shown} />
           )}
         />
         <div
@@ -68,11 +65,11 @@ export function WindowSidebar({ shownMachineId }: { shownMachineId: string }) {
 }
 
 /**
- * Add directory on any machine. On the shown machine it opens the dialog at
+ * Add project on any machine. On the shown machine it opens the dialog at
  * once. On another machine it opens that machine with the dialog, because
  * the dialog completes paths and checks them on that machine.
  */
-function MachineDirectoryActions({
+function MachineProjectActions({
   machine,
   shown,
 }: {
@@ -82,13 +79,13 @@ function MachineDirectoryActions({
   const { isMobile, setOpenMobile } = useSidebar()
   if (!shown && machine.state !== "online") return null
   return (
-    <DirectoryActions
-      title={shown ? "Add directory" : `Add directory on ${machine.label}`}
+    <ProjectActions
+      title={shown ? "Add project" : `Add project on ${machine.label}`}
       showShortcut={shown}
-      onOpenAddDirectoryDialog={() => {
+      onOpenAddProjectDialog={() => {
         if (isMobile) setOpenMobile(false)
-        if (shown) queueMachineAction(machine.id, { type: "add-directory" })
-        else openMachine(machine.id, { action: { type: "add-directory" } })
+        if (shown) queueMachineAction(machine.id, { type: "add-project" })
+        else openMachine(machine.id, { action: { type: "add-project" } })
       }}
     />
   )

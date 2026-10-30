@@ -6,7 +6,7 @@ import type { ToolBlock } from "@/lib/pico"
  * Renderers for tool results, by tool name.
  *
  * - `Card` replaces the whole tool card. It is always open, for tools whose
- *   result the user must see or act on (questions, diagrams, child sessions).
+ *   result the user must see or act on (questions, diagrams, subagents).
  * - `Body` replaces only the body of the collapsible tool card.
  * - `summary` replaces the one-line summary in the card header.
  */
@@ -32,10 +32,10 @@ export function toolRenderer(name: string | undefined) {
   return name ? renderers.get(name) : undefined
 }
 
-/** The session that a conversation view shows, for tool renderers that call the server. */
+/** The agent that a conversation view shows, for tool renderers that call the server. */
 export type ToolRenderContextValue = {
   viewerContextId: string
-  sessionId?: string
+  agentId?: string
   cwd?: string
 }
 

@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys"
 
-import type { SessionListEntry } from "@/lib/pico/api"
+import type { AgentListEntry } from "@/lib/pico/api"
 
 import {
   appModifierFlag,
@@ -11,28 +11,28 @@ import {
   type RightSidebarShortcutPane,
 } from "./keyboard-shortcuts"
 import { isInShownMachineShell } from "@/lib/pico/machine-context"
-import { getShownSidebarSessionItems } from "./sidebar-session-numbers"
+import { getShownSidebarAgentItems } from "./sidebar-agent-numbers"
 
 const DOUBLE_ESCAPE_INTERVAL_MS = 500
 
 type ShortcutActions = {
   abortCompact: () => void | Promise<unknown>
-  abortSession: () => void | Promise<unknown>
-  createSession: () => void | Promise<unknown>
+  abortAgent: () => void | Promise<unknown>
+  createAgent: () => void | Promise<unknown>
   focusModelSelector: () => void
   focusPrompt: () => void
-  focusSessionSearch: () => void
+  focusAgentSearch: () => void
   jumpToNextMessage: () => void
   jumpToPreviousMessage: () => void
-  openAddDirectoryDialog: () => void
+  openAddProjectDialog: () => void
   openCommandPalette: () => void
   closeCommandPalette: () => void
   openCommitDialog: () => void
-  openDeleteDialog: (targets: Array<SessionListEntry>) => void
-  openDeleteDialogForCurrentSession: () => void
+  openDeleteDialog: (targets: Array<AgentListEntry>) => void
+  openDeleteDialogForCurrentAgent: () => void
   openForkDialog: () => void | Promise<unknown>
   openRenameDialog: () => void
-  openSessionsDialog: () => void
+  openAgentsDialog: () => void
   openSettingsDialog: () => void
   openTreeDialog: () => void | Promise<unknown>
   forcePushGitChanges: () => void | Promise<unknown>
@@ -50,25 +50,25 @@ type ShortcutActions = {
 
 export type AppShellShortcutState = {
   currentTab: string
-  selectedSidebarSessions: Array<SessionListEntry>
-  sessionHasAvailableModels: boolean
-  sessionHasFile: boolean
-  sessionIsStreaming: boolean
-  sidebarSessionEntriesByKey: Map<string, SessionListEntry>
+  selectedSidebarAgents: Array<AgentListEntry>
+  agentHasAvailableModels: boolean
+  agentHasFile: boolean
+  agentIsStreaming: boolean
+  sidebarAgentEntriesByKey: Map<string, AgentListEntry>
 }
 
 type UseAppShellShortcutsOptions = {
-  addDirectoryOpenRef: React.RefObject<boolean>
+  addProjectOpenRef: React.RefObject<boolean>
   commandPaletteOpenRef: React.RefObject<boolean>
   compactRunningRef: React.RefObject<boolean>
   deleteOpenRef: React.RefObject<boolean>
   forkOpenRef: React.RefObject<boolean>
   gitCommitOpenRef: React.RefObject<boolean>
-  moveSessionDirectoryOpenRef: React.RefObject<boolean>
+  moveAgentProjectOpenRef: React.RefObject<boolean>
   pendingUiRequestOpenRef: React.RefObject<boolean>
   renameOpenRef: React.RefObject<boolean>
-  sessionSearchInputRef: React.RefObject<HTMLInputElement | null>
-  sessionsOpenRef: React.RefObject<boolean>
+  agentSearchInputRef: React.RefObject<HTMLInputElement | null>
+  agentsOpenRef: React.RefObject<boolean>
   settingsOpenRef: React.RefObject<boolean>
   shortcutActionsRef: React.RefObject<ShortcutActions>
   shortcutStateRef: React.RefObject<AppShellShortcutState>
@@ -80,9 +80,9 @@ type ShortcutContext = AppShellShortcutState & {
   activeElementIsConversationViewport: boolean
   blockingModalOpen: boolean
   commandPaletteOpen: boolean
-  focusedSidebarSession?: SessionListEntry
+  focusedSidebarAgent?: AgentListEntry
   modalOpen: boolean
-  targetIsSessionSearch: boolean
+  targetIsAgentSearch: boolean
 }
 
 function isTerminalTarget(target: EventTarget | null) {
@@ -124,17 +124,17 @@ function hasSelectedText(target: EventTarget | null) {
   return false
 }
 
-function isCurrentSidebarSessionItem(element: HTMLElement) {
-  return element.dataset.currentSession !== undefined
+function isCurrentSidebarAgentItem(element: HTMLElement) {
+  return element.dataset.currentAgent !== undefined
 }
 
-// Open the session in the sidebar that is `offset` rows from the current
-// session. Without a current session, go to the first or last row.
-function openAdjacentSidebarSession(offset: -1 | 1) {
-  const items = getShownSidebarSessionItems()
+// Open the agent in the sidebar that is `offset` rows from the current
+// agent. Without a current agent, go to the first or last row.
+function openAdjacentSidebarAgent(offset: -1 | 1) {
+  const items = getShownSidebarAgentItems()
   if (items.length === 0) return
 
-  const currentIndex = items.findIndex(isCurrentSidebarSessionItem)
+  const currentIndex = items.findIndex(isCurrentSidebarAgentItem)
   const nextIndex =
     currentIndex < 0
       ? offset > 0
@@ -145,20 +145,20 @@ function openAdjacentSidebarSession(offset: -1 | 1) {
   items[nextIndex]?.click()
 }
 
-// Open the first session of the previous or next sidebar group (a directory
-// or the pinned group). Groups without shown sessions are skipped.
+// Open the first agent of the previous or next sidebar group (a project
+// or the pinned group). Groups without shown agents are skipped.
 function openAdjacentSidebarGroup(offset: -1 | 1) {
   const groups = Array.from(
-    document.querySelectorAll<HTMLElement>("[data-sidebar-session-group]")
+    document.querySelectorAll<HTMLElement>("[data-sidebar-agent-group]")
   ).flatMap((group) => {
     if (!isInShownMachineShell(group)) return []
-    const items = getShownSidebarSessionItems(group)
+    const items = getShownSidebarAgentItems(group)
     return items.length > 0 ? [{ group, items }] : []
   })
   if (groups.length === 0) return
 
   const currentIndex = groups.findIndex(({ items }) =>
-    items.some(isCurrentSidebarSessionItem)
+    items.some(isCurrentSidebarAgentItem)
   )
   const nextIndex =
     currentIndex < 0
@@ -169,22 +169,22 @@ function openAdjacentSidebarGroup(offset: -1 | 1) {
   groups[nextIndex]?.items[0]?.click()
 }
 
-function openSidebarSessionAt(index: number) {
-  getShownSidebarSessionItems()[index]?.click()
+function openSidebarAgentAt(index: number) {
+  getShownSidebarAgentItems()[index]?.click()
 }
 
 export function useAppShellShortcuts({
-  addDirectoryOpenRef,
+  addProjectOpenRef,
   commandPaletteOpenRef,
   compactRunningRef,
   deleteOpenRef,
   forkOpenRef,
   gitCommitOpenRef,
-  moveSessionDirectoryOpenRef,
+  moveAgentProjectOpenRef,
   pendingUiRequestOpenRef,
   renameOpenRef,
-  sessionSearchInputRef,
-  sessionsOpenRef,
+  agentSearchInputRef,
+  agentsOpenRef,
   settingsOpenRef,
   shortcutActionsRef,
   shortcutStateRef,
@@ -196,30 +196,30 @@ export function useAppShellShortcuts({
     const shortcutState = shortcutStateRef.current
     const commandPaletteOpen = commandPaletteOpenRef.current
     const blockingModalOpen =
-      addDirectoryOpenRef.current ||
+      addProjectOpenRef.current ||
       renameOpenRef.current ||
       deleteOpenRef.current ||
       forkOpenRef.current ||
       gitCommitOpenRef.current ||
-      moveSessionDirectoryOpenRef.current ||
+      moveAgentProjectOpenRef.current ||
       treeOpenRef.current ||
-      sessionsOpenRef.current ||
+      agentsOpenRef.current ||
       settingsOpenRef.current ||
       pendingUiRequestOpenRef.current
     const activeElement = document.activeElement
     const activeElementIsConversationViewport =
       activeElement instanceof HTMLElement &&
       activeElement.closest('[data-conversation-viewport="true"]') !== null
-    const focusedSidebarSessionKey =
+    const focusedSidebarAgentKey =
       activeElement instanceof HTMLElement
-        ? (activeElement.dataset.sessionKey?.trim() ?? "")
+        ? (activeElement.dataset.agentKey?.trim() ?? "")
         : ""
-    const focusedSidebarSession = focusedSidebarSessionKey
-      ? shortcutState.sidebarSessionEntriesByKey.get(focusedSidebarSessionKey)
+    const focusedSidebarAgent = focusedSidebarAgentKey
+      ? shortcutState.sidebarAgentEntriesByKey.get(focusedSidebarAgentKey)
       : undefined
-    const targetIsSessionSearch =
+    const targetIsAgentSearch =
       event.target instanceof HTMLInputElement &&
-      event.target === sessionSearchInputRef.current
+      event.target === agentSearchInputRef.current
 
     return {
       ...shortcutState,
@@ -227,9 +227,9 @@ export function useAppShellShortcuts({
       activeElementIsConversationViewport,
       blockingModalOpen,
       commandPaletteOpen,
-      focusedSidebarSession,
+      focusedSidebarAgent,
       modalOpen: blockingModalOpen || commandPaletteOpen,
-      targetIsSessionSearch,
+      targetIsAgentSearch,
     }
   }
 
@@ -267,9 +267,9 @@ export function useAppShellShortcuts({
       return
     }
 
-    if (context.sessionIsStreaming && !isEditableTarget(event.target)) {
+    if (context.agentIsStreaming && !isEditableTarget(event.target)) {
       event.preventDefault()
-      void shortcutActionsRef.current.abortSession()
+      void shortcutActionsRef.current.abortAgent()
     }
   }
 
@@ -278,46 +278,46 @@ export function useAppShellShortcuts({
 
     if (
       context.modalOpen ||
-      (isEditableTarget(event.target) && !context.targetIsSessionSearch) ||
+      (isEditableTarget(event.target) && !context.targetIsAgentSearch) ||
       context.activeElementIsConversationViewport
     ) {
       return
     }
 
-    const sessionButtons = Array.from(
-      document.querySelectorAll<HTMLElement>("[data-sidebar-session-item]")
+    const agentButtons = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-sidebar-agent-item]")
     ).filter(isInShownMachineShell)
-    const focusedSessionButton =
+    const focusedAgentButton =
       context.activeElement instanceof HTMLElement
         ? context.activeElement.closest<HTMLElement>(
-            "[data-sidebar-session-item]"
+            "[data-sidebar-agent-item]"
           )
         : null
 
-    if (sessionButtons.length === 0) return
+    if (agentButtons.length === 0) return
 
-    const currentIndex = focusedSessionButton
-      ? sessionButtons.findIndex((button) => button === focusedSessionButton)
+    const currentIndex = focusedAgentButton
+      ? agentButtons.findIndex((button) => button === focusedAgentButton)
       : -1
     const nextIndex =
       event.key === "Home"
         ? 0
         : event.key === "End"
-          ? sessionButtons.length - 1
+          ? agentButtons.length - 1
           : currentIndex >= 0
             ? Math.max(
                 0,
                 Math.min(
-                  sessionButtons.length - 1,
+                  agentButtons.length - 1,
                   currentIndex + (event.key === "ArrowDown" ? 1 : -1)
                 )
               )
             : event.key === "ArrowUp"
-              ? sessionButtons.length - 1
+              ? agentButtons.length - 1
               : 0
 
     event.preventDefault()
-    sessionButtons[nextIndex]?.focus()
+    agentButtons[nextIndex]?.focus()
   }
 
   const handleSidebarBackspaceDelete = (event: KeyboardEvent) => {
@@ -325,15 +325,15 @@ export function useAppShellShortcuts({
 
     if (
       context.modalOpen ||
-      (isEditableTarget(event.target) && !context.targetIsSessionSearch)
+      (isEditableTarget(event.target) && !context.targetIsAgentSearch)
     ) {
       return
     }
 
-    if (context.selectedSidebarSessions.length <= 1) return
+    if (context.selectedSidebarAgents.length <= 1) return
 
     event.preventDefault()
-    shortcutActionsRef.current.openDeleteDialog(context.selectedSidebarSessions)
+    shortcutActionsRef.current.openDeleteDialog(context.selectedSidebarAgents)
   }
 
   const handleFocusPrompt = (event: KeyboardEvent) => {
@@ -356,7 +356,7 @@ export function useAppShellShortcuts({
     const context = getShortcutContext(event)
 
     if (
-      context.currentTab !== "session" ||
+      context.currentTab !== "conversation" ||
       context.modalOpen ||
       event.defaultPrevented ||
       (isEditableTarget(event.target) && !isPromptTextareaTarget(event.target))
@@ -384,10 +384,7 @@ export function useAppShellShortcuts({
     shortcutActionsRef.current.scrollConversationToBottom()
   }
 
-  const handleSidebarSessionSwitch = (
-    event: KeyboardEvent,
-    open: () => void
-  ) => {
+  const handleSidebarAgentSwitch = (event: KeyboardEvent, open: () => void) => {
     const context = getShortcutContext(event)
 
     if (
@@ -476,19 +473,19 @@ export function useAppShellShortcuts({
     if (key === "n") {
       event.preventDefault()
       closeCommandPaletteForShortcut(context.commandPaletteOpen)
-      void shortcutActionsRef.current.createSession()
+      void shortcutActionsRef.current.createAgent()
       return
     }
 
     if (key === "s") {
       event.preventDefault()
       closeCommandPaletteForShortcut(context.commandPaletteOpen)
-      shortcutActionsRef.current.openSessionsDialog()
+      shortcutActionsRef.current.openAgentsDialog()
       return
     }
 
     if (key === "e") {
-      if (!context.sessionHasFile) return
+      if (!context.agentHasFile) return
       event.preventDefault()
       closeCommandPaletteForShortcut(context.commandPaletteOpen)
       shortcutActionsRef.current.openRenameDialog()
@@ -505,7 +502,7 @@ export function useAppShellShortcuts({
     if (key === "d") {
       event.preventDefault()
       closeCommandPaletteForShortcut(context.commandPaletteOpen)
-      shortcutActionsRef.current.openAddDirectoryDialog()
+      shortcutActionsRef.current.openAddProjectDialog()
       return
     }
 
@@ -517,7 +514,7 @@ export function useAppShellShortcuts({
     }
 
     if (key === "m") {
-      if (!context.sessionHasAvailableModels && !context.commandPaletteOpen) {
+      if (!context.agentHasAvailableModels && !context.commandPaletteOpen) {
         return
       }
       event.preventDefault()
@@ -564,18 +561,18 @@ export function useAppShellShortcuts({
       ) {
         return
       }
-      if (context.selectedSidebarSessions.length > 1) {
+      if (context.selectedSidebarAgents.length > 1) {
         event.preventDefault()
         closeCommandPaletteForShortcut(context.commandPaletteOpen)
         shortcutActionsRef.current.openDeleteDialog(
-          context.selectedSidebarSessions
+          context.selectedSidebarAgents
         )
         return
       }
-      if (!context.sessionHasFile) return
+      if (!context.agentHasFile) return
       event.preventDefault()
       closeCommandPaletteForShortcut(context.commandPaletteOpen)
-      shortcutActionsRef.current.openDeleteDialogForCurrentSession()
+      shortcutActionsRef.current.openDeleteDialogForCurrentAgent()
     }
   }
 
@@ -585,7 +582,7 @@ export function useAppShellShortcuts({
       callback: handleEscape,
       options: {
         meta: {
-          name: "Abort active session",
+          name: "Abort active agent",
           description: "Abort compaction or the streaming assistant response.",
         },
       },
@@ -607,7 +604,7 @@ export function useAppShellShortcuts({
       options: {
         meta: {
           name: "Move sidebar focus",
-          description: "Move keyboard focus through sidebar sessions.",
+          description: "Move keyboard focus through sidebar agents.",
         },
       },
     })),
@@ -616,9 +613,9 @@ export function useAppShellShortcuts({
       callback: handleSidebarBackspaceDelete,
       options: {
         meta: {
-          name: "Archive selected sidebar sessions",
+          name: "Archive selected sidebar agents",
           description:
-            "Open the archive dialog for multiple selected sidebar sessions.",
+            "Open the archive dialog for multiple selected sidebar agents.",
         },
       },
     },
@@ -652,14 +649,14 @@ export function useAppShellShortcuts({
     ).map(({ key, offset }) => ({
       hotkey: { key, shift: true, ...appModifierFlag },
       callback: (event: KeyboardEvent) => {
-        handleSidebarSessionSwitch(event, () => {
-          openAdjacentSidebarSession(offset)
+        handleSidebarAgentSwitch(event, () => {
+          openAdjacentSidebarAgent(offset)
         })
       },
       options: {
         meta: {
-          name: "Open previous or next session",
-          description: "Open the session above or below in the sidebar.",
+          name: "Open previous or next agent",
+          description: "Open the agent above or below in the sidebar.",
         },
       },
     })),
@@ -671,15 +668,15 @@ export function useAppShellShortcuts({
     ).map(({ key, offset }) => ({
       hotkey: { key, ...appModifierFlag },
       callback: (event: KeyboardEvent) => {
-        handleSidebarSessionSwitch(event, () => {
+        handleSidebarAgentSwitch(event, () => {
           openAdjacentSidebarGroup(offset)
         })
       },
       options: {
         meta: {
-          name: "Open previous or next directory",
+          name: "Open previous or next project",
           description:
-            "Open the first session of the directory above or below in the sidebar.",
+            "Open the first agent of the project above or below in the sidebar.",
         },
       },
     })),
@@ -687,14 +684,14 @@ export function useAppShellShortcuts({
       (key, index) => ({
         hotkey: { key, ...appModifierFlag },
         callback: (event: KeyboardEvent) => {
-          handleSidebarSessionSwitch(event, () => {
-            openSidebarSessionAt(index)
+          handleSidebarAgentSwitch(event, () => {
+            openSidebarAgentAt(index)
           })
         },
         options: {
           meta: {
-            name: "Open sidebar session by number",
-            description: "Open the Nth session in the sidebar.",
+            name: "Open sidebar agent by number",
+            description: "Open the Nth agent in the sidebar.",
           },
         },
       })

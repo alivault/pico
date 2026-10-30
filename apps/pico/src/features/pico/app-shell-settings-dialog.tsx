@@ -12,10 +12,10 @@ import {
 } from "@/features/pico/keyboard-shortcuts"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
-  setShowSessionPreviews,
-  useShowSessionPreviews,
+  setShowAgentPreviews,
+  useShowAgentPreviews,
 } from "@/features/pico/sidebar-display-settings"
-import type { DesktopNotificationPermission } from "@/features/pico/session-done-notifications"
+import type { DesktopNotificationPermission } from "@/features/pico/agent-done-notifications"
 import type {
   PiCacheRetention,
   PiPerformanceSettingsResponse,
@@ -380,10 +380,10 @@ type AppShellSettingsDialogProps = {
   onCenterMessagesChange: (centered: boolean) => void
   autoScrollEnabled: boolean
   onAutoScrollEnabledChange: (enabled: boolean) => void
-  sessionDoneSoundEnabled: boolean
-  onSessionDoneSoundEnabledChange: (enabled: boolean) => void
-  sessionDoneDesktopNotificationsEnabled: boolean
-  onSessionDoneDesktopNotificationsEnabledChange: (enabled: boolean) => void
+  agentDoneSoundEnabled: boolean
+  onAgentDoneSoundEnabledChange: (enabled: boolean) => void
+  agentDoneDesktopNotificationsEnabled: boolean
+  onAgentDoneDesktopNotificationsEnabledChange: (enabled: boolean) => void
   desktopNotificationPermission: DesktopNotificationPermission
   onLoginProviders: () => void
   onLogoutProviders: () => void
@@ -403,16 +403,16 @@ type SettingsCommandGroupsOptions = Pick<
   | "onCenterMessagesChange"
   | "autoScrollEnabled"
   | "onAutoScrollEnabledChange"
-  | "sessionDoneSoundEnabled"
-  | "onSessionDoneSoundEnabledChange"
-  | "sessionDoneDesktopNotificationsEnabled"
-  | "onSessionDoneDesktopNotificationsEnabledChange"
+  | "agentDoneSoundEnabled"
+  | "onAgentDoneSoundEnabledChange"
+  | "agentDoneDesktopNotificationsEnabled"
+  | "onAgentDoneDesktopNotificationsEnabledChange"
   | "desktopNotificationPermission"
   | "onLoginProviders"
   | "onLogoutProviders"
 > & {
   onThemeCommand: () => void
-  showSessionPreviews: boolean
+  showAgentPreviews: boolean
   piTransport: PiTransport
   piCacheRetention: PiCacheRetention
   onPiTransportChange: (transport: PiTransport) => void | Promise<void>
@@ -446,15 +446,15 @@ function getSettingsCommandGroups({
   onCenterMessagesChange,
   autoScrollEnabled,
   onAutoScrollEnabledChange,
-  sessionDoneSoundEnabled,
-  onSessionDoneSoundEnabledChange,
-  sessionDoneDesktopNotificationsEnabled,
-  onSessionDoneDesktopNotificationsEnabledChange,
+  agentDoneSoundEnabled,
+  onAgentDoneSoundEnabledChange,
+  agentDoneDesktopNotificationsEnabled,
+  onAgentDoneDesktopNotificationsEnabledChange,
   desktopNotificationPermission,
   onLoginProviders,
   onLogoutProviders,
   onThemeCommand,
-  showSessionPreviews,
+  showAgentPreviews,
   piTransport,
   piCacheRetention,
   onPiTransportChange,
@@ -549,14 +549,13 @@ function getSettingsCommandGroups({
       heading: "Sidebar",
       commands: [
         {
-          id: "sidebar-session-previews",
-          title: "Show session previews",
-          description:
-            "Show the last message under each session in the sidebar.",
-          valueLabel: formatToggleValue(showSessionPreviews),
-          toggled: showSessionPreviews,
-          keywords: ["sidebar", "session", "preview", "last message"],
-          onSelect: () => setShowSessionPreviews(!showSessionPreviews),
+          id: "sidebar-agent-previews",
+          title: "Show agent previews",
+          description: "Show the last message under each agent in the sidebar.",
+          valueLabel: formatToggleValue(showAgentPreviews),
+          toggled: showAgentPreviews,
+          keywords: ["sidebar", "agent", "preview", "last message"],
+          onSelect: () => setShowAgentPreviews(!showAgentPreviews),
         },
       ],
     },
@@ -581,7 +580,7 @@ function getSettingsCommandGroups({
           id: "pi-cache-retention",
           title: "Long prompt cache retention",
           description:
-            "Keep supported provider prompt caches longer for sessions with pauses between turns.",
+            "Keep supported provider prompt caches longer for agents with pauses between turns.",
           valueLabel: formatToggleValue(piCacheRetention === "long"),
           toggled: piCacheRetention === "long",
           keywords: ["pi", "prompt", "cache", "retention", "performance"],
@@ -599,7 +598,7 @@ function getSettingsCommandGroups({
           id: "agent-settings",
           title: "Agent settings",
           description:
-            "Push notifications, child sessions, worktrees, tool profiles, and MCP servers.",
+            "Push notifications, subagents, worktrees, tool profiles, and MCP servers.",
           valueLabel: "Open",
           keywords: [
             "agent",
@@ -617,7 +616,7 @@ function getSettingsCommandGroups({
           id: "machines",
           title: "Machines",
           description:
-            "Show the sessions of other computers over SSH, and manage them.",
+            "Show the agents of other computers over SSH, and manage them.",
           valueLabel: "Open",
           keywords: [
             "machines",
@@ -665,14 +664,14 @@ function getSettingsCommandGroups({
       ],
     },
     {
-      heading: "Session completion notifications",
+      heading: "Turn completion notifications",
       commands: [
         {
           id: "desktop-notifications",
           title: "Desktop notifications",
           description: desktopNotificationDescription,
-          valueLabel: formatToggleValue(sessionDoneDesktopNotificationsEnabled),
-          toggled: sessionDoneDesktopNotificationsEnabled,
+          valueLabel: formatToggleValue(agentDoneDesktopNotificationsEnabled),
+          toggled: agentDoneDesktopNotificationsEnabled,
           keywords: [
             "desktop",
             "browser",
@@ -681,20 +680,19 @@ function getSettingsCommandGroups({
             desktopNotificationPermission,
           ],
           onSelect: () =>
-            onSessionDoneDesktopNotificationsEnabledChange(
-              !sessionDoneDesktopNotificationsEnabled
+            onAgentDoneDesktopNotificationsEnabledChange(
+              !agentDoneDesktopNotificationsEnabled
             ),
         },
         {
           id: "completion-sound",
           title: "Completion sound",
           description:
-            "Play a short confirmation sound when a session finishes.",
-          valueLabel: formatToggleValue(sessionDoneSoundEnabled),
-          toggled: sessionDoneSoundEnabled,
+            "Play a short confirmation sound when an agent finishes its turn.",
+          valueLabel: formatToggleValue(agentDoneSoundEnabled),
+          toggled: agentDoneSoundEnabled,
           keywords: ["sound", "audio", "completion", "notifications"],
-          onSelect: () =>
-            onSessionDoneSoundEnabledChange(!sessionDoneSoundEnabled),
+          onSelect: () => onAgentDoneSoundEnabledChange(!agentDoneSoundEnabled),
         },
       ],
     },
@@ -951,10 +949,10 @@ function AppShellSettingsDialog({
   onCenterMessagesChange,
   autoScrollEnabled,
   onAutoScrollEnabledChange,
-  sessionDoneSoundEnabled,
-  onSessionDoneSoundEnabledChange,
-  sessionDoneDesktopNotificationsEnabled,
-  onSessionDoneDesktopNotificationsEnabledChange,
+  agentDoneSoundEnabled,
+  onAgentDoneSoundEnabledChange,
+  agentDoneDesktopNotificationsEnabled,
+  onAgentDoneDesktopNotificationsEnabledChange,
   desktopNotificationPermission,
   onLoginProviders,
   onLogoutProviders,
@@ -962,7 +960,7 @@ function AppShellSettingsDialog({
 }: AppShellSettingsDialogProps) {
   const machineId = useMachineId()
   const queryClient = useQueryClient()
-  const showSessionPreviews = useShowSessionPreviews()
+  const showAgentPreviews = useShowAgentPreviews()
   const performanceQuery = useQuery({
     queryKey: picoQueryKeys.piPerformance(viewerContextId),
     queryFn: () =>
@@ -1001,9 +999,9 @@ function AppShellSettingsDialog({
         picoQueryKeys.piPerformance(viewerContextId),
         response
       )
-      if (response.appliesToActiveSessionAfterRestart) {
+      if (response.appliesToActiveAgentAfterRestart) {
         toast.info("Pi performance setting saved", {
-          description: "The active session will use it after its next restart.",
+          description: "The active agent will use it after its next restart.",
         })
       }
     },
@@ -1092,14 +1090,14 @@ function AppShellSettingsDialog({
     onCenterMessagesChange,
     autoScrollEnabled,
     onAutoScrollEnabledChange,
-    sessionDoneSoundEnabled,
-    onSessionDoneSoundEnabledChange,
-    sessionDoneDesktopNotificationsEnabled,
-    onSessionDoneDesktopNotificationsEnabledChange,
+    agentDoneSoundEnabled,
+    onAgentDoneSoundEnabledChange,
+    agentDoneDesktopNotificationsEnabled,
+    onAgentDoneDesktopNotificationsEnabledChange,
     desktopNotificationPermission,
     onLoginProviders,
     onLogoutProviders,
-    showSessionPreviews,
+    showAgentPreviews,
     piTransport: performance?.transport ?? "auto",
     piCacheRetention: performance?.cacheRetention ?? "standard",
     onPiTransportChange: async (transport) => {

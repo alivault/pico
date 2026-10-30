@@ -18,8 +18,8 @@ export type OfflinePromptQueueItem = {
   id: string
   contextId: string
   createdAt: number
-  sessionId?: string
-  targetSessionKey?: string
+  agentId?: string
+  targetAgentKey?: string
   message: string
   images: Array<OfflinePromptImage>
   streamingBehavior?: StreamingBehavior
@@ -116,11 +116,10 @@ function normalizeItem(value: unknown): OfflinePromptQueueItem | null {
       Number.isFinite(rawItem.createdAt)
         ? rawItem.createdAt
         : Date.now(),
-    sessionId:
-      typeof rawItem.sessionId === "string" ? rawItem.sessionId : undefined,
-    targetSessionKey:
-      typeof rawItem.targetSessionKey === "string"
-        ? rawItem.targetSessionKey
+    agentId: typeof rawItem.agentId === "string" ? rawItem.agentId : undefined,
+    targetAgentKey:
+      typeof rawItem.targetAgentKey === "string"
+        ? rawItem.targetAgentKey
         : undefined,
     message: rawItem.message,
     images,

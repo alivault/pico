@@ -8,15 +8,15 @@ import { Batcher } from "@tanstack/pacer"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "@/lib/pico/toast"
 
-import type { SelectSessionNavigationOptions } from "@/features/pico/app-shell-types"
-import type { PromptImage, SessionState, StateSyncPayload } from "@/lib/pico"
+import type { SelectAgentNavigationOptions } from "@/features/pico/app-shell-types"
+import type { PromptImage, AgentState, StateSyncPayload } from "@/lib/pico"
 import type {
   ExtensionUiEvent,
   PicoServerEvent,
-  SessionDoneEvent,
-  SessionListEntry,
-  SessionStatusEvent,
-  SessionsEvent,
+  AgentDoneEvent,
+  AgentListEntry,
+  AgentStatusEvent,
+  AgentsEvent,
   SimpleOkResponse,
 } from "@/lib/pico/api"
 
@@ -27,7 +27,7 @@ import {
 } from "@/features/pico/app-shell-utils"
 import { serializeComposerDraft } from "@/features/pico/composer-utils"
 import { picoQueryKeys } from "@/features/pico/query-keys"
-import { hasPendingNewSessionAction } from "@/lib/pico/machine"
+import { hasPendingNewAgentAction } from "@/lib/pico/machine"
 import {
   batch,
   useSelector,
@@ -45,9 +45,9 @@ import { applyConversationDelta, sameContextUsage } from "@/lib/pico/sync"
 import {
   isConversationDeltaEvent,
   isGitChangedEvent,
-  isSessionDoneEvent,
-  isSessionStatusEvent,
-  isSessionsEvent,
+  isAgentDoneEvent,
+  isAgentStatusEvent,
+  isAgentsEvent,
   isStateSyncEvent,
   uiRequestExpectsResponse,
 } from "@/lib/pico/api"
@@ -69,7 +69,7 @@ type PendingComposerMessage = {
   streamingBehavior: "steer" | "followUp"
 }
 
-type SessionStateStore = PicoStore<SessionState>
+type AgentStateStore = PicoStore<AgentState>
 
 type SyncedWorkingState = {
   label: string
@@ -83,49 +83,45 @@ type GitInvalidationBatchItem = {
   scopes: Set<string>
 }
 
-type UseAppShellSessionSyncOptions = {
+type UseAppShellAgentSyncOptions = {
   viewerContextId: string
-  sessionId?: string
-  draftSessionLoadingOwnerKey: string | null
-  bootstrapSidebarDirectories: Array<string>
+  agentId?: string
+  draftAgentLoadingOwnerKey: string | null
+  bootstrapSidebarProjects: Array<string>
   hideToolBlocksRef: React.RefObject<boolean>
-  sessionStore: SessionStateStore
-  sessionStateRef: React.RefObject<SessionState>
+  agentStore: AgentStateStore
+  agentStateRef: React.RefObject<AgentState>
   composerTextRef: React.RefObject<string>
   composerSkillRef: React.RefObject<string | undefined>
   replaceComposerDraftRef: React.RefObject<
     (
       value: string,
-      target?: SessionState,
+      target?: AgentState,
       options?: {
         forceSync?: boolean
       }
     ) => void
   >
-  handleSelectSessionRef: React.RefObject<
-    (nextSessionId?: string, options?: SelectSessionNavigationOptions) => void
+  handleSelectAgentRef: React.RefObject<
+    (nextAgentId?: string, options?: SelectAgentNavigationOptions) => void
   >
-  pendingRouteSessionIdRef: React.RefObject<string | undefined>
-  pendingRouteSessionPathRef: React.RefObject<string | undefined>
-  setSessionState: React.Dispatch<React.SetStateAction<SessionState>>
-  setConversationItems: (items: SessionState["items"]) => void
+  pendingRouteAgentIdRef: React.RefObject<string | undefined>
+  pendingRouteAgentPathRef: React.RefObject<string | undefined>
+  setAgentState: React.Dispatch<React.SetStateAction<AgentState>>
+  setConversationItems: (items: AgentState["items"]) => void
   setWorkingState: (state: SyncedWorkingState | null) => void
   setCompactRunningState: (running: boolean) => void
-  setComposerContextUsage: (contextUsage: SessionState["contextUsage"]) => void
+  setComposerContextUsage: (contextUsage: AgentState["contextUsage"]) => void
   setComposerStreaming: (streaming: boolean) => void
-  setSessionsEvent: React.Dispatch<React.SetStateAction<SessionsEvent | null>>
-  setSessionDoneEvents: React.Dispatch<
-    React.SetStateAction<Array<SessionDoneEvent>>
+  setAgentsEvent: React.Dispatch<React.SetStateAction<AgentsEvent | null>>
+  setAgentDoneEvents: React.Dispatch<
+    React.SetStateAction<Array<AgentDoneEvent>>
   >
-  applySidebarSessionStatusRef: React.RefObject<
-    (status: SessionStatusEvent) => void
+  applySidebarAgentStatusRef: React.RefObject<
+    (status: AgentStatusEvent) => void
   >
-  bindOptimisticSidebarSessionRef: React.RefObject<
-    (session: {
-      cwd?: string
-      sessionId?: string
-      sessionPath?: string
-    }) => void
+  bindOptimisticSidebarAgentRef: React.RefObject<
+    (agent: { cwd?: string; agentId?: string; agentPath?: string }) => void
   >
   setComposerImages: React.Dispatch<React.SetStateAction<Array<PromptImage>>>
   setPendingMessages: React.Dispatch<
@@ -198,19 +194,17 @@ function normalizePendingMessages(
   }))
 }
 
-type AutoSessionNamingErrorPayload = Extract<
+type AutoAgentNamingErrorPayload = Extract<
   PicoServerEvent,
-  { type: "auto_session_naming_error" }
+  { type: "auto_agent_naming_error" }
 >
 
-function autoSessionNamingErrorDescription(
-  payload: AutoSessionNamingErrorPayload
-) {
+function autoAgentNamingErrorDescription(payload: AutoAgentNamingErrorPayload) {
   return (
     payload.refinementReason ||
     payload.heuristicReason ||
     payload.promptPreview ||
-    "The server could not generate a session name."
+    "The server could not generate an agent name."
   )
 }
 
@@ -265,9 +259,9 @@ function samePendingMessages(
   return true
 }
 
-function sameDirectoryStates(
-  left: NonNullable<SessionsEvent["directoryStates"]> = [],
-  right: NonNullable<SessionsEvent["directoryStates"]> = []
+function sameProjectStates(
+  left: NonNullable<AgentsEvent["projectStates"]> = [],
+  right: NonNullable<AgentsEvent["projectStates"]> = []
 ) {
   if (left.length !== right.length) return false
 
@@ -283,9 +277,9 @@ function sameDirectoryStates(
   return true
 }
 
-function sameSessionListEntries(
-  left: Array<SessionListEntry> = [],
-  right: Array<SessionListEntry> = []
+function sameAgentListEntries(
+  left: Array<AgentListEntry> = [],
+  right: Array<AgentListEntry> = []
 ) {
   if (left.length !== right.length) return false
 
@@ -326,24 +320,22 @@ function sameSessionListEntries(
   return true
 }
 
-function sameDirectoryIndexes(
-  left: SessionsEvent["directoryIndexes"],
-  right: SessionsEvent["directoryIndexes"]
+function sameProjectIndexes(
+  left: AgentsEvent["projectIndexes"],
+  right: AgentsEvent["projectIndexes"]
 ) {
   const leftEntries = Object.entries(left || {})
   const rightEntries = Object.entries(right || {})
 
   if (leftEntries.length !== rightEntries.length) return false
 
-  for (const [directory, leftSnapshot] of leftEntries) {
-    const rightSnapshot = right?.[directory]
+  for (const [project, leftSnapshot] of leftEntries) {
+    const rightSnapshot = right?.[project]
     if (!leftSnapshot || !rightSnapshot) return false
-    if (leftSnapshot.directory !== rightSnapshot.directory) return false
+    if (leftSnapshot.project !== rightSnapshot.project) return false
     if (leftSnapshot.totalCount !== rightSnapshot.totalCount) return false
     if (leftSnapshot.revision !== rightSnapshot.revision) return false
-    if (
-      !sameSessionListEntries(leftSnapshot.sessions, rightSnapshot.sessions)
-    ) {
+    if (!sameAgentListEntries(leftSnapshot.agents, rightSnapshot.agents)) {
       return false
     }
   }
@@ -351,29 +343,23 @@ function sameDirectoryIndexes(
   return true
 }
 
-function sameSessionsEvent(
-  left: SessionsEvent | null,
-  right: SessionsEvent | null
-) {
+function sameAgentsEvent(left: AgentsEvent | null, right: AgentsEvent | null) {
   if (left === right) return true
   if (!left || !right) return false
 
   return (
-    left.activeSessionId === right.activeSessionId &&
-    left.activeSessionKey === right.activeSessionKey &&
-    left.activeSessionPath === right.activeSessionPath &&
-    sameStringArray(left.directories || [], right.directories || []) &&
-    sameDirectoryStates(
-      left.directoryStates || [],
-      right.directoryStates || []
-    ) &&
-    sameDirectoryIndexes(left.directoryIndexes, right.directoryIndexes)
+    left.activeAgentId === right.activeAgentId &&
+    left.activeAgentKey === right.activeAgentKey &&
+    left.activeAgentPath === right.activeAgentPath &&
+    sameStringArray(left.projects || [], right.projects || []) &&
+    sameProjectStates(left.projectStates || [], right.projectStates || []) &&
+    sameProjectIndexes(left.projectIndexes, right.projectIndexes)
   )
 }
 
 function visibleAssistantBlockKey(
   block: Extract<
-    SessionState["items"][number],
+    AgentState["items"][number],
     { kind: "assistant" }
   >["blocks"][number],
   options: { hideThinking: boolean; hideToolBlocks: boolean }
@@ -400,12 +386,12 @@ function visibleAssistantBlockKey(
   }
 }
 
-function visibleConversationItemKey(item: SessionState["items"][number]) {
+function visibleConversationItemKey(item: AgentState["items"][number]) {
   return item.renderKey || item.itemKey || ""
 }
 
 function visibleConversationSignature(
-  items: SessionState["items"],
+  items: AgentState["items"],
   options: { hideThinking: boolean; hideToolBlocks: boolean }
 ) {
   const parts: Array<string> = []
@@ -457,8 +443,8 @@ function visibleConversationSignature(
 }
 
 function sameVisibleConversation(
-  left: SessionState["items"],
-  right: SessionState["items"],
+  left: AgentState["items"],
+  right: AgentState["items"],
   options: { hideThinking: boolean; hideToolBlocks: boolean }
 ) {
   if (left === right) return true
@@ -469,10 +455,7 @@ function sameVisibleConversation(
   )
 }
 
-function sameSessionStateExceptConversation(
-  left: SessionState,
-  right: SessionState
-) {
+function sameAgentStateExceptConversation(left: AgentState, right: AgentState) {
   return (
     left.connected === right.connected &&
     left.replaying === right.replaying &&
@@ -481,13 +464,13 @@ function sameSessionStateExceptConversation(
     left.draft === right.draft &&
     left.historyOffset === right.historyOffset &&
     left.historyTotalCount === right.historyTotalCount &&
-    left.sessionId === right.sessionId &&
-    left.sessionKey === right.sessionKey &&
-    left.sessionName === right.sessionName &&
+    left.agentId === right.agentId &&
+    left.agentKey === right.agentKey &&
+    left.agentName === right.agentName &&
     left.firstMessage === right.firstMessage &&
-    left.sessionFile === right.sessionFile &&
+    left.agentFile === right.agentFile &&
     left.cwd === right.cwd &&
-    left.directory === right.directory &&
+    left.project === right.project &&
     left.modified === right.modified &&
     left.model === right.model &&
     left.thinkingLevel === right.thinkingLevel &&
@@ -500,8 +483,8 @@ function sameSessionStateExceptConversation(
 }
 
 function samePublishableUiState(
-  left: SessionState["uiState"],
-  right: SessionState["uiState"]
+  left: AgentState["uiState"],
+  right: AgentState["uiState"]
 ) {
   return (
     left.statuses === right.statuses &&
@@ -510,11 +493,11 @@ function samePublishableUiState(
   )
 }
 
-function shouldPublishSessionState(previous: SessionState, next: SessionState) {
+function shouldPublishAgentState(previous: AgentState, next: AgentState) {
   if (previous === next) return false
 
   return (
-    !sameSessionStateExceptConversation(previous, next) ||
+    !sameAgentStateExceptConversation(previous, next) ||
     !samePublishableUiState(previous.uiState, next.uiState) ||
     (previous.items.length === 0) !== (next.items.length === 0)
   )
@@ -523,10 +506,9 @@ function shouldPublishSessionState(previous: SessionState, next: SessionState) {
 function stateSyncPayloadDraftKey(payload: StateSyncPayload) {
   return promptDraftKey({
     cwd: typeof payload.cwd === "string" ? payload.cwd : undefined,
-    sessionFile:
-      typeof payload.sessionFile === "string" ? payload.sessionFile : undefined,
-    sessionId:
-      typeof payload.sessionId === "string" ? payload.sessionId : undefined,
+    agentFile:
+      typeof payload.agentFile === "string" ? payload.agentFile : undefined,
+    agentId: typeof payload.agentId === "string" ? payload.agentId : undefined,
   })
 }
 
@@ -541,7 +523,7 @@ function stateSyncPayloadConfirmsPendingDraft(
 
 function stateSyncPayloadConfirmsOptimisticDraft(
   payload: StateSyncPayload,
-  previousState: SessionState
+  previousState: AgentState
 ) {
   if (payload.draft !== true) return false
 
@@ -554,16 +536,14 @@ function stateSyncPayloadConfirmsOptimisticDraft(
 function shouldIgnoreOptimisticDraftStateSync(options: {
   ownerKey: string | null
   payload: StateSyncPayload
-  previousState: SessionState
+  previousState: AgentState
 }) {
-  const previousSessionKey = options.previousState.sessionKey || ""
-  const payloadSessionKey =
-    typeof options.payload.sessionKey === "string"
-      ? options.payload.sessionKey
-      : ""
+  const previousAgentKey = options.previousState.agentKey || ""
+  const payloadAgentKey =
+    typeof options.payload.agentKey === "string" ? options.payload.agentKey : ""
 
-  if (!previousSessionKey.startsWith("optimistic:")) return false
-  if (!payloadSessionKey || payloadSessionKey === previousSessionKey) {
+  if (!previousAgentKey.startsWith("optimistic:")) return false
+  if (!payloadAgentKey || payloadAgentKey === previousAgentKey) {
     return false
   }
 
@@ -580,43 +560,41 @@ function shouldIgnoreOptimisticDraftStateSync(options: {
   return true
 }
 
-export function useAppShellSessionSync({
+export function useAppShellAgentSync({
   viewerContextId,
-  sessionId,
-  draftSessionLoadingOwnerKey,
-  bootstrapSidebarDirectories,
+  agentId,
+  draftAgentLoadingOwnerKey,
+  bootstrapSidebarProjects,
   hideToolBlocksRef,
-  sessionStore,
-  sessionStateRef,
+  agentStore,
+  agentStateRef,
   composerTextRef,
   composerSkillRef,
   replaceComposerDraftRef,
-  handleSelectSessionRef,
-  pendingRouteSessionIdRef,
-  pendingRouteSessionPathRef,
-  setSessionState,
+  handleSelectAgentRef,
+  pendingRouteAgentIdRef,
+  pendingRouteAgentPathRef,
+  setAgentState,
   setConversationItems,
   setWorkingState,
   setCompactRunningState,
   setComposerContextUsage,
   setComposerStreaming,
-  setSessionsEvent,
-  setSessionDoneEvents,
-  applySidebarSessionStatusRef,
-  bindOptimisticSidebarSessionRef,
+  setAgentsEvent,
+  setAgentDoneEvents,
+  applySidebarAgentStatusRef,
+  bindOptimisticSidebarAgentRef,
   setComposerImages,
   setPendingMessages,
   pendingUiRequestHandlerRef,
   dismissUiRequestRef,
   lastSyncedEditorTextRef,
-}: UseAppShellSessionSyncOptions) {
+}: UseAppShellAgentSyncOptions) {
   const machineId = useMachineId()
   const queryClient = useQueryClient()
-  const initialEventsSessionIdRef = React.useRef(sessionId)
-  const currentSessionIdRef = React.useRef(sessionId)
-  const draftSessionLoadingOwnerKeyRef = React.useRef(
-    draftSessionLoadingOwnerKey
-  )
+  const initialEventsAgentIdRef = React.useRef(agentId)
+  const currentAgentIdRef = React.useRef(agentId)
+  const draftAgentLoadingOwnerKeyRef = React.useRef(draftAgentLoadingOwnerKey)
   const currentSourceRef = React.useRef<EventSource | null>(null)
   const eventsLastIdRef = React.useRef<string | undefined>(undefined)
   const hasReceivedStateSyncRef = React.useRef(false)
@@ -626,12 +604,12 @@ export function useAppShellSessionSync({
   const [eventsReconnectNonce, setEventsReconnectNonce] = React.useState(0)
 
   React.useEffect(() => {
-    currentSessionIdRef.current = sessionId
-  }, [sessionId])
+    currentAgentIdRef.current = agentId
+  }, [agentId])
 
   React.useEffect(() => {
-    draftSessionLoadingOwnerKeyRef.current = draftSessionLoadingOwnerKey
-  }, [draftSessionLoadingOwnerKey])
+    draftAgentLoadingOwnerKeyRef.current = draftAgentLoadingOwnerKey
+  }, [draftAgentLoadingOwnerKey])
 
   React.useEffect(() => {
     eventsLastIdRef.current = normalizeEventSourceLastId(
@@ -641,52 +619,47 @@ export function useAppShellSessionSync({
 
   React.useEffect(() => {
     if (currentSourceRef.current) return
-    initialEventsSessionIdRef.current = sessionId
-  }, [sessionId])
+    initialEventsAgentIdRef.current = agentId
+  }, [agentId])
 
-  const syncedSessionId = useSelector(
-    sessionStore,
-    (sessionState) => sessionState.sessionId
+  const syncedAgentId = useSelector(
+    agentStore,
+    (agentState) => agentState.agentId
   )
   const latestActivationRevisionRef = React.useRef(0)
-  const sessionSelectNonceRef = React.useRef(Date.now() * 1000)
-  const observedRouteSessionIdRef = React.useRef<string | undefined>(undefined)
-  const syncedSessionDraft = useSelector(
-    sessionStore,
-    (sessionState) => sessionState.draft
+  const agentSelectNonceRef = React.useRef(Date.now() * 1000)
+  const observedRouteAgentIdRef = React.useRef<string | undefined>(undefined)
+  const syncedAgentDraft = useSelector(
+    agentStore,
+    (agentState) => agentState.draft
   )
 
   React.useEffect(() => {
-    const previousRouteSessionId = observedRouteSessionIdRef.current
-    const routeSessionChanged = previousRouteSessionId !== sessionId
-    observedRouteSessionIdRef.current = sessionId
+    const previousRouteAgentId = observedRouteAgentIdRef.current
+    const routeAgentChanged = previousRouteAgentId !== agentId
+    observedRouteAgentIdRef.current = agentId
 
-    if (!sessionId) {
-      pendingRouteSessionIdRef.current = undefined
-      pendingRouteSessionPathRef.current = undefined
+    if (!agentId) {
+      pendingRouteAgentIdRef.current = undefined
+      pendingRouteAgentPathRef.current = undefined
       return
     }
 
-    if (sessionId === syncedSessionId) {
-      if (pendingRouteSessionIdRef.current === sessionId) {
-        pendingRouteSessionIdRef.current = undefined
-        pendingRouteSessionPathRef.current = undefined
+    if (agentId === syncedAgentId) {
+      if (pendingRouteAgentIdRef.current === agentId) {
+        pendingRouteAgentIdRef.current = undefined
+        pendingRouteAgentPathRef.current = undefined
       }
       return
     }
 
-    if (!routeSessionChanged) return
+    if (!routeAgentChanged) return
 
-    if (pendingRouteSessionIdRef.current !== sessionId) {
-      pendingRouteSessionPathRef.current = undefined
+    if (pendingRouteAgentIdRef.current !== agentId) {
+      pendingRouteAgentPathRef.current = undefined
     }
-    pendingRouteSessionIdRef.current = sessionId
-  }, [
-    pendingRouteSessionIdRef,
-    pendingRouteSessionPathRef,
-    sessionId,
-    syncedSessionId,
-  ])
+    pendingRouteAgentIdRef.current = agentId
+  }, [pendingRouteAgentIdRef, pendingRouteAgentPathRef, agentId, syncedAgentId])
 
   React.useEffect(() => {
     if (!viewerContextId) return
@@ -715,7 +688,7 @@ export function useAppShellSessionSync({
       const shouldReconnectEvents =
         force || !source || source.readyState !== EventSource.OPEN
       if (shouldReconnectEvents) {
-        initialEventsSessionIdRef.current = currentSessionIdRef.current
+        initialEventsAgentIdRef.current = currentAgentIdRef.current
         setEventsReconnectNonce((nonce) => nonce + 1)
       }
       void queryClient
@@ -767,7 +740,7 @@ export function useAppShellSessionSync({
     return onServerReconnect(() => {
       const source = currentSourceRef.current
       if (!source || source.readyState !== EventSource.OPEN) {
-        initialEventsSessionIdRef.current = currentSessionIdRef.current
+        initialEventsAgentIdRef.current = currentAgentIdRef.current
         setEventsReconnectNonce((nonce) => nonce + 1)
       }
       void queryClient
@@ -782,28 +755,28 @@ export function useAppShellSessionSync({
       markServerOnline()
       // Events may be lost while the stream was closed.
       refreshSidebarState(machineId)
-      const currentState = sessionStateRef.current
+      const currentState = agentStateRef.current
       if (currentState.connected) return
       const nextState = { ...currentState, connected: true }
-      sessionStateRef.current = nextState
+      agentStateRef.current = nextState
       setConversationItems(nextState.items)
-      setSessionState(nextState)
+      setAgentState(nextState)
     },
-    [sessionStateRef, setConversationItems, setSessionState]
+    [agentStateRef, setConversationItems, setAgentState]
   )
 
   const handleEventSourceError = React.useCallback(
     (source: EventSource) => {
       if (currentSourceRef.current !== source) return
       checkServerConnection()
-      const currentState = sessionStateRef.current
+      const currentState = agentStateRef.current
       if (!currentState.connected) return
       const nextState = { ...currentState, connected: false }
-      sessionStateRef.current = nextState
+      agentStateRef.current = nextState
       setConversationItems(nextState.items)
-      setSessionState(nextState)
+      setAgentState(nextState)
     },
-    [sessionStateRef, setConversationItems, setSessionState]
+    [agentStateRef, setConversationItems, setAgentState]
   )
 
   const handleEventSourceMessage = React.useCallback(
@@ -821,10 +794,10 @@ export function useAppShellSessionSync({
       const payload = JSON.parse(event.data) as PicoServerEvent
 
       if (isConversationDeltaEvent(payload)) {
-        const previousState = sessionStateRef.current
+        const previousState = agentStateRef.current
         if (
-          previousState.sessionId &&
-          previousState.sessionId !== payload.sessionId
+          previousState.agentId &&
+          previousState.agentId !== payload.agentId
         ) {
           return
         }
@@ -836,15 +809,15 @@ export function useAppShellSessionSync({
           replaying: false,
           streaming: true,
           items,
-        } satisfies SessionState
+        } satisfies AgentState
         batch(() => {
-          sessionStateRef.current = nextState
+          agentStateRef.current = nextState
           setConversationItems(items)
           if (!previousState.streaming) {
             setComposerStreaming(true)
             setWorkingState({ label: "Working…", cancelable: false })
           }
-          setSessionState(nextState)
+          setAgentState(nextState)
         })
         return
       }
@@ -865,10 +838,10 @@ export function useAppShellSessionSync({
           hasReceivedStateSyncRef.current = true
           setHasReceivedStateSync(true)
         }
-        const previousState = sessionStateRef.current
+        const previousState = agentStateRef.current
         if (
           shouldIgnoreOptimisticDraftStateSync({
-            ownerKey: draftSessionLoadingOwnerKeyRef.current,
+            ownerKey: draftAgentLoadingOwnerKeyRef.current,
             payload,
             previousState,
           })
@@ -889,58 +862,58 @@ export function useAppShellSessionSync({
 
         const previousEditorText = previousState.uiState.editorText || ""
         const nextState = updateStateFromSync(previousState, payload)
-        const sessionChanged =
+        const agentChanged =
           promptDraftKey(nextState) !== promptDraftKey(previousState)
-        const currentRouteSessionId = currentSessionIdRef.current
-        const currentDraftOwnerKey = draftSessionLoadingOwnerKeyRef.current
+        const currentRouteAgentId = currentAgentIdRef.current
+        const currentDraftOwnerKey = draftAgentLoadingOwnerKeyRef.current
         const confirmedDraft =
-          nextState.draft && !nextState.sessionKey?.startsWith("optimistic:")
+          nextState.draft && !nextState.agentKey?.startsWith("optimistic:")
         const previousWasOptimisticDraft =
           previousState.draft &&
-          previousState.sessionKey?.startsWith("optimistic:")
+          previousState.agentKey?.startsWith("optimistic:")
         const draftMatchesPendingOwner = promptDraftKeyMatchesOwner(
           promptDraftKey(nextState),
           currentDraftOwnerKey
         )
         const shouldClearDraftRoute = Boolean(
-          currentRouteSessionId &&
-          !pendingRouteSessionIdRef.current &&
+          currentRouteAgentId &&
+          !pendingRouteAgentIdRef.current &&
           confirmedDraft &&
           (draftMatchesPendingOwner || previousWasOptimisticDraft)
         )
         const preserveLocalPrompt =
-          !sessionChanged && localPromptText !== previousEditorText
+          !agentChanged && localPromptText !== previousEditorText
         const nextPromptText = preserveLocalPrompt
           ? localPromptText
           : (readStoredPromptDraft(machineId, nextState) ??
             nextState.uiState.editorText ??
             "")
         // Sent one time with the editor text, for example after a fork at a
-        // user message. Not kept in the session state.
+        // user message. Not kept in the agent state.
         const editorImages = payload.uiState?.editorImages
           ?.map(normalizePromptImage)
           .filter((image) => image !== null)
 
         batch(() => {
-          sessionStateRef.current = nextState
+          agentStateRef.current = nextState
           if (previousState.contextUsage !== nextState.contextUsage) {
             setComposerContextUsage(nextState.contextUsage)
           }
-          const activeSessionChanged =
-            previousState.sessionKey !== nextState.sessionKey ||
-            previousState.sessionId !== nextState.sessionId ||
-            previousState.sessionFile !== nextState.sessionFile
+          const activeAgentChanged =
+            previousState.agentKey !== nextState.agentKey ||
+            previousState.agentId !== nextState.agentId ||
+            previousState.agentFile !== nextState.agentFile
           if (previousState.streaming !== nextState.streaming) {
             setComposerStreaming(nextState.streaming)
           }
           if (
-            activeSessionChanged ||
+            activeAgentChanged ||
             previousState.compacting !== nextState.compacting
           ) {
             setCompactRunningState(nextState.compacting)
           }
           if (
-            activeSessionChanged ||
+            activeAgentChanged ||
             previousState.streaming ||
             nextState.streaming ||
             previousState.compacting ||
@@ -954,7 +927,7 @@ export function useAppShellSessionSync({
                   : null
             )
           }
-          const forceConversationSync = activeSessionChanged
+          const forceConversationSync = activeAgentChanged
           if (
             forceConversationSync ||
             !sameVisibleConversation(previousState.items, nextState.items, {
@@ -964,61 +937,61 @@ export function useAppShellSessionSync({
           ) {
             setConversationItems(nextState.items)
           }
-          if (shouldPublishSessionState(previousState, nextState)) {
-            setSessionState(nextState)
+          if (shouldPublishAgentState(previousState, nextState)) {
+            setAgentState(nextState)
           }
 
           if (
-            previousState.sessionKey !== nextState.sessionKey ||
-            previousState.sessionId !== nextState.sessionId ||
-            previousState.sessionFile !== nextState.sessionFile ||
+            previousState.agentKey !== nextState.agentKey ||
+            previousState.agentId !== nextState.agentId ||
+            previousState.agentFile !== nextState.agentFile ||
             previousState.streaming !== nextState.streaming
           ) {
-            applySidebarSessionStatusRef.current({
-              type: "session_status",
-              sessionKey: nextState.sessionKey,
-              sessionId: nextState.sessionId,
-              sessionPath: nextState.sessionFile,
+            applySidebarAgentStatusRef.current({
+              type: "agent_status",
+              agentKey: nextState.agentKey,
+              agentId: nextState.agentId,
+              agentPath: nextState.agentFile,
               streaming: nextState.streaming,
               unread: false,
             })
           }
 
-          // The draft became a real session. Move the sidebar placeholder
-          // to the new session, so it does not stay next to the real entry.
-          if (previousState.draft && !nextState.draft && nextState.sessionId) {
-            bindOptimisticSidebarSessionRef.current({
+          // The draft became a real agent. Move the sidebar placeholder
+          // to the new agent, so it does not stay next to the real entry.
+          if (previousState.draft && !nextState.draft && nextState.agentId) {
+            bindOptimisticSidebarAgentRef.current({
               cwd: nextState.cwd,
-              sessionId: nextState.sessionId,
-              sessionPath: nextState.sessionFile,
+              agentId: nextState.agentId,
+              agentPath: nextState.agentFile,
             })
           }
 
-          if (sessionChanged) {
-            setSessionsEvent((current) => {
+          if (agentChanged) {
+            setAgentsEvent((current) => {
               if (!current) return current
-              const nextSessionsEvent = {
+              const nextAgentsEvent = {
                 ...current,
-                activeSessionId: nextState.sessionId,
-                activeSessionKey: nextState.sessionKey,
-                activeSessionPath: nextState.sessionFile,
+                activeAgentId: nextState.agentId,
+                activeAgentKey: nextState.agentKey,
+                activeAgentPath: nextState.agentFile,
               }
-              return sameSessionsEvent(current, nextSessionsEvent)
+              return sameAgentsEvent(current, nextAgentsEvent)
                 ? current
-                : nextSessionsEvent
+                : nextAgentsEvent
             })
           }
 
           if (editorImages && !preserveLocalPrompt) {
             setComposerImages(editorImages)
-          } else if (sessionChanged) {
+          } else if (agentChanged) {
             setComposerImages((current) =>
               current.length === 0 ? current : []
             )
           }
 
           if (shouldClearDraftRoute) {
-            handleSelectSessionRef.current(undefined, { replace: true })
+            handleSelectAgentRef.current(undefined, { replace: true })
           }
           if (!preserveLocalPrompt) {
             replaceComposerDraftRef.current(nextPromptText, nextState)
@@ -1036,22 +1009,22 @@ export function useAppShellSessionSync({
         return
       }
 
-      if (isSessionsEvent(payload)) {
-        setSessionsEvent((current) =>
-          sameSessionsEvent(current, payload) ? current : payload
+      if (isAgentsEvent(payload)) {
+        setAgentsEvent((current) =>
+          sameAgentsEvent(current, payload) ? current : payload
         )
         return
       }
 
-      if (isSessionStatusEvent(payload)) {
-        applySidebarSessionStatusRef.current(payload)
+      if (isAgentStatusEvent(payload)) {
+        applySidebarAgentStatusRef.current(payload)
         return
       }
 
-      if (isSessionDoneEvent(payload)) {
-        // The read state is global. The server sends a session_status with
-        // unread true before this event, unless an open tab shows the session.
-        setSessionDoneEvents((current) =>
+      if (isAgentDoneEvent(payload)) {
+        // The read state is global. The server sends an agent_status with
+        // unread true before this event, unless an open tab shows the agent.
+        setAgentDoneEvents((current) =>
           current.some((entry) => entry.id === payload.id)
             ? current
             : [...current, payload]
@@ -1075,20 +1048,20 @@ export function useAppShellSessionSync({
         return
       }
 
-      if (payload.type === "session_extensions") {
-        if (typeof payload.sessionId === "string") {
-          emitPicoEvent("pico:session-extensions", {
-            sessionId: payload.sessionId,
+      if (payload.type === "agent_extensions") {
+        if (typeof payload.agentId === "string") {
+          emitPicoEvent("pico:agent-extensions", {
+            agentId: payload.agentId,
             ...(typeof payload.kind === "string" ? { kind: payload.kind } : {}),
           })
         }
         return
       }
 
-      if (payload.type === "auto_session_naming_error") {
-        console.warn("[pico] auto session naming failed", payload)
-        toast.warning("Could not name session", {
-          description: autoSessionNamingErrorDescription(payload),
+      if (payload.type === "auto_agent_naming_error") {
+        console.warn("[pico] auto agent naming failed", payload)
+        toast.warning("Could not name agent", {
+          description: autoAgentNamingErrorDescription(payload),
         })
         return
       }
@@ -1132,27 +1105,27 @@ export function useAppShellSessionSync({
       }
     },
     [
-      applySidebarSessionStatusRef,
-      bindOptimisticSidebarSessionRef,
+      applySidebarAgentStatusRef,
+      bindOptimisticSidebarAgentRef,
       composerSkillRef,
       composerTextRef,
-      handleSelectSessionRef,
+      handleSelectAgentRef,
       hideToolBlocksRef,
       lastSyncedEditorTextRef,
-      pendingRouteSessionIdRef,
+      pendingRouteAgentIdRef,
       pendingUiRequestHandlerRef,
       dismissUiRequestRef,
       replaceComposerDraftRef,
-      sessionStateRef,
+      agentStateRef,
       setComposerContextUsage,
       setComposerImages,
       setComposerStreaming,
       setCompactRunningState,
       setConversationItems,
       setPendingMessages,
-      setSessionDoneEvents,
-      setSessionState,
-      setSessionsEvent,
+      setAgentDoneEvents,
+      setAgentState,
+      setAgentsEvent,
       setWorkingState,
       viewerContextId,
     ]
@@ -1231,10 +1204,10 @@ export function useAppShellSessionSync({
       buildRequestUrl("/events", {
         machineId,
         contextId: viewerContextId,
-        sessionId: initialEventsSessionIdRef.current,
+        agentId: initialEventsAgentIdRef.current,
         searchParams: {
           lastEventId: eventsLastIdRef.current,
-          sidebarDirectory: bootstrapSidebarDirectories,
+          sidebarProject: bootstrapSidebarProjects,
         },
       })
     )
@@ -1262,7 +1235,7 @@ export function useAppShellSessionSync({
       gitInvalidationBatcher.clear()
     }
   }, [
-    bootstrapSidebarDirectories,
+    bootstrapSidebarProjects,
     eventsReconnectNonce,
     handleEventSourceError,
     handleEventSourceMessage,
@@ -1272,28 +1245,28 @@ export function useAppShellSessionSync({
   ])
 
   React.useEffect(() => {
-    if (!viewerContextId || !sessionId) return
-    if (draftSessionLoadingOwnerKey) return
+    if (!viewerContextId || !agentId) return
+    if (draftAgentLoadingOwnerKey) return
     if (!hasReceivedStateSync) return
-    if (sessionId === syncedSessionId) return
-    if (pendingRouteSessionIdRef.current !== sessionId) return
+    if (agentId === syncedAgentId) return
+    if (pendingRouteAgentIdRef.current !== agentId) return
 
     const abortController = new AbortController()
-    const sessionPath = pendingRouteSessionPathRef.current
+    const agentPath = pendingRouteAgentPathRef.current
     const selectionNonce = Math.max(
-      sessionSelectNonceRef.current + 1,
+      agentSelectNonceRef.current + 1,
       Date.now() * 1000
     )
-    sessionSelectNonceRef.current = selectionNonce
+    agentSelectNonceRef.current = selectionNonce
 
     void fetchJson<SimpleOkResponse>(
-      buildRequestUrl("/api/session/select", {
+      buildRequestUrl("/api/agent/select", {
         machineId,
         contextId: viewerContextId,
-        sessionId,
+        agentId,
         searchParams: {
           selectionNonce,
-          sessionPath,
+          agentPath,
         },
       }),
       {
@@ -1303,7 +1276,7 @@ export function useAppShellSessionSync({
     ).catch((error) => {
       if (abortController.signal.aborted) return
       toast.error(
-        error instanceof Error ? error.message : "Failed to select session"
+        error instanceof Error ? error.message : "Failed to select agent"
       )
     })
 
@@ -1311,42 +1284,42 @@ export function useAppShellSessionSync({
       abortController.abort()
     }
   }, [
-    draftSessionLoadingOwnerKey,
+    draftAgentLoadingOwnerKey,
     hasReceivedStateSync,
-    pendingRouteSessionIdRef,
-    pendingRouteSessionPathRef,
-    syncedSessionId,
+    pendingRouteAgentIdRef,
+    pendingRouteAgentPathRef,
+    syncedAgentId,
     viewerContextId,
-    sessionId,
+    agentId,
   ])
 
   React.useEffect(() => {
-    if (syncedSessionDraft || !syncedSessionId) return
+    if (syncedAgentDraft || !syncedAgentId) return
 
-    const pendingRouteSessionId = pendingRouteSessionIdRef.current
-    if (pendingRouteSessionId) {
-      if (syncedSessionId === pendingRouteSessionId) {
-        pendingRouteSessionIdRef.current = undefined
-        pendingRouteSessionPathRef.current = undefined
+    const pendingRouteAgentId = pendingRouteAgentIdRef.current
+    if (pendingRouteAgentId) {
+      if (syncedAgentId === pendingRouteAgentId) {
+        pendingRouteAgentIdRef.current = undefined
+        pendingRouteAgentPathRef.current = undefined
       }
       return
     }
 
-    if (syncedSessionId !== sessionId) {
-      // The sidebar opened this machine for a new session. The shell still
-      // has the session that it showed before, and it makes the new session
+    if (syncedAgentId !== agentId) {
+      // The sidebar opened this machine for a new agent. The shell still
+      // has the agent that it showed before, and it makes the new agent
       // in an effect after this one. Do not take the route back to the old
-      // session.
-      if (hasPendingNewSessionAction(machineId)) return
-      handleSelectSessionRef.current(syncedSessionId, { replace: true })
+      // agent.
+      if (hasPendingNewAgentAction(machineId)) return
+      handleSelectAgentRef.current(syncedAgentId, { replace: true })
     }
   }, [
-    handleSelectSessionRef,
+    handleSelectAgentRef,
     machineId,
-    pendingRouteSessionIdRef,
-    pendingRouteSessionPathRef,
-    sessionId,
-    syncedSessionDraft,
-    syncedSessionId,
+    pendingRouteAgentIdRef,
+    pendingRouteAgentPathRef,
+    agentId,
+    syncedAgentDraft,
+    syncedAgentId,
   ])
 }

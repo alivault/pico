@@ -26,9 +26,9 @@ import {
 } from "@/features/pico/agent/agent-panel"
 import { emitPicoEvent } from "@/features/pico/agent/events"
 import {
-  postSessionJson,
-  useSessionExtensions,
-} from "@/features/pico/agent/session-extensions"
+  postAgentJson,
+  useAgentExtensions,
+} from "@/features/pico/agent/agent-extensions"
 import { errorText, IconAction } from "@/features/pico/agent/shared"
 import {
   registerToolRenderer,
@@ -191,23 +191,23 @@ function todoItemsFrom(state: Record<string, unknown>) {
   return todo?.items ?? []
 }
 
-function useTodoChange(viewerContextId: string, sessionId: string) {
+function useTodoChange(viewerContextId: string, agentId: string) {
   const machineId = useMachineId()
   return (body: Record<string, unknown>) => {
-    void postSessionJson(
+    void postAgentJson(
       machineId,
       viewerContextId,
-      sessionId,
-      "/api/session/todo",
+      agentId,
+      "/api/agent/todo",
       body
     ).catch((error: unknown) => toast.error(errorText(error)))
   }
 }
 
-function TodoSection({ sessionId, state, viewerContextId }: AgentSectionProps) {
+function TodoSection({ agentId, state, viewerContextId }: AgentSectionProps) {
   const items = todoItemsFrom(state)
   const [text, setText] = React.useState("")
-  const change = useTodoChange(viewerContextId, sessionId)
+  const change = useTodoChange(viewerContextId, agentId)
   return (
     <div className="space-y-0.5">
       <TodoList items={items} onChange={change} />
@@ -236,8 +236,8 @@ function TodoSection({ sessionId, state, viewerContextId }: AgentSectionProps) {
   )
 }
 
-function TodoActions({ sessionId, state, viewerContextId }: AgentSectionProps) {
-  const change = useTodoChange(viewerContextId, sessionId)
+function TodoActions({ agentId, state, viewerContextId }: AgentSectionProps) {
+  const change = useTodoChange(viewerContextId, agentId)
   const done = todoItemsFrom(state).filter(
     (item) => item.status === "done"
   ).length
@@ -253,13 +253,13 @@ function TodoActions({ sessionId, state, viewerContextId }: AgentSectionProps) {
 
 /** A compact progress line above the composer while the plan has open items. */
 export function TodoProgressChip({
-  sessionId,
+  agentId,
   viewerContextId,
 }: {
-  sessionId?: string
+  agentId?: string
   viewerContextId: string
 }) {
-  const query = useSessionExtensions(viewerContextId, sessionId)
+  const query = useAgentExtensions(viewerContextId, agentId)
   const items = query.data ? todoItemsFrom(query.data) : []
   if (items.length === 0) return null
   const done = items.filter((item) => item.status === "done").length

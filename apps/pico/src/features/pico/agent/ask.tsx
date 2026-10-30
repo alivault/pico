@@ -23,7 +23,7 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { postSessionJson } from "@/features/pico/agent/session-extensions"
+import { postAgentJson } from "@/features/pico/agent/agent-extensions"
 import {
   getClipboardImageFiles,
   readFileAsPromptImage,
@@ -440,7 +440,7 @@ export function QuestionForm({
   )
 }
 
-function useAnswer(viewerContextId: string, sessionId: string | undefined) {
+function useAnswer(viewerContextId: string, agentId: string | undefined) {
   const machineId = useMachineId()
   const [sending, setSending] = React.useState(false)
   const answer = (
@@ -449,11 +449,11 @@ function useAnswer(viewerContextId: string, sessionId: string | undefined) {
     images: Array<PromptImage>
   ) => {
     setSending(true)
-    void postSessionJson(
+    void postAgentJson(
       machineId,
       viewerContextId,
-      sessionId,
-      "/api/session/answer",
+      agentId,
+      "/api/agent/answer",
       {
         questionId,
         value,
@@ -469,17 +469,17 @@ function useAnswer(viewerContextId: string, sessionId: string | undefined) {
 }
 
 function QuestionCard({ block }: ToolRendererProps) {
-  const { viewerContextId, sessionId } = useToolRenderContext()
+  const { viewerContextId, agentId } = useToolRenderContext()
   const details = toolDetails<AskDetails>(block)
   const questionId = details.questionId ?? block.callId ?? ""
   const question = questionFromArgs(toolArgs(block), questionId)
-  const { sending, answer } = useAnswer(viewerContextId, sessionId)
+  const { sending, answer } = useAnswer(viewerContextId, agentId)
   const waiting = block.running && details.status !== "answered"
   const answered =
     details.status === "answered" || (!block.running && !block.isError)
   const trackRef = useTrackWaitingCard(
     waiting && questionId
-      ? waitingCardKey(viewerContextId, sessionId, questionId)
+      ? waitingCardKey(viewerContextId, agentId, questionId)
       : undefined,
     "question"
   )

@@ -37,7 +37,7 @@ export type MachineResources = {
   jobs: Array<{
     id: string
     name: string
-    sessionId: string
+    agentId: string
     pid?: number
     memory?: number
     scoped: boolean
@@ -165,7 +165,7 @@ function ResourcesView({ data }: { data: MachineResources }) {
           data.jobs.map((job) => (
             <Row
               key={job.id}
-              label={`${job.name} · ${job.sessionId}`}
+              label={`${job.name} · ${job.agentId}`}
               value={`${formatBytes(job.memory)} · ${job.processes} proc${job.scoped ? " · scope" : ""}`}
             />
           ))

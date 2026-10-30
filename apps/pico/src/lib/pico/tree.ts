@@ -3,7 +3,7 @@ import type { FlatTreeNode, TreeNode } from "@/lib/pico"
 export function flattenTree(tree: Array<TreeNode>) {
   const flatNodes: Array<FlatTreeNode> = []
 
-  // A long linear session is one deep chain, so walk it with a stack, not recursion.
+  // A long linear agent is one deep chain, so walk it with a stack, not recursion.
   const stack: Array<[TreeNode, number]> = []
   for (let index = tree.length - 1; index >= 0; index -= 1) {
     stack.push([tree[index], 0])

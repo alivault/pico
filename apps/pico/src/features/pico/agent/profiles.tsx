@@ -29,7 +29,7 @@ import {
   registerAgentSettingsSection,
   SettingsSection,
 } from "@/features/pico/agent/agent-settings-dialog"
-import { sessionExtensionsQueryKey } from "@/features/pico/agent/session-extensions"
+import { agentExtensionsQueryKey } from "@/features/pico/agent/agent-extensions"
 import { errorText } from "@/features/pico/agent/shared"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { useMachineFeature } from "@/features/pico/machine-store"
@@ -73,16 +73,16 @@ function ProfileIcon({
 
 type ProfilesResponse = { ok: true; profiles: Array<Profile>; current: string }
 
-function useProfiles(viewerContextId: string, sessionId?: string) {
+function useProfiles(viewerContextId: string, agentId?: string) {
   const machineId = useMachineId()
   return useQuery({
-    queryKey: ["pico", "profiles", viewerContextId, sessionId ?? "draft"],
+    queryKey: ["pico", "profiles", viewerContextId, agentId ?? "draft"],
     queryFn: () =>
       fetchJson<ProfilesResponse>(
         buildRequestUrl("/api/profiles", {
           machineId,
           contextId: viewerContextId,
-          sessionId,
+          agentId,
         })
       ),
     enabled: Boolean(viewerContextId),
@@ -91,26 +91,22 @@ function useProfiles(viewerContextId: string, sessionId?: string) {
 
 type ProfileTarget = {
   cwd?: string
-  sessionId?: string
+  agentId?: string
   viewerContextId: string
 }
 
-/** The profiles, and a mutation that sets the profile of a session or of the draft. */
-function useProfileSelection({
-  cwd,
-  sessionId,
-  viewerContextId,
-}: ProfileTarget) {
+/** The profiles, and a mutation that sets the profile of an agent or of the draft. */
+function useProfileSelection({ cwd, agentId, viewerContextId }: ProfileTarget) {
   const machineId = useMachineId()
   const queryClient = useQueryClient()
-  const query = useProfiles(viewerContextId, sessionId)
+  const query = useProfiles(viewerContextId, agentId)
   const mutation = useMutation({
     mutationFn: (profile: string) =>
       fetchJson<{ profile: string }>(
-        buildRequestUrl("/api/session/profile", {
+        buildRequestUrl("/api/agent/profile", {
           machineId,
           contextId: viewerContextId,
-          sessionId,
+          agentId,
         }),
         {
           method: "POST",
@@ -120,13 +116,13 @@ function useProfileSelection({
       ),
     onSuccess: (data) => {
       queryClient.setQueryData(
-        ["pico", "profiles", viewerContextId, sessionId ?? "draft"],
+        ["pico", "profiles", viewerContextId, agentId ?? "draft"],
         (current: ProfilesResponse | undefined) =>
           current ? { ...current, current: data.profile } : current
       )
-      if (sessionId)
+      if (agentId)
         void queryClient.invalidateQueries({
-          queryKey: sessionExtensionsQueryKey(viewerContextId, sessionId),
+          queryKey: agentExtensionsQueryKey(viewerContextId, agentId),
         })
     },
     onError: (error) => toast.error(errorText(error)),
@@ -161,7 +157,7 @@ function ProfileMenuItems({
   ))
 }
 
-/** A dropdown that sets the tool profile of a session or of the new-session draft. */
+/** A dropdown that sets the tool profile of an agent or of the new-agent draft. */
 function ProfilePickerView({
   variant = "ghost",
   ...target
@@ -198,7 +194,7 @@ function ProfilePickerView({
   )
 }
 
-/** A submenu that sets the tool profile, for a menu such as the session menu. */
+/** A submenu that sets the tool profile, for a menu such as the agent menu. */
 function ProfileMenuSubView({
   className,
   ...target

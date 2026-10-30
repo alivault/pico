@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 
-import type { SessionState } from "@/lib/pico"
+import type { AgentState } from "@/lib/pico"
 import { emitPicoEvent } from "@/features/pico/agent/events"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { picoQueryKeys } from "@/features/pico/query-keys"
@@ -83,7 +83,7 @@ type ComposerContextUsageSnapshot = {
   weeklyUsage: ComposerContextUsageQuotaSnapshot | null
 }
 
-type ContextUsageRecord = NonNullable<SessionState["contextUsage"]>
+type ContextUsageRecord = NonNullable<AgentState["contextUsage"]>
 
 const GENERIC_CONTEXT_USAGE_QUOTA_KEYS = new Set([
   "used",
@@ -101,10 +101,10 @@ const GENERIC_CONTEXT_USAGE_QUOTA_KEYS = new Set([
   "expiresAt",
 ])
 
-export type ComposerContextUsageStore = PicoStore<SessionState["contextUsage"]>
+export type ComposerContextUsageStore = PicoStore<AgentState["contextUsage"]>
 
 const emptyContextUsageStore: ComposerContextUsageStore =
-  createPicoStore<SessionState["contextUsage"]>(undefined)
+  createPicoStore<AgentState["contextUsage"]>(undefined)
 
 type ProviderUsageWindow = {
   label: string
@@ -126,7 +126,7 @@ type ContextUsageRing = {
 }
 
 type ComposerContextUsageIndicatorProps = {
-  activeSessionId?: string
+  activeAgentId?: string
   contextUsageStore?: ComposerContextUsageStore
   disabled?: boolean
   modelProvider?: string
@@ -274,7 +274,7 @@ function getContextUsageQuotaSnapshot(
 }
 
 function getComposerContextUsageSnapshot(
-  contextUsage: SessionState["contextUsage"]
+  contextUsage: AgentState["contextUsage"]
 ): ComposerContextUsageSnapshot | undefined {
   if (!contextUsage?.contextWindow) return undefined
 
@@ -544,7 +544,7 @@ function getContextUsageRingGeometry(ringCount: number) {
 }
 
 export function ComposerContextUsageIndicator({
-  activeSessionId,
+  activeAgentId,
   contextUsageStore = emptyContextUsageStore,
   disabled = false,
   modelProvider,
@@ -557,7 +557,7 @@ export function ComposerContextUsageIndicator({
     enabled: Boolean(modelProvider && viewerContextId),
     queryKey: picoQueryKeys.providerUsage(
       viewerContextId,
-      activeSessionId || "",
+      activeAgentId || "",
       modelProvider || ""
     ),
     queryFn: async () => {
@@ -567,7 +567,7 @@ export function ComposerContextUsageIndicator({
         buildRequestUrl("/api/provider-usage", {
           machineId,
           contextId: viewerContextId,
-          sessionId: activeSessionId,
+          agentId: activeAgentId,
           searchParams: { provider: modelProvider },
         })
       )

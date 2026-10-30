@@ -161,7 +161,7 @@ export function assertMachineWritable(
   if (label !== undefined) throw new MachineOfflineError(label)
 }
 
-/** Local storage keys whose values belong to one machine. */
+/** Local storage keys whose values belong to one machine. Stored names: do not change. */
 const MACHINE_SCOPED_KEYS = new Set([
   "pico-draft-directory",
   "pico-sidebar-directories",
@@ -200,41 +200,41 @@ export function storageKeyMachine(storageKey: string) {
 }
 
 /**
- * A session with its machine. A session ID alone is not unique: two machines
+ * An agent with its machine. An agent ID alone is not unique: two machines
  * can have the same ID. Use this type where data of more than one machine
- * meets, for example in the sidebar groups and the sessions dialog.
+ * meets, for example in the sidebar groups and the agents dialog.
  */
-export type SessionRef = { machineId: string; sessionId: string }
+export type AgentRef = { machineId: string; agentId: string }
 
 /**
- * The string form of a `SessionRef`: the plain session ID for the local
+ * The string form of a `AgentRef`: the plain agent ID for the local
  * machine, so that stored keys stay readable, `<id>@<machine>` otherwise.
  */
-export function sessionRefKey(ref: SessionRef) {
+export function agentRefKey(ref: AgentRef) {
   return ref.machineId === LOCAL_MACHINE_ID
-    ? ref.sessionId
-    : `${ref.sessionId}@${ref.machineId}`
+    ? ref.agentId
+    : `${ref.agentId}@${ref.machineId}`
 }
 
-export function sameSessionRef(
-  left: SessionRef | undefined,
-  right: SessionRef | undefined
+export function sameAgentRef(
+  left: AgentRef | undefined,
+  right: AgentRef | undefined
 ) {
   return (
-    left?.machineId === right?.machineId && left?.sessionId === right?.sessionId
+    left?.machineId === right?.machineId && left?.agentId === right?.agentId
   )
 }
 
-/** The page of a machine, optionally with a session open. */
-export function machinePageUrl(machineId: string, sessionId?: string) {
+/** The page of a machine, optionally with an agent open. */
+export function machinePageUrl(machineId: string, agentId?: string) {
   const query = new URLSearchParams()
   if (machineId !== LOCAL_MACHINE_ID) query.set("machine", machineId)
-  if (sessionId) query.set("session", sessionId)
+  if (agentId) query.set("agent", agentId)
   const search = query.toString()
   return search ? `/?${search}` : "/"
 }
 
-type MachineNavigator = (machineId: string, sessionId?: string) => void
+type MachineNavigator = (machineId: string, agentId?: string) => void
 
 let machineNavigator: MachineNavigator | undefined
 
@@ -244,17 +244,17 @@ export function setMachineNavigator(navigator: MachineNavigator | undefined) {
 }
 
 /**
- * An action for the app shell of a machine: a new session in a directory
+ * An action for the app shell of a machine: a new agent in a project
  * (optionally with a prompt draft to put in its composer), or the Add
- * directory dialog.
+ * project dialog.
  */
 export type MachineAction =
   | {
-      type: "new-session"
-      directory: string
+      type: "new-agent"
+      project: string
       draft?: { text: string; images: Array<PromptImage> }
     }
-  | { type: "add-directory" }
+  | { type: "add-project" }
 
 const pendingActions = new Map<string, Array<MachineAction>>()
 const actionListeners = new Map<string, Set<() => void>>()
@@ -277,10 +277,10 @@ export function takeMachineActions(machineId: string) {
   return queue
 }
 
-/** True when a new-session action waits for the app shell of `machineId`. */
-export function hasPendingNewSessionAction(machineId: string) {
+/** True when a new-agent action waits for the app shell of `machineId`. */
+export function hasPendingNewAgentAction(machineId: string) {
   return (pendingActions.get(machineId) ?? []).some(
-    (action) => action.type === "new-session"
+    (action) => action.type === "new-agent"
   )
 }
 
@@ -298,22 +298,22 @@ export function onMachineAction(machineId: string, listener: () => void) {
 }
 
 /**
- * Show a machine, optionally with a session open or with an action for its
+ * Show a machine, optionally with an agent open or with an action for its
  * app shell (see `queueMachineAction`).
  */
 export function openMachine(
   machineId: string,
-  options: { sessionId?: string; action?: MachineAction } = {}
+  options: { agentId?: string; action?: MachineAction } = {}
 ) {
   if (options.action) queueMachineAction(machineId, options.action)
   if (machineNavigator) {
-    machineNavigator(machineId, options.sessionId)
+    machineNavigator(machineId, options.agentId)
     return
   }
-  window.location.assign(machinePageUrl(machineId, options.sessionId))
+  window.location.assign(machinePageUrl(machineId, options.agentId))
 }
 
-/** Show a session of any machine. */
-export function openSession(ref: SessionRef) {
-  openMachine(ref.machineId, { sessionId: ref.sessionId })
+/** Show an agent of any machine. */
+export function openAgent(ref: AgentRef) {
+  openMachine(ref.machineId, { agentId: ref.agentId })
 }

@@ -17,10 +17,10 @@ import { registerAgentSection } from "@/features/pico/agent/agent-panel"
 import { openJobTerminal } from "@/features/pico/agent/events"
 import {
   jobPrompt,
-  useSessionJobs,
-  type SessionJob,
+  useAgentJobs,
+  type AgentJob,
 } from "@/features/pico/agent/job-state"
-import { postSessionJson } from "@/features/pico/agent/session-extensions"
+import { postAgentJson } from "@/features/pico/agent/agent-extensions"
 import {
   useTrackWaitingCard,
   waitingCardKey,
@@ -47,7 +47,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
 
-type Job = SessionJob
+type Job = AgentJob
 
 function statusClass(job: Job) {
   const prompt = jobPrompt(job)
@@ -78,11 +78,11 @@ function statusText(job: Job, now: number) {
 }
 
 function JobsSection({
-  sessionId,
+  agentId,
   state,
   viewerContextId,
 }: {
-  sessionId: string
+  agentId: string
   state: Record<string, unknown>
   viewerContextId: string
 }) {
@@ -98,11 +98,11 @@ function JobsSection({
     resources.data?.jobs.find((item) => item.id === jobId)?.memory
   const [logJob, setLogJob] = React.useState<Job | null>(null)
   const stop = (jobId: string) => {
-    void postSessionJson(
+    void postAgentJson(
       machineId,
       viewerContextId,
-      sessionId,
-      "/api/session/job/stop",
+      agentId,
+      "/api/agent/job/stop",
       {
         jobId,
       }
@@ -192,10 +192,10 @@ function JobsSection({
             if (!open) setLogJob(null)
           }}
           title={`Output of ${logJob.name}`}
-          path="/api/session/job/log"
+          path="/api/agent/job/log"
           searchParams={{ jobId: logJob.id, tail: 2000 }}
           refreshMs={logJob.status === "running" ? 2000 : undefined}
-          sessionId={sessionId}
+          agentId={agentId}
           viewerContextId={viewerContextId}
         />
       ) : null}
@@ -231,18 +231,18 @@ const InlineJobTerminal = React.lazy(
 
 /** An interactive job_start call: its job's live terminal, while it runs. */
 function JobStartCard({ block, fallback }: ToolRendererProps) {
-  const { viewerContextId, sessionId } = useToolRenderContext()
+  const { viewerContextId, agentId } = useToolRenderContext()
   const interactive = toolArgs(block).interactive === true && block.running
-  const { jobs } = useSessionJobs(
+  const { jobs } = useAgentJobs(
     viewerContextId,
-    interactive ? sessionId : undefined
+    interactive ? agentId : undefined
   )
   const job = interactive
     ? jobs.find((item) => item.callId === block.callId)
     : undefined
   const trackRef = useTrackWaitingCard(
     job?.status === "running"
-      ? waitingCardKey(viewerContextId, sessionId, `job:${job.id}`)
+      ? waitingCardKey(viewerContextId, agentId, `job:${job.id}`)
       : undefined,
     "terminal"
   )

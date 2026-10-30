@@ -1,11 +1,11 @@
 import type {
   ConversationItem,
   ConversationDeltaEvent,
-  DirectoryState,
+  ProjectState,
   ModelOption,
   PromptImage,
-  SessionState,
-  SessionsPayload,
+  AgentState,
+  AgentsPayload,
   StateSyncPayload,
   TreeNode,
   UiRequest,
@@ -17,7 +17,7 @@ export type ApiErrorResponse = {
   routePath?: string
 }
 
-export type SessionHistoryResponse =
+export type AgentHistoryResponse =
   | {
       ok: true
       offset: number
@@ -37,7 +37,7 @@ export type PiPerformanceSettingsResponse =
       ok: true
       transport: PiTransport
       cacheRetention: PiCacheRetention
-      appliesToActiveSessionAfterRestart?: boolean
+      appliesToActiveAgentAfterRestart?: boolean
     }
   | ApiErrorResponse
 
@@ -285,40 +285,40 @@ export type GitCommitMessageResponse =
     }
   | ApiErrorResponse
 
-export type DirectorySessionsIndexSnapshot = {
-  directory: string
+export type ProjectAgentsIndexSnapshot = {
+  project: string
   totalCount: number
   revision: string
-  sessions: Array<SessionListEntry>
+  agents: Array<AgentListEntry>
 }
 
-export type DirectorySessionsIndexesResponse =
+export type ProjectAgentsIndexesResponse =
   | {
       ok: true
-      directories: Array<string>
-      directoryIndexes: Record<string, DirectorySessionsIndexSnapshot>
+      projects: Array<string>
+      projectIndexes: Record<string, ProjectAgentsIndexSnapshot>
     }
   | ApiErrorResponse
 
-export type DeleteOldDirectorySessionsRequest = {
-  directory: string
+export type DeleteOldProjectAgentsRequest = {
+  project: string
   olderThanMs: number
   dryRun?: boolean
-  includeActiveSession?: boolean
+  includeActiveAgent?: boolean
 }
 
-export type DeleteOldDirectorySessionsResponse =
+export type DeleteOldProjectAgentsResponse =
   | {
       ok: true
-      directory: string
+      project: string
       cutoff: string
       dryRun: boolean
-      deletedSessionIds: Array<string>
-      matchingSessions: Array<SessionListEntry & { activityAt?: string }>
+      deletedAgentIds: Array<string>
+      matchingAgents: Array<AgentListEntry & { activityAt?: string }>
     }
   | ApiErrorResponse
 
-export type SessionListEntry = {
+export type AgentListEntry = {
   path?: string
   id?: string
   cwd?: string
@@ -329,42 +329,42 @@ export type SessionListEntry = {
   lastMessageAt?: string
   lastMessagePreview?: string
   messageCount?: number
-  contextUsage?: SessionState["contextUsage"]
+  contextUsage?: AgentState["contextUsage"]
   streaming?: boolean
   unread?: boolean
   optimistic?: boolean
   /** The agent waits for an answer from the user. */
   needsInput?: boolean
-  /** What an idle session waits on: timers, watches, or jobs. */
+  /** What an idle agent waits on: timers, watches, or jobs. */
   waiting?: string
-  /** The session that spawned this one. */
+  /** The agent that spawned this one. */
   parent?: string
-  /** The git branch of the session's own worktree. */
+  /** The git branch of the agent's own worktree. */
   worktreeBranch?: string
 }
 
-export type SessionsEvent = SessionsPayload & {
-  activeSessionPath?: string
-  activeSessionId?: string
-  activeSessionKey?: string
-  directories?: Array<string>
-  directoryStates?: Array<DirectoryState>
-  directoryIndexes?: Record<string, DirectorySessionsIndexSnapshot>
+export type AgentsEvent = AgentsPayload & {
+  activeAgentPath?: string
+  activeAgentId?: string
+  activeAgentKey?: string
+  projects?: Array<string>
+  projectStates?: Array<ProjectState>
+  projectIndexes?: Record<string, ProjectAgentsIndexSnapshot>
 }
 
-export type SessionStatusEvent = {
-  type: "session_status"
-  sessionKey?: string
-  sessionId?: string
-  sessionPath?: string
+export type AgentStatusEvent = {
+  type: "agent_status"
+  agentKey?: string
+  agentId?: string
+  agentPath?: string
   streaming?: boolean
   unread?: boolean
   needsInput?: boolean
-  /** What the session waits on; an empty string when it waits on nothing. */
+  /** What the agent waits on; an empty string when it waits on nothing. */
   waiting?: string
 }
 
-export type SessionReadStateResponse =
+export type AgentReadStateResponse =
   | {
       ok: true
       path: string
@@ -372,18 +372,18 @@ export type SessionReadStateResponse =
     }
   | ApiErrorResponse
 
-export type SessionDoneEvent = {
-  type: "session_done"
+export type AgentDoneEvent = {
+  type: "agent_done"
   id: string
-  sessionKey?: string
-  sessionId?: string
-  sessionPath?: string
+  agentKey?: string
+  agentId?: string
+  agentPath?: string
   cwd?: string
   title?: string
   reason: "agent" | "manual_compaction"
   outcome?: "success" | "error"
   completedAt: string
-  /** The turn ended, but the session waits on a timer, a watch, or a job. */
+  /** The turn ended, but the agent waits on a timer, a watch, or a job. */
   waiting?: string
 }
 
@@ -393,9 +393,9 @@ export type PromptResponse =
       queued: boolean
       pendingId?: string
       canceled?: boolean
-      /** The session that got the prompt. Older servers do not send it. */
-      sessionId?: string
-      sessionPath?: string
+      /** The agent that got the prompt. Older servers do not send it. */
+      agentId?: string
+      agentPath?: string
     }
   | ApiErrorResponse
 
@@ -415,11 +415,11 @@ export type ModelResponse =
     }
   | ApiErrorResponse
 
-export type SessionNewResponse =
+export type AgentNewResponse =
   | {
       ok: true
       draft: true
-      sessionKey: string
+      agentKey: string
       cwd?: string
     }
   | ApiErrorResponse
@@ -528,7 +528,7 @@ export type TerminalEvent =
       error: string
     }
 
-export type SessionTreeResponse =
+export type AgentTreeResponse =
   | {
       ok: true
       leafId: string | null
@@ -537,7 +537,7 @@ export type SessionTreeResponse =
     }
   | ApiErrorResponse
 
-export type NavigateSessionTreeResponse =
+export type NavigateAgentTreeResponse =
   | {
       ok: true
       cancelled: boolean
@@ -558,36 +558,36 @@ export type ForkableMessagesResponse =
     }
   | ApiErrorResponse
 
-export type ForkSessionResponse =
+export type ForkAgentResponse =
   | {
       ok: true
       cancelled?: boolean
       draft?: boolean
-      sessionKey?: string
-      sessionId?: string
-      sessionFile?: string
+      agentKey?: string
+      agentId?: string
+      agentFile?: string
     }
   | ApiErrorResponse
 
-export type CloneSessionResponse =
+export type CloneAgentResponse =
   | {
       ok: true
       cancelled?: boolean
       draft?: boolean
-      previousSessionFile?: string
-      sessionId?: string
-      sessionFile?: string
+      previousAgentFile?: string
+      agentId?: string
+      agentFile?: string
     }
   | ApiErrorResponse
 
-export type RenameSessionResponse =
+export type RenameAgentResponse =
   | {
       ok: true
       name: string
     }
   | ApiErrorResponse
 
-export type GenerateSessionNameResponse =
+export type GenerateAgentNameResponse =
   | {
       ok: true
       name: string
@@ -596,48 +596,48 @@ export type GenerateSessionNameResponse =
     }
   | ApiErrorResponse
 
-export type MoveSessionResponse =
+export type MoveAgentResponse =
   | {
       ok: true
       previousPath: string
       previousCwd?: string
       path: string
       cwd: string
-      sessionId?: string
+      agentId?: string
     }
   | ApiErrorResponse
 
-export type DeleteSessionsRequest = {
+export type DeleteAgentsRequest = {
   paths: Array<string>
 }
 
-export type DeleteSessionsResponse =
+export type DeleteAgentsResponse =
   | {
       ok: true
       deletedPaths: Array<string>
-      sessionId?: string
-      sessionFile?: string
+      agentId?: string
+      agentFile?: string
     }
   | ApiErrorResponse
 
-export type ArchivedSessionEntry = SessionListEntry & {
-  /** The sidebar directory the session returns to on restore. */
-  directory: string
+export type ArchivedAgentEntry = AgentListEntry & {
+  /** The sidebar project the agent returns to on restore. */
+  project: string
   archivedAt?: string
 }
 
-export type ArchivedSessionsResponse =
+export type ArchivedAgentsResponse =
   | {
       ok: true
-      sessions: Array<ArchivedSessionEntry>
+      agents: Array<ArchivedAgentEntry>
     }
   | ApiErrorResponse
 
-export type RestoreSessionResponse =
+export type RestoreAgentResponse =
   | {
       ok: true
       path: string
-      directory: string
+      project: string
     }
   | ApiErrorResponse
 
@@ -730,9 +730,9 @@ type UserMessageEvent = {
   queued?: boolean
 }
 
-type AutoSessionNamingErrorEvent = {
-  type: "auto_session_naming_error"
-  sessionId?: string
+type AutoAgentNamingErrorEvent = {
+  type: "auto_agent_naming_error"
+  agentId?: string
   cwd?: string
   promptPreview?: string
   imageCount?: number
@@ -750,17 +750,17 @@ export type GitChangedEvent = {
   scopes?: Array<GitChangedScope>
 }
 
-export type SessionExtensionsEvent = {
-  type: "session_extensions"
-  sessionId: string
+export type AgentExtensionsEvent = {
+  type: "agent_extensions"
+  agentId: string
   kind?: string
 }
 
 /** The sidebar layout that all devices share. */
 export type SidebarStateSnapshot = {
-  directories: Array<string>
-  pinnedSessionKeys: Array<string>
-  collapsedDirectories: Record<string, boolean>
+  projects: Array<string>
+  pinnedAgentKeys: Array<string>
+  collapsedProjects: Record<string, boolean>
   revision: number
   initialized: boolean
 }
@@ -774,17 +774,17 @@ export type SidebarStateEvent = SidebarStateSnapshot & {
 export type PicoServerEvent =
   | StateSyncPayload
   | ConversationDeltaEvent
-  | SessionsEvent
-  | SessionStatusEvent
-  | SessionDoneEvent
+  | AgentsEvent
+  | AgentStatusEvent
+  | AgentDoneEvent
   | RequestErrorEvent
   | ExtensionErrorEvent
   | ExtensionUiEvent
   | ExtensionUiDismissEvent
   | UserMessageEvent
-  | AutoSessionNamingErrorEvent
+  | AutoAgentNamingErrorEvent
   | GitChangedEvent
-  | SessionExtensionsEvent
+  | AgentExtensionsEvent
   | SidebarStateEvent
 
 export function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
@@ -815,29 +815,27 @@ export function isConversationDeltaEvent(
   )
 }
 
-export function isSessionsEvent(value: unknown): value is SessionsEvent {
+export function isAgentsEvent(value: unknown): value is AgentsEvent {
   return Boolean(
     value &&
     typeof value === "object" &&
-    (value as { type?: unknown }).type === "sessions"
+    (value as { type?: unknown }).type === "agents"
   )
 }
 
-export function isSessionStatusEvent(
-  value: unknown
-): value is SessionStatusEvent {
+export function isAgentStatusEvent(value: unknown): value is AgentStatusEvent {
   return Boolean(
     value &&
     typeof value === "object" &&
-    (value as { type?: unknown }).type === "session_status"
+    (value as { type?: unknown }).type === "agent_status"
   )
 }
 
-export function isSessionDoneEvent(value: unknown): value is SessionDoneEvent {
+export function isAgentDoneEvent(value: unknown): value is AgentDoneEvent {
   return Boolean(
     value &&
     typeof value === "object" &&
-    (value as { type?: unknown }).type === "session_done" &&
+    (value as { type?: unknown }).type === "agent_done" &&
     typeof (value as { id?: unknown }).id === "string"
   )
 }

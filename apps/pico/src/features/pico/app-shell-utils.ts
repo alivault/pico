@@ -1,12 +1,12 @@
 import {
   buildItemsFromSync,
-  createInitialSessionState,
+  createInitialAgentState,
   previewUrlForImage,
   promptDraftKey,
   sameContextUsage,
   type ConversationItem,
   type PromptImage,
-  type SessionState,
+  type AgentState,
 } from "@/lib/pico"
 import { isApiErrorResponse } from "@/lib/pico/api"
 import {
@@ -57,7 +57,7 @@ function sameStatusMap(
   return true
 }
 
-function sameModel(left: SessionState["model"], right: SessionState["model"]) {
+function sameModel(left: AgentState["model"], right: AgentState["model"]) {
   if (!left && !right) return true
   if (!left || !right) return false
 
@@ -70,8 +70,8 @@ function sameModel(left: SessionState["model"], right: SessionState["model"]) {
 }
 
 function sameModelArray(
-  left: SessionState["availableModels"],
-  right: SessionState["availableModels"]
+  left: AgentState["availableModels"],
+  right: AgentState["availableModels"]
 ) {
   if (left.length !== right.length) return false
 
@@ -83,8 +83,8 @@ function sameModelArray(
 }
 
 function sameSkillArray(
-  left: SessionState["availableSkills"],
-  right: SessionState["availableSkills"]
+  left: AgentState["availableSkills"],
+  right: AgentState["availableSkills"]
 ) {
   if (left.length !== right.length) return false
 
@@ -103,7 +103,7 @@ function sameSkillArray(
 }
 
 function normalizeStatuses(
-  value: SessionState["uiState"] | undefined
+  value: AgentState["uiState"] | undefined
 ): Record<string, string> {
   const source = value?.statuses
   if (!source || typeof source !== "object") return {}
@@ -119,8 +119,8 @@ function normalizeStatuses(
 }
 
 function shareUiState(
-  previous: SessionState["uiState"],
-  next: SessionState["uiState"] | undefined
+  previous: AgentState["uiState"],
+  next: AgentState["uiState"] | undefined
 ) {
   if (!next) return previous
 
@@ -136,7 +136,7 @@ function shareUiState(
       typeof next.editorText === "string" ? next.editorText : undefined,
     workingMessage:
       typeof next.workingMessage === "string" ? next.workingMessage : undefined,
-  } satisfies SessionState["uiState"]
+  } satisfies AgentState["uiState"]
 
   return sharedStatuses === previous.statuses &&
     previous.title === sharedUiState.title &&
@@ -155,18 +155,18 @@ function withRequestParams(
   base: string,
   {
     contextId,
-    sessionId,
+    agentId,
     searchParams,
   }: {
     contextId: string
-    sessionId?: string
+    agentId?: string
     searchParams?: RequestSearchParams
   }
 ) {
   const url = new URL(base, window.location.origin)
   url.searchParams.set("context", contextId)
-  if (sessionId) {
-    url.searchParams.set("session", sessionId)
+  if (agentId) {
+    url.searchParams.set("agent", agentId)
   }
 
   for (const [key, rawValue] of Object.entries(searchParams ?? {})) {
@@ -194,7 +194,7 @@ export function buildRequestUrl(
     /** The machine that gets the request. */
     machineId: string
     contextId: string
-    sessionId?: string
+    agentId?: string
     searchParams?: RequestSearchParams
   }
 ) {
@@ -356,15 +356,15 @@ function applyConversationItemsPatch(
 }
 
 export function updateStateFromSync(
-  previous: SessionState,
+  previous: AgentState,
   sync: Parameters<typeof buildItemsFromSync>[0]
 ) {
-  const replacingSession =
-    typeof sync.sessionKey === "string" &&
-    sync.sessionKey !== (previous.sessionKey || "")
-  const base = replacingSession
+  const replacingAgent =
+    typeof sync.agentKey === "string" &&
+    sync.agentKey !== (previous.agentKey || "")
+  const base = replacingAgent
     ? {
-        ...createInitialSessionState(),
+        ...createInitialAgentState(),
         connected: previous.connected,
       }
     : previous
@@ -372,19 +372,18 @@ export function updateStateFromSync(
     cwd: typeof sync.cwd === "string" ? sync.cwd : previous.cwd,
   })
   const replacingOptimisticDraft =
-    replacingSession &&
-    previous.sessionKey === `optimistic:${nextDraftOwnerKey}`
+    replacingAgent && previous.agentKey === `optimistic:${nextDraftOwnerKey}`
   const incomingHistoryOffset =
     typeof sync.historyOffset === "number"
       ? sync.historyOffset
       : base.historyOffset
   const preservedHistoryItemCount =
-    !replacingSession && sync.itemsPatch
+    !replacingAgent && sync.itemsPatch
       ? conversationPatchPrefixLength(
           base.items,
           sync.itemsPatch.previousLength
         )
-      : !replacingSession && incomingHistoryOffset > base.historyOffset
+      : !replacingAgent && incomingHistoryOffset > base.historyOffset
         ? Math.min(
             base.items.length,
             incomingHistoryOffset - base.historyOffset
@@ -438,31 +437,31 @@ export function updateStateFromSync(
     typeof sync.historyTotalCount === "number"
       ? sync.historyTotalCount
       : base.historyTotalCount
-  const sessionKey =
-    typeof sync.sessionKey === "string" ? sync.sessionKey : base.sessionKey
-  const sessionId = Object.prototype.hasOwnProperty.call(sync, "sessionId")
-    ? sync.sessionId
-    : base.sessionId
-  const sessionName = Object.prototype.hasOwnProperty.call(sync, "sessionName")
-    ? sync.sessionName
-    : base.sessionName
+  const agentKey =
+    typeof sync.agentKey === "string" ? sync.agentKey : base.agentKey
+  const agentId = Object.prototype.hasOwnProperty.call(sync, "agentId")
+    ? sync.agentId
+    : base.agentId
+  const agentName = Object.prototype.hasOwnProperty.call(sync, "agentName")
+    ? sync.agentName
+    : base.agentName
   const firstMessage = Object.prototype.hasOwnProperty.call(
     sync,
     "firstMessage"
   )
     ? sync.firstMessage || ""
     : base.firstMessage
-  const sessionFile = Object.prototype.hasOwnProperty.call(sync, "sessionFile")
-    ? sync.sessionFile
-    : base.sessionFile
+  const agentFile = Object.prototype.hasOwnProperty.call(sync, "agentFile")
+    ? sync.agentFile
+    : base.agentFile
   const cwd = Object.prototype.hasOwnProperty.call(sync, "cwd")
     ? sync.cwd
     : base.cwd
-  const directory = Object.prototype.hasOwnProperty.call(sync, "directory")
-    ? sync.directory
+  const project = Object.prototype.hasOwnProperty.call(sync, "project")
+    ? sync.project
     : Object.prototype.hasOwnProperty.call(sync, "cwd")
       ? undefined
-      : base.directory
+      : base.project
   const modified = Object.prototype.hasOwnProperty.call(sync, "modified")
     ? sync.modified
     : base.modified
@@ -519,13 +518,13 @@ export function updateStateFromSync(
     previous.items === items &&
     previous.historyOffset === historyOffset &&
     previous.historyTotalCount === historyTotalCount &&
-    previous.sessionId === sessionId &&
-    previous.sessionKey === sessionKey &&
-    previous.sessionName === sessionName &&
+    previous.agentId === agentId &&
+    previous.agentKey === agentKey &&
+    previous.agentName === agentName &&
     previous.firstMessage === firstMessage &&
-    previous.sessionFile === sessionFile &&
+    previous.agentFile === agentFile &&
     previous.cwd === cwd &&
-    previous.directory === directory &&
+    previous.project === project &&
     previous.modified === modified &&
     previous.model === model &&
     previous.thinkingLevel === thinkingLevel &&
@@ -550,13 +549,13 @@ export function updateStateFromSync(
     items,
     historyOffset,
     historyTotalCount,
-    sessionId,
-    sessionKey,
-    sessionName,
+    agentId,
+    agentKey,
+    agentName,
     firstMessage,
-    sessionFile,
+    agentFile,
     cwd,
-    directory,
+    project,
     modified,
     model,
     thinkingLevel,
@@ -566,5 +565,5 @@ export function updateStateFromSync(
     hideThinkingBlock,
     contextUsage,
     uiState,
-  } satisfies SessionState
+  } satisfies AgentState
 }

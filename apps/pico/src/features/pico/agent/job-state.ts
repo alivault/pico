@@ -1,12 +1,12 @@
 import * as React from "react"
 
 import { openJobTerminal } from "@/features/pico/agent/events"
-import { useSessionExtensions } from "@/features/pico/agent/session-extensions"
+import { useAgentExtensions } from "@/features/pico/agent/agent-extensions"
 import { jobFocusSeen, rememberJobFocusSeen } from "@/lib/pico/storage"
 import { useMachineId } from "@/lib/pico/machine-context"
 
 /** A background job, as the server's `jobs` state gives it. */
-export type SessionJob = {
+export type AgentJob = {
   id: string
   name: string
   command: string
@@ -22,16 +22,16 @@ export type SessionJob = {
   callId?: string
 }
 
-/** The background jobs of a session (the 20 newest), when they are loaded. */
-export function useSessionJobs(
+/** The background jobs of an agent (the 20 newest), when they are loaded. */
+export function useAgentJobs(
   viewerContextId: string,
-  sessionId: string | undefined
+  agentId: string | undefined
 ) {
-  const query = useSessionExtensions(viewerContextId, sessionId)
+  const query = useAgentExtensions(viewerContextId, agentId)
   const jobs = query.data?.jobs
   return {
     loaded: query.isSuccess,
-    jobs: Array.isArray(jobs) ? (jobs as Array<SessionJob>) : [],
+    jobs: Array.isArray(jobs) ? (jobs as Array<AgentJob>) : [],
   }
 }
 
@@ -40,7 +40,7 @@ export function useSessionJobs(
  * that Pico only guesses from a prompt-like line is `quiet`: the client shows
  * it, but does not call the user.
  */
-export function jobPrompt(job: SessionJob | undefined) {
+export function jobPrompt(job: AgentJob | undefined) {
   if (!job || job.status !== "running") return undefined
   if (job.focus)
     return { text: job.focus.prompt, secret: job.waiting?.secret, quiet: false }
@@ -66,17 +66,17 @@ export function jobPrompt(job: SessionJob | undefined) {
 /**
  * Open the terminal tab of a job when the agent asks for the user
  * (the terminal tool's focus action). Each device does this one time for each request, when it
- * shows the session.
+ * shows the agent.
  */
 export function JobFocusWatcher({
-  sessionId,
+  agentId,
   viewerContextId,
 }: {
-  sessionId: string | undefined
+  agentId: string | undefined
   viewerContextId: string
 }) {
   const machineId = useMachineId()
-  const { jobs } = useSessionJobs(viewerContextId, sessionId)
+  const { jobs } = useAgentJobs(viewerContextId, agentId)
   React.useEffect(() => {
     for (const job of jobs) {
       // An inline job shows in its tool call in the chat.

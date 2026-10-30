@@ -2552,7 +2552,7 @@ export const UserMessageCard = React.memo(function UserMessageCard({
 export type UserMessageActions = {
   /** Fork at the message's parent and put its text back in the composer. */
   editUserMessage?: (entryId: string) => void
-  /** True while the session works; the server refuses tree moves then. */
+  /** True while the agent works; the server refuses tree moves then. */
   editDisabled?: boolean
 }
 
@@ -2578,7 +2578,7 @@ function UserMessageFooter({
         <TitleTooltip
           title={
             editDisabled
-              ? "Wait for the session to finish to edit"
+              ? "Wait for the agent to finish to edit"
               : "Edit and resend from here"
           }
         >

@@ -148,7 +148,7 @@ function AppShellCommandPalette({
           <DrawerHeader>
             <DrawerTitle>Command palette</DrawerTitle>
             <DrawerDescription>
-              Search for commands and session actions.
+              Search for commands and agent actions.
             </DrawerDescription>
           </DrawerHeader>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
@@ -164,7 +164,7 @@ function AppShellCommandPalette({
       open={open}
       onOpenChange={onOpenChange}
       title="Command palette"
-      description="Search for commands and session actions."
+      description="Search for commands and agent actions."
       className="sm:max-w-2xl"
       initialFocus
     >

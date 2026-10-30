@@ -680,7 +680,7 @@ type AppShellUiRequestDialogControllerProps = {
   ref?: React.Ref<AppShellUiRequestDialogHandle>
   openStateRef?: React.RefObject<boolean>
   viewerContextId: string
-  sessionId?: string
+  agentId?: string
   onAuthBack?: () => void
 }
 
@@ -688,7 +688,7 @@ export function AppShellUiRequestDialogController({
   ref,
   openStateRef,
   viewerContextId,
-  sessionId,
+  agentId,
   onAuthBack,
 }: AppShellUiRequestDialogControllerProps) {
   const machineId = useMachineId()
@@ -720,7 +720,7 @@ export function AppShellUiRequestDialogController({
       buildRequestUrl(`/api/ui/${encodeURIComponent(requestId)}`, {
         machineId,
         contextId: viewerContextId,
-        sessionId,
+        agentId,
       }),
       {
         method: "POST",

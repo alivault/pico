@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useWaitingForAnswer } from "@/features/pico/agent/session-extensions"
+import { useWaitingForAnswer } from "@/features/pico/agent/agent-extensions"
 import {
   ArrowUpIcon,
   FileTextIcon,
@@ -11,7 +11,7 @@ import {
   XIcon,
 } from "lucide-react"
 
-import type { PromptImage, SessionState, StreamingBehavior } from "@/lib/pico"
+import type { PromptImage, AgentState, StreamingBehavior } from "@/lib/pico"
 import type { CompletionItem } from "@/lib/pico/api"
 
 import {
@@ -70,7 +70,7 @@ export type ComposerPanelHandle = {
 
 type ImageFileSelection = FileList | Array<File> | null
 
-type ComposerSessionStore = PicoStore<SessionState>
+type ComposerAgentStore = PicoStore<AgentState>
 
 type ComposerDisplaySettingsStore = PicoStore<{
   autoScrollEnabled: boolean
@@ -79,7 +79,7 @@ type ComposerDisplaySettingsStore = PicoStore<{
 }>
 
 type ComposerPanelProps = {
-  activeSessionId?: string
+  activeAgentId?: string
   currentPendingMessages: Array<PendingComposerMessage>
   composerLineComments: Array<ComposerLineComment>
   composerImages: Array<PromptImage>
@@ -90,7 +90,7 @@ type ComposerPanelProps = {
   centerMessages: boolean
   contextUsageStore: ComposerContextUsageStore
   displaySettingsStore: ComposerDisplaySettingsStore
-  sessionStore: ComposerSessionStore
+  agentStore: ComposerAgentStore
   isSubmitting: boolean
   isCompacting: boolean
   isStreaming: boolean
@@ -144,7 +144,7 @@ type ComposerPromptEditorProps = {
   promptRef: React.RefObject<HTMLTextAreaElement | null>
   queueRef: React.RefObject<ComposerPendingMessagesHandle | null>
   displaySettingsStore: ComposerDisplaySettingsStore
-  sessionStore: ComposerSessionStore
+  agentStore: ComposerAgentStore
   onComposerTextChange: (value: string) => void
   onPickImages: (files: ImageFileSelection) => void
   onRemoveComposerLineComment: (id: string) => void
@@ -171,7 +171,7 @@ function buildComposerSlashCommands({
   hideThinkingBlock,
   hideToolBlocks,
 }: {
-  availableSkills: SessionState["availableSkills"]
+  availableSkills: AgentState["availableSkills"]
   hideThinkingBlock: boolean
   hideToolBlocks: boolean
 }) {
@@ -189,32 +189,33 @@ function buildComposerSlashCommands({
     {
       kind: "builtin" as const,
       name: "compact",
-      description: "Summarize the session to reduce context size",
+      description: "Summarize the conversation to make the context smaller",
     },
     {
       kind: "builtin" as const,
       name: "clone",
-      description: "Duplicate the current active branch into a new session",
+      description:
+        "Copy the current branch of the conversation into a new agent",
     },
     {
       kind: "builtin" as const,
       name: "archive",
-      description: "Archive the current session",
+      description: "Archive the current agent",
     },
     {
       kind: "builtin" as const,
       name: "fork",
-      description: "Create a new session from a previous message",
+      description: "Start a new agent from an earlier message",
     },
     {
       kind: "builtin" as const,
       name: "tree",
-      description: "Navigate to an earlier point in the current session tree",
+      description: "Go to an earlier point in the conversation tree",
     },
     {
       kind: "builtin" as const,
       name: "rename",
-      description: "Rename the current session",
+      description: "Rename the current agent",
     },
     ...(hideThinkingBlock
       ? [
@@ -259,16 +260,16 @@ function buildComposerSlashCommands({
 
 function useComposerSlashCommands({
   displaySettingsStore,
-  sessionStore,
+  agentStore,
 }: {
   displaySettingsStore: ComposerDisplaySettingsStore
-  sessionStore: ComposerSessionStore
+  agentStore: ComposerAgentStore
 }) {
   const { availableSkills, hideThinkingBlock } = useSelector(
-    sessionStore,
-    (sessionState) => ({
-      availableSkills: sessionState.availableSkills,
-      hideThinkingBlock: sessionState.hideThinkingBlock,
+    agentStore,
+    (agentState) => ({
+      availableSkills: agentState.availableSkills,
+      hideThinkingBlock: agentState.hideThinkingBlock,
     }),
     { compare: shallow }
   )
@@ -344,7 +345,7 @@ function composerPickerReducer(
 }
 
 export function ComposerPanel({
-  activeSessionId,
+  activeAgentId,
   currentPendingMessages,
   composerLineComments,
   composerImages,
@@ -355,7 +356,7 @@ export function ComposerPanel({
   centerMessages,
   contextUsageStore,
   displaySettingsStore,
-  sessionStore,
+  agentStore,
   isSubmitting,
   isCompacting,
   isStreaming,
@@ -427,8 +428,8 @@ export function ComposerPanel({
         {topContent}
 
         <ComposerPendingMessages
-          // An edit belongs to one session. A switch ends it.
-          key={`${viewerContextId}:${activeSessionId ?? ""}`}
+          // An edit belongs to one agent. A switch ends it.
+          key={`${viewerContextId}:${activeAgentId ?? ""}`}
           ref={queueRef}
           currentPendingMessages={currentPendingMessages}
           canStartQueue={canStartPendingQueue}
@@ -455,7 +456,7 @@ export function ComposerPanel({
             promptRef={promptRef}
             queueRef={queueRef}
             displaySettingsStore={displaySettingsStore}
-            sessionStore={sessionStore}
+            agentStore={agentStore}
             onComposerTextChange={onComposerTextChange}
             onPickImages={onPickImages}
             onRemoveComposerLineComment={onRemoveComposerLineComment}
@@ -468,7 +469,7 @@ export function ComposerPanel({
           />
 
           <ComposerPickers
-            activeSessionId={activeSessionId}
+            activeAgentId={activeAgentId}
             modelPickerOpen={modelPickerOpen}
             onModelPickerOpenChange={(open) =>
               dispatchPickerState({ type: "setModelOpen", open })
@@ -482,7 +483,7 @@ export function ComposerPanel({
               dispatchPickerState({ type: "setModelQuery", query })
             }
             contextUsageStore={contextUsageStore}
-            sessionStore={sessionStore}
+            agentStore={agentStore}
             disabled={disabled}
             viewerContextId={viewerContextId}
             onSelectModel={onSelectModel}
@@ -563,7 +564,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
   promptRef,
   queueRef,
   displaySettingsStore,
-  sessionStore,
+  agentStore,
   onComposerTextChange,
   onPickImages,
   onRemoveComposerLineComment,
@@ -577,7 +578,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
   const waitingForAnswer = useWaitingForAnswer()
   const slashCommands = useComposerSlashCommands({
     displaySettingsStore,
-    sessionStore,
+    agentStore,
   })
   const draftTextRef = React.useRef(composerText)
   const draftSkillRef = React.useRef<string | undefined>(composerSkill)

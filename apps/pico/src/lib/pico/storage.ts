@@ -1,4 +1,4 @@
-import type { PromptDraftTarget, SessionEntryIdentity } from "@/lib/pico"
+import type { PromptDraftTarget, AgentEntryIdentity } from "@/lib/pico"
 import {
   normalizeThemeColorMode,
   normalizeThemeFamily,
@@ -11,14 +11,21 @@ import {
 export const THEME_STORAGE_KEY = "pico-theme"
 export const THEME_COLOR_MODE_STORAGE_KEY = "pico-theme-color-mode"
 export const APPLIED_THEME_STORAGE_KEY = "pico-applied-theme"
-export const DRAFT_DIRECTORY_STORAGE_KEY = "pico-draft-directory"
-export const SIDEBAR_DIRECTORIES_STORAGE_KEY = "pico-sidebar-directories"
-export const COLLAPSED_DIRECTORIES_STORAGE_KEY = "pico-collapsed-directories"
-export const PINNED_SESSIONS_STORAGE_KEY = "pico-pinned-sessions"
-export const RECENT_DIRECTORIES_STORAGE_KEY = "pico-recent-directories"
-export const RECENT_DIRECTORIES_LIMIT = 8
-export const SESSION_DONE_SOUND_ENABLED_STORAGE_KEY = "pico-session-done-sound"
-export const SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY =
+// Stored name: do not change.
+export const DRAFT_PROJECT_STORAGE_KEY = "pico-draft-directory"
+// Stored name: do not change.
+export const SIDEBAR_PROJECTS_STORAGE_KEY = "pico-sidebar-directories"
+// Stored name: do not change.
+export const COLLAPSED_PROJECTS_STORAGE_KEY = "pico-collapsed-directories"
+// Stored name: do not change.
+export const PINNED_AGENTS_STORAGE_KEY = "pico-pinned-sessions"
+// Stored name: do not change.
+export const RECENT_PROJECTS_STORAGE_KEY = "pico-recent-directories"
+export const RECENT_PROJECTS_LIMIT = 8
+// Stored name: do not change.
+export const AGENT_DONE_SOUND_ENABLED_STORAGE_KEY = "pico-session-done-sound"
+// Stored name: do not change.
+export const AGENT_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY =
   "pico-session-done-desktop-notifications"
 export const HIDE_TOOL_BLOCKS_STORAGE_KEY = "pico-hide-tools"
 export const CENTER_MESSAGES_STORAGE_KEY = "pico-center-messages"
@@ -144,29 +151,29 @@ function machineSessionStorageSetItem(
   }
 }
 
-export function normalizeStoredDirectoryList(value: unknown) {
+export function normalizeStoredProjectList(value: unknown) {
   if (!Array.isArray(value)) return []
 
-  const nextDirectories: Array<string> = []
+  const nextProjects: Array<string> = []
   const seen = new Set<string>()
 
   for (const entry of value) {
     const normalized = typeof entry === "string" ? entry.trim() : ""
     if (!normalized || seen.has(normalized)) continue
     seen.add(normalized)
-    nextDirectories.push(normalized)
+    nextProjects.push(normalized)
   }
 
-  return nextDirectories
+  return nextProjects
 }
 
-export function sessionListEntryKey(sessionLike: SessionEntryIdentity = {}) {
-  if (sessionLike.path) return `path:${sessionLike.path}`
-  if (sessionLike.id) return `id:${sessionLike.id}`
+export function agentListEntryKey(agentLike: AgentEntryIdentity = {}) {
+  if (agentLike.path) return `path:${agentLike.path}`
+  if (agentLike.id) return `id:${agentLike.id}`
   return ""
 }
 
-export function normalizeSessionSelectionKeys(value: unknown) {
+export function normalizeAgentSelectionKeys(value: unknown) {
   if (!Array.isArray(value)) return []
 
   const keys: Array<string> = []
@@ -313,8 +320,9 @@ export function rememberStoredTerminalTabs(
 }
 
 export function promptDraftKey(target: PromptDraftTarget = {}) {
-  if (target.sessionId) return `session:${target.sessionId}`
-  if (target.sessionFile) return `file:${target.sessionFile}`
+  // Stored name: do not change.
+  if (target.agentId) return `session:${target.agentId}`
+  if (target.agentFile) return `file:${target.agentFile}`
   return `draft:${target.cwd?.trim() || "default"}`
 }
 
@@ -325,7 +333,7 @@ export function promptDraftKeyMatchesOwner(
   if (!ownerKey) return false
   if (draftKey === ownerKey) return true
 
-  // During optimistic new-session startup, the client may not know the server's
+  // During optimistic new-agent startup, the client may not know the server's
   // resolved cwd yet and uses the default draft owner key until state sync lands.
   return ownerKey === promptDraftKey() && draftKey.startsWith("draft:")
 }
@@ -378,41 +386,38 @@ export function rememberStoredPromptDraft(
   )
 }
 
-export function readStoredSidebarDirectories(machineId: string) {
+export function readStoredSidebarProjects(machineId: string) {
   try {
     const raw = machineLocalStorageGetItem(
       machineId,
-      SIDEBAR_DIRECTORIES_STORAGE_KEY
+      SIDEBAR_PROJECTS_STORAGE_KEY
     )
     if (raw == null) {
-      return { directories: [], hasStoredValue: false }
+      return { projects: [], hasStoredValue: false }
     }
 
     return {
-      directories: normalizeStoredDirectoryList(JSON.parse(raw)),
+      projects: normalizeStoredProjectList(JSON.parse(raw)),
       hasStoredValue: true,
     }
   } catch {
-    return { directories: [], hasStoredValue: false }
+    return { projects: [], hasStoredValue: false }
   }
 }
 
-export function readStoredPinnedSessionKeys(machineId: string) {
+export function readStoredPinnedAgentKeys(machineId: string) {
   try {
-    const raw = machineLocalStorageGetItem(
-      machineId,
-      PINNED_SESSIONS_STORAGE_KEY
-    )
+    const raw = machineLocalStorageGetItem(machineId, PINNED_AGENTS_STORAGE_KEY)
     if (!raw) return []
-    return normalizeSessionSelectionKeys(JSON.parse(raw))
+    return normalizeAgentSelectionKeys(JSON.parse(raw))
   } catch {
     return []
   }
 }
 
-export function readStoredCollapsedDirectories(
+export function readStoredCollapsedProjects(
   machineId: string,
-  key = COLLAPSED_DIRECTORIES_STORAGE_KEY
+  key = COLLAPSED_PROJECTS_STORAGE_KEY
 ) {
   try {
     const raw = machineLocalStorageGetItem(machineId, key)
@@ -432,20 +437,20 @@ export function readStoredCollapsedDirectories(
   }
 }
 
-export function readStoredDraftDirectory(machineId: string) {
+export function readStoredDraftProject(machineId: string) {
   return (
-    machineLocalStorageGetItem(machineId, DRAFT_DIRECTORY_STORAGE_KEY) ?? ""
+    machineLocalStorageGetItem(machineId, DRAFT_PROJECT_STORAGE_KEY) ?? ""
   ).trim()
 }
 
-export function readStoredRecentDirectories(machineId: string) {
+export function readStoredRecentProjects(machineId: string) {
   try {
     const raw = machineLocalStorageGetItem(
       machineId,
-      RECENT_DIRECTORIES_STORAGE_KEY
+      RECENT_PROJECTS_STORAGE_KEY
     )
     if (!raw) return []
-    return normalizeStoredDirectoryList(JSON.parse(raw))
+    return normalizeStoredProjectList(JSON.parse(raw))
   } catch {
     return []
   }
@@ -488,14 +493,14 @@ export function readStoredTerminalPanelOpen() {
   return safeLocalStorageGetItem(TERMINAL_PANEL_OPEN_STORAGE_KEY) === "1"
 }
 
-export function readStoredSessionDoneSoundEnabled() {
-  const value = safeLocalStorageGetItem(SESSION_DONE_SOUND_ENABLED_STORAGE_KEY)
+export function readStoredAgentDoneSoundEnabled() {
+  const value = safeLocalStorageGetItem(AGENT_DONE_SOUND_ENABLED_STORAGE_KEY)
   return value == null ? true : value !== "0"
 }
 
-export function readStoredSessionDoneDesktopNotificationsEnabled() {
+export function readStoredAgentDoneDesktopNotificationsEnabled() {
   const value = safeLocalStorageGetItem(
-    SESSION_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY
+    AGENT_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY
   )
   return value == null ? true : value !== "0"
 }

@@ -4,7 +4,7 @@ import * as React from "react"
  * The left sidebar is window UI: the page draws it one time, with a heading
  * for each machine (see `window-sidebar.tsx`). The app shell of the machine
  * that shows puts its own parts into the sidebar through portals: the search
- * button ("top"), its directories ("content"), and its footer ("bottom").
+ * button ("top"), its projects ("content"), and its footer ("bottom").
  *
  * The window draws the slots of the shown machine only. The shell of a
  * hidden machine finds no slot and draws nothing, so the sidebar never has

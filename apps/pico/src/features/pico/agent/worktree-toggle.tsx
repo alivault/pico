@@ -33,10 +33,10 @@ type DraftWorktree = {
 }
 
 /**
- * The "New worktree" option of a new session. The choice is part of the
- * server's draft, so the first prompt creates the worktree with the session.
+ * The "New worktree" option of a new agent. The choice is part of the
+ * server's draft, so the first prompt creates the worktree with the agent.
  */
-function NewSessionWorktreeToggleView({
+function NewAgentWorktreeToggleView({
   cwd,
   viewerContextId,
 }: {
@@ -53,7 +53,7 @@ function NewSessionWorktreeToggleView({
     queryKey,
     queryFn: () =>
       fetchJson<DraftWorktree>(
-        buildRequestUrl("/api/session/draft-worktree", {
+        buildRequestUrl("/api/agent/draft-worktree", {
           machineId,
           contextId: viewerContextId,
           searchParams: { cwd },
@@ -68,7 +68,7 @@ function NewSessionWorktreeToggleView({
   const mutation = useMutation({
     mutationFn: (body: { enabled: boolean; branch?: string }) =>
       fetchJson<DraftWorktree>(
-        buildRequestUrl("/api/session/draft-worktree", {
+        buildRequestUrl("/api/agent/draft-worktree", {
           machineId,
           contextId: viewerContextId,
         }),
@@ -92,8 +92,8 @@ function NewSessionWorktreeToggleView({
       <TitleTooltip
         title={
           enabled
-            ? "The new session gets its own git worktree"
-            : "The new session works in this directory"
+            ? "The new agent gets its own git worktree"
+            : "The new agent works in the project directory"
         }
       >
         <PopoverTrigger
@@ -101,7 +101,7 @@ function NewSessionWorktreeToggleView({
             <Button
               type="button"
               variant="ghost"
-              aria-label="Worktree for the new session"
+              aria-label="Worktree for the new agent"
               className={cn(enabled && "text-foreground")}
             />
           }
@@ -121,8 +121,8 @@ function NewSessionWorktreeToggleView({
             <FieldContent>
               <FieldLabel htmlFor={worktreeFieldId}>New worktree</FieldLabel>
               <FieldDescription>
-                The session works in its own git worktree and branch, so it does
-                not change the files that other sessions use.
+                The agent works in its own git worktree and branch, so it does
+                not change the files that other agents use.
               </FieldDescription>
             </FieldContent>
             <Switch
@@ -176,9 +176,9 @@ function NewSessionWorktreeToggleView({
 }
 
 /** Hidden when the server of the page does not have the feature. */
-export function NewSessionWorktreeToggle(
-  props: React.ComponentProps<typeof NewSessionWorktreeToggleView>
+export function NewAgentWorktreeToggle(
+  props: React.ComponentProps<typeof NewAgentWorktreeToggleView>
 ) {
   const available = useMachineFeature("worktrees")
-  return available ? <NewSessionWorktreeToggleView {...props} /> : null
+  return available ? <NewAgentWorktreeToggleView {...props} /> : null
 }

@@ -5,10 +5,10 @@ import * as React from "react"
  * state: the event stream, tool cards, the Agent panel, and the app shell.
  */
 export type PicoEventMap = {
-  /** A session's Agent panel state changed on the server. */
-  "pico:session-extensions": { sessionId: string; kind?: string }
-  /** Select a session, for example a child session. */
-  "pico:open-session": { sessionId: string }
+  /** An agent's Agent panel state changed on the server. */
+  "pico:agent-extensions": { agentId: string; kind?: string }
+  /** Select an agent, for example a subagent. */
+  "pico:open-agent": { agentId: string }
   /** Show a right sidebar tab. */
   "pico:open-sidebar-tab": { tab: "agent" | "review" }
   /** Show a background job in the terminal panel. */
@@ -16,7 +16,7 @@ export type PicoEventMap = {
   /** Another device changed the shared sidebar layout in local storage. */
   "pico:sidebar-state": {
     machineId: string
-    changed: Array<"directories" | "pinnedSessionKeys" | "collapsedDirectories">
+    changed: Array<"projects" | "pinnedAgentKeys" | "collapsedProjects">
   }
   /** Open the agent settings dialog. */
   "pico:open-agent-settings": Record<string, never>

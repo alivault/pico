@@ -38,8 +38,8 @@ export type RightSidebarTabValue =
 export type RightSidebarProps = {
   viewerContextId: string
   cwd?: string
-  /** The selected session; absent for a draft. */
-  sessionId?: string
+  /** The selected agent; absent for a draft. */
+  agentId?: string
   active: boolean
   activeFilePath?: string
   activeTab?: RightSidebarTabValue

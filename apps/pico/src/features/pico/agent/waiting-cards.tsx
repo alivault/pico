@@ -33,14 +33,14 @@ function subscribeWaitingCards(listener: () => void) {
 
 export function waitingCardKey(
   viewerContextId: string,
-  sessionId: string | undefined,
+  agentId: string | undefined,
   id: string
 ) {
-  return `${waitingCardPrefix(viewerContextId, sessionId)}${id}`
+  return `${waitingCardPrefix(viewerContextId, agentId)}${id}`
 }
 
-function waitingCardPrefix(viewerContextId: string, sessionId?: string) {
-  return `${viewerContextId}\n${sessionId ?? ""}\n`
+function waitingCardPrefix(viewerContextId: string, agentId?: string) {
+  return `${viewerContextId}\n${agentId ?? ""}\n`
 }
 
 /** Track a card while it waits for the user; give `undefined` when it does not. */
@@ -86,13 +86,13 @@ const CHIP_TEXT: Record<WaitingCardKind, string> = {
  * view. A click scrolls to the card and focuses its first field.
  */
 export function WaitingCardChip({
-  sessionId,
+  agentId,
   viewerContextId,
 }: {
-  sessionId?: string
+  agentId?: string
   viewerContextId: string
 }) {
-  const prefix = waitingCardPrefix(viewerContextId, sessionId)
+  const prefix = waitingCardPrefix(viewerContextId, agentId)
   const card = React.useSyncExternalStore(subscribeWaitingCards, () =>
     offscreenWaitingCard(prefix)
   )

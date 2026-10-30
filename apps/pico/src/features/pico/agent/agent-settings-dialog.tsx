@@ -37,14 +37,14 @@ import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
 
 export type AgentSettings = {
-  notifyRunDone: boolean
+  notifyTurnDone: boolean
   notifyNeedsInput: boolean
   ntfyUrl: string
   publicUrl: string
   browserHeadless: boolean
   scratchSpillKb: number
-  maxChildSessions: number
-  maxSpawnDepth: number
+  maxSubagents: number
+  maxSubagentDepth: number
   worktreeCopy: Array<string>
   jobMemoryHigh: string
   jobMemoryMax: string
@@ -207,7 +207,7 @@ function DevicePushRow({ viewerContextId }: { viewerContextId: string }) {
       label="Push notifications on this device"
       description={
         supported
-          ? "Get a notification when a run finishes or the agent asks a question, also when Pico is closed."
+          ? "Get a notification when an agent finishes its turn or asks a question, also when Pico is closed."
           : "Needs HTTPS (for example Tailscale Serve) or localhost. On iOS, add Pico to the home screen first."
       }
     >
@@ -307,7 +307,7 @@ export function AgentSettingsDialog({
         <DialogHeader>
           <DialogTitle>Agent settings</DialogTitle>
           <DialogDescription>
-            Notifications, context, child sessions, and tools. Tools run without
+            Notifications, context, subagents, and tools. Tools run without
             approval.
           </DialogDescription>
         </DialogHeader>
@@ -320,12 +320,12 @@ export function AgentSettingsDialog({
             <SettingsSection title="Notifications">
               <DevicePushRow viewerContextId={viewerContextId} />
               <Row
-                label="Notify when a run finishes"
+                label="Notify when an agent finishes its turn"
                 control={(id) => (
                   <Switch
                     id={id}
-                    checked={settings.notifyRunDone}
-                    onCheckedChange={(value) => save({ notifyRunDone: value })}
+                    checked={settings.notifyTurnDone}
+                    onCheckedChange={(value) => save({ notifyTurnDone: value })}
                   />
                 )}
               />
@@ -372,7 +372,7 @@ export function AgentSettingsDialog({
             <SettingsSection title="Context">
               <Row
                 label="Compact at"
-                description="Summarize old messages when a session's context gets to this many tokens, for example 200k. A summary starts in the background about 33k before. Empty: compact near the full context window."
+                description="Summarize old messages when an agent's context gets to this many tokens, for example 200k. A summary starts in the background about 33k before. Empty: compact near the full context window."
                 control={(id) => (
                   <TextSetting
                     id={id}
@@ -390,30 +390,30 @@ export function AgentSettingsDialog({
               />
             </SettingsSection>
 
-            <SettingsSection title="Child sessions">
+            <SettingsSection title="Subagents">
               <Row
-                label="Child sessions that can run at once"
+                label="Subagents that can run at once"
                 control={(id) => (
                   <TextSetting
                     id={id}
                     type="number"
                     width="w-20"
-                    initial={String(settings.maxChildSessions)}
-                    onSave={(value) =>
-                      save({ maxChildSessions: Number(value) })
-                    }
+                    initial={String(settings.maxSubagents)}
+                    onSave={(value) => save({ maxSubagents: Number(value) })}
                   />
                 )}
               />
               <Row
-                label="How deep child sessions can nest"
+                label="How deep subagents can nest"
                 control={(id) => (
                   <TextSetting
                     id={id}
                     type="number"
                     width="w-20"
-                    initial={String(settings.maxSpawnDepth)}
-                    onSave={(value) => save({ maxSpawnDepth: Number(value) })}
+                    initial={String(settings.maxSubagentDepth)}
+                    onSave={(value) =>
+                      save({ maxSubagentDepth: Number(value) })
+                    }
                   />
                 )}
               />

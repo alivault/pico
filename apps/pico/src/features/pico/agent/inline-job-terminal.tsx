@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils"
  * `interactive`). It takes keys while the user works in it.
  */
 export default function InlineJobTerminal({ jobId }: { jobId: string }) {
-  const { viewerContextId, sessionId } = useToolRenderContext()
+  const { viewerContextId, agentId } = useToolRenderContext()
   const [active, setActive] = React.useState(false)
   const [status, setStatus] = React.useState<TerminalStatus>({
     type: "idle",
@@ -36,7 +36,7 @@ export default function InlineJobTerminal({ jobId }: { jobId: string }) {
         onStatusChange={(_tabId, next) => setStatus(next)}
         onTerminalIdChange={() => undefined}
         selected
-        sessionId={sessionId}
+        agentId={agentId}
         tabId={`job:${jobId}`}
         viewerContextId={viewerContextId}
       />

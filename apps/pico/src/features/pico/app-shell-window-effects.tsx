@@ -3,41 +3,41 @@ import { toast } from "@/lib/pico/toast"
 
 import {
   doneEventLabel,
-  getCurrentSessionTitleFromState,
-  sessionNotificationKey,
+  getCurrentAgentTitleFromState,
+  agentNotificationKey,
   shallowRecordEqual,
 } from "@/features/pico/app-shell-common"
 import type { AppShellNotificationState } from "@/features/pico/app-shell-types"
 import {
-  playSessionDoneSound,
-  primeSessionDoneSound,
-  showSessionDoneDesktopNotification,
-} from "@/features/pico/session-done-notifications"
+  playAgentDoneSound,
+  primeAgentDoneSound,
+  showAgentDoneDesktopNotification,
+} from "@/features/pico/agent-done-notifications"
 import type { AppShellSidebarStore } from "@/features/pico/app-shell-sidebar-store"
 import {
   setStoreField,
   useSelector,
   type PicoStore,
 } from "@/features/pico/tanstack-store-utils"
-import type { SessionState } from "@/lib/pico"
-import type { SessionDoneEvent } from "@/lib/pico/api"
+import type { AgentState } from "@/lib/pico"
+import type { AgentDoneEvent } from "@/lib/pico/api"
 import { hasPushSubscription } from "@/features/pico/agent/push"
 
 /**
- * Shows the desktop notification for a finished session. Web Push already
- * tells this browser about a finished agent run, so skip those to show only
+ * Shows the desktop notification for a finished agent. Web Push already
+ * tells this browser about a finished agent turn, so skip those to show only
  * one notification.
  */
 function showDoneNotification(
-  event: SessionDoneEvent,
+  event: AgentDoneEvent,
   notification: { title: string; body: string; tag: string }
 ) {
   if (event.reason !== "agent") {
-    showSessionDoneDesktopNotification(notification)
+    showAgentDoneDesktopNotification(notification)
     return
   }
   void hasPushSubscription().then((subscribed) => {
-    if (!subscribed) showSessionDoneDesktopNotification(notification)
+    if (!subscribed) showAgentDoneDesktopNotification(notification)
   })
 }
 
@@ -49,74 +49,74 @@ function getIsPageForeground() {
 
 function getWindowTitleUnreadCount(
   sidebarUnreadVersion: string,
-  backgroundCurrentSessionUnreadKey: string
+  backgroundCurrentAgentUnreadKey: string
 ) {
   const unreadKeys = new Set(
     sidebarUnreadVersion ? sidebarUnreadVersion.split("\n") : []
   )
 
-  if (backgroundCurrentSessionUnreadKey) {
-    unreadKeys.add(backgroundCurrentSessionUnreadKey)
+  if (backgroundCurrentAgentUnreadKey) {
+    unreadKeys.add(backgroundCurrentAgentUnreadKey)
   }
 
   return unreadKeys.size
 }
 
 function setPicoDocumentTitle({
-  backgroundCurrentSessionUnreadKey,
+  backgroundCurrentAgentUnreadKey,
   currentPageTitle,
   sidebarUnreadVersion,
 }: {
-  backgroundCurrentSessionUnreadKey: string
+  backgroundCurrentAgentUnreadKey: string
   currentPageTitle: string
   sidebarUnreadVersion: string
 }) {
   const nextTitle = currentPageTitle
-  const unreadSessionCount = getWindowTitleUnreadCount(
+  const unreadAgentCount = getWindowTitleUnreadCount(
     sidebarUnreadVersion,
-    backgroundCurrentSessionUnreadKey
+    backgroundCurrentAgentUnreadKey
   )
 
   document.title =
-    unreadSessionCount > 0 ? `(${unreadSessionCount}) ${nextTitle}` : nextTitle
+    unreadAgentCount > 0 ? `(${unreadAgentCount}) ${nextTitle}` : nextTitle
 }
 
 export function AppShellWindowEffectsHost({
-  isSessionViewLoading,
-  loadingDisplaySessionTitle,
+  isAgentViewLoading,
+  loadingDisplayAgentTitle,
   notificationStore,
-  onSelectSession,
-  sessionStore,
+  onSelectAgent,
+  agentStore,
   sidebarStore,
 }: {
-  isSessionViewLoading: boolean
-  loadingDisplaySessionTitle: string
+  isAgentViewLoading: boolean
+  loadingDisplayAgentTitle: string
   notificationStore: PicoStore<AppShellNotificationState>
-  onSelectSession: (nextSessionId?: string) => void
-  sessionStore: PicoStore<SessionState>
+  onSelectAgent: (nextAgentId?: string) => void
+  agentStore: PicoStore<AgentState>
   sidebarStore: AppShellSidebarStore
 }) {
-  const sessionWindowState = useSelector(
-    sessionStore,
-    (sessionState) => ({
-      activeSessionKey: sessionState.sessionKey,
-      activeSessionNotificationKey: sessionNotificationKey({
-        sessionId: sessionState.sessionId,
-        sessionFile: sessionState.sessionFile,
+  const agentWindowState = useSelector(
+    agentStore,
+    (agentState) => ({
+      activeAgentKey: agentState.agentKey,
+      activeAgentNotificationKey: agentNotificationKey({
+        agentId: agentState.agentId,
+        agentFile: agentState.agentFile,
       }),
-      sessionCwd: sessionState.cwd,
-      sessionName: sessionState.sessionName,
-      firstMessage: sessionState.firstMessage,
-      uiTitle: sessionState.uiState.title?.trim() || "",
+      agentCwd: agentState.cwd,
+      agentName: agentState.agentName,
+      firstMessage: agentState.firstMessage,
+      uiTitle: agentState.uiState.title?.trim() || "",
     }),
     { compare: shallowRecordEqual }
   )
   const notificationState = useSelector(notificationStore)
   React.useEffect(() => {
-    if (!notificationState.sessionDoneSoundEnabled) return
+    if (!notificationState.agentDoneSoundEnabled) return
 
     const handleInteraction = () => {
-      void primeSessionDoneSound()
+      void primeAgentDoneSound()
     }
 
     window.addEventListener("pointerdown", handleInteraction, true)
@@ -126,87 +126,84 @@ export function AppShellWindowEffectsHost({
       window.removeEventListener("pointerdown", handleInteraction, true)
       window.removeEventListener("keydown", handleInteraction, true)
     }
-  }, [notificationState.sessionDoneSoundEnabled])
+  }, [notificationState.agentDoneSoundEnabled])
 
-  const currentSessionTitle =
-    getCurrentSessionTitleFromState(sessionWindowState)
-  const currentPageTitle = isSessionViewLoading
-    ? loadingDisplaySessionTitle
-    : sessionWindowState.uiTitle ||
-      (currentSessionTitle !== "New session" ? currentSessionTitle : "Pico")
-  const onConsumeSessionDoneEvents = (ids: Array<string>) => {
+  const currentAgentTitle = getCurrentAgentTitleFromState(agentWindowState)
+  const currentPageTitle = isAgentViewLoading
+    ? loadingDisplayAgentTitle
+    : agentWindowState.uiTitle ||
+      (currentAgentTitle !== "New agent" ? currentAgentTitle : "Pico")
+  const onConsumeAgentDoneEvents = (ids: Array<string>) => {
     const consumedIds = new Set(ids)
-    setStoreField(notificationStore, "sessionDoneEvents", (current) =>
+    setStoreField(notificationStore, "agentDoneEvents", (current) =>
       current.filter((event) => !consumedIds.has(event.id))
     )
   }
 
   return (
     <AppShellWindowEffects
-      activeSessionKey={sessionWindowState.activeSessionKey}
-      activeSessionNotificationKey={
-        sessionWindowState.activeSessionNotificationKey
-      }
+      activeAgentKey={agentWindowState.activeAgentKey}
+      activeAgentNotificationKey={agentWindowState.activeAgentNotificationKey}
       currentPageTitle={currentPageTitle}
-      sessionCwd={sessionWindowState.sessionCwd}
-      sessionDoneDesktopNotificationsEnabled={
-        notificationState.sessionDoneDesktopNotificationsEnabled
+      agentCwd={agentWindowState.agentCwd}
+      agentDoneDesktopNotificationsEnabled={
+        notificationState.agentDoneDesktopNotificationsEnabled
       }
-      sessionDoneSoundEnabled={notificationState.sessionDoneSoundEnabled}
-      sessionDoneEvents={notificationState.sessionDoneEvents}
+      agentDoneSoundEnabled={notificationState.agentDoneSoundEnabled}
+      agentDoneEvents={notificationState.agentDoneEvents}
       sidebarStore={sidebarStore}
-      onConsumeSessionDoneEvents={onConsumeSessionDoneEvents}
-      onSelectSession={onSelectSession}
+      onConsumeAgentDoneEvents={onConsumeAgentDoneEvents}
+      onSelectAgent={onSelectAgent}
     />
   )
 }
 
 function AppShellWindowEffects({
-  activeSessionKey,
-  activeSessionNotificationKey,
+  activeAgentKey,
+  activeAgentNotificationKey,
   currentPageTitle,
-  sessionCwd,
-  sessionDoneDesktopNotificationsEnabled,
-  sessionDoneSoundEnabled,
-  sessionDoneEvents,
+  agentCwd,
+  agentDoneDesktopNotificationsEnabled,
+  agentDoneSoundEnabled,
+  agentDoneEvents,
   sidebarStore,
-  onConsumeSessionDoneEvents,
-  onSelectSession,
+  onConsumeAgentDoneEvents,
+  onSelectAgent,
 }: {
-  activeSessionKey?: string
-  activeSessionNotificationKey: string
+  activeAgentKey?: string
+  activeAgentNotificationKey: string
   currentPageTitle: string
-  sessionCwd?: string
-  sessionDoneDesktopNotificationsEnabled: boolean
-  sessionDoneSoundEnabled: boolean
-  sessionDoneEvents: Array<SessionDoneEvent>
+  agentCwd?: string
+  agentDoneDesktopNotificationsEnabled: boolean
+  agentDoneSoundEnabled: boolean
+  agentDoneEvents: Array<AgentDoneEvent>
   sidebarStore: AppShellSidebarStore
-  onConsumeSessionDoneEvents: (ids: Array<string>) => void
-  onSelectSession: (nextSessionId?: string) => void
+  onConsumeAgentDoneEvents: (ids: Array<string>) => void
+  onSelectAgent: (nextAgentId?: string) => void
 }) {
   const sidebarUnreadVersion = useSelector(sidebarStore, (snapshot) =>
-    snapshot.derived.sidebarSessions
-      .flatMap((session) => {
-        if (!session.unread) return []
-        const key = sessionNotificationKey(session)
+    snapshot.derived.sidebarAgents
+      .flatMap((agent) => {
+        if (!agent.unread) return []
+        const key = agentNotificationKey(agent)
         return key ? [key] : []
       })
       .sort()
       .join("\n")
   )
   const isPageForegroundRef = React.useRef(getIsPageForeground())
-  const backgroundCurrentSessionUnreadKeyRef = React.useRef("")
+  const backgroundCurrentAgentUnreadKeyRef = React.useRef("")
   const titleSnapshotRef = React.useRef({
     currentPageTitle,
     sidebarUnreadVersion,
   })
-  const processedSessionDoneEventIdsRef = React.useRef<Set<string>>(new Set())
+  const processedAgentDoneEventIdsRef = React.useRef<Set<string>>(new Set())
 
   const updateDocumentTitle = () => {
     setPicoDocumentTitle({
       ...titleSnapshotRef.current,
-      backgroundCurrentSessionUnreadKey:
-        backgroundCurrentSessionUnreadKeyRef.current,
+      backgroundCurrentAgentUnreadKey:
+        backgroundCurrentAgentUnreadKeyRef.current,
     })
   }
 
@@ -223,18 +220,18 @@ function AppShellWindowEffects({
       const isPageForeground = getIsPageForeground()
       isPageForegroundRef.current = isPageForeground
 
-      if (isPageForeground || !activeSessionNotificationKey) {
-        backgroundCurrentSessionUnreadKeyRef.current = ""
+      if (isPageForeground || !activeAgentNotificationKey) {
+        backgroundCurrentAgentUnreadKeyRef.current = ""
         updateDocumentTitle()
         return
       }
 
-      const currentBackgroundKey = backgroundCurrentSessionUnreadKeyRef.current
+      const currentBackgroundKey = backgroundCurrentAgentUnreadKeyRef.current
       if (
         currentBackgroundKey &&
-        currentBackgroundKey !== activeSessionNotificationKey
+        currentBackgroundKey !== activeAgentNotificationKey
       ) {
-        backgroundCurrentSessionUnreadKeyRef.current = ""
+        backgroundCurrentAgentUnreadKeyRef.current = ""
         updateDocumentTitle()
       }
     }
@@ -249,57 +246,55 @@ function AppShellWindowEffects({
       window.removeEventListener("blur", syncPageForeground)
       document.removeEventListener("visibilitychange", syncPageForeground)
     }
-  }, [activeSessionNotificationKey])
+  }, [activeAgentNotificationKey])
 
   React.useEffect(() => {
-    if (sessionDoneEvents.length === 0) return
+    if (agentDoneEvents.length === 0) return
 
     const consumedIds: Array<string> = []
     let playedSound = false
 
-    for (const event of sessionDoneEvents) {
+    for (const event of agentDoneEvents) {
       consumedIds.push(event.id)
-      if (processedSessionDoneEventIdsRef.current.has(event.id)) continue
-      processedSessionDoneEventIdsRef.current.add(event.id)
+      if (processedAgentDoneEventIdsRef.current.has(event.id)) continue
+      processedAgentDoneEventIdsRef.current.add(event.id)
       // The agent goes on when its timer, watch, or job fires.
       if (event.waiting) continue
 
-      const key = sessionNotificationKey({
-        sessionId: event.sessionId,
-        sessionPath: event.sessionPath,
+      const key = agentNotificationKey({
+        agentId: event.agentId,
+        agentPath: event.agentPath,
       })
-      const matchesCurrentSession = Boolean(
+      const matchesCurrentAgent = Boolean(
         (key &&
-          activeSessionNotificationKey &&
-          key === activeSessionNotificationKey) ||
-        (event.sessionKey &&
-          activeSessionKey &&
-          event.sessionKey === activeSessionKey)
+          activeAgentNotificationKey &&
+          key === activeAgentNotificationKey) ||
+        (event.agentKey && activeAgentKey && event.agentKey === activeAgentKey)
       )
       const label = doneEventLabel(event)
-      const body = event.cwd || sessionCwd || "Open Pico to continue"
-      const tag = event.sessionPath || event.sessionId || event.id
+      const body = event.cwd || agentCwd || "Open Pico to continue"
+      const tag = event.agentPath || event.agentId || event.id
       const isPageForeground = isPageForegroundRef.current
 
-      if (matchesCurrentSession) {
+      if (matchesCurrentAgent) {
         if (!isPageForeground && key) {
-          backgroundCurrentSessionUnreadKeyRef.current = key
+          backgroundCurrentAgentUnreadKeyRef.current = key
           updateDocumentTitle()
         }
 
-        if (sessionDoneDesktopNotificationsEnabled && !isPageForeground) {
+        if (agentDoneDesktopNotificationsEnabled && !isPageForeground) {
           showDoneNotification(event, { title: label, body, tag })
         }
 
-        if (sessionDoneSoundEnabled && !isPageForeground && !playedSound) {
+        if (agentDoneSoundEnabled && !isPageForeground && !playedSound) {
           playedSound = true
-          void playSessionDoneSound()
+          void playAgentDoneSound()
         }
         continue
       }
 
-      if (event.sessionId) {
-        const sessionId = event.sessionId
+      if (event.agentId) {
+        const agentId = event.agentId
         const toastId = event.id
 
         toast.success(label, {
@@ -312,7 +307,7 @@ function AppShellWindowEffects({
               className="absolute inset-0 z-10 cursor-pointer rounded-[var(--border-radius)] bg-transparent p-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
               onClick={() => {
                 toast.dismiss(toastId)
-                onSelectSession(sessionId)
+                onSelectAgent(agentId)
               }}
             />
           ),
@@ -321,26 +316,26 @@ function AppShellWindowEffects({
         toast.success(label)
       }
 
-      if (sessionDoneDesktopNotificationsEnabled && !isPageForeground) {
+      if (agentDoneDesktopNotificationsEnabled && !isPageForeground) {
         showDoneNotification(event, { title: label, body, tag })
       }
 
-      if (sessionDoneSoundEnabled && !playedSound) {
+      if (agentDoneSoundEnabled && !playedSound) {
         playedSound = true
-        void playSessionDoneSound()
+        void playAgentDoneSound()
       }
     }
 
-    onConsumeSessionDoneEvents(consumedIds)
+    onConsumeAgentDoneEvents(consumedIds)
   }, [
-    activeSessionKey,
-    activeSessionNotificationKey,
-    onConsumeSessionDoneEvents,
-    onSelectSession,
-    sessionCwd,
-    sessionDoneDesktopNotificationsEnabled,
-    sessionDoneEvents,
-    sessionDoneSoundEnabled,
+    activeAgentKey,
+    activeAgentNotificationKey,
+    onConsumeAgentDoneEvents,
+    onSelectAgent,
+    agentCwd,
+    agentDoneDesktopNotificationsEnabled,
+    agentDoneEvents,
+    agentDoneSoundEnabled,
   ])
 
   return null
