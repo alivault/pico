@@ -1,13 +1,13 @@
 /**
- * Tool profiles: named selections of extensions and tools for a session.
+ * Tool profiles: named selections of extensions and tools for an agent.
  *
  * A profile is a capability choice, not an approval system: tools that a
  * profile keeps still run without asking. Built-in profiles are below; the
  * `profiles` setting adds more or replaces one by name.
  *
- * Child agents (agents with a parent) get more limits: no `ask_user` or
- * `spawn_session` unless the parent grants them, and a bash
- * guard (see `bashGuard`). The parent can add and remove tools for each child.
+ * Subagents (agents with a parent) get more limits: no `ask_user` or
+ * `spawn_subagent` unless the parent grants them, and a bash guard (see
+ * `bashGuard`). The parent can add and remove tools for each subagent.
  *
  * A name with a dot, such as `browser.eval`, is an action of a tool. The
  * tool checks it with `actionRemoved`, so a profile can keep a tool and take
@@ -32,18 +32,18 @@ export type Profile = {
   instructions?: string
 }
 
-/** The tool limits of one session, kept in its metadata. */
+/** The tool limits of one agent, kept in its metadata. */
 export type ToolLimits = {
-  /** Tools to turn on, also when the profile or the child rules remove them. */
+  /** Tools to turn on, also when the profile or the subagent rules remove them. */
   add?: string[]
   /** Tools to turn off. */
   remove?: string[]
-  /** Commands that bash refuses, in addition to the child rules. */
+  /** Commands that bash refuses, in addition to the subagent rules. */
   denyCommands?: string[]
 }
 
-/** Tools that a child session does not get unless its parent grants them. */
-export const SUBAGENT_DENIED_TOOLS = ["ask_user", "spawn_session"]
+/** Tools that a subagent does not get unless its parent grants them. */
+export const SUBAGENT_DENIED_TOOLS = ["ask_user", "spawn_subagent"]
 
 const WRITE_TOOLS = [
   "write",
@@ -53,8 +53,8 @@ const WRITE_TOOLS = [
   "terminal",
   "browser.act",
   "browser.eval",
-  "spawn_session",
-  "send_to_session",
+  "spawn_subagent",
+  "agents.send",
   "agents.stop",
 ]
 
@@ -67,12 +67,7 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
     name: "builder",
     description:
       "Build and change code: files, shell, git, and tests. No browser and no other agents.",
-    removeTools: [
-      "browser",
-      "send_to_session",
-      "agents.stop",
-      "agents.archive",
-    ],
+    removeTools: ["browser", "agents.send", "agents.stop", "agents.archive"],
     instructions:
       "You are a builder: make the change, run the checks and tests, and report what you changed and what you did not do.",
   },
@@ -100,7 +95,7 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
     description:
       "Review changes: diffs, other agents, pull requests, and tests. No file changes.",
     removeTools: WRITE_TOOLS.filter(
-      (tool) => tool !== "bash" && tool !== "send_to_session"
+      (tool) => tool !== "bash" && tool !== "agents.send"
     ),
     instructions:
       "You are a reviewer: read the diff (git diff, gh pr diff, agents read), run the tests, and report problems with file and line. Do not change files.",
@@ -161,7 +156,7 @@ export function nameList(value: unknown) {
   return names.length > 0 ? [...new Set(names)] : undefined
 }
 
-type SelectionOptions = { child?: { parent: string }; limits?: ToolLimits }
+type SelectionOptions = { subagent?: { parent: string }; limits?: ToolLimits }
 
 /** The tool and action names that a profile and the limits take away. */
 export function removedNames(
@@ -172,14 +167,14 @@ export function removedNames(
   const removeNames = new Set([
     ...(profile?.removeTools ?? []),
     ...(options.limits?.remove ?? []),
-    ...(options.child ? SUBAGENT_DENIED_TOOLS : []),
+    ...(options.subagent ? SUBAGENT_DENIED_TOOLS : []),
   ])
   for (const name of add) removeNames.delete(name)
   return removeNames
 }
 
 /**
- * True when a session may not use `action` (`tool.action`, for example
+ * True when an agent may not use `action` (`tool.action`, for example
  * `agents.stop`). Profiles and limits remove actions by this name.
  */
 export function actionRemoved(
@@ -190,7 +185,7 @@ export function actionRemoved(
   return removedNames(profile, options).has(action)
 }
 
-/** What a session gets: the extensions, the removed tools, and the prompt text. */
+/** What an agent gets: the extensions, the removed tools, and the prompt text. */
 export function resolveSelection(
   registry: RegistryReader,
   profile: Profile | undefined,
@@ -228,7 +223,7 @@ export function resolveSelection(
     removeTools.push(tool)
     removed.push(tool.name)
   }
-  // Actions of tools that the session keeps, for example `browser.eval`.
+  // Actions of tools that the agent keeps, for example `browser.eval`.
   for (const name of removeNames) {
     const tool = name.split(".")[0]!
     if (name.includes(".") && seen.has(tool) && !removed.includes(tool))
@@ -236,9 +231,14 @@ export function resolveSelection(
   }
   const parts: string[] = []
   if (profile?.instructions) parts.push(profile.instructions)
-  if (options.child)
+  if (options.subagent)
     parts.push(
-      subagentInstructions(options.child.parent, profile, removed, options.limits)
+      subagentInstructions(
+        options.subagent.parent,
+        profile,
+        removed,
+        options.limits
+      )
     )
   return {
     extensions,
@@ -259,13 +259,13 @@ function subagentInstructions(
     ...(limits?.denyCommands ?? []).map((command) => `\`${command}\``),
   ]
   return [
-    `You are a child session of session ${parent}. Your parent gave you this work and limited your tools${profile && profile.name !== "full" ? ` (profile: ${profile.name})` : ""}.`,
+    `You are a subagent of agent ${parent}. Your parent gave you this work and limited your tools${profile && profile.name !== "full" ? ` (profile: ${profile.name})` : ""}.`,
     removed.length > 0
       ? `You do not have these tools or actions: ${removed.sort().join(", ")}.`
       : "",
     `Bash refuses: ${deny.join(", ")}.`,
     "If you need a tool, a command, or a decision, do not wait and do not work around the limit. End your turn with a message that starts with `Question:`. Give the question, the options, and your recommendation. Your parent reads it and answers you, and it can give you more tools.",
-    "When the work is done, end your turn with a short report of what you did. Your parent gets the end of your turn as a message, so do not also send the report with send_to_session.",
+    "When the work is done, end your turn with a short report of what you did. Your parent gets the end of your turn as a message, so do not also send the report with agents send.",
     "If you end your turn to wait on a timer, a watch, or a job, your parent gets no message: it gets one when you end with a question or with done.",
   ]
     .filter(Boolean)
@@ -275,14 +275,14 @@ function subagentInstructions(
 /**
  * Configure a conversation for a profile. `undefined` or `full` clears the
  * profile's choices, so the conversation follows the host defaults again.
- * A child always keeps the child limits.
+ * A subagent always keeps the subagent limits.
  */
 export async function applyProfile(
   conversation: Pick<Conversation, "configure">,
   registry: RegistryReader,
   profile: Profile | undefined,
   context: Context,
-  options: { child?: { parent: string }; limits?: ToolLimits } = {}
+  options: SelectionOptions = {}
 ) {
   const selection = resolveSelection(registry, profile, options)
   await conversation.configure(
@@ -299,7 +299,7 @@ export async function applyProfile(
 }
 
 // -----------------------------------------------------------------------------
-// The bash guard of child agents
+// The bash guard of subagents
 
 /** Shell words of a command, split into simple commands at `;`, `&`, `|`, newlines, and `(`. */
 function simpleCommands(command: string) {
@@ -447,7 +447,7 @@ function startsWith(words: string[], denied: string[]) {
 }
 
 /**
- * The reason a child session may not run a command, or undefined. It refuses
+ * The reason a subagent may not run a command, or undefined. It refuses
  * `git push` to main or master, `sudo`, and the commands in `denyCommands`
  * (each one a command with its first words, for example `npm publish`). It
  * is a guard against mistakes, not a sandbox.
@@ -470,13 +470,13 @@ export async function bashGuard(
       words[0]?.endsWith("/sudo") ||
       words[0] === "doas"
     )
-      return "sudo is not allowed in a child session"
+      return "sudo is not allowed in a subagent"
     for (const entry of denied)
       if (startsWith(words, entry))
-        return `\`${entry.join(" ")}\` is not allowed in this child session`
+        return `\`${entry.join(" ")}\` is not allowed in this subagent`
     words = commandWords(words)
     const push = await pushToMain(words, options.cwd, options.currentBranch)
-    if (push) return `${push} is not allowed in a child session`
+    if (push) return `${push} is not allowed in a subagent`
   }
   return undefined
 }

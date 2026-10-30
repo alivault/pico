@@ -1831,7 +1831,7 @@ export class Agents implements HostAgents {
   /** The child limits of a session, for `applyProfile`. */
   #toolOptions(meta: AgentMeta) {
     return {
-      ...(meta.parent ? { child: { parent: meta.parent } } : {}),
+      ...(meta.parent ? { subagent: { parent: meta.parent } } : {}),
       ...(meta.limits ? { limits: meta.limits } : {}),
     }
   }

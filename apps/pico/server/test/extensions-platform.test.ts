@@ -67,23 +67,23 @@ void test("profiles select extensions and remove tools", async () => {
     await applyProfile(conversation, registry, undefined, ctx)
     assert.ok((await names()).includes("write"))
     assert.equal((await conversation.agent(ctx)).instructions, undefined)
-    // A child has no ask_user unless its parent adds it.
+    // A subagent has no ask_user unless its parent adds it.
     await applyProfile(conversation, registry, findProfile("reviewer"), ctx, {
-      child: { parent: "s1" },
+      subagent: { parent: "s1" },
       limits: { remove: ["todo"], denyCommands: ["npm publish"] },
     })
-    const child = await names()
-    assert.ok(!child.includes("ask_user"))
-    assert.ok(!child.includes("todo"))
-    assert.ok(!child.includes("write"))
+    const subagent = await names()
+    assert.ok(!subagent.includes("ask_user"))
+    assert.ok(!subagent.includes("todo"))
+    assert.ok(!subagent.includes("write"))
     const instructions = (await conversation.agent(ctx)).instructions ?? ""
     assert.match(instructions, /reviewer/)
-    assert.match(instructions, /child session of session s1/)
+    assert.match(instructions, /subagent of agent s1/)
     assert.match(instructions, /ask_user/)
     assert.match(instructions, /`npm publish`/)
     assert.match(instructions, /Question:/)
     await applyProfile(conversation, registry, findProfile("review"), ctx, {
-      child: { parent: "s1" },
+      subagent: { parent: "s1" },
       limits: { add: ["ask_user"] },
     })
     assert.ok((await names()).includes("ask_user"))

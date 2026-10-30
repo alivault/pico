@@ -263,7 +263,7 @@ export function deniedAction(
     action,
     profile?.name === "full" ? undefined : profile,
     {
-      ...(meta.parent ? { child: { parent: meta.parent } } : {}),
+      ...(meta.parent ? { subagent: { parent: meta.parent } } : {}),
       ...(meta.limits ? { limits: meta.limits } : {}),
     }
   )
