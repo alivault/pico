@@ -4,7 +4,7 @@ import { test } from "node:test"
 import type { JobsState } from "../src/extensions/jobs.ts"
 import { waitingLabel } from "../src/extensions/waiting.ts"
 
-test("waitingLabel names running jobs that notify", () => {
+void test("waitingLabel names running jobs that notify", () => {
   const jobs = {
     items: {
       j1: { status: "running", notifyOnExit: true, name: "build" },
@@ -16,7 +16,7 @@ test("waitingLabel names running jobs that notify", () => {
   assert.equal(waitingLabel(jobs), "2 jobs (build, lint)")
 })
 
-test("waitingLabel is undefined when nothing is pending", () => {
+void test("waitingLabel is undefined when nothing is pending", () => {
   assert.equal(waitingLabel(undefined), undefined)
   const jobs = {
     items: { j1: { status: "exited", notifyOnExit: true, name: "test" } },
