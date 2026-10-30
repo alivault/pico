@@ -300,7 +300,7 @@ export function createApi(api: ApiContext) {
     if (!directory) throw badRequest("directory is required")
     return {
       ok: true,
-      ...agents.directoryIndex(directory, viewers.unread()),
+      ...agents.projectIndex(directory, viewers.unread()),
     }
   })
 
@@ -318,7 +318,7 @@ export function createApi(api: ApiContext) {
       directoryIndexes: Object.fromEntries(
         directories.map((directory) => [
           directory,
-          agents.directoryIndex(directory, unread),
+          agents.projectIndex(directory, unread),
         ])
       ),
     }
@@ -1759,7 +1759,7 @@ export function createApi(api: ApiContext) {
     return {
       ok: true,
       path: agentPath(id),
-      directory: agents.directoryOf(id),
+      directory: agents.projectOf(id),
     }
   })
 

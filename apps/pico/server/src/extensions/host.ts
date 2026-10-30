@@ -15,14 +15,14 @@ import type { BrowserManager } from "../services/browser.ts"
 import type { Notifier } from "../services/notify.ts"
 import type { Terminals } from "../services/terminal.ts"
 
-/** Session operations that extensions use. `Agents` implements it. */
+/** Agent operations that extensions use. `Agents` implements it. */
 export type HostAgents = {
   has(id: string | undefined): id is string
-  /** The visible session for an ID, after tree navigation replacements. */
+  /** The visible agent for an ID, after tree navigation replacements. */
   current(id: string | undefined): string | undefined
   meta(id: string): HostAgentMeta
   isBusy(id: string): boolean
-  /** The tool calls that run now in a session, oldest first. */
+  /** The tool calls that run now in an agent, oldest first. */
   runningTools(
     id: string
   ): Array<{ callId: string; name: string; startedAt: number }>
@@ -38,24 +38,24 @@ export type HostAgents = {
   ): Promise<{ queued: boolean }>
   abort(id: string): Promise<void>
   /**
-   * Put a message in the follow-up queue of a session, after the queued
-   * prompts of the user. It never steers: the agent gets it when its run
-   * answers, and an idle session starts a run. A paused queue keeps it.
+   * Put a message in the follow-up queue of an agent, after the queued
+   * prompts of the user. It never steers: the agent gets it when its turn
+   * answers, and an idle agent starts a turn. A paused queue keeps it.
    */
   followUp(id: string, message: string, requestId: string): Promise<void>
-  /** Give tools to a session or take them away, and apply its profile again. */
+  /** Give tools to an agent or take them away, and apply its profile again. */
   changeLimits(
     id: string,
     change: { add?: string[]; remove?: string[] }
   ): Promise<ToolLimits>
-  /** Children that `spawn_session` made for a session. */
-  children(id: string): string[]
+  /** Subagents that `spawn_subagent` made for an agent. */
+  subagents(id: string): string[]
   /** Agents for tools, newest activity first. */
-  list(filter: { parent?: string; directory?: string }): HostAgentSummary[]
+  list(filter: { parent?: string; project?: string }): HostAgentSummary[]
   rename(id: string, name: string): string
-  /** Mark a session read or unread for every client. */
+  /** Mark an agent read or unread for every client. */
   setRead(id: string, read: boolean): void
-  /** Hide a session. It stays on disk and `restore` shows it again. */
+  /** Hide an agent. It stays on disk and `restore` shows it again. */
   archive(id: string): void
   restore(id: string): void
   /** Archived agents, most recently archived first. */
@@ -67,7 +67,7 @@ export type HostAgents = {
   }>
   availableModels(): Array<{ id: string; provider?: string }>
   publishStateIfWatched(id: string): Promise<void>
-  /** Tell clients that a session's extension state changed. */
+  /** Tell clients that an agent's extension state changed. */
   extensionStateChanged(id: string, kind: string): void
 }
 
@@ -93,9 +93,9 @@ export type HostAgentSummary = {
   cwd: string
   busy: boolean
   needsInput: boolean
-  /** What the session waits on: timers, watches, or jobs. */
+  /** What the agent waits on: timers, watches, or jobs. */
   waiting?: string
-  /** Nobody has read the last run yet. */
+  /** Nobody has read the last turn yet. */
   unread: boolean
   parent?: string
   worktreeBranch?: string
@@ -110,10 +110,10 @@ export type HostCreateOptions = {
   parent?: string
   spawnedByCall?: string
   profile?: string
-  /** Tool limits of a child session: added and removed tools, denied commands. */
+  /** Tool limits of a subagent: added and removed tools, denied commands. */
   limits?: ToolLimits
   name?: string
-  /** Show the session under this directory in the sidebar. */
+  /** Show the agent under this project in the sidebar. */
   group?: string
   worktree?: { repoRoot: string; path: string; branch: string }
 }
@@ -152,7 +152,7 @@ export type HostServices = {
   dataDir: string
   notifier?: Notifier
   browser?: BrowserManager
-  /** The remote machines of a hub, for the session tools. */
+  /** The remote machines of a hub, for the agent tools. */
   machines?: Pick<MachineManager, "find" | "list">
 }
 
@@ -211,7 +211,7 @@ export class HostBridge {
   }
 }
 
-/** Public session IDs are `s<conversation id>`; see `core/agents.ts`. */
+/** Public agent IDs are `s<conversation id>`; see `core/agents.ts`. */
 export function agentIdOf(conversationId: ConversationId) {
   return `s${conversationId}`
 }

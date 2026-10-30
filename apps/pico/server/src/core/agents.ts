@@ -1,11 +1,12 @@
 /**
  * Agents on durable conversations.
  *
- * A Pico session is an ownerless durable conversation with a `pico.session`
- * document: its directory, name, summary, and labels. Navigating the session
- * tree forks the conversation and the fork takes the session's place, so a
- * session is a family of conversations of which one is visible. Deleting a
- * session archives it; durable conversations are never removed.
+ * A Pico agent is an ownerless durable conversation with a `pico.session`
+ * document (`AgentMetaDoc`): its directory, project, name, summary, and
+ * labels. Navigating the conversation tree forks the conversation and the
+ * fork takes the agent's place, so an agent is a family of conversations of
+ * which one is visible. Deleting an agent archives it; durable conversations
+ * are never removed.
  *
  * Every commit is observed: new entries, `pi.live`, `pi.inbox`, and `pi.agent`
  * changes become state syncs, streaming deltas, sidebar updates, and
@@ -110,13 +111,13 @@ export type AgentMeta = {
   nameSource?: "user" | "auto"
   createdAt: number
   modifiedAt: number
-  /** Archived by the user. The session stays on disk and can be restored. */
+  /** Archived by the user. The agent stays on disk and can be restored. */
   archived?: boolean
-  /** When the user archived the session. */
+  /** When the user archived the agent. */
   archivedAt?: number
-  /** Replaced by a tree navigation fork, which is the session now. */
+  /** Replaced by a tree navigation fork, which is the agent now. */
   replacedBy?: string
-  /** First conversation of the session's family. */
+  /** First conversation of the agent's family. */
   family?: string
   firstMessage: string
   lastMessagePreview?: string
@@ -124,23 +125,24 @@ export type AgentMeta = {
   lastMessageAt?: number
   messageCount: number
   labels?: Record<string, { label: string; timestamp: number }>
-  /** The session that spawned this one with `spawn_session`. */
+  /** The agent that spawned this one with `spawn_subagent`. */
   parent?: string
-  /** The `spawn_session` call that made this session. */
+  /** The `spawn_subagent` call that made this agent. */
   spawnedByCall?: string
-  /** How many `spawn_session` levels are above this session. */
+  /** How many `spawn_subagent` levels are above this agent. */
   depth?: number
   /** Tool profile name; absent uses the default profile. */
   profile?: string
-  /** Tool limits that the parent set for a child session. */
+  /** Tool limits that the parent set for a subagent. */
   limits?: ToolLimits
-  /** The sidebar directory, when it is not `cwd` (worktree agents). */
+  /** The sidebar project, when it is not `cwd` (worktree agents). */
   group?: string
-  /** The git worktree that this session made and works in. */
+  /** The git worktree that this agent made and works in. */
   worktree?: { repoRoot: string; path: string; branch: string }
 }
 
 export const AgentMetaDoc = defineDoc<AgentMeta>({
+  // Stored name: do not change.
   kind: "pico.session",
   checkpointWhen: () => false,
   version: 1,
@@ -173,7 +175,7 @@ export type AgentListEntry = {
   worktreeBranch?: string
   /** The agent waits for an answer from the user. */
   needsInput?: boolean
-  /** What an idle session waits on: jobs that report their exit. */
+  /** What an idle agent waits on: jobs that report their exit. */
   waiting?: string
 }
 
@@ -208,8 +210,8 @@ type Dirty = {
 type PromptImageInput = { mimeType?: string; data?: string }
 
 /**
- * Public session IDs are `s<conversation id>`: the client's router reads a
- * numeric search value as a number, not a session ID.
+ * Public agent IDs are `s<conversation id>`: the client's router reads a
+ * numeric search value as a number, not an agent ID.
  */
 export function publicId(conversationId: ConversationId) {
   return `s${conversationId}`
@@ -225,11 +227,15 @@ export function agentPath(id: string) {
   return `pico:${id}`
 }
 
+/**
+ * The key of an agent in the sidebar and in the pinned agents. Stored name:
+ * do not change the `session:` prefix. Pins keep it.
+ */
 export function agentKey(id: string) {
   return `session:${id}`
 }
 
-/** A session ID from a session ID, key, or path. */
+/** An agent ID from an agent ID, key, or path. */
 export function parseAgentId(value: string | undefined): string | undefined {
   const trimmed = value?.trim()
   if (!trimmed) return undefined
@@ -263,7 +269,7 @@ function fnv1a(parts: string[]) {
 /**
  * Shrink a prompt image to the model limits (2000 px, 4.5 MB). The API refuses
  * images larger than this when a request has many images, so a large pasted
- * screenshot would break the session later.
+ * screenshot would break the agent later.
  */
 async function fitImage(image: ImageContent): Promise<ImageContent> {
   try {
@@ -334,7 +340,7 @@ type HeldItem = {
   id: number
   mode: "steer" | "followUp"
   content: JsonValue
-  /** A follow-up from another session: it is held only one time. */
+  /** A follow-up from another agent: it is held only one time. */
   requestId?: string
 }
 
@@ -435,7 +441,7 @@ export class Agents implements HostAgents {
     string,
     { jobId: string; name: string; prompt: string }
   >()
-  /** What each session waits on (see `waitingLabel`). */
+  /** What each agent waits on (see `waitingLabel`). */
   readonly #waiting = new Map<string, string>()
   readonly #held = new Map<string, HeldItem[]>()
   #stateKinds: Set<string> | undefined
@@ -450,7 +456,7 @@ export class Agents implements HostAgents {
     viewers.onReadChange((id, unread) => {
       if (!this.#metas.has(id)) return
       this.#hub.push({
-        type: "session_status",
+        type: "agent_status",
         agentId: id,
         agentKey: agentKey(id),
         agentPath: agentPath(id),
@@ -465,7 +471,7 @@ export class Agents implements HostAgents {
     return this.#runtime.harness
   }
 
-  /** Read every session and start observing commits. */
+  /** Read every agent and start observing commits. */
   async load() {
     let cursor: Parameters<Conversation["entries"]>[2]
     const ids: ConversationId[] = []
@@ -506,7 +512,7 @@ export class Agents implements HostAgents {
       })
     )
     this.#harness.subscribeCommits((publication) => this.#observe(publication))
-    // Continue runs an earlier process left unfinished.
+    // Continue turns an earlier process left unfinished.
     this.#harness.resume()
   }
 
@@ -519,11 +525,11 @@ export class Agents implements HostAgents {
 
   meta(id: string): AgentMeta {
     const meta = this.#metas.get(id)
-    if (!meta) throw notFound(`Unknown session: ${id}`)
+    if (!meta) throw notFound(`Unknown agent: ${id}`)
     return meta
   }
 
-  /** The visible session for an ID, following tree navigation replacements. */
+  /** The visible agent for an ID, following tree navigation replacements. */
   current(id: string | undefined): string | undefined {
     let current = parseAgentId(id)
     for (let hops = 0; current && hops < 100; hops += 1) {
@@ -550,7 +556,7 @@ export class Agents implements HostAgents {
       ctx
     )
     if (!conversation || !this.#metas.has(id))
-      throw notFound(`Unknown session: ${id}`)
+      throw notFound(`Unknown agent: ${id}`)
     return conversation
   }
 
@@ -563,7 +569,7 @@ export class Agents implements HostAgents {
   // ---------------------------------------------------------------------------
   // Watching
 
-  /** An event stream shows this session; keep its transcript and send its updates. */
+  /** An event stream shows this agent; keep its transcript and send its updates. */
   watch(id: string) {
     this.#watchers.set(id, (this.#watchers.get(id) ?? 0) + 1)
     return () => {
@@ -681,9 +687,9 @@ export class Agents implements HostAgents {
           change.conversationId === undefined &&
           this.#isStateKind(change.record.kind)
         ) {
-          // A session-wide document: every session may show it.
+          // An agent-wide document: every agent may show it.
           this.#hub.push({
-            type: "session_extensions",
+            type: "agent_extensions",
             agentId: "*",
             kind: change.record.kind,
           })
@@ -749,7 +755,7 @@ export class Agents implements HostAgents {
     else this.#runningTools.delete(id)
   }
 
-  /** The tool calls that run now in a session, oldest first. */
+  /** The tool calls that run now in an agent, oldest first. */
   runningTools(id: string) {
     return [...(this.#runningTools.get(id) ?? new Map()).entries()]
       .map(([callId, value]) => ({ callId, ...value }))
@@ -783,10 +789,10 @@ export class Agents implements HostAgents {
     return this.#stateKinds.has(kind)
   }
 
-  /** Tell clients to read a session's Agent panel state again. */
+  /** Tell clients to read an agent's Agent panel state again. */
   extensionStateChanged(id: string, kind: string) {
     this.#hub.push(
-      { type: "session_extensions", agentId: id, ...(kind ? { kind } : {}) },
+      { type: "agent_extensions", agentId: id, ...(kind ? { kind } : {}) },
       { agentId: id }
     )
   }
@@ -804,8 +810,8 @@ export class Agents implements HostAgents {
         console.warn(`[pico] could not read ${provider.key} state:`, error)
       }
     }
-    const children = this.list({ parent: id })
-    if (children.length > 0) state.children = children
+    const subagents = this.list({ parent: id })
+    if (subagents.length > 0) state.subagents = subagents
     const meta = this.meta(id)
     const instructions = await this.instructionFiles(id).catch(
       (error: unknown) => {
@@ -817,7 +823,7 @@ export class Agents implements HostAgents {
       state.instructions = { cwd: meta.cwd, files: instructions }
     state.profile = meta.profile ?? "full"
     if (meta.parent || meta.worktree) {
-      state.session = {
+      state.agent = {
         ...(meta.parent && this.#metas.has(meta.parent)
           ? { parent: { id: meta.parent, title: this.#title(meta.parent) } }
           : {}),
@@ -827,21 +833,21 @@ export class Agents implements HostAgents {
     return state
   }
 
-  /** The context files (AGENTS.md) that the agent of a session loads. */
+  /** The context files (AGENTS.md) that the agent of an agent loads. */
   async instructionFiles(id: string) {
     const files = (await this.#runtime.resources.get(this.meta(id).cwd))
       .agentsFiles
     return files.map(({ path }) => ({ path }))
   }
 
-  /** The content of one context file that the agent of a session loads. */
+  /** The content of one context file that the agent of an agent loads. */
   async instructionFile(id: string, path: string) {
     const files = (await this.#runtime.resources.get(this.meta(id).cwd))
       .agentsFiles
     return files.find((file) => file.path === path)?.content
   }
 
-  /** Questions and jobs that need the user make a session need input. */
+  /** Questions and jobs that need the user make an agent need input. */
   #updateNeedsInput(id: string) {
     this.setNeedsInput(
       id,
@@ -851,7 +857,7 @@ export class Agents implements HostAgents {
   }
 
   /**
-   * Mark that the agent of a session waits, or no longer waits, for the
+   * Mark that the agent of an agent waits, or no longer waits, for the
    * user. `job` names a job that needs the user, for the notification.
    */
   setNeedsInput(
@@ -866,7 +872,7 @@ export class Agents implements HostAgents {
     this.#scheduleAgentsBroadcast()
     this.#hub.push(
       {
-        type: "session_status",
+        type: "agent_status",
         agentId: id,
         agentKey: agentKey(id),
         agentPath: agentPath(id),
@@ -890,12 +896,12 @@ export class Agents implements HostAgents {
     return this.#needsInput.has(id)
   }
 
-  /** What a session waits on: jobs that report their exit. */
+  /** What an agent waits on: jobs that report their exit. */
   waiting(id: string) {
     return this.#waiting.get(id)
   }
 
-  /** Keep `#waiting` current when the jobs of a session change. */
+  /** Keep `#waiting` current when the jobs of an agent change. */
   #updateWaiting(id: string, jobs: JobsState | undefined) {
     const waiting = waitingLabel(jobs)
     if (waiting === this.#waiting.get(id)) return
@@ -904,7 +910,7 @@ export class Agents implements HostAgents {
     this.#scheduleAgentsBroadcast()
     this.#hub.push(
       {
-        type: "session_status",
+        type: "agent_status",
         agentId: id,
         agentKey: agentKey(id),
         agentPath: agentPath(id),
@@ -916,15 +922,15 @@ export class Agents implements HostAgents {
     )
   }
 
-  list(filter: { parent?: string; directory?: string }): HostAgentSummary[] {
+  list(filter: { parent?: string; project?: string }): HostAgentSummary[] {
     return [...this.#metas.entries()]
       .filter(
         ([id, meta]) =>
           this.isVisible(id) &&
           (filter.parent === undefined || meta.parent === filter.parent) &&
-          (filter.directory === undefined ||
-            (meta.group ?? meta.cwd) === filter.directory ||
-            meta.cwd === filter.directory)
+          (filter.project === undefined ||
+            (meta.group ?? meta.cwd) === filter.project ||
+            meta.cwd === filter.project)
       )
       .sort((left, right) => activity(right[1]) - activity(left[1]))
       .map(([id, meta]) => ({
@@ -945,14 +951,14 @@ export class Agents implements HostAgents {
       }))
   }
 
-  /** Visible agents that `spawn_session` made for a session, oldest first. */
-  children(id: string): string[] {
+  /** Visible agents that `spawn_subagent` made for an agent, oldest first. */
+  subagents(id: string): string[] {
     return [...this.#metas.entries()]
       .filter(
-        ([childId, meta]) => meta.parent === id && this.isVisible(childId)
+        ([subagentId, meta]) => meta.parent === id && this.isVisible(subagentId)
       )
       .sort((left, right) => left[1].createdAt - right[1].createdAt)
-      .map(([childId]) => childId)
+      .map(([subagentId]) => subagentId)
   }
 
   #markDirty(id: string, dirty: Dirty) {
@@ -973,7 +979,7 @@ export class Agents implements HostAgents {
       try {
         await this.#flushAgent(id, changes)
       } catch (error) {
-        console.error(`[pico] could not publish session ${id}:`, error)
+        console.error(`[pico] could not publish agent ${id}:`, error)
       }
     }
   }
@@ -990,10 +996,10 @@ export class Agents implements HostAgents {
     if (busy !== wasBusy) {
       const parent = this.#metas.get(id)?.parent
       if (parent && this.#metas.has(parent))
-        this.extensionStateChanged(parent, "children")
+        this.extensionStateChanged(parent, "subagents")
       this.#hub.push(
         {
-          type: "session_status",
+          type: "agent_status",
           agentId: id,
           agentKey: agentKey(id),
           agentPath: agentPath(id),
@@ -1070,7 +1076,7 @@ export class Agents implements HostAgents {
     this.#persistMetaNow(id)
     this.#hub.push(
       {
-        type: "session_done",
+        type: "agent_done",
         id: `done:${id}:${this.#hub.currentSequence + 1}`,
         agentId: id,
         agentKey: agentKey(id),
@@ -1145,7 +1151,7 @@ export class Agents implements HostAgents {
         Object.assign(draft, JSON.parse(JSON.stringify(meta)))
       }, ctx)
     } catch (error) {
-      console.error(`[pico] could not save session ${id}:`, error)
+      console.error(`[pico] could not save agent ${id}:`, error)
     }
   }
 
@@ -1161,7 +1167,7 @@ export class Agents implements HostAgents {
 
   #title(id: string) {
     const meta = this.#metas.get(id)
-    return meta?.name?.trim() || meta?.firstMessage?.trim() || "New session"
+    return meta?.name?.trim() || meta?.firstMessage?.trim() || "New agent"
   }
 
   // ---------------------------------------------------------------------------
@@ -1193,33 +1199,33 @@ export class Agents implements HostAgents {
     }
   }
 
-  /** The sidebar directory of a session. */
-  directoryOf(id: string) {
+  /** The sidebar project of an agent. */
+  projectOf(id: string) {
     const meta = this.meta(id)
     return meta.group ?? meta.cwd
   }
 
-  /** Visible agents of a directory, most recently active first. */
-  projectAgents(directory: string): string[] {
+  /** Visible agents of a project, most recently active first. */
+  projectAgents(project: string): string[] {
     return [...this.#metas.entries()]
       .filter(
         ([id, meta]) =>
-          (meta.group ?? meta.cwd) === directory && this.isVisible(id)
+          (meta.group ?? meta.cwd) === project && this.isVisible(id)
       )
       .sort((left, right) => activity(right[1]) - activity(left[1]))
       .map(([id]) => id)
   }
 
-  directories(): string[] {
-    const directories = new Set<string>()
+  projects(): string[] {
+    const projects = new Set<string>()
     for (const [id, meta] of this.#metas)
-      if (this.isVisible(id)) directories.add(meta.group ?? meta.cwd)
-    return [...directories].sort()
+      if (this.isVisible(id)) projects.add(meta.group ?? meta.cwd)
+    return [...projects].sort()
   }
 
-  #revision(directory: string, ids: string[], unread: Set<string>) {
+  #revision(project: string, ids: string[], unread: Set<string>) {
     return fnv1a([
-      directory,
+      project,
       ...ids.flatMap((id) => {
         const meta = this.#metas.get(id)!
         return [
@@ -1236,37 +1242,37 @@ export class Agents implements HostAgents {
     ])
   }
 
-  directoryIndex(directory: string, unread: Set<string>) {
-    const ids = this.projectAgents(directory)
+  projectIndex(project: string, unread: Set<string>) {
+    const ids = this.projectAgents(project)
     return {
-      directory,
+      project,
       totalCount: ids.length,
-      revision: this.#revision(directory, ids, unread),
+      revision: this.#revision(project, ids, unread),
       agents: ids.map((id) => this.summary(id, unread)),
     }
   }
 
   agentsPayload(options: {
     activeAgentId?: string
-    directories?: string[]
+    projects?: string[]
     unread?: Set<string>
   }) {
     const unread = options.unread ?? new Set<string>()
-    const directories = this.directories()
-    const indexDirectories = new Set(options.directories ?? [])
+    const projects = this.projects()
+    const indexProjects = new Set(options.projects ?? [])
     if (options.activeAgentId && this.#metas.has(options.activeAgentId)) {
-      indexDirectories.add(this.directoryOf(options.activeAgentId))
+      indexProjects.add(this.projectOf(options.activeAgentId))
     }
-    const directoryIndexes: Record<
+    const projectIndexes: Record<
       string,
-      ReturnType<Agents["directoryIndex"]>
+      ReturnType<Agents["projectIndex"]>
     > = {}
-    for (const directory of indexDirectories)
-      directoryIndexes[directory] = this.directoryIndex(directory, unread)
+    for (const project of indexProjects)
+      projectIndexes[project] = this.projectIndex(project, unread)
     return {
       type: "agents",
-      directories,
-      directoryStates: directories.map((path) => {
+      projects,
+      projectStates: projects.map((path) => {
         const ids = this.projectAgents(path)
         return {
           path,
@@ -1274,7 +1280,7 @@ export class Agents implements HostAgents {
           revision: this.#revision(path, ids, unread),
         }
       }),
-      directoryIndexes,
+      projectIndexes,
       ...(options.activeAgentId && this.#metas.has(options.activeAgentId)
         ? {
             activeAgentPath: agentPath(options.activeAgentId),
@@ -1446,7 +1452,7 @@ export class Agents implements HostAgents {
       ...(meta.worktree ? { worktree: meta.worktree } : {}),
       firstMessage: meta.firstMessage,
       cwd: meta.cwd,
-      directory: meta.group ?? meta.cwd,
+      project: meta.group ?? meta.cwd,
       modified: iso(meta.modifiedAt),
       draft: false,
       streaming: busy,
@@ -1512,7 +1518,7 @@ export class Agents implements HostAgents {
     }
   }
 
-  /** Send the session's state to the clients that show it. */
+  /** Send the agent's state to the clients that show it. */
   async publishState(id: string, options: EditorContent = {}) {
     if (!this.#metas.has(id)) return
     this.#hub.push(await this.stateSync(id, options), { agentId: id })
@@ -1596,16 +1602,16 @@ export class Agents implements HostAgents {
       )
     }
     this.#scheduleAgentsBroadcast()
-    if (options.parent) this.extensionStateChanged(options.parent, "children")
+    if (options.parent) this.extensionStateChanged(options.parent, "subagents")
     return id
   }
 
-  /** Remove the worktree that a session made. The session keeps its history. */
+  /** Remove the worktree that an agent made. The agent keeps its history. */
   async removeWorktree(id: string, force: boolean) {
     const meta = this.meta(id)
     if (!meta.worktree) return false
     if (this.isBusy(id))
-      throw badRequest("Wait for the session to finish first.")
+      throw badRequest("Wait for the agent to finish first.")
     try {
       await removeWorktree(meta.worktree, { force })
     } catch (error) {
@@ -1625,7 +1631,7 @@ export class Agents implements HostAgents {
     }
   ) {
     const meta = this.meta(id)
-    if (meta.archived) throw badRequest("This session was archived")
+    if (meta.archived) throw badRequest("This agent was archived")
     const conversation = await this.conversation(id)
     if (input.thinkingLevel) {
       const level = this.validateThinkingLevel(input.thinkingLevel)
@@ -1640,7 +1646,7 @@ export class Agents implements HostAgents {
     )
     const busy = this.isBusy(id)
     // A steer answers an open question; it still reaches the model as a steer.
-    // A follow-up waits for the run to end, so it does not answer the question.
+    // A follow-up waits for the turn to end, so it does not answer the question.
     if (
       busy &&
       input.streamingBehavior !== "followUp" &&
@@ -1677,7 +1683,7 @@ export class Agents implements HostAgents {
     }
   }
 
-  /** Name an unnamed session from its first prompt: a heuristic now, the model's name soon. */
+  /** Name an unnamed agent from its first prompt: a heuristic now, the model's name soon. */
   #autoName(id: string, text: string, imageCount: number) {
     const heuristic = heuristicAgentName(text, imageCount)
     if (heuristic) {
@@ -1691,7 +1697,7 @@ export class Agents implements HostAgents {
       .catch((error: unknown) => {
         this.#hub.push(
           {
-            type: "auto_session_naming_error",
+            type: "auto_agent_naming_error",
             agentId: id,
             cwd: this.#metas.get(id)?.cwd,
             promptPreview: preview(text),
@@ -1724,7 +1730,7 @@ export class Agents implements HostAgents {
     if (this.#watched(id)) await this.publishState(id)
   }
 
-  /** Publish the state of every watched session, after a setting changed. */
+  /** Publish the state of every watched agent, after a setting changed. */
   async publishWatchedStates() {
     for (const id of this.#watchers.keys()) await this.publishState(id)
   }
@@ -1768,7 +1774,7 @@ export class Agents implements HostAgents {
     return allProfiles(this.#runtime.settings.data.profiles)
   }
 
-  /** Give a session a tool profile; `full` clears it. */
+  /** Give an agent a tool profile; `full` clears it. */
   async setProfile(id: string, name: string) {
     this.meta(id)
     const profile = findProfile(name, this.#runtime.settings.data.profiles)
@@ -1789,7 +1795,7 @@ export class Agents implements HostAgents {
     return profile.name
   }
 
-  /** Give tools to a session or take them away, and apply its profile again. */
+  /** Give tools to an agent or take them away, and apply its profile again. */
   async changeLimits(
     id: string,
     change: { add?: string[]; remove?: string[] }
@@ -1828,7 +1834,7 @@ export class Agents implements HostAgents {
     return limits
   }
 
-  /** The child limits of a session, for `applyProfile`. */
+  /** The subagent limits of an agent, for `applyProfile`. */
   #toolOptions(meta: AgentMeta) {
     return {
       ...(meta.parent ? { subagent: { parent: meta.parent } } : {}),
@@ -1837,7 +1843,7 @@ export class Agents implements HostAgents {
   }
 
   /**
-   * Put a message from another session in the follow-up queue, after the
+   * Put a message from another agent in the follow-up queue, after the
    * user's queued prompts. It never steers. A paused queue holds it with the
    * user's prompts, so it keeps its place.
    */
@@ -1871,7 +1877,7 @@ export class Agents implements HostAgents {
     )
   }
 
-  /** Change the todo list of a session from the web client. */
+  /** Change the todo list of an agent from the web client. */
   async changeTodo(id: string, change: TodoChange) {
     this.meta(id)
     try {
@@ -1882,7 +1888,7 @@ export class Agents implements HostAgents {
   }
 
   /**
-   * Compact the session and wait until compaction ends. `compacted` is false
+   * Compact the conversation and wait until compaction ends. `compacted` is false
    * when there was nothing to compact.
    */
   async compact(id: string, instructions: string | undefined) {
@@ -2041,7 +2047,7 @@ export class Agents implements HostAgents {
    * new order, with new text, lanes, and new rows from `edits`. Prompts in
    * `remove` are withdrawn only. Queued prompts that `edits` does not name
    * keep their content and go to the end. Rows whose prompt was already sent
-   * count as `missed`. On an idle conversation the first one starts a run.
+   * count as `missed`. On an idle conversation the first one starts a turn.
    */
   async requeue(
     id: string,
@@ -2179,7 +2185,7 @@ export class Agents implements HostAgents {
   }
 
   // ---------------------------------------------------------------------------
-  // Session mutations
+  // Agent mutations
 
   rename(id: string, name: string) {
     const trimmed = name.trim().slice(0, 48)
@@ -2191,7 +2197,7 @@ export class Agents implements HostAgents {
     return trimmed
   }
 
-  /** Generate a name with the session's model, as Pi's `/auto-name` does. */
+  /** Generate a name with the agent's model, as Pi's `/auto-name` does. */
   async generateName(id: string) {
     const meta = this.meta(id)
     const transcript = await this.transcript(id)
@@ -2201,7 +2207,7 @@ export class Agents implements HostAgents {
     const imageCount = message ? messageImages(message).length : 0
     if (!text.trim() && imageCount === 0) {
       throw badRequest(
-        "Could not generate a session name from an empty conversation"
+        "Could not generate an agent name from an empty conversation"
       )
     }
     let name: string
@@ -2238,13 +2244,13 @@ export class Agents implements HostAgents {
   archive(id: string) {
     this.meta(id)
     if (this.isBusy(id))
-      throw badRequest("Wait for the session to finish before archiving it.")
+      throw badRequest("Wait for the agent to finish before archiving it.")
     this.#updateMeta(id, { archived: true, archivedAt: Date.now() })
     this.#viewers.forget(id)
     this.#scheduleAgentsBroadcast()
   }
 
-  /** Make an archived session visible again. */
+  /** Make an archived agent visible again. */
   restore(id: string) {
     const meta = this.meta(id)
     if (!meta.archived) return
@@ -2263,7 +2269,7 @@ export class Agents implements HostAgents {
       )
       .map(([id, meta]) => ({
         ...this.summary(id, new Set()),
-        directory: meta.group ?? meta.cwd,
+        project: meta.group ?? meta.cwd,
         ...(meta.archivedAt ? { archivedAt: iso(meta.archivedAt) } : {}),
       }))
   }
@@ -2271,7 +2277,7 @@ export class Agents implements HostAgents {
   async move(id: string, cwd: string) {
     const meta = this.meta(id)
     if (this.isBusy(id))
-      throw badRequest("Wait for the session to finish before moving it.")
+      throw badRequest("Wait for the agent to finish before moving it.")
     const conversation = await this.conversation(id)
     await conversation.configure({ cwd }, ctx)
     this.#updateMeta(id, { cwd, modifiedAt: Date.now() })
@@ -2280,14 +2286,14 @@ export class Agents implements HostAgents {
     return { previousCwd: meta.cwd }
   }
 
-  /** Archive agents of a directory not active since `olderThanMs`. */
+  /** Archive agents of a project not active since `olderThanMs`. */
   cleanup(
-    directory: string,
+    project: string,
     olderThanMs: number,
     options: { dryRun: boolean; includeActive: boolean; activeIds: Set<string> }
   ) {
     const cutoff = Date.now() - olderThanMs
-    const matching = this.projectAgents(directory).filter((id) => {
+    const matching = this.projectAgents(project).filter((id) => {
       if (!options.includeActive && options.activeIds.has(id)) return false
       if (this.isBusy(id)) return false
       return activity(this.meta(id)) < cutoff
@@ -2315,7 +2321,7 @@ export class Agents implements HostAgents {
   // ---------------------------------------------------------------------------
   // Tree, fork, and clone
 
-  /** Conversations of a session's family, the visible one last. */
+  /** Conversations of an agent's family, the visible one last. */
   #family(id: string) {
     const family = this.meta(id).family ?? id
     return [...this.#metas.entries()]
@@ -2435,7 +2441,7 @@ export class Agents implements HostAgents {
 
   /**
    * Make a new conversation from `source` up to `at` (inclusive), or an empty
-   * one when `at` is undefined, with the source's agent and directory.
+   * one when `at` is undefined, with the source's agent settings and directory.
    */
   async #forkConversation(
     source: string,
@@ -2509,7 +2515,7 @@ export class Agents implements HostAgents {
     return id
   }
 
-  /** Fork at a user message: the new session ends before it and offers its text again. */
+  /** Fork at a user message: the new agent ends before it and offers its text again. */
   async fork(id: string, entryId: string, contextId: string) {
     const { transcript, index, entry } = await this.#entry(id, entryId)
     if (!entry || !isUserInputEntry(entry))
@@ -2552,14 +2558,14 @@ export class Agents implements HostAgents {
   }
 
   /**
-   * Move a session to another point of its tree. The session continues in a
+   * Move an agent to another point of its tree. The agent continues in a
    * fork at that point: after a user message's parent (its text returns to the
    * editor), or at any other entry.
    */
   async navigate(id: string, targetId: string) {
     if (this.isBusy(id))
       throw badRequest(
-        "Wait for the session to finish before navigating the tree."
+        "Wait for the agent to finish before navigating the tree."
       )
     let owner: string | undefined
     let target: EntryRecord | undefined
@@ -2602,13 +2608,13 @@ export class Agents implements HostAgents {
       family: meta.family ?? id,
     })
     this.#updateMeta(id, { replacedBy: replacement })
-    // The replacement is the same session to the user, so it keeps the
-    // children. Archived ones too, so that a restore puts them back under it.
-    for (const [childId, childMeta] of this.#metas) {
-      if (childMeta.parent === id)
-        this.#updateMeta(childId, { parent: replacement })
+    // The replacement is the same agent to the user, so it keeps the
+    // subagents. Archived ones too, so that a restore puts them back under it.
+    for (const [subagentId, subagentMeta] of this.#metas) {
+      if (subagentMeta.parent === id)
+        this.#updateMeta(subagentId, { parent: replacement })
     }
-    this.extensionStateChanged(replacement, "children")
+    this.extensionStateChanged(replacement, "subagents")
     for (const [contextId, context] of this.#viewers.all()) {
       if (context.selectedAgent === id)
         this.#viewers.selectAgent(contextId, replacement)
@@ -2624,7 +2630,7 @@ export class Agents implements HostAgents {
     }
   }
 
-  /** Publish a new session's first state with optional editor content. */
+  /** Publish a new agent's first state with optional editor content. */
   #watchOnce(id: string, editor: EditorContent = {}) {
     void this.stateSync(id, editor).then((payload) => {
       this.#hub.push(payload, { agentId: id })
@@ -2692,7 +2698,7 @@ function summarize(entries: readonly EntryRecord[]): Partial<AgentMeta> {
 
 const TREE_PREVIEW = 2000
 
-/** An entry as the session tree shows it, in the shape of Pi's tree. */
+/** An entry as the conversation tree shows it, in the shape of Pi's tree. */
 function projectTreeEntry(entry: EntryRecord, parentId: string | null) {
   const message = entry.model?.[0] as
     | {
