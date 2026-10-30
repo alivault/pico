@@ -35,7 +35,7 @@ export type MachineAgentSummary = {
   needsInput: boolean
   /** What an idle agent waits on: timers, watches, or jobs. */
   waiting?: string
-  /** Nobody has read the last run yet. The same for all clients. */
+  /** Nobody has read the last turn yet. The same for all clients. */
   unread?: boolean
   /** Servers before global read state: the viewer contexts that did not see it. */
   unreadBy?: Array<string>

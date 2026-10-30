@@ -87,7 +87,7 @@ const LANES: Array<{
   {
     lane: "followUp",
     title: "Follow-up",
-    hint: "after the run",
+    hint: "after the turn",
     readyIcon: "●",
     laterIcon: "○",
     boxClassName: "border-sky-500/40 bg-sky-500/5",

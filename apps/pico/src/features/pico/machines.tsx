@@ -109,7 +109,7 @@ export function MachineStateDot({
   )
 }
 
-/** A finished run that nobody has read yet. */
+/** A finished turn that nobody has read yet. */
 export function isMachineAgentUnread(agent: MachineAgentSummary) {
   return (
     !agent.busy &&

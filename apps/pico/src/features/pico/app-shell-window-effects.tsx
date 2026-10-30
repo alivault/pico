@@ -25,7 +25,7 @@ import { hasPushSubscription } from "@/features/pico/agent/push"
 
 /**
  * Shows the desktop notification for a finished agent. Web Push already
- * tells this browser about a finished agent run, so skip those to show only
+ * tells this browser about a finished agent turn, so skip those to show only
  * one notification.
  */
 function showDoneNotification(

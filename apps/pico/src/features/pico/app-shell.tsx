@@ -3258,7 +3258,7 @@ function useAppShellAgentWorkspaceView({
     canStartPendingQueue:
       !composerDisabled &&
       pendingMessages.length > 0 &&
-      // A paused queue holds its prompts, also while a new run streams.
+      // A paused queue holds its prompts, also while a new turn streams.
       (pendingMessages.some((message) => isHeldPendingId(message.pendingId)) ||
         (!agentStateRef.current.streaming &&
           !agentStateRef.current.compacting)) &&

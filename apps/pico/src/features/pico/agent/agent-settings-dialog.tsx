@@ -37,14 +37,14 @@ import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
 
 export type AgentSettings = {
-  notifyRunDone: boolean
+  notifyTurnDone: boolean
   notifyNeedsInput: boolean
   ntfyUrl: string
   publicUrl: string
   browserHeadless: boolean
   scratchSpillKb: number
   maxSubagents: number
-  maxSpawnDepth: number
+  maxSubagentDepth: number
   worktreeCopy: Array<string>
   jobMemoryHigh: string
   jobMemoryMax: string
@@ -207,7 +207,7 @@ function DevicePushRow({ viewerContextId }: { viewerContextId: string }) {
       label="Push notifications on this device"
       description={
         supported
-          ? "Get a notification when a run finishes or the agent asks a question, also when Pico is closed."
+          ? "Get a notification when an agent finishes its turn or asks a question, also when Pico is closed."
           : "Needs HTTPS (for example Tailscale Serve) or localhost. On iOS, add Pico to the home screen first."
       }
     >
@@ -320,12 +320,12 @@ export function AgentSettingsDialog({
             <SettingsSection title="Notifications">
               <DevicePushRow viewerContextId={viewerContextId} />
               <Row
-                label="Notify when a run finishes"
+                label="Notify when an agent finishes its turn"
                 control={(id) => (
                   <Switch
                     id={id}
-                    checked={settings.notifyRunDone}
-                    onCheckedChange={(value) => save({ notifyRunDone: value })}
+                    checked={settings.notifyTurnDone}
+                    onCheckedChange={(value) => save({ notifyTurnDone: value })}
                   />
                 )}
               />
@@ -410,8 +410,10 @@ export function AgentSettingsDialog({
                     id={id}
                     type="number"
                     width="w-20"
-                    initial={String(settings.maxSpawnDepth)}
-                    onSave={(value) => save({ maxSpawnDepth: Number(value) })}
+                    initial={String(settings.maxSubagentDepth)}
+                    onSave={(value) =>
+                      save({ maxSubagentDepth: Number(value) })
+                    }
                   />
                 )}
               />

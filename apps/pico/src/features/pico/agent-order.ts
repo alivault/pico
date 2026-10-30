@@ -3,12 +3,12 @@ import type { AgentListEntry } from "@/lib/pico/api"
 /**
  * The sidebar order of agents, in three groups:
  *
- * 1. Agents with a finished run that you did not see yet, newest first.
+ * 1. Agents with a finished turn that you did not see yet, newest first.
  * 2. Streaming agents.
  * 3. Idle agents that you saw.
  *
  * Groups 2 and 3 are sorted by the time of your last message. An agent moves
- * only when its run starts or ends, or when you prompt it. New messages of a
+ * only when its turn starts or ends, or when you prompt it. New messages of a
  * running agent do not move it, so the rows stay in place while agents work.
  */
 export function compareSidebarAgents(
@@ -42,7 +42,7 @@ function isUnreadDone(entry: AgentListEntry) {
   return Boolean(entry.unread) && !entry.streaming
 }
 
-/** The last message of a finished run is near its end. */
+/** The last message of a finished turn is near its end. */
 function doneTime(entry: AgentListEntry) {
   return timestampValue(entry.lastMessageAt || entry.modified)
 }
