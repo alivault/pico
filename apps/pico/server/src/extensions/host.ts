@@ -211,7 +211,7 @@ export class HostBridge {
   }
 }
 
-/** Public session IDs are `s<conversation id>`; see `sessions.ts`. */
+/** Public session IDs are `s<conversation id>`; see `core/agents.ts`. */
 export function sessionIdOf(conversationId: ConversationId) {
   return `s${conversationId}`
 }

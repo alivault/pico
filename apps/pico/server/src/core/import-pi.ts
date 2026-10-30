@@ -20,7 +20,7 @@ import {
   type Harness,
 } from "@earendil-works/pi-durable"
 
-import { SessionDoc, publicId, type SessionMeta } from "./sessions.ts"
+import { SessionDoc, publicId, type SessionMeta } from "./agents.ts"
 import { messageText } from "./items.ts"
 
 const ImportDoc = defineDoc<{

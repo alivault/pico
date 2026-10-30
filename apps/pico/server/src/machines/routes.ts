@@ -19,7 +19,7 @@ import {
 import { VERSION } from "../config.ts"
 import type { Runtime } from "../core/runtime.ts"
 import type { Viewers } from "../core/viewers.ts"
-import { conversationIdOf, type Sessions } from "../core/sessions.ts"
+import { conversationIdOf, type Sessions } from "../core/agents.ts"
 import type { EventHub } from "../events.ts"
 import {
   lastAnswerEntry,
@@ -27,7 +27,7 @@ import {
   runningToolLines,
   transcriptText,
   waitingOn,
-} from "../extensions/sessions.ts"
+} from "../extensions/agents.ts"
 import {
   ApiError,
   badRequest,

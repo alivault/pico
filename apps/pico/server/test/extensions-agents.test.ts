@@ -22,7 +22,7 @@ import {
   normalizeSessionId,
   STOPPED_ANSWER,
   waitingOn,
-} from "../src/extensions/sessions.ts"
+} from "../src/extensions/agents.ts"
 import { JobsDoc } from "../src/extensions/jobs.ts"
 import {
   createWorktree,

@@ -9,7 +9,7 @@ import { Harness, createRegistry } from "@earendil-works/pi-durable"
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
 
 import { importPiFile, readPiFile } from "../src/core/import-pi.ts"
-import { conversationIdOf, SessionDoc } from "../src/core/sessions.ts"
+import { conversationIdOf, SessionDoc } from "../src/core/agents.ts"
 import { tempDir } from "./support.ts"
 
 void test("Pi import preserves branches, edits, settings, and history without running work", async () => {

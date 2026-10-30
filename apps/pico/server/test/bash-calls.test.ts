@@ -13,7 +13,7 @@ import {
   type ProcessSample,
 } from "../src/core/bash-calls.ts"
 import { HostBridge, type HostServices } from "../src/extensions/host.ts"
-import { runningToolLines } from "../src/extensions/sessions.ts"
+import { runningToolLines } from "../src/extensions/agents.ts"
 
 function sample(cpuMs: number, io: number, at = 0): ProcessSample {
   return {

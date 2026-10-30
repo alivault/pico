@@ -23,7 +23,7 @@ import {
   sessionPath,
   type PendingEdit,
   type Sessions,
-} from "./core/sessions.ts"
+} from "./core/agents.ts"
 import type { Viewers } from "./core/viewers.ts"
 import type { HostBridge } from "./extensions/host.ts"
 import { JobsDoc, stopJob } from "./extensions/jobs.ts"

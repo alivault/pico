@@ -8,7 +8,7 @@ import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context"
 import { createModels } from "@earendil-works/pi-ai"
 import { Harness, createRegistry } from "@earendil-works/pi-durable"
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node"
-import { SessionDoc, publicId } from "../src/core/sessions.ts"
+import { SessionDoc, publicId } from "../src/core/agents.ts"
 import { tempDir } from "./support.ts"
 
 void test("tree navigation keeps the child sessions under the session", async () => {

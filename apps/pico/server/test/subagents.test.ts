@@ -6,7 +6,7 @@ import {
   childMessageKind,
   isQuestion,
   reportMessage,
-} from "../src/extensions/sessions.ts"
+} from "../src/extensions/agents.ts"
 
 const guard = (command: string, branch = "feature", denyCommands?: string[]) =>
   bashGuard(command, {
