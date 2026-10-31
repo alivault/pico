@@ -192,6 +192,34 @@ export function moveQueueRow(
   return null
 }
 
+/**
+ * Put a row at `index` in `lane`, as a drag and drop does. The index counts
+ * the rows of the lane without the row itself. Null when nothing changes.
+ */
+export function placeQueueRow(
+  rows: Array<QueueEditRow>,
+  key: string,
+  lane: QueueLane,
+  index: number
+): Array<QueueEditRow> | null {
+  const row = rows.find((entry) => entry.key === key)
+  if (!row) return null
+
+  const rest = rows.filter((entry) => entry !== row)
+  const target = laneRows(rest, lane)
+  const position = Math.max(0, Math.min(index, target.length))
+  if (row.lane === lane && laneRows(rows, lane).indexOf(row) === position) {
+    return null
+  }
+
+  target.splice(position, 0, { ...row, lane, moved: true })
+  return settleMoves(
+    lane === "steer"
+      ? [...target, ...laneRows(rest, "followUp")]
+      : [...laneRows(rest, "steer"), ...target]
+  )
+}
+
 /** Add a blank row above or below a row, in the same lane. */
 export function insertQueueRow(
   rows: Array<QueueEditRow>,

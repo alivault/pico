@@ -1,5 +1,24 @@
 import * as React from "react"
 import {
+  closestCorners,
+  DndContext,
+  DragOverlay,
+  MouseSensor,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+  type Modifier,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import {
   ArrowDownIcon,
   ArrowUpIcon,
   ImageIcon,
@@ -11,6 +30,7 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import {
   getClipboardImageFiles,
@@ -26,6 +46,7 @@ import {
   mergeQueueAgent,
   mostRecentQueueKey,
   moveQueueRow,
+  placeQueueRow,
   queueRowsFromMessages,
   queueAgentSavePlan,
   type PendingQueueMessage,
@@ -110,6 +131,82 @@ function rowIcon(
   if (options.paused) return "⏸"
   if (options.held) return "◈"
   return index === 0 ? lane.readyIcon : lane.laterIcon
+}
+
+/**
+ * Drag rows with the mouse only, so that touch keeps its scroll and tap.
+ * A press on the editor, a button, or an image does not start a drag.
+ */
+class QueueRowMouseSensor extends MouseSensor {
+  static activators: (typeof MouseSensor)["activators"] = [
+    {
+      eventName: "onMouseDown",
+      handler: ({ nativeEvent: event }, options) => {
+        if (event.button !== 0) return false
+        const target = event.target
+        if (
+          target instanceof Element &&
+          target.closest("textarea, input, button, img")
+        ) {
+          return false
+        }
+        options.onActivation?.({ event })
+        return true
+      },
+    },
+  ]
+}
+
+const restrictToVerticalAxis: Modifier = ({ transform }) => ({
+  ...transform,
+  x: 0,
+})
+const QUEUE_DRAG_MODIFIERS = [restrictToVerticalAxis]
+
+const LANE_DROP_PREFIX = "queue-lane:"
+
+function QueueLaneSection({
+  lane,
+  className,
+  children,
+  ...props
+}: React.ComponentProps<"section"> & { lane: QueueLane }) {
+  const { setNodeRef } = useDroppable({ id: `${LANE_DROP_PREFIX}${lane}` })
+  return (
+    <section ref={setNodeRef} className={className} {...props}>
+      {children}
+    </section>
+  )
+}
+
+function SortableQueueRow({
+  id,
+  disabled,
+  className,
+  onMouseDown,
+  children,
+}: {
+  id: string
+  disabled: boolean
+  className: string
+  onMouseDown: (event: React.MouseEvent<HTMLLIElement>) => void
+  children: React.ReactNode
+}) {
+  const { listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id, disabled })
+  return (
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      className={cn(className, isDragging && "opacity-40")}
+      onMouseDown={(event) => {
+        listeners?.onMouseDown?.(event)
+        onMouseDown(event)
+      }}
+    >
+      {children}
+    </li>
+  )
 }
 
 function isCaretOnFirstLine(textarea: HTMLTextAreaElement) {
@@ -212,6 +309,14 @@ export const ComposerPendingMessages = React.memo(
       },
       []
     )
+
+    const isMobile = useIsMobile()
+    const dragSensors = useSensors(
+      useSensor(QueueRowMouseSensor, { activationConstraint: { distance: 6 } })
+    )
+    const [dragKey, setDragKey] = React.useState<string | null>(null)
+    // The rows before the drag, to restore them when the drag is cancelled.
+    const dragStartRowsRef = React.useRef<Array<QueueEditRow> | null>(null)
 
     const selectedKey = agent?.selectedKey
     const caret = agent?.caret
@@ -479,6 +584,77 @@ export const ComposerPendingMessages = React.memo(
       }
     }
 
+    const dragRow = dragKey
+      ? rows.find((row) => row.key === dragKey)
+      : undefined
+
+    /** The lane and the row (if any) under the pointer. */
+    const dropTarget = (overId: string) => {
+      if (overId.startsWith(LANE_DROP_PREFIX)) {
+        return {
+          lane: overId.slice(LANE_DROP_PREFIX.length) as QueueLane,
+          row: undefined,
+        }
+      }
+      const row = rows.find((entry) => entry.key === overId)
+      return row ? { lane: row.lane, row } : null
+    }
+
+    const handleDragStart = (event: DragStartEvent) => {
+      dragStartRowsRef.current = agentRef.current?.rows ?? null
+      setDragKey(String(event.active.id))
+    }
+
+    // A row that goes over the other lane moves to that lane at once, so
+    // that the lane opens a place for it.
+    const handleDragOver = ({ active, over }: DragOverEvent) => {
+      if (!over) return
+      const key = String(active.id)
+      const row = rows.find((entry) => entry.key === key)
+      const target = dropTarget(String(over.id))
+      if (!row || !target || target.lane === row.lane) return
+
+      const laneItems = laneRows(rows, target.lane)
+      let index = laneItems.length
+      if (target.row) {
+        const activeRect = active.rect.current.translated
+        const below =
+          activeRect !== null &&
+          activeRect.top + activeRect.height / 2 >
+            over.rect.top + over.rect.height / 2
+        index = laneItems.indexOf(target.row) + (below ? 1 : 0)
+      }
+      updateAgent((current) => {
+        const next = placeQueueRow(current.rows, key, target.lane, index)
+        return next ? { ...current, rows: next } : current
+      })
+    }
+
+    const handleDragEnd = ({ active, over }: DragEndEvent) => {
+      setDragKey(null)
+      dragStartRowsRef.current = null
+      if (!over) return
+      const key = String(active.id)
+      const target = dropTarget(String(over.id))
+      if (!target?.row || target.row.key === key) return
+      const overRow = target.row
+      updateAgent((current) => {
+        const index = laneRows(current.rows, target.lane).findIndex(
+          (row) => row.key === overRow.key
+        )
+        if (index === -1) return current
+        const next = placeQueueRow(current.rows, key, target.lane, index)
+        return next ? { ...current, rows: next, selectedKey: key } : current
+      })
+    }
+
+    const handleDragCancel = () => {
+      const startRows = dragStartRowsRef.current
+      setDragKey(null)
+      dragStartRowsRef.current = null
+      if (startRows) updateAgent((current) => ({ ...current, rows: startRows }))
+    }
+
     const firstLane = rows[0]?.lane
     // The hold of an open edit is not a pause.
     const paused = canStartQueue && !heldForEdit
@@ -492,235 +668,296 @@ export const ComposerPendingMessages = React.memo(
         data-queue-editing={agent ? "true" : undefined}
       >
         <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
-          {LANES.map((lane) => {
-            const items = laneRows(rows, lane.lane)
-            if (items.length === 0 && !agent) return null
+          <DndContext
+            sensors={dragSensors}
+            collisionDetection={closestCorners}
+            modifiers={QUEUE_DRAG_MODIFIERS}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
+          >
+            {LANES.map((lane) => {
+              const items = laneRows(rows, lane.lane)
+              if (items.length === 0 && !agent) return null
 
-            return (
-              <section
-                key={lane.lane}
-                aria-label={`${lane.title} queue`}
-                className={cn(
-                  "rounded-xl border px-1.5 pb-1.5",
-                  lane.boxClassName
-                )}
-              >
-                <div className="flex min-h-7 items-center gap-2 px-1.5 pt-1 text-xs">
-                  <span className={cn("font-medium", lane.titleClassName)}>
-                    {lane.title}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {items.length} · {lane.hint}
-                  </span>
-                  <span className="ml-auto flex items-center gap-1">
-                    {!agent && lane.lane === firstLane ? (
-                      <span className="hidden items-center gap-1 text-muted-foreground md:inline-flex">
-                        <Kbd>Alt+Q</Kbd> edit
-                      </span>
-                    ) : null}
-                    {lane.lane === "followUp" && paused ? (
-                      <>
-                        <span className="text-muted-foreground">⏸ Paused</span>
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          onClick={onStartPendingQueue}
-                        >
-                          Resume
-                        </Button>
-                      </>
-                    ) : null}
-                    {agent ? (
-                      <Button
-                        size="icon-xs"
-                        variant="ghost"
-                        title={`Add a ${lane.title.toLowerCase()} row`}
-                        onClick={() => append(lane.lane)}
-                      >
-                        <PlusIcon />
-                      </Button>
-                    ) : null}
-                  </span>
-                </div>
-
-                {items.length === 0 ? (
-                  <div className="px-1.5 pb-1 text-xs text-muted-foreground">
-                    Empty. Move a row here with{" "}
-                    <Kbd>{lane.lane === "steer" ? "Alt+↑" : "Alt+↓"}</Kbd>.
-                  </div>
-                ) : (
-                  <ol className="flex flex-col gap-0.5">
-                    {items.map((row, index) => {
-                      const selected = row.key === agent?.selectedKey
-                      const icon = rowIcon(row, index, lane, {
-                        selected,
-                        paused,
-                        held: heldForEdit,
-                      })
-                      const changed = agent ? isQueueRowChanged(row) : false
-
-                      return (
-                        <li
-                          key={row.key}
-                          className={cn(
-                            "flex items-start gap-2 rounded-lg px-1.5 py-1 text-sm",
-                            selected
-                              ? lane.selectedClassName
-                              : "cursor-text hover:bg-foreground/5"
-                          )}
-                          onMouseDown={(event) => {
-                            if (selected) return
-                            event.preventDefault()
-                            select(row.key, "end")
-                          }}
-                        >
-                          <span
-                            aria-hidden="true"
-                            className={cn(
-                              "w-3.5 shrink-0 text-center leading-6 select-none",
-                              row.removed
-                                ? "text-destructive"
-                                : lane.titleClassName
-                            )}
-                          >
-                            {icon}
+              return (
+                <QueueLaneSection
+                  key={lane.lane}
+                  lane={lane.lane}
+                  aria-label={`${lane.title} queue`}
+                  className={cn(
+                    "rounded-xl border px-1.5 pb-1.5",
+                    lane.boxClassName
+                  )}
+                >
+                  <div className="flex min-h-7 items-center gap-2 px-1.5 pt-1 text-xs">
+                    <span className={cn("font-medium", lane.titleClassName)}>
+                      {lane.title}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {items.length} · {lane.hint}
+                    </span>
+                    <span className="ml-auto flex items-center gap-1">
+                      {!agent && lane.lane === firstLane ? (
+                        <span className="hidden items-center gap-1 text-muted-foreground md:inline-flex">
+                          <Kbd>Alt+Q</Kbd> edit
+                        </span>
+                      ) : null}
+                      {lane.lane === "followUp" && paused ? (
+                        <>
+                          <span className="text-muted-foreground">
+                            ⏸ Paused
                           </span>
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            onClick={onStartPendingQueue}
+                          >
+                            Resume
+                          </Button>
+                        </>
+                      ) : null}
+                      {agent ? (
+                        <Button
+                          size="icon-xs"
+                          variant="ghost"
+                          title={`Add a ${lane.title.toLowerCase()} row`}
+                          onClick={() => append(lane.lane)}
+                        >
+                          <PlusIcon />
+                        </Button>
+                      ) : null}
+                    </span>
+                  </div>
 
-                          <div className="min-w-0 flex-1">
-                            {selected ? (
-                              <textarea
-                                ref={attachEditor}
-                                value={row.text}
-                                rows={1}
-                                aria-label={`Edit ${lane.title.toLowerCase()} prompt ${index + 1}`}
-                                placeholder={
-                                  row.images.length > 0
-                                    ? "Optional text for this image prompt"
-                                    : "Type a prompt"
-                                }
+                  {items.length === 0 ? (
+                    <div className="px-1.5 pb-1 text-xs text-muted-foreground">
+                      Empty. {isMobile ? "Move" : "Drag or move"} a row here
+                      with{" "}
+                      <Kbd>{lane.lane === "steer" ? "Alt+↑" : "Alt+↓"}</Kbd>.
+                    </div>
+                  ) : (
+                    <SortableContext
+                      items={items.map((row) => row.key)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <ol className="flex flex-col gap-0.5">
+                        {items.map((row, index) => {
+                          const selected = row.key === agent?.selectedKey
+                          const icon = rowIcon(row, index, lane, {
+                            selected,
+                            paused,
+                            held: heldForEdit,
+                          })
+                          const changed = agent ? isQueueRowChanged(row) : false
+
+                          return (
+                            <SortableQueueRow
+                              key={row.key}
+                              id={row.key}
+                              disabled={isMobile}
+                              className={cn(
+                                "flex items-start gap-2 rounded-lg px-1.5 py-1 text-sm",
+                                selected
+                                  ? lane.selectedClassName
+                                  : "cursor-text hover:bg-foreground/5"
+                              )}
+                              onMouseDown={(event) => {
+                                if (selected) return
+                                event.preventDefault()
+                                select(row.key, "end")
+                              }}
+                            >
+                              <span
+                                aria-hidden="true"
                                 className={cn(
-                                  "block field-sizing-content max-h-60 min-h-6 w-full resize-none bg-transparent leading-6 outline-none placeholder:text-muted-foreground",
-                                  row.removed && "line-through opacity-60"
-                                )}
-                                onChange={(event) =>
-                                  setText(row.key, event.target.value)
-                                }
-                                onKeyDown={(event) =>
-                                  handleEditorKeyDown(event, row)
-                                }
-                                onPaste={(event) =>
-                                  handleEditorPaste(event, row)
-                                }
-                              />
-                            ) : (
-                              <div
-                                title={row.text || undefined}
-                                className={cn(
-                                  "truncate leading-6",
-                                  row.removed &&
-                                    "text-muted-foreground line-through",
-                                  !row.text && "text-muted-foreground italic"
+                                  "w-3.5 shrink-0 text-center leading-6 select-none",
+                                  row.removed
+                                    ? "text-destructive"
+                                    : lane.titleClassName
                                 )}
                               >
-                                {row.text.replace(/\s+/g, " ").trim() ||
-                                  (row.images.length > 0
-                                    ? "Image prompt"
-                                    : "Empty prompt")}
-                              </div>
-                            )}
+                                {icon}
+                              </span>
 
-                            {selected && row.images.length > 0 ? (
-                              <div className="flex flex-wrap gap-2 py-1">
-                                {row.images.map((image, imageIndex) => (
+                              <div className="min-w-0 flex-1">
+                                {selected ? (
+                                  <textarea
+                                    ref={attachEditor}
+                                    value={row.text}
+                                    rows={1}
+                                    aria-label={`Edit ${lane.title.toLowerCase()} prompt ${index + 1}`}
+                                    placeholder={
+                                      row.images.length > 0
+                                        ? "Optional text for this image prompt"
+                                        : "Type a prompt"
+                                    }
+                                    className={cn(
+                                      "block field-sizing-content max-h-60 min-h-6 w-full resize-none bg-transparent leading-6 outline-none placeholder:text-muted-foreground",
+                                      row.removed && "line-through opacity-60"
+                                    )}
+                                    onChange={(event) =>
+                                      setText(row.key, event.target.value)
+                                    }
+                                    onKeyDown={(event) =>
+                                      handleEditorKeyDown(event, row)
+                                    }
+                                    onPaste={(event) =>
+                                      handleEditorPaste(event, row)
+                                    }
+                                  />
+                                ) : (
                                   <div
-                                    key={promptImageKey(image)}
-                                    className="relative"
+                                    title={row.text || undefined}
+                                    className={cn(
+                                      "truncate leading-6",
+                                      row.removed &&
+                                        "text-muted-foreground line-through",
+                                      !row.text &&
+                                        "text-muted-foreground italic"
+                                    )}
                                   >
-                                    <img
-                                      src={image.previewUrl}
-                                      alt="Attachment preview"
-                                      className="h-12 rounded-md border object-cover"
-                                    />
-                                    <Button
-                                      type="button"
-                                      size="icon-xs"
-                                      variant="ghost"
-                                      title="Remove image"
-                                      className="absolute top-0.5 right-0.5 size-5 rounded-full bg-background/90 shadow-sm"
-                                      onMouseDown={(event) =>
-                                        event.preventDefault()
-                                      }
-                                      onClick={() =>
-                                        setImages(row.key, (images) =>
-                                          images.filter(
-                                            (_, index) => index !== imageIndex
-                                          )
-                                        )
-                                      }
-                                    >
-                                      <XIcon className="size-3" />
-                                    </Button>
+                                    {row.text.replace(/\s+/g, " ").trim() ||
+                                      (row.images.length > 0
+                                        ? "Image prompt"
+                                        : "Empty prompt")}
                                   </div>
-                                ))}
-                              </div>
-                            ) : null}
+                                )}
 
-                            {(!selected && row.images.length > 0) ||
-                            (changed && (row.moved || row.isNew)) ? (
-                              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                {!selected && row.images.length > 0 ? (
-                                  <span className="inline-flex items-center gap-1">
-                                    <ImageIcon className="size-3" />
-                                    {row.images.length}
-                                  </span>
+                                {selected && row.images.length > 0 ? (
+                                  <div className="flex flex-wrap gap-2 py-1">
+                                    {row.images.map((image, imageIndex) => (
+                                      <div
+                                        key={promptImageKey(image)}
+                                        className="relative"
+                                      >
+                                        <img
+                                          src={image.previewUrl}
+                                          alt="Attachment preview"
+                                          className="h-12 rounded-md border object-cover"
+                                        />
+                                        <Button
+                                          type="button"
+                                          size="icon-xs"
+                                          variant="ghost"
+                                          title="Remove image"
+                                          className="absolute top-0.5 right-0.5 size-5 rounded-full bg-background/90 shadow-sm"
+                                          onMouseDown={(event) =>
+                                            event.preventDefault()
+                                          }
+                                          onClick={() =>
+                                            setImages(row.key, (images) =>
+                                              images.filter(
+                                                (_, index) =>
+                                                  index !== imageIndex
+                                              )
+                                            )
+                                          }
+                                        >
+                                          <XIcon className="size-3" />
+                                        </Button>
+                                      </div>
+                                    ))}
+                                  </div>
                                 ) : null}
-                                {row.isNew ? <span>new</span> : null}
-                                {row.moved && !row.isNew ? (
-                                  <span>saves in new position</span>
+
+                                {(!selected && row.images.length > 0) ||
+                                (changed && (row.moved || row.isNew)) ? (
+                                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                    {!selected && row.images.length > 0 ? (
+                                      <span className="inline-flex items-center gap-1">
+                                        <ImageIcon className="size-3" />
+                                        {row.images.length}
+                                      </span>
+                                    ) : null}
+                                    {row.isNew ? <span>new</span> : null}
+                                    {row.moved && !row.isNew ? (
+                                      <span>saves in new position</span>
+                                    ) : null}
+                                  </div>
                                 ) : null}
                               </div>
-                            ) : null}
-                          </div>
 
-                          {selected ? (
-                            <span className="flex shrink-0 items-center">
-                              <Button
-                                size="icon-xs"
-                                variant="ghost"
-                                title="Move up"
-                                onMouseDown={(event) => event.preventDefault()}
-                                onClick={() => move(row.key, -1)}
-                              >
-                                <ArrowUpIcon />
-                              </Button>
-                              <Button
-                                size="icon-xs"
-                                variant="ghost"
-                                title="Move down"
-                                onMouseDown={(event) => event.preventDefault()}
-                                onClick={() => move(row.key, 1)}
-                              >
-                                <ArrowDownIcon />
-                              </Button>
-                              <Button
-                                size="icon-xs"
-                                variant="ghost"
-                                title={row.removed ? "Keep" : "Remove"}
-                                onMouseDown={(event) => event.preventDefault()}
-                                onClick={() => toggleRemove(row.key)}
-                              >
-                                {row.removed ? <Undo2Icon /> : <Trash2Icon />}
-                              </Button>
-                            </span>
-                          ) : null}
-                        </li>
-                      )
-                    })}
-                  </ol>
-                )}
-              </section>
-            )
-          })}
+                              {selected ? (
+                                <span className="flex shrink-0 items-center">
+                                  <Button
+                                    size="icon-xs"
+                                    variant="ghost"
+                                    title="Move up"
+                                    onMouseDown={(event) =>
+                                      event.preventDefault()
+                                    }
+                                    onClick={() => move(row.key, -1)}
+                                  >
+                                    <ArrowUpIcon />
+                                  </Button>
+                                  <Button
+                                    size="icon-xs"
+                                    variant="ghost"
+                                    title="Move down"
+                                    onMouseDown={(event) =>
+                                      event.preventDefault()
+                                    }
+                                    onClick={() => move(row.key, 1)}
+                                  >
+                                    <ArrowDownIcon />
+                                  </Button>
+                                  <Button
+                                    size="icon-xs"
+                                    variant="ghost"
+                                    title={row.removed ? "Keep" : "Remove"}
+                                    onMouseDown={(event) =>
+                                      event.preventDefault()
+                                    }
+                                    onClick={() => toggleRemove(row.key)}
+                                  >
+                                    {row.removed ? (
+                                      <Undo2Icon />
+                                    ) : (
+                                      <Trash2Icon />
+                                    )}
+                                  </Button>
+                                </span>
+                              ) : null}
+                            </SortableQueueRow>
+                          )
+                        })}
+                      </ol>
+                    </SortableContext>
+                  )}
+                </QueueLaneSection>
+              )
+            })}
+            <DragOverlay dropAnimation={null}>
+              {dragRow ? (
+                <div className="flex cursor-grabbing items-start gap-2 rounded-lg border bg-background px-1.5 py-1 text-sm shadow-md">
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "w-3.5 shrink-0 text-center leading-6 select-none",
+                      LANES.find((lane) => lane.lane === dragRow.lane)
+                        ?.titleClassName
+                    )}
+                  >
+                    ›
+                  </span>
+                  <div
+                    className={cn(
+                      "min-w-0 flex-1 truncate leading-6",
+                      dragRow.removed && "text-muted-foreground line-through",
+                      !dragRow.text && "text-muted-foreground italic"
+                    )}
+                  >
+                    {dragRow.text.replace(/\s+/g, " ").trim() ||
+                      (dragRow.images.length > 0
+                        ? "Image prompt"
+                        : "Empty prompt")}
+                  </div>
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
         </div>
 
         {agent ? (
