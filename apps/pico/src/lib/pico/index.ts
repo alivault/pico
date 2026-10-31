@@ -115,6 +115,8 @@ export type ProjectState = {
   path: string
   totalCount: number
   revision: string
+  /** Archived agents of the project with a running job. */
+  archivedJobAgents?: number
 }
 
 export type PromptDraftTarget = {

@@ -24,6 +24,11 @@ export type PicoEventMap = {
   "pico:open-machines": Record<string, never>
   /** Open the resources dialog of the shown machine. */
   "pico:open-resources": Record<string, never>
+  /**
+   * Open the archived agents dialog of the shown machine. With `jobs`, it
+   * shows only agents with running jobs; with `project`, only that project.
+   */
+  "pico:open-archived-agents": { project?: string; jobs?: boolean }
 }
 
 export function emitPicoEvent<K extends keyof PicoEventMap>(

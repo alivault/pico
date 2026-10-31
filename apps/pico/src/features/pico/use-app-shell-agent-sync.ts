@@ -272,6 +272,8 @@ function sameProjectStates(
     if (leftState.path !== rightState.path) return false
     if (leftState.totalCount !== rightState.totalCount) return false
     if (leftState.revision !== rightState.revision) return false
+    if (leftState.archivedJobAgents !== rightState.archivedJobAgents)
+      return false
   }
 
   return true

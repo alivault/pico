@@ -541,6 +541,10 @@ type AppSidebarProps = {
   onRemoveProject?: (project: string) => void
   onReorderProjects?: (nextProjects: Array<string>) => void
   onOpenArchivedAgents?: () => void
+  /** Archived agents with a running job, by project. */
+  archivedJobAgents?: Record<string, number>
+  /** Show the archived agents of a project that run jobs. */
+  onOpenArchivedJobs?: (project: string) => void
 }
 
 type SortableProjectGroupProps = {
@@ -1423,6 +1427,9 @@ type ProjectAgentGroupProps = {
   onDeleteOldAgentsInProject?: (project: string) => void
   onMarkAgentsRead?: (entries: Array<AgentListEntry>) => void
   onRemoveProject?: (project: string) => void
+  /** Archived agents of the project with a running job. */
+  archivedJobAgents?: number
+  onOpenArchivedJobs?: (project: string) => void
 }
 
 function projectUnreadAgents(state: ProjectAgentsState, project: string) {
@@ -1606,6 +1613,8 @@ const ProjectAgentGroup = React.memo(function ProjectAgentGroup({
   onDeleteOldAgentsInProject,
   onMarkAgentsRead,
   onRemoveProject,
+  archivedJobAgents = 0,
+  onOpenArchivedJobs,
 }: ProjectAgentGroupProps) {
   const [renderCount, setRenderCount] = React.useState(
     INITIAL_PROJECT_AGENT_RENDER_COUNT
@@ -1717,6 +1726,24 @@ const ProjectAgentGroup = React.memo(function ProjectAgentGroup({
           setStatusFilter((current) => toggleStatusFilter(current, filter))
         }}
       />
+
+      {archivedJobAgents > 0 && onOpenArchivedJobs && !overlay ? (
+        <TitleTooltip
+          title={`${archivedJobAgents} archived agent${archivedJobAgents === 1 ? "" : "s"} with running jobs`}
+        >
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`${archivedJobAgents} archived agents with running jobs in ${project}`}
+            className="h-6 shrink-0 gap-1 px-1.5 text-[11px] font-normal text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            onClick={() => onOpenArchivedJobs(project)}
+          >
+            <ArchiveIcon className="size-3" />
+            <span className="size-1.5 rounded-full bg-success" />
+            {archivedJobAgents}
+          </Button>
+        </TitleTooltip>
+      ) : null}
 
       {onCreateAgentInProject && !overlay && !isMobile ? (
         <TitleTooltip title={`Create an agent in ${project}`}>
@@ -2864,6 +2891,8 @@ function useAppSidebarView({
   onRemoveProject,
   onReorderProjects,
   onOpenArchivedAgents,
+  archivedJobAgents,
+  onOpenArchivedJobs,
 }: AppSidebarProps) {
   const machineId = useMachineId()
   const { isMobile, setOpenMobile } = useSidebar()
@@ -3284,6 +3313,10 @@ function useAppSidebarView({
                                           ? removeProject
                                           : undefined
                                       }
+                                      archivedJobAgents={
+                                        archivedJobAgents?.[project]
+                                      }
+                                      onOpenArchivedJobs={onOpenArchivedJobs}
                                     />
                                   )}
                                 </SortableProjectGroup>

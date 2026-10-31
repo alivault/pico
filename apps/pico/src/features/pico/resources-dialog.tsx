@@ -9,7 +9,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
-import { usePicoEvent } from "@/features/pico/agent/events"
+import {
+  emitPicoEvent,
+  openJobTerminal,
+  usePicoEvent,
+} from "@/features/pico/agent/events"
 import { errorText } from "@/features/pico/agent/shared"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { useMachineId } from "@/lib/pico/machine-context"
@@ -38,6 +42,11 @@ export type MachineResources = {
     id: string
     name: string
     agentId: string
+    agentTitle?: string
+    /** The sidebar project of the job's agent. */
+    project?: string
+    /** The job's agent is archived. */
+    archived?: boolean
     pid?: number
     memory?: number
     scoped: boolean
@@ -106,7 +115,28 @@ function Section({
   )
 }
 
-function ResourcesView({ data }: { data: MachineResources }) {
+type ResourceJob = MachineResources["jobs"][number]
+
+/** Show a job: in its agent's terminal panel, or in the archived agents. */
+function openResourceJob(job: ResourceJob) {
+  if (job.archived) {
+    emitPicoEvent("pico:open-archived-agents", {
+      ...(job.project ? { project: job.project } : {}),
+      jobs: true,
+    })
+    return
+  }
+  emitPicoEvent("pico:open-agent", { agentId: job.agentId })
+  openJobTerminal(job.id, job.agentId)
+}
+
+function ResourcesView({
+  data,
+  onOpenJob,
+}: {
+  data: MachineResources
+  onOpenJob: (job: ResourceJob) => void
+}) {
   const pressure = data.machine.pressure
   return (
     <div className="space-y-4">
@@ -163,11 +193,22 @@ function ResourcesView({ data }: { data: MachineResources }) {
           <p className="py-1 text-sm text-muted-foreground">No job runs.</p>
         ) : (
           data.jobs.map((job) => (
-            <Row
+            <button
               key={job.id}
-              label={`${job.name} · ${job.agentId}`}
-              value={`${formatBytes(job.memory)} · ${job.processes} proc${job.scoped ? " · scope" : ""}`}
-            />
+              type="button"
+              className="block w-full rounded-sm text-left outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/50"
+              title={
+                job.archived
+                  ? "Show in the archived agents"
+                  : "Show the job in its agent"
+              }
+              onClick={() => onOpenJob(job)}
+            >
+              <Row
+                label={`${job.name} · ${job.agentTitle || job.agentId}${job.archived ? " (archived)" : ""}`}
+                value={`${formatBytes(job.memory)} · ${job.processes} proc${job.scoped ? " · scope" : ""}`}
+              />
+            </button>
           ))
         )}
       </Section>
@@ -194,7 +235,13 @@ function ResourcesDialog({
           </DialogDescription>
         </DialogHeader>
         {query.data ? (
-          <ResourcesView data={query.data} />
+          <ResourcesView
+            data={query.data}
+            onOpenJob={(job) => {
+              onOpenChange(false)
+              openResourceJob(job)
+            }}
+          />
         ) : query.error ? (
           <p className="text-sm text-destructive">{errorText(query.error)}</p>
         ) : (

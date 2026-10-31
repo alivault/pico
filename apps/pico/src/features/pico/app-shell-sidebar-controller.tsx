@@ -31,7 +31,11 @@ import {
   SIDEBAR_PROJECTS_STORAGE_KEY,
 } from "@/lib/pico"
 import type { AgentListEntry } from "@/lib/pico/api"
-import { ArchivedAgentsDialog } from "@/features/pico/archived-agents-dialog"
+import {
+  ArchivedAgentsDialog,
+  type ArchivedAgentsView,
+} from "@/features/pico/archived-agents-dialog"
+import { usePicoEvent } from "@/features/pico/agent/events"
 import { useMachineId } from "@/lib/pico/machine-context"
 import { onServerReconnect } from "@/lib/pico/server-connection"
 import {
@@ -94,6 +98,16 @@ function useAppShellSidebarControllerView({
 }: AppShellSidebarControllerProps) {
   const machineId = useMachineId()
   const [archivedAgentsOpen, setArchivedAgentsOpen] = React.useState(false)
+  const [archivedAgentsView, setArchivedAgentsView] = React.useState<
+    ArchivedAgentsView | undefined
+  >()
+  const openArchivedAgents = React.useCallback((view?: ArchivedAgentsView) => {
+    setArchivedAgentsView(view)
+    setArchivedAgentsOpen(true)
+  }, [])
+  usePicoEvent("pico:open-archived-agents", (detail) =>
+    openArchivedAgents(detail)
+  )
   const [projectAgentsStore] = React.useState(() =>
     createProjectAgentsStore({}, {})
   )
@@ -107,6 +121,12 @@ function useAppShellSidebarControllerView({
     (snapshot) => snapshot.derived.projectStateByPath,
     sameMapEntries
   )
+  const archivedJobAgents = React.useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const [path, state] of projectStateByPath)
+      if (state.archivedJobAgents) counts[path] = state.archivedJobAgents
+    return counts
+  }, [projectStateByPath])
   const emptySidebarStateText = useAppShellSidebarValue(
     sidebarStore,
     (snapshot) => snapshot.derived.emptySidebarStateText
@@ -930,12 +950,17 @@ function useAppShellSidebarControllerView({
           })
         }}
         onReorderProjects={reorderSidebarProjects}
-        onOpenArchivedAgents={() => setArchivedAgentsOpen(true)}
+        onOpenArchivedAgents={() => openArchivedAgents()}
+        archivedJobAgents={archivedJobAgents}
+        onOpenArchivedJobs={(project) =>
+          openArchivedAgents({ project, jobs: true })
+        }
       />
       <ArchivedAgentsDialog
         open={archivedAgentsOpen}
         onOpenChange={setArchivedAgentsOpen}
         viewerContextId={viewerContextId}
+        initialView={archivedAgentsView}
         onRestored={(result) => showRestoredAgentProject(result.project)}
       />
     </>

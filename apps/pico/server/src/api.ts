@@ -1443,14 +1443,31 @@ export function createApi(api: ApiContext) {
   // Agent settings
 
   // What uses memory on this machine (see services/resources.ts).
-  router.get("/api/resources", async () => ({
-    ok: true,
-    ...(await collectResources({
+  router.get("/api/resources", async () => {
+    const resources = await collectResources({
       terminals: api.terminals,
       jobs: () => runtime.extensions.jobs.liveJobs(),
       browser: api.host.current?.browser,
-    })),
-  }))
+    })
+    return {
+      ok: true,
+      ...resources,
+      // Each job names its agent, so the client can open it.
+      jobs: resources.jobs.map((job) => {
+        const agentId = agents.current(job.agentId) ?? job.agentId
+        if (!agents.has(agentId)) return job
+        const meta = agents.meta(agentId)
+        return {
+          ...job,
+          agentId,
+          agentPath: agentPath(agentId),
+          agentTitle: agents.summary(agentId, new Set()).title,
+          project: meta.group ?? meta.cwd,
+          ...(meta.archived ? { archived: true } : {}),
+        }
+      }),
+    }
+  })
 
   router.get("/api/settings/agent", () => ({
     ok: true,

@@ -1290,6 +1290,18 @@ export class Agents implements HostAgents {
       .map(([id]) => id)
   }
 
+  /** Archived agents with a running job, by sidebar project. */
+  archivedJobAgentCounts() {
+    const counts = new Map<string, number>()
+    for (const [id, meta] of this.#metas) {
+      if (!meta.archived || meta.replacedBy) continue
+      if (!this.#jobs.get(id)?.some((job) => job.state !== "failed")) continue
+      const project = meta.group ?? meta.cwd
+      counts.set(project, (counts.get(project) ?? 0) + 1)
+    }
+    return counts
+  }
+
   projects(): string[] {
     const projects = new Set<string>()
     for (const [id, meta] of this.#metas)
@@ -1334,6 +1346,7 @@ export class Agents implements HostAgents {
   }) {
     const unread = options.unread ?? new Set<string>()
     const projects = this.projects()
+    const archivedJobs = this.archivedJobAgentCounts()
     const indexProjects = new Set(options.projects ?? [])
     if (options.activeAgentId && this.#metas.has(options.activeAgentId)) {
       indexProjects.add(this.projectOf(options.activeAgentId))
@@ -1349,10 +1362,12 @@ export class Agents implements HostAgents {
       projects,
       projectStates: projects.map((path) => {
         const ids = this.projectAgents(path)
+        const archivedJobAgents = archivedJobs.get(path)
         return {
           path,
           totalCount: ids.length,
           revision: this.#revision(path, ids, unread),
+          ...(archivedJobAgents ? { archivedJobAgents } : {}),
         }
       }),
       projectIndexes,
