@@ -218,7 +218,7 @@ export function NewAgentComposerSelectors({
 }: {
   cwd?: string
   defaultNewAgentProject: string
-  projectOptions: Array<{ path: string; label: string }>
+  projectOptions: string[]
   onCreateAgent: (cwdOverride?: string) => void
   /** Start the agent on another machine, with the prompt draft. */
   onMoveDraftToMachine: (machineId: string, project: string) => void
@@ -236,22 +236,13 @@ export function NewAgentComposerSelectors({
   const [createBranchOpen, setCreateBranchOpen] = React.useState(false)
   const [createBranchName, setCreateBranchName] = React.useState("")
   const selectedProject = cwd?.trim() || defaultNewAgentProject.trim()
-  const projectMenuOptions = (() => {
-    const seen = new Set<string>()
-    const options: Array<{ path: string; label: string }> = []
-    const pushOption = (path: string, label: string) => {
-      const normalizedPath = path.trim()
-      if (!normalizedPath || seen.has(normalizedPath)) return
-      seen.add(normalizedPath)
-      options.push({ path: normalizedPath, label })
-    }
-
-    pushOption(selectedProject, "Selected project")
-    for (const option of projectOptions) {
-      pushOption(option.path, option.label)
-    }
-    return options
-  })()
+  const projectMenuPaths = Array.from(
+    new Set(
+      [selectedProject, ...projectOptions]
+        .map((path) => path.trim())
+        .filter(Boolean)
+    )
+  )
   const selectedProjectLabel =
     formatFolderName(selectedProject) || "Select project"
   const gitStatusQuery = useQuery({
@@ -363,20 +354,12 @@ export function NewAgentComposerSelectors({
                 {thisMachine?.label ?? "This machine"}
               </DropdownMenuLabel>
             ) : null}
-            {projectMenuOptions.map((option) => (
-              <DropdownMenuItem
-                key={option.path}
-                onClick={() => onCreateAgent(option.path)}
-              >
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="text-xs text-muted-foreground">
-                    {option.label}
-                  </span>
-                  <span className="truncate">
-                    {formatDisplayPath(option.path)}
-                  </span>
-                </div>
-                {option.path === selectedProject ? (
+            {projectMenuPaths.map((path) => (
+              <DropdownMenuItem key={path} onClick={() => onCreateAgent(path)}>
+                <span className="min-w-0 flex-1 truncate">
+                  {formatDisplayPath(path)}
+                </span>
+                {path === selectedProject ? (
                   <CheckIcon className="ml-2 size-4 shrink-0" />
                 ) : null}
               </DropdownMenuItem>

@@ -2234,28 +2234,17 @@ function useAppShellAgentWorkspaceView({
 
   const defaultNewAgentProject =
     agentProject || baseSidebarProjects[0] || storedDraftProject || ""
-  const newAgentProjectOptions = React.useMemo(() => {
-    const nextOptions: Array<{ path: string; label: string }> = []
-    const seen = new Set<string>()
-    const pushProjectOption = (path: string, label: string) => {
-      const normalizedPath = path.trim()
-      if (!normalizedPath || seen.has(normalizedPath)) return
-      seen.add(normalizedPath)
-      nextOptions.push({ path: normalizedPath, label })
-    }
-
-    if (agentProject) {
-      pushProjectOption(agentProject, "Project of the current agent")
-    }
-    if (storedDraftProject) {
-      pushProjectOption(storedDraftProject, "Draft project")
-    }
-    for (const project of baseSidebarProjects) {
-      pushProjectOption(project, "Sidebar project")
-    }
-
-    return nextOptions
-  }, [baseSidebarProjects, agentProject, storedDraftProject])
+  const newAgentProjectOptions = React.useMemo(
+    () =>
+      Array.from(
+        new Set(
+          [agentProject, storedDraftProject, ...baseSidebarProjects]
+            .map((path) => (path ?? "").trim())
+            .filter(Boolean)
+        )
+      ),
+    [baseSidebarProjects, agentProject, storedDraftProject]
+  )
 
   const knownProjects = React.useMemo(
     () =>

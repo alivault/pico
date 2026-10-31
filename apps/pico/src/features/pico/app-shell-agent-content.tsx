@@ -50,7 +50,7 @@ export type AppShellAgentContentProps = {
   isLoadingOlderHistory: boolean
   isAgentViewLoading: boolean
   isSubmitting: boolean
-  newAgentProjectOptions: Array<{ path: string; label: string }>
+  newAgentProjectOptions: string[]
   onCancelCompaction: () => void
   onCreateAgent: (cwdOverride?: string) => void
   onLoadOlderHistory: () => Promise<void>

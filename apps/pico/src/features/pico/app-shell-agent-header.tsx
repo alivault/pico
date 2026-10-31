@@ -68,7 +68,7 @@ type AppShellAgentHeaderProps = {
   currentAgentPinned: boolean
   displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
   isAgentViewLoading: boolean
-  newAgentProjectOptions: Array<{ path: string; label: string }>
+  newAgentProjectOptions: string[]
   onToggleGitPanel: () => void
   onToggleTerminalPanel: () => void
   agentStore: PicoStore<AgentState>
@@ -114,7 +114,7 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
   // A worktree folder has the branch name, so the branch text covers it.
   const showFolderName = Boolean(displayAgentCwd && !agentInfo?.worktree)
   const moveAgentProjectOptions = newAgentProjectOptions.filter(
-    (option) => option.path !== displayAgentCwd
+    (path) => path !== displayAgentCwd
   )
 
   return (
@@ -196,22 +196,17 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>New agent in…</DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-72">
-                    {newAgentProjectOptions.map((option) => (
+                    {newAgentProjectOptions.map((path) => (
                       <DropdownMenuItem
-                        key={option.path}
+                        key={path}
                         onClick={() => {
-                          void actionsRef.current.createAgent(option.path)
+                          void actionsRef.current.createAgent(path)
                         }}
                       >
-                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <span className="text-xs text-muted-foreground">
-                            {option.label}
-                          </span>
-                          <span className="truncate">
-                            {formatDisplayPath(option.path)}
-                          </span>
-                        </div>
-                        {option.path === defaultNewAgentProject ? (
+                        <span className="min-w-0 flex-1 truncate">
+                          {formatDisplayPath(path)}
+                        </span>
+                        {path === defaultNewAgentProject ? (
                           <DropdownMenuShortcut>Default</DropdownMenuShortcut>
                         ) : null}
                       </DropdownMenuItem>
@@ -234,23 +229,16 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>Move to…</DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-72">
-                    {moveAgentProjectOptions.map((option) => (
+                    {moveAgentProjectOptions.map((path) => (
                       <DropdownMenuItem
-                        key={option.path}
+                        key={path}
                         onClick={() => {
-                          void actionsRef.current.onMoveCurrentAgent(
-                            option.path
-                          )
+                          void actionsRef.current.onMoveCurrentAgent(path)
                         }}
                       >
-                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <span className="text-xs text-muted-foreground">
-                            {option.label}
-                          </span>
-                          <span className="truncate">
-                            {formatDisplayPath(option.path)}
-                          </span>
-                        </div>
+                        <span className="min-w-0 flex-1 truncate">
+                          {formatDisplayPath(path)}
+                        </span>
                       </DropdownMenuItem>
                     ))}
                     <DropdownMenuItem
