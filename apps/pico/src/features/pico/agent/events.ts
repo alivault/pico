@@ -34,19 +34,31 @@ export function emitPicoEvent<K extends keyof PicoEventMap>(
   window.dispatchEvent(new CustomEvent(name, { detail }))
 }
 
-const pendingJobTerminals: Array<string> = []
+const pendingJobTerminals: Array<{ jobId: string; agentId?: string }> = []
 
 /**
  * Show a job in the terminal panel. The panel may mount after this call, so
  * the request also waits in a queue that the panel reads when it mounts.
+ * With `agentId`, only the panel of that agent shows the job: use it when
+ * the call also selects the agent, so the panel of the agent before does
+ * not take the request.
  */
-export function openJobTerminal(jobId: string) {
-  if (!pendingJobTerminals.includes(jobId)) pendingJobTerminals.push(jobId)
+export function openJobTerminal(jobId: string, agentId?: string) {
+  if (!pendingJobTerminals.some((entry) => entry.jobId === jobId))
+    pendingJobTerminals.push({ jobId, ...(agentId ? { agentId } : {}) })
   emitPicoEvent("pico:open-job-terminal", { jobId })
 }
 
-export function takePendingJobTerminals() {
-  return pendingJobTerminals.splice(0)
+/** The queued jobs for the panel of an agent. Others stay in the queue. */
+export function takePendingJobTerminals(agentId: string | undefined) {
+  const taken: Array<string> = []
+  for (let index = pendingJobTerminals.length - 1; index >= 0; index--) {
+    const entry = pendingJobTerminals[index]
+    if (entry.agentId && entry.agentId !== agentId) continue
+    taken.unshift(entry.jobId)
+    pendingJobTerminals.splice(index, 1)
+  }
+  return taken
 }
 
 export function usePicoEvent<K extends keyof PicoEventMap>(

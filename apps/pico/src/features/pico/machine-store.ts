@@ -1,5 +1,6 @@
 import * as React from "react"
 
+import type { AgentJob } from "@/lib/pico/api"
 import { useMachineId } from "@/lib/pico/machine-context"
 import {
   hubUrl,
@@ -35,6 +36,8 @@ export type MachineAgentSummary = {
   needsInput: boolean
   /** What an idle agent waits on: timers, watches, or jobs. */
   waiting?: string
+  /** The agent's jobs that the sidebar shows as dots. */
+  jobs?: Array<AgentJob>
   /** Nobody has read the last turn yet. The same for all clients. */
   unread?: boolean
   /** Servers before global read state: the viewer contexts that did not see it. */

@@ -318,6 +318,19 @@ export type DeleteOldProjectAgentsResponse =
     }
   | ApiErrorResponse
 
+/**
+ * A job of an agent, as a dot on its sidebar row: a running process, a
+ * process that waits for input, or a process that ended with an error and
+ * did not report its exit to the agent.
+ */
+export type AgentJob = {
+  id: string
+  name: string
+  state: "running" | "input" | "failed"
+  /** When a failed job ended. */
+  endedAt?: number
+}
+
 export type AgentListEntry = {
   path?: string
   id?: string
@@ -337,6 +350,8 @@ export type AgentListEntry = {
   needsInput?: boolean
   /** What an idle agent waits on: timers, watches, or jobs. */
   waiting?: string
+  /** The agent's jobs that the sidebar shows as dots. */
+  jobs?: Array<AgentJob>
   /** The agent that spawned this one. */
   parent?: string
   /** The git branch of the agent's own worktree. */
@@ -362,6 +377,8 @@ export type AgentStatusEvent = {
   needsInput?: boolean
   /** What the agent waits on; an empty string when it waits on nothing. */
   waiting?: string
+  /** The jobs that the sidebar shows; an empty list when there are none. */
+  jobs?: Array<AgentJob>
 }
 
 export type AgentReadStateResponse =

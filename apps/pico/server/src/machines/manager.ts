@@ -16,6 +16,7 @@
 import { request as httpRequest, type IncomingMessage } from "node:http"
 import { connect as netConnect, type Socket } from "node:net"
 
+import type { AgentJob } from "../extensions/waiting.ts"
 import {
   findProfile,
   machineDir,
@@ -58,6 +59,8 @@ export type AgentStatusSummary = {
   needsInput: boolean
   /** What an idle agent waits on: timers, watches, or jobs. */
   waiting?: string
+  /** The agent's jobs that the sidebar shows as dots. */
+  jobs?: AgentJob[]
   /** Nobody has read the last turn yet. Read state is the same for all clients. */
   unread?: boolean
   /**
@@ -180,6 +183,9 @@ export function parseSummary(value: unknown): MachineSummary | undefined {
           needsInput: entry.needsInput === true,
           ...(typeof entry.waiting === "string" && entry.waiting
             ? { waiting: entry.waiting }
+            : {}),
+          ...(Array.isArray(entry.jobs)
+            ? { jobs: parseAgentJobs(entry.jobs) }
             : {}),
           ...(entry.unread === true ? { unread: true } : {}),
           ...(Array.isArray(entry.unreadBy)
@@ -915,4 +921,29 @@ export class MachineManager {
     // Keep the SSH masters: a restarted hub connects again at once.
     await Promise.all(connections.map((connection) => connection.close()))
   }
+}
+
+/** The jobs of an agent in a remote summary. Skips entries it cannot read. */
+function parseAgentJobs(value: unknown[]): AgentJob[] {
+  return value.flatMap((entry): AgentJob[] => {
+    if (
+      !isRecord(entry) ||
+      typeof entry.id !== "string" ||
+      typeof entry.name !== "string" ||
+      (entry.state !== "running" &&
+        entry.state !== "input" &&
+        entry.state !== "failed")
+    )
+      return []
+    return [
+      {
+        id: entry.id,
+        name: entry.name,
+        state: entry.state,
+        ...(typeof entry.endedAt === "number"
+          ? { endedAt: entry.endedAt }
+          : {}),
+      },
+    ]
+  })
 }

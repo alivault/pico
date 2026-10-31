@@ -588,7 +588,8 @@ function sameSidebarAgentStatus(
     left?.streaming === right.streaming &&
     left?.unread === right.unread &&
     left?.needsInput === right.needsInput &&
-    left?.waiting === right.waiting
+    left?.waiting === right.waiting &&
+    left?.jobs === right.jobs
   )
 }
 
@@ -620,6 +621,7 @@ export function mergeSidebarAgentStatusMap(
           : previous?.needsInput,
       waiting:
         typeof event.waiting === "string" ? event.waiting : previous?.waiting,
+      jobs: Array.isArray(event.jobs) ? event.jobs : previous?.jobs,
     }
 
     if (sameSidebarAgentStatus(previous, status)) continue
@@ -661,22 +663,31 @@ function applySidebarAgentStatus(
     (typeof status.waiting === "string" ? status.waiting : entry.waiting) ||
     undefined
 
+  // An empty list: the agent has no jobs to show.
+  const nextJobs = status.jobs
+    ? status.jobs.length > 0
+      ? status.jobs
+      : undefined
+    : entry.jobs
+
   if (
     Boolean(entry.streaming) === Boolean(nextStreaming) &&
     Boolean(entry.unread) === Boolean(nextUnread) &&
     Boolean(entry.needsInput) === Boolean(nextNeedsInput) &&
-    entry.waiting === nextWaiting
+    entry.waiting === nextWaiting &&
+    entry.jobs === nextJobs
   ) {
     return entry
   }
 
-  const { waiting: _waiting, ...rest } = entry
+  const { waiting: _waiting, jobs: _jobs, ...rest } = entry
   return {
     ...rest,
     streaming: nextStreaming,
     unread: nextUnread,
     needsInput: nextNeedsInput,
     ...(nextWaiting ? { waiting: nextWaiting } : {}),
+    ...(nextJobs ? { jobs: nextJobs } : {}),
   }
 }
 

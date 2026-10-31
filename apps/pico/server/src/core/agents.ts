@@ -59,7 +59,12 @@ import type {
 } from "../extensions/host.ts"
 import { updateTodo, type TodoChange } from "../extensions/todo.ts"
 import { JobsDoc, jobNeedingUser, type JobsState } from "../extensions/jobs.ts"
-import { waitingLabel } from "../extensions/waiting.ts"
+import {
+  agentJobs,
+  agentJobsSignature,
+  waitingLabel,
+  type AgentJob,
+} from "../extensions/waiting.ts"
 import {
   allProfiles,
   applyProfile,
@@ -178,6 +183,8 @@ export type AgentListEntry = {
   needsInput?: boolean
   /** What an idle agent waits on: jobs that report their exit. */
   waiting?: string
+  /** The agent's jobs that the sidebar shows as dots. */
+  jobs?: AgentJob[]
 }
 
 export type PendingMessage = {
@@ -444,6 +451,8 @@ export class Agents implements HostAgents {
   >()
   /** What each agent waits on (see `waitingLabel`). */
   readonly #waiting = new Map<string, string>()
+  /** The jobs of each agent that the sidebar shows (see `agentJobs`). */
+  readonly #jobs = new Map<string, AgentJob[]>()
   readonly #held = new Map<string, HeldItem[]>()
   #stateKinds: Set<string> | undefined
   #flushScheduled = false
@@ -510,6 +519,8 @@ export class Agents implements HostAgents {
         const jobs = await this.#harness.snapshot(JobsDoc, conversationId, ctx)
         const waiting = waitingLabel(jobs)
         if (waiting) this.#waiting.set(id, waiting)
+        const shown = agentJobs(jobs)
+        if (shown) this.#jobs.set(id, shown)
       })
     )
     await this.#reapplyStaleProfiles()
@@ -764,6 +775,7 @@ export class Agents implements HostAgents {
             else this.#jobWaits.delete(id)
             this.#updateNeedsInput(id)
             this.#updateWaiting(id, value as JobsState | undefined)
+            this.#updateJobs(id, value as JobsState | undefined)
           }
           this.#markDirty(id, { extensions: true })
         }
@@ -958,6 +970,30 @@ export class Agents implements HostAgents {
     )
   }
 
+  /** Keep `#jobs` current when the jobs of an agent change. */
+  #updateJobs(id: string, jobs: JobsState | undefined) {
+    const shown = agentJobs(jobs)
+    const before = this.#jobs.get(id)
+    if (agentJobsSignature(shown) === agentJobsSignature(before)) return
+    if (shown) this.#jobs.set(id, shown)
+    else this.#jobs.delete(id)
+    this.#scheduleAgentsBroadcast()
+    // Clients do not read the agent list while their agent works, so they
+    // get the jobs in a status event too.
+    this.#hub.push(
+      {
+        type: "agent_status",
+        agentId: id,
+        agentKey: agentKey(id),
+        agentPath: agentPath(id),
+        streaming: this.isBusy(id),
+        // An empty list tells clients that the agent has no jobs to show.
+        jobs: shown ?? [],
+      },
+      { agentId: id }
+    )
+  }
+
   list(filter: { parent?: string; project?: string }): HostAgentSummary[] {
     return [...this.#metas.entries()]
       .filter(
@@ -976,6 +1012,7 @@ export class Agents implements HostAgents {
         busy: this.isBusy(id),
         needsInput: this.#needsInput.has(id),
         ...(this.#waiting.has(id) ? { waiting: this.#waiting.get(id) } : {}),
+        ...(this.#jobs.has(id) ? { jobs: this.#jobs.get(id) } : {}),
         unread: this.#viewers.isUnread(id),
         ...(meta.parent ? { parent: meta.parent } : {}),
         ...(meta.worktree ? { worktreeBranch: meta.worktree.branch } : {}),
@@ -1232,6 +1269,7 @@ export class Agents implements HostAgents {
       ...(meta.worktree ? { worktreeBranch: meta.worktree.branch } : {}),
       ...(this.#needsInput.has(id) ? { needsInput: true } : {}),
       ...(this.#waiting.has(id) ? { waiting: this.#waiting.get(id) } : {}),
+      ...(this.#jobs.has(id) ? { jobs: this.#jobs.get(id) } : {}),
     }
   }
 
@@ -1273,6 +1311,7 @@ export class Agents implements HostAgents {
           unread.has(id) ? "1" : "0",
           this.#needsInput.has(id) ? "1" : "0",
           this.#waiting.get(id) ?? "",
+          agentJobsSignature(this.#jobs.get(id)),
         ]
       }),
     ])

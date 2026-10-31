@@ -8,7 +8,7 @@ import type { AgentListEntry } from "@/lib/pico/api"
  * It is window state for each machine, so the heading and the agents of the
  * machine use it.
  */
-export type AgentStatusFilter = "working" | "waiting" | "done"
+export type AgentStatusFilter = "working" | "waiting" | "done" | "live"
 
 /** The states that are on, in a fixed order. Never empty. */
 export type AgentStatusFilters = ReadonlyArray<AgentStatusFilter>
@@ -17,6 +17,7 @@ const FILTER_ORDER: ReadonlyArray<AgentStatusFilter> = [
   "waiting",
   "working",
   "done",
+  "live",
 ]
 
 let snapshot: Record<string, AgentStatusFilters> = {}
@@ -92,7 +93,14 @@ export function agentMatchesStatusFilter(
       return Boolean(
         entry.unread && !entry.streaming && !entry.needsInput && !entry.waiting
       )
+    case "live":
+      return hasLiveJob(entry.jobs)
   }
+}
+
+/** Whether an agent has a process that runs now (a green or sky dot). */
+export function hasLiveJob(jobs: AgentListEntry["jobs"]) {
+  return Boolean(jobs?.some((job) => job.state !== "failed"))
 }
 
 /**

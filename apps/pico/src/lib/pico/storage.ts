@@ -45,6 +45,7 @@ export const TERMINAL_PANEL_OPEN_STORAGE_KEY = "pico-terminal-panel-open"
 export const TERMINAL_PANEL_HEIGHT_STORAGE_KEY = "pico-terminal-panel-height"
 export const TERMINAL_TABS_STORAGE_KEY = "pico-terminal-tabs"
 export const JOB_FOCUS_SEEN_STORAGE_KEY = "pico-job-focus-seen"
+export const JOBS_SEEN_STORAGE_KEY = "pico-jobs-seen"
 const PROMPT_DRAFTS_STORAGE_KEY = "pico-prompt-drafts"
 export const VIEWER_CONTEXT_STORAGE_KEY = "pico-context-id"
 
@@ -286,6 +287,63 @@ export function rememberJobFocusSeen(
     JOB_FOCUS_SEEN_STORAGE_KEY,
     JSON.stringify(Object.fromEntries(kept))
   )
+}
+
+/** When this device last showed each job, newest first. */
+function loadSeenJobs(machineId: string) {
+  return parseSeenJobs(seenJobsSnapshot(machineId))
+}
+
+const seenJobsListeners = new Set<() => void>()
+
+/**
+ * Get a call when a job is seen on this device (see `rememberJobSeen`), also
+ * in another tab.
+ */
+export function subscribeSeenJobs(listener: () => void) {
+  seenJobsListeners.add(listener)
+  window.addEventListener("storage", listener)
+  return () => {
+    seenJobsListeners.delete(listener)
+    window.removeEventListener("storage", listener)
+  }
+}
+
+/**
+ * The stored seen jobs as text, for `useSyncExternalStore`: the text is the
+ * same until a job is seen. Read it with `parseSeenJobs`.
+ */
+export function seenJobsSnapshot(machineId: string) {
+  return machineLocalStorageGetItem(machineId, JOBS_SEEN_STORAGE_KEY) ?? ""
+}
+
+/** When this device last showed each job (see `seenJobsSnapshot`). */
+export function parseSeenJobs(snapshot: string): Record<string, number> {
+  try {
+    const value = JSON.parse(snapshot || "{}") as unknown
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, number>)
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+/** Remember that this device shows a job now. */
+export function rememberJobSeen(machineId: string, jobId: string) {
+  const seen = loadSeenJobs(machineId)
+  seen[jobId] = Date.now()
+  // Keep the newest entries only.
+  const kept = Object.entries(seen)
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 100)
+  const written = machineLocalStorageSetItem(
+    machineId,
+    JOBS_SEEN_STORAGE_KEY,
+    JSON.stringify(Object.fromEntries(kept))
+  )
+  for (const listener of seenJobsListeners) listener()
+  return written
 }
 
 export function readStoredTerminalTabs(machineId: string, scopeKey: string) {

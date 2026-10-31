@@ -14,6 +14,7 @@ import type { MachineManager } from "../machines/manager.ts"
 import type { BrowserManager } from "../services/browser.ts"
 import type { Notifier } from "../services/notify.ts"
 import type { Terminals } from "../services/terminal.ts"
+import type { AgentJob } from "./waiting.ts"
 
 /** Agent operations that extensions use. `Agents` implements it. */
 export type HostAgents = {
@@ -95,6 +96,8 @@ export type HostAgentSummary = {
   needsInput: boolean
   /** What the agent waits on: timers, watches, or jobs. */
   waiting?: string
+  /** The agent's jobs that the sidebar shows as dots. */
+  jobs?: AgentJob[]
   /** Nobody has read the last turn yet. */
   unread: boolean
   parent?: string

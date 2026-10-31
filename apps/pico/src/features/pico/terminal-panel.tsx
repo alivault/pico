@@ -63,6 +63,7 @@ import {
 } from "@/features/pico/keyboard-shortcuts"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { readStoredTerminalTabs, rememberStoredTerminalTabs } from "@/lib/pico"
+import { rememberJobSeen } from "@/lib/pico/storage"
 import { machineOfflineLabel } from "@/lib/pico/machine"
 import type { TerminalCreateResponse, TerminalEvent } from "@/lib/pico/api"
 import {
@@ -1243,6 +1244,12 @@ export function TerminalPanel({
   }, [active, normalizedCwd, scopeKey, tabs.length, tabsState.scopeKey])
 
   const activeTab = tabs.find((tab) => tab.id === selectedTabId)
+  // A job that shows here is seen: the sidebar stops marking its failure.
+  const shownJobId = active ? activeTab?.job?.id : undefined
+  const shownJobStatus = activeTab?.job?.status
+  React.useEffect(() => {
+    if (shownJobId) rememberJobSeen(machineId, shownJobId)
+  }, [machineId, shownJobId, shownJobStatus])
   const activeJobPrompt = activeTab ? jobPrompt(activeTab.job) : undefined
   // A guessed wait shows only in the tab's status, not in a prompt bar.
   const activePrompt = activeJobPrompt?.quiet ? undefined : activeJobPrompt
@@ -1299,10 +1306,10 @@ export function TerminalPanel({
   }
 
   usePicoEvent("pico:open-job-terminal", () => {
-    for (const jobId of takePendingJobTerminals()) showJobTab(jobId)
+    for (const jobId of takePendingJobTerminals(agentId)) showJobTab(jobId)
   })
   React.useEffect(() => {
-    for (const jobId of takePendingJobTerminals()) showJobTab(jobId)
+    for (const jobId of takePendingJobTerminals(agentId)) showJobTab(jobId)
     // Read the queue once the panel shows a scope.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeKey])

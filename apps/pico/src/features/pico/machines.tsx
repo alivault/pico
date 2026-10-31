@@ -36,6 +36,7 @@ import { useMachineId } from "@/lib/pico/machine-context"
 import { hubUrl, LOCAL_MACHINE_ID, openMachine } from "@/lib/pico/machine"
 import { cn } from "@/lib/utils"
 import {
+  hasLiveJob,
   setAgentStatusFilter,
   toggleAgentStatusFilter,
   useAgentStatusFilter,
@@ -134,6 +135,7 @@ function agentCounts(machine: MachineInfo) {
     done: agents.filter(
       (agent) => !agent.waiting && isMachineAgentUnread(agent)
     ).length,
+    live: agents.filter((agent) => hasLiveJob(agent.jobs)).length,
   }
 }
 
@@ -187,7 +189,7 @@ function MachineCountButton({
 }
 
 function MachineCounts({ machine }: { machine: MachineInfo }) {
-  const { working, waiting, done } = agentCounts(machine)
+  const { working, waiting, done, live } = agentCounts(machine)
   const online = machine.state === "online"
   // A machine that goes offline shows all its agents again.
   React.useEffect(() => {
@@ -226,6 +228,14 @@ function MachineCounts({ machine }: { machine: MachineInfo }) {
         title="Done"
       >
         <span className="size-2 rounded-full bg-primary" />
+      </MachineCountButton>
+      <MachineCountButton
+        machine={machine}
+        filter="live"
+        count={live}
+        title="Agents with running jobs"
+      >
+        <span className="size-1.5 rounded-full bg-success" />
       </MachineCountButton>
     </span>
   )

@@ -28,14 +28,13 @@ import {
   FolderIcon,
   FolderPlusIcon,
   GitForkIcon,
-  HourglassIcon,
   MessageCircleQuestionIcon,
   PinIcon,
   SearchIcon,
   SquarePenIcon,
 } from "lucide-react"
 
-import type { AgentListEntry } from "@/lib/pico/api"
+import type { AgentJob, AgentListEntry } from "@/lib/pico/api"
 import { Button } from "@/components/ui/button"
 import {
   Collapsible,
@@ -87,7 +86,11 @@ import {
   machineLocalStorageSetItem,
   agentListEntryKey,
 } from "@/lib/pico"
-import { usePicoEvent } from "@/features/pico/agent/events"
+import { openJobTerminal, usePicoEvent } from "@/features/pico/agent/events"
+import {
+  SidebarAgentJobDots,
+  SidebarAgentJobsContext,
+} from "@/features/pico/sidebar-agent-jobs"
 import {
   isAltChange,
   isMachineAgentUnread,
@@ -815,8 +818,10 @@ function SidebarAgentItem({
       ) : entry.waiting ? (
         <TitleTooltip title={`Waiting on ${entry.waiting}`} side="right">
           <span className={AGENT_STATUS_ICON_CLASS}>
-            <HourglassIcon
-              className="size-3.5 text-muted-foreground"
+            {/* A hollow dot: the agent is not done. It goes on when the
+                job ends. */}
+            <span
+              className="size-2 rounded-full border-[1.5px] border-primary"
               aria-label={`Waiting on ${entry.waiting}`}
             />
           </span>
@@ -835,8 +840,10 @@ function SidebarAgentItem({
             <span className="min-w-0 flex-1 truncate font-medium">
               {entry.title}
             </span>
-            {/* An invisible copy of the timestamp (or of the number) keeps
-                space for the real one, which sits on top of the row. */}
+            {/* An invisible copy of the job dots and of the timestamp (or
+                of the number) keeps space for the real ones, which sit on
+                top of the row. */}
+            <SidebarAgentJobDots entry={entry} placeholder />
             {agentNumber > 0 && !overlay ? (
               <Kbd aria-hidden="true" className="invisible shrink-0">
                 {agentNumberLabel}
@@ -871,13 +878,12 @@ function SidebarAgentItem({
     </SidebarMenuButton>
   )
 
-  const agentTrailingControls =
-    agentNumber > 0 && !overlay ? (
-      <span className="absolute top-(--sidebar-row-icon-top) right-(--sidebar-item-pad) z-10 flex min-w-4 items-center justify-end">
+  const agentTrailingControls = (
+    <span className="absolute top-(--sidebar-row-icon-top) right-(--sidebar-item-pad) z-10 flex min-w-4 items-center justify-end gap-2 empty:hidden">
+      {overlay ? null : <SidebarAgentJobDots entry={entry} />}
+      {agentNumber > 0 && !overlay ? (
         <Kbd>{agentNumberLabel}</Kbd>
-      </span>
-    ) : hasTimestamp ? (
-      <span className="absolute top-(--sidebar-row-icon-top) right-(--sidebar-item-pad) z-10 flex min-w-4 items-center justify-end">
+      ) : hasTimestamp ? (
         <TitleTooltip
           title={isMobile ? undefined : exactTimestamp}
           side="right"
@@ -888,8 +894,9 @@ function SidebarAgentItem({
             className="shrink-0 text-[11px] font-normal text-sidebar-foreground/50"
           />
         </TitleTooltip>
-      </span>
-    ) : null
+      ) : null}
+    </span>
+  )
 
   const agentRow = (
     <div
@@ -1029,10 +1036,28 @@ function sameProjectAgentEntry(
     Boolean(left.unread) === Boolean(right.unread) &&
     Boolean(left.needsInput) === Boolean(right.needsInput) &&
     left.waiting === right.waiting &&
+    sameAgentJobs(left.jobs, right.jobs) &&
     left.parent === right.parent &&
     left.worktreeBranch === right.worktreeBranch &&
     Boolean(left.optimistic) === Boolean(right.optimistic)
   )
+}
+
+function sameAgentJobs(
+  left: Array<AgentJob> | undefined,
+  right: Array<AgentJob> | undefined
+) {
+  if (left === right) return true
+  if (!left || !right || left.length !== right.length) return false
+  return left.every((job, index) => {
+    const other = right[index]
+    return (
+      job.id === other.id &&
+      job.name === other.name &&
+      job.state === other.state &&
+      job.endedAt === other.endedAt
+    )
+  })
 }
 
 function buildProjectAgentEntryMap(
@@ -1326,6 +1351,7 @@ type ProjectStatusCounts = {
   working: number
   waiting: number
   done: number
+  live: number
 }
 
 /** The same counts as the machine heading, for the agents of one project. */
@@ -1333,13 +1359,14 @@ function projectStatusCounts(
   state: ProjectAgentsState,
   project: string
 ): ProjectStatusCounts {
-  const counts = { working: 0, waiting: 0, done: 0 }
+  const counts = { working: 0, waiting: 0, done: 0, live: 0 }
   for (const entryKey of state.agentKeysByProject[project] ?? []) {
     const entry = state.entriesByKey.get(entryKey)
     if (!entry) continue
     if (agentMatchesStatusFilter(entry, "working")) counts.working++
     if (agentMatchesStatusFilter(entry, "waiting")) counts.waiting++
     if (agentMatchesStatusFilter(entry, "done")) counts.done++
+    if (agentMatchesStatusFilter(entry, "live")) counts.live++
   }
   return counts
 }
@@ -1351,7 +1378,8 @@ function sameProjectStatusCounts(
   return (
     left.working === right.working &&
     left.waiting === right.waiting &&
-    left.done === right.done
+    left.done === right.done &&
+    left.live === right.live
   )
 }
 
@@ -1449,6 +1477,14 @@ function ProjectCounts({
         title="Done"
       >
         <span className="size-2 rounded-full bg-primary" />
+      </ProjectCountButton>
+      <ProjectCountButton
+        {...shared}
+        filter="live"
+        count={counts.live}
+        title="Agents with running jobs"
+      >
+        <span className="size-1.5 rounded-full bg-success" />
       </ProjectCountButton>
     </span>
   )
@@ -2061,6 +2097,7 @@ function machineSummaryEntry(agent: MachineAgentSummary): AgentListEntry {
     streaming: agent.busy,
     needsInput: agent.needsInput,
     ...(agent.waiting ? { waiting: agent.waiting } : {}),
+    ...(agent.jobs ? { jobs: agent.jobs } : {}),
     unread: isMachineAgentUnread(agent),
     ...(agent.parent ? { parent: agent.parent } : {}),
   }
@@ -2230,6 +2267,18 @@ export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
     },
     [machine.id]
   )
+  // The terminal panel of another machine is not on this page: a click on
+  // a job dot opens the agent there.
+  const jobActions = React.useMemo(
+    () => ({
+      machineId: machine.id,
+      openJob: (entry: AgentListEntry) => {
+        if (isMobile) setOpenMobile(false)
+        openAgent(entry)
+      },
+    }),
+    [isMobile, machine.id, openAgent, setOpenMobile]
+  )
   const createAgent = React.useCallback(
     (project: string) => {
       if (isMobile) setOpenMobile(false)
@@ -2288,7 +2337,7 @@ export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
   }
 
   return (
-    <>
+    <SidebarAgentJobsContext value={jobActions}>
       <PinnedAgentGroup
         nested
         pinnedAgentKeys={pinnedAgentKeys}
@@ -2342,7 +2391,7 @@ export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
           if (!open) setArchiveEntry(undefined)
         }}
       />
-    </>
+    </SidebarAgentJobsContext>
   )
 }
 
@@ -2612,6 +2661,19 @@ function useAppSidebarView({
   // (`window-sidebar.tsx`). This shell fills the slots of its machine when
   // its machine shows.
   const topSlot = useSidebarSlot("top", machineId)
+  // A click on a job dot selects the agent and shows the job in its
+  // terminal panel.
+  const jobActions = React.useMemo(
+    () => ({
+      machineId,
+      openJob: (entry: AgentListEntry, job: AgentJob) => {
+        onAgentClick?.(entry, { multiSelectKey: false, shiftKey: false })
+        if (isMobile) setOpenMobile(false)
+        openJobTerminal(job.id, entry.id)
+      },
+    }),
+    [isMobile, machineId, onAgentClick, setOpenMobile]
+  )
   const contentSlot = useSidebarSlot("content", machineId)
   const bottomSlot = useSidebarSlot("bottom", machineId)
 
@@ -2625,185 +2687,158 @@ function useAppSidebarView({
         : null}
       {contentSlot
         ? createPortal(
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
-              onDragEnd={handleDragEnd}
-              onDragCancel={handleDragCancel}
-            >
-              <PinnedAgentGroup
-                pinnedAgentKeys={pinnedAgentKeys}
-                projectAgentsStore={projectAgentsStore}
-                collapsedProjectStore={collapsedProjectStore}
-                collapseAllKeys={collapseAllKeys}
-                searchActive={listFiltered}
-                activeAgentStore={activeAgentStore}
-                selectedAgentKeyStore={selectedAgentKeyStore}
-                isMobile={isMobile}
-                moveTargetProjects={visibleProjects}
-                setOpenMobile={setOpenMobile}
-                onAgentClick={onAgentClick}
-                onRenameAgent={onRenameAgent}
-                onDeleteAgent={onDeleteAgent}
-                onSetAgentUnread={onSetAgentUnread}
-                onMoveAgent={onMoveAgent}
-                onTogglePinnedAgent={onTogglePinnedAgent}
-              />
-              <Collapsible
-                open={showProjectsHeader ? !projectsCollapsed : true}
-                onOpenChange={(open, details) => {
-                  if (searchActive) return
-                  // An Option-click also expands or collapses all projects.
-                  if (isAltChange(details)) {
-                    collapsedProjectStore.setAll(
-                      [PROJECTS_AGENT_GROUP_COLLAPSE_KEY, ...visibleProjects],
+            <SidebarAgentJobsContext value={jobActions}>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragEnd={handleDragEnd}
+                onDragCancel={handleDragCancel}
+              >
+                <PinnedAgentGroup
+                  pinnedAgentKeys={pinnedAgentKeys}
+                  projectAgentsStore={projectAgentsStore}
+                  collapsedProjectStore={collapsedProjectStore}
+                  collapseAllKeys={collapseAllKeys}
+                  searchActive={listFiltered}
+                  activeAgentStore={activeAgentStore}
+                  selectedAgentKeyStore={selectedAgentKeyStore}
+                  isMobile={isMobile}
+                  moveTargetProjects={visibleProjects}
+                  setOpenMobile={setOpenMobile}
+                  onAgentClick={onAgentClick}
+                  onRenameAgent={onRenameAgent}
+                  onDeleteAgent={onDeleteAgent}
+                  onSetAgentUnread={onSetAgentUnread}
+                  onMoveAgent={onMoveAgent}
+                  onTogglePinnedAgent={onTogglePinnedAgent}
+                />
+                <Collapsible
+                  open={showProjectsHeader ? !projectsCollapsed : true}
+                  onOpenChange={(open, details) => {
+                    if (searchActive) return
+                    // An Option-click also expands or collapses all projects.
+                    if (isAltChange(details)) {
+                      collapsedProjectStore.setAll(
+                        [PROJECTS_AGENT_GROUP_COLLAPSE_KEY, ...visibleProjects],
+                        !open
+                      )
+                      return
+                    }
+                    collapsedProjectStore.setCollapsed(
+                      PROJECTS_AGENT_GROUP_COLLAPSE_KEY,
                       !open
                     )
-                    return
-                  }
-                  collapsedProjectStore.setCollapsed(
-                    PROJECTS_AGENT_GROUP_COLLAPSE_KEY,
-                    !open
-                  )
-                }}
-              >
-                <SidebarGroup
-                  className={showProjectsHeader ? "py-1" : "pt-0 pb-1"}
+                  }}
                 >
-                  {showProjectsHeader ? (
-                    <AppSidebarProjectsHeader
-                      agentSearch={agentSearch}
-                      matchingAgentCount={matchingAgentCount}
-                      collapsed={projectsCollapsed}
-                      onOpenAddProjectDialog={onOpenAddProjectDialog}
-                    />
-                  ) : null}
-                  <CollapsibleContent>
-                    <SidebarGroupContent>
-                      {visibleProjects.length === 0 ? (
-                        <div className="p-2">
-                          <Empty className="rounded-xl border border-dashed bg-sidebar-accent/10 py-10">
-                            <EmptyHeader>
-                              <EmptyMedia variant="icon">
-                                <FolderIcon />
-                              </EmptyMedia>
-                              <EmptyTitle>{emptyStateText}</EmptyTitle>
-                            </EmptyHeader>
-                          </Empty>
-                        </div>
-                      ) : (
-                        <SortableContext
-                          items={orderedVisibleProjects}
-                          strategy={verticalListSortingStrategy}
-                        >
-                          {orderedVisibleProjects.map((project) => {
-                            return (
-                              <SortableProjectGroup
-                                key={project}
-                                id={project}
-                                disabled={!projectOrderingEnabled}
-                              >
-                                {({ attributes, listeners, isDragging }) => (
-                                  <ProjectAgentGroup
-                                    project={project}
-                                    projectAgentsStore={projectAgentsStore}
-                                    collapsedProjectStore={
-                                      collapsedProjectStore
-                                    }
-                                    collapseAllKeys={collapseAllKeys}
-                                    searchActive={listFiltered}
-                                    moveTargetProjects={visibleProjects}
-                                    activeAgentStore={activeAgentStore}
-                                    selectedAgentKeyStore={
-                                      selectedAgentKeyStore
-                                    }
-                                    pinnedAgentKeys={pinnedAgentKeys}
-                                    isMobile={isMobile}
-                                    setOpenMobile={setOpenMobile}
-                                    isDragging={isDragging}
-                                    isAgentDropTarget={
-                                      agentDropProject === project
-                                    }
-                                    attributes={attributes}
-                                    listeners={listeners}
-                                    onAgentClick={onAgentClick}
-                                    onRenameAgent={onRenameAgent}
-                                    onDeleteAgent={onDeleteAgent}
-                                    onSetAgentUnread={onSetAgentUnread}
-                                    onMoveAgent={onMoveAgent}
-                                    onMoveAgentAnyProject={
-                                      onMoveAgentAnyProject
-                                    }
-                                    onTogglePinnedAgent={onTogglePinnedAgent}
-                                    onCreateAgentInProject={
-                                      onCreateAgentInProject
-                                    }
-                                    onDeleteOldAgentsInProject={
-                                      onDeleteOldAgentsInProject
-                                    }
-                                    onMarkAgentsRead={onMarkAgentsRead}
-                                    onRemoveProject={
-                                      onRemoveProject
-                                        ? removeProject
-                                        : undefined
-                                    }
-                                  />
-                                )}
-                              </SortableProjectGroup>
-                            )
-                          })}
-                        </SortableContext>
-                      )}
-                    </SidebarGroupContent>
-                  </CollapsibleContent>
-                </SidebarGroup>
-              </Collapsible>
+                  <SidebarGroup
+                    className={showProjectsHeader ? "py-1" : "pt-0 pb-1"}
+                  >
+                    {showProjectsHeader ? (
+                      <AppSidebarProjectsHeader
+                        agentSearch={agentSearch}
+                        matchingAgentCount={matchingAgentCount}
+                        collapsed={projectsCollapsed}
+                        onOpenAddProjectDialog={onOpenAddProjectDialog}
+                      />
+                    ) : null}
+                    <CollapsibleContent>
+                      <SidebarGroupContent>
+                        {visibleProjects.length === 0 ? (
+                          <div className="p-2">
+                            <Empty className="rounded-xl border border-dashed bg-sidebar-accent/10 py-10">
+                              <EmptyHeader>
+                                <EmptyMedia variant="icon">
+                                  <FolderIcon />
+                                </EmptyMedia>
+                                <EmptyTitle>{emptyStateText}</EmptyTitle>
+                              </EmptyHeader>
+                            </Empty>
+                          </div>
+                        ) : (
+                          <SortableContext
+                            items={orderedVisibleProjects}
+                            strategy={verticalListSortingStrategy}
+                          >
+                            {orderedVisibleProjects.map((project) => {
+                              return (
+                                <SortableProjectGroup
+                                  key={project}
+                                  id={project}
+                                  disabled={!projectOrderingEnabled}
+                                >
+                                  {({ attributes, listeners, isDragging }) => (
+                                    <ProjectAgentGroup
+                                      project={project}
+                                      projectAgentsStore={projectAgentsStore}
+                                      collapsedProjectStore={
+                                        collapsedProjectStore
+                                      }
+                                      collapseAllKeys={collapseAllKeys}
+                                      searchActive={listFiltered}
+                                      moveTargetProjects={visibleProjects}
+                                      activeAgentStore={activeAgentStore}
+                                      selectedAgentKeyStore={
+                                        selectedAgentKeyStore
+                                      }
+                                      pinnedAgentKeys={pinnedAgentKeys}
+                                      isMobile={isMobile}
+                                      setOpenMobile={setOpenMobile}
+                                      isDragging={isDragging}
+                                      isAgentDropTarget={
+                                        agentDropProject === project
+                                      }
+                                      attributes={attributes}
+                                      listeners={listeners}
+                                      onAgentClick={onAgentClick}
+                                      onRenameAgent={onRenameAgent}
+                                      onDeleteAgent={onDeleteAgent}
+                                      onSetAgentUnread={onSetAgentUnread}
+                                      onMoveAgent={onMoveAgent}
+                                      onMoveAgentAnyProject={
+                                        onMoveAgentAnyProject
+                                      }
+                                      onTogglePinnedAgent={onTogglePinnedAgent}
+                                      onCreateAgentInProject={
+                                        onCreateAgentInProject
+                                      }
+                                      onDeleteOldAgentsInProject={
+                                        onDeleteOldAgentsInProject
+                                      }
+                                      onMarkAgentsRead={onMarkAgentsRead}
+                                      onRemoveProject={
+                                        onRemoveProject
+                                          ? removeProject
+                                          : undefined
+                                      }
+                                    />
+                                  )}
+                                </SortableProjectGroup>
+                              )
+                            })}
+                          </SortableContext>
+                        )}
+                      </SidebarGroupContent>
+                    </CollapsibleContent>
+                  </SidebarGroup>
+                </Collapsible>
 
-              <DragOverlay>
-                {activeProject ? (
-                  <ProjectAgentGroup
-                    project={activeProject}
-                    projectAgentsStore={projectAgentsStore}
-                    collapsedProjectStore={collapsedProjectStore}
-                    collapseAllKeys={collapseAllKeys}
-                    searchActive={listFiltered}
-                    moveTargetProjects={visibleProjects}
-                    activeAgentStore={activeAgentStore}
-                    selectedAgentKeyStore={selectedAgentKeyStore}
-                    pinnedAgentKeys={pinnedAgentKeys}
-                    isMobile={isMobile}
-                    setOpenMobile={setOpenMobile}
-                    overlay
-                    onAgentClick={onAgentClick}
-                    onRenameAgent={onRenameAgent}
-                    onDeleteAgent={onDeleteAgent}
-                    onSetAgentUnread={onSetAgentUnread}
-                    onMoveAgent={onMoveAgent}
-                    onMoveAgentAnyProject={onMoveAgentAnyProject}
-                    onTogglePinnedAgent={onTogglePinnedAgent}
-                    onCreateAgentInProject={onCreateAgentInProject}
-                    onDeleteOldAgentsInProject={onDeleteOldAgentsInProject}
-                    onMarkAgentsRead={onMarkAgentsRead}
-                    onRemoveProject={
-                      onRemoveProject ? removeProject : undefined
-                    }
-                  />
-                ) : activeAgentDrag ? (
-                  <SidebarMenu className="w-full rounded-md bg-sidebar shadow-lg ring-1 ring-sidebar-border/70">
-                    <SidebarAgentItem
-                      entryKey={activeAgentDrag.entryKey}
+                <DragOverlay>
+                  {activeProject ? (
+                    <ProjectAgentGroup
+                      project={activeProject}
                       projectAgentsStore={projectAgentsStore}
+                      collapsedProjectStore={collapsedProjectStore}
+                      collapseAllKeys={collapseAllKeys}
+                      searchActive={listFiltered}
+                      moveTargetProjects={visibleProjects}
                       activeAgentStore={activeAgentStore}
                       selectedAgentKeyStore={selectedAgentKeyStore}
-                      isPinned={pinnedAgentKeys.includes(
-                        activeAgentDrag.entryKey
-                      )}
+                      pinnedAgentKeys={pinnedAgentKeys}
                       isMobile={isMobile}
-                      overlay
-                      moveTargetProjects={visibleProjects}
                       setOpenMobile={setOpenMobile}
+                      overlay
                       onAgentClick={onAgentClick}
                       onRenameAgent={onRenameAgent}
                       onDeleteAgent={onDeleteAgent}
@@ -2811,11 +2846,40 @@ function useAppSidebarView({
                       onMoveAgent={onMoveAgent}
                       onMoveAgentAnyProject={onMoveAgentAnyProject}
                       onTogglePinnedAgent={onTogglePinnedAgent}
+                      onCreateAgentInProject={onCreateAgentInProject}
+                      onDeleteOldAgentsInProject={onDeleteOldAgentsInProject}
+                      onMarkAgentsRead={onMarkAgentsRead}
+                      onRemoveProject={
+                        onRemoveProject ? removeProject : undefined
+                      }
                     />
-                  </SidebarMenu>
-                ) : null}
-              </DragOverlay>
-            </DndContext>,
+                  ) : activeAgentDrag ? (
+                    <SidebarMenu className="w-full rounded-md bg-sidebar shadow-lg ring-1 ring-sidebar-border/70">
+                      <SidebarAgentItem
+                        entryKey={activeAgentDrag.entryKey}
+                        projectAgentsStore={projectAgentsStore}
+                        activeAgentStore={activeAgentStore}
+                        selectedAgentKeyStore={selectedAgentKeyStore}
+                        isPinned={pinnedAgentKeys.includes(
+                          activeAgentDrag.entryKey
+                        )}
+                        isMobile={isMobile}
+                        overlay
+                        moveTargetProjects={visibleProjects}
+                        setOpenMobile={setOpenMobile}
+                        onAgentClick={onAgentClick}
+                        onRenameAgent={onRenameAgent}
+                        onDeleteAgent={onDeleteAgent}
+                        onSetAgentUnread={onSetAgentUnread}
+                        onMoveAgent={onMoveAgent}
+                        onMoveAgentAnyProject={onMoveAgentAnyProject}
+                        onTogglePinnedAgent={onTogglePinnedAgent}
+                      />
+                    </SidebarMenu>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
+            </SidebarAgentJobsContext>,
             contentSlot
           )
         : null}

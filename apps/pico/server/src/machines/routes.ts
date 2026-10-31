@@ -86,6 +86,7 @@ export function localSummary(
           busy: agent.busy,
           needsInput: agent.needsInput,
           ...(agent.waiting ? { waiting: agent.waiting } : {}),
+          ...(agent.jobs ? { jobs: agent.jobs } : {}),
           ...(viewers.isUnread(agent.id) ? { unread: true } : {}),
           ...(agent.parent ? { parent: agent.parent } : {}),
           ...(agent.lastMessageAt

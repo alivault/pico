@@ -170,6 +170,7 @@ const MACHINE_SCOPED_KEYS = new Set([
   "pico-recent-directories",
   "pico-terminal-tabs",
   "pico-job-focus-seen",
+  "pico-jobs-seen",
   "pico-prompt-drafts",
   "pico-sidebar-state-merged",
 ])
