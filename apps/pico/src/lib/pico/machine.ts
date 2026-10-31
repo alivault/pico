@@ -173,6 +173,7 @@ const MACHINE_SCOPED_KEYS = new Set([
   "pico-jobs-seen",
   "pico-prompt-drafts",
   "pico-sidebar-state-merged",
+  "pico-sidebar-group-by",
 ])
 
 export function isMachineScopedStorageKey(key: string) {

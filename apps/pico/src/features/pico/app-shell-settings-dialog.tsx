@@ -13,7 +13,9 @@ import {
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
   setShowAgentPreviews,
+  setSidebarGroupBy,
   useShowAgentPreviews,
+  useSidebarGroupBy,
 } from "@/features/pico/sidebar-display-settings"
 import type { DesktopNotificationPermission } from "@/features/pico/agent-done-notifications"
 import type {
@@ -413,6 +415,9 @@ type SettingsCommandGroupsOptions = Pick<
 > & {
   onThemeCommand: () => void
   showAgentPreviews: boolean
+  /** The sidebar groups the agents of this machine by state. */
+  groupByStatus: boolean
+  onGroupByStatusChange: (enabled: boolean) => void
   piTransport: PiTransport
   piCacheRetention: PiCacheRetention
   onPiTransportChange: (transport: PiTransport) => void | Promise<void>
@@ -455,6 +460,8 @@ function getSettingsCommandGroups({
   onLogoutProviders,
   onThemeCommand,
   showAgentPreviews,
+  groupByStatus,
+  onGroupByStatusChange,
   piTransport,
   piCacheRetention,
   onPiTransportChange,
@@ -556,6 +563,16 @@ function getSettingsCommandGroups({
           toggled: showAgentPreviews,
           keywords: ["sidebar", "agent", "preview", "last message"],
           onSelect: () => setShowAgentPreviews(!showAgentPreviews),
+        },
+        {
+          id: "sidebar-group-by-status",
+          title: "Group agents by state",
+          description:
+            "Show the agents of this machine in groups by state, not by project.",
+          valueLabel: formatToggleValue(groupByStatus),
+          toggled: groupByStatus,
+          keywords: ["sidebar", "group", "status", "state", "project"],
+          onSelect: () => onGroupByStatusChange(!groupByStatus),
         },
       ],
     },
@@ -961,6 +978,7 @@ function AppShellSettingsDialog({
   const machineId = useMachineId()
   const queryClient = useQueryClient()
   const showAgentPreviews = useShowAgentPreviews()
+  const groupByStatus = useSidebarGroupBy(machineId) === "status"
   const performanceQuery = useQuery({
     queryKey: picoQueryKeys.piPerformance(viewerContextId),
     queryFn: () =>
@@ -1098,6 +1116,9 @@ function AppShellSettingsDialog({
     onLoginProviders,
     onLogoutProviders,
     showAgentPreviews,
+    groupByStatus,
+    onGroupByStatusChange: (enabled) =>
+      setSidebarGroupBy(machineId, enabled ? "status" : "project"),
     piTransport: performance?.transport ?? "auto",
     piCacheRetention: performance?.cacheRetention ?? "standard",
     onPiTransportChange: async (transport) => {

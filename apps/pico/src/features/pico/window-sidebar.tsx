@@ -80,6 +80,7 @@ function MachineProjectActions({
   if (!shown && machine.state !== "online") return null
   return (
     <ProjectActions
+      machineId={machine.id}
       title={shown ? "Add project" : `Add project on ${machine.label}`}
       showShortcut={shown}
       onOpenAddProjectDialog={() => {

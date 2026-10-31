@@ -98,6 +98,29 @@ export function agentMatchesStatusFilter(
   }
 }
 
+/**
+ * A sidebar group when the sidebar groups agents by state. Each agent is in
+ * exactly one group. "live" is not a group: a live agent can also work or
+ * be done.
+ */
+export type AgentStatusGroup = "waiting" | "done" | "working" | "idle"
+
+/** The groups in sidebar order: the agents that need you come first. */
+export const AGENT_STATUS_GROUPS: ReadonlyArray<AgentStatusGroup> = [
+  "waiting",
+  "done",
+  "working",
+  "idle",
+]
+
+/** The group of an agent, with the same rules as the filter. */
+export function agentStatusGroup(entry: AgentListEntry): AgentStatusGroup {
+  if (agentMatchesStatusFilter(entry, "waiting")) return "waiting"
+  if (agentMatchesStatusFilter(entry, "working")) return "working"
+  if (agentMatchesStatusFilter(entry, "done")) return "done"
+  return "idle"
+}
+
 /** Whether an agent has a process that runs now (a green or sky dot). */
 export function hasLiveJob(jobs: AgentListEntry["jobs"]) {
   return Boolean(jobs?.some((job) => job.state !== "failed"))
