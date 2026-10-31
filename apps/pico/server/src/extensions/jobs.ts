@@ -25,6 +25,7 @@ import {
   defineDoc,
   defineExtension,
   defineTool,
+  section,
   type ConversationId,
   type DocumentReader,
   type Harness,
@@ -173,6 +174,66 @@ function describeJob(job: Job, now = Date.now()) {
       ? `, waits for input${job.waiting.secret ? " (echo off)" : ""}: ${clip(job.waiting.prompt, 200)}`
       : ""
   return `${job.id} (${job.name}) ${state}${waiting}: ${job.command}`
+}
+
+/**
+ * What an agent may do with a job. `own`: everything. `control`: all but
+ * focus, for a job of a subagent (at any depth), or of an archived agent
+ * without a visible agent above it. `view`: list, output, read, and wait, for
+ * the other jobs of the agent's project.
+ */
+export type JobAccess = "own" | "control" | "view"
+
+type FoundJob = {
+  job: Job
+  /** The conversation that keeps the job's record. */
+  conversationId: ConversationId
+  /** The agent that started the job. */
+  owner: string
+  access: JobAccess
+}
+
+/** The sidebar project of an agent. */
+function projectOf(services: Pick<HostServices, "agents">, id: string) {
+  const meta = services.agents.meta(id)
+  return meta.group ?? meta.cwd
+}
+
+/** How the agent `caller` may use a job of the agent `owner`, if at all. */
+export function jobAccess(
+  services: Pick<HostServices, "agents">,
+  caller: string,
+  owner: string
+): JobAccess | undefined {
+  const { agents } = services
+  const current = agents.current(owner) ?? owner
+  if (current === caller || owner === caller) return "own"
+  if (!agents.has(caller) || !agents.has(current)) return undefined
+  // The agents above the job's agent control its jobs.
+  let visibleAbove = false
+  let parent = agents.meta(current).parent
+  for (let hops = 0; parent && hops < 50; hops += 1) {
+    const above = agents.current(parent) ?? parent
+    if (above === caller) return "control"
+    if (!agents.has(above)) break
+    const meta = agents.meta(above)
+    if (!meta.archived) visibleAbove = true
+    parent = meta.parent
+  }
+  if (projectOf(services, current) !== projectOf(services, caller))
+    return undefined
+  // Nobody works in an archived agent: without a visible agent above it,
+  // every agent of the project controls its jobs.
+  return agents.meta(current).archived && !visibleAbove ? "control" : "view"
+}
+
+/** An agent for a message: its ID and name. */
+function agentLabel(services: Pick<HostServices, "agents">, id: string) {
+  const current = services.agents.current(id) ?? id
+  const name = services.agents.has(current)
+    ? services.agents.meta(current).name
+    : undefined
+  return name ? `agent ${current} ("${name}")` : `agent ${current}`
 }
 
 function describeWait(job: Job, result: WaitResult) {
@@ -596,9 +657,15 @@ class JobRunner {
       timeoutMs: number
       signal?: AbortSignal
       newOnly?: boolean
+      /**
+       * Default true: a wait or exit that this call reports is not reported
+       * again to the job's agent. Another agent's wait gives false.
+       */
+      claim?: boolean
     }
   ): Promise<WaitResult> {
     const live = this.#live.get(jobId)
+    const claim = options.claim ?? true
     let resolveResult!: (result: WaitResult) => void
     const result = new Promise<WaitResult>((resolve) => {
       resolveResult = resolve
@@ -617,16 +684,20 @@ class JobRunner {
         return false
       }
       if (event.type === "waiting")
-        return finish({
-          type: "waiting",
-          prompt: event.prompt,
-          secret: event.secret,
-        })
-      return finish({
-        type: "exit",
-        exitCode: event.exitCode,
-        ...(event.signal ? { signal: event.signal } : {}),
-      })
+        return (
+          finish({
+            type: "waiting",
+            prompt: event.prompt,
+            secret: event.secret,
+          }) && claim
+        )
+      return (
+        finish({
+          type: "exit",
+          exitCode: event.exitCode,
+          ...(event.signal ? { signal: event.signal } : {}),
+        }) && claim
+      )
     }
     // Listen first, so no output falls between the search and the wait.
     live?.waiters.add(waiter)
@@ -648,10 +719,11 @@ class JobRunner {
       // waits for what the user's input brings: a pattern, or a focus
       // request that is open.
       const waiting = live.watcher?.waiting
-      const known =
-        live.reported === live.episode && (options.match || live.focused)
+      const known = claim
+        ? live.reported === live.episode && (options.match || live.focused)
+        : Boolean(options.match)
       if (waiting && !known) {
-        live.reported = live.episode
+        if (claim) live.reported = live.episode
         finish({ type: "waiting", ...waiting })
       }
       const timer = setTimeout(
@@ -676,7 +748,7 @@ class JobRunner {
             clearTimeout(settle)
             live.waiters.delete(onExit)
             resolve(event)
-            return true
+            return claim
           }
           live.waiters.add(onExit)
         })
@@ -696,7 +768,7 @@ class JobRunner {
    * Wait until a job's output settles after input: `quietMs` without output,
    * at most `maxMs`.
    */
-  settle(jobId: string, quietMs = 300, maxMs = 3000) {
+  settle(jobId: string, claim = true, quietMs = 300, maxMs = 3000) {
     const live = this.#live.get(jobId)
     if (!live) return Promise.resolve()
     return new Promise<void>((resolve) => {
@@ -713,7 +785,7 @@ class JobRunner {
       const onExit: Waiter = (event) => {
         if (event.type !== "exit") return false
         done()
-        return true
+        return claim
       }
       live.waiters.add(onExit)
       // Give the program a moment to answer before the first quiet check.
@@ -741,6 +813,14 @@ class JobRunner {
       startedAt: live.job.startedAt,
       agentId: agentIdOf(live.conversationId),
     }))
+  }
+
+  /** A running job and the conversation of its agent. */
+  live(jobId: string) {
+    const live = this.#live.get(jobId)
+    return live
+      ? { job: live.job, conversationId: live.conversationId }
+      : undefined
   }
 
   /** Whether a job runs in this process. */
@@ -1035,6 +1115,124 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     return jobs?.items[id.trim()]
   }
 
+  /**
+   * Find a job of this agent or of another agent that it may use, with the
+   * conversation that keeps its record. A running job's runner knows its
+   * agent; a finished one is looked for in the jobs of the project's agents.
+   */
+  const findJob = async (
+    api: {
+      snapshot: DocumentReader["snapshot"]
+      conversationId: ConversationId
+    },
+    id: string,
+    context: Context
+  ): Promise<FoundJob | undefined> => {
+    const jobId = id.trim()
+    const caller = agentIdOf(api.conversationId)
+    const own = await jobFor(api, jobId, context)
+    if (own)
+      return {
+        job: own,
+        conversationId: api.conversationId,
+        owner: caller,
+        access: "own",
+      }
+    const services = host.current
+    if (!services || !services.agents.has(caller)) return undefined
+    const candidates = new Set<ConversationId>()
+    const live = runner.live(jobId)
+    if (live) candidates.add(live.conversationId)
+    else {
+      const project = projectOf(services, caller)
+      const ids = [
+        ...services.agents.list({ project }).map((agent) => agent.id),
+        ...services.agents
+          .archivedAgents()
+          .map((agent) => agent.id)
+          .filter((agentId) => projectOf(services, agentId) === project),
+        ...services.agents.subagents(caller),
+      ]
+      for (const agentId of ids)
+        if (agentId !== caller) candidates.add(conversationOf(agentId))
+    }
+    for (const conversationId of candidates) {
+      const jobs = await api.snapshot(JobsDoc, conversationId, context)
+      const job = jobs?.items[jobId]
+      if (!job) continue
+      const owner = agentIdOf(conversationId)
+      const access = jobAccess(services, caller, owner)
+      return access ? { job, conversationId, owner, access } : undefined
+    }
+    return undefined
+  }
+
+  /** The error for a change to a job that the agent may only read. */
+  const viewOnly = (services: HostServices, found: FoundJob) =>
+    errorResult(
+      `${found.job.name} (${found.job.id}) belongs to ${agentLabel(services, found.owner)}. You can list, read, and wait on it, and read its output. Only that agent and the agents above it can stop it, type into it, or close it.`
+    )
+
+  /**
+   * Tell the agent of a job that another agent changed it. Only a busy agent
+   * hears of it: a message would start a turn in an idle one.
+   */
+  const tellOwner = async (
+    services: HostServices,
+    found: FoundJob,
+    caller: string,
+    what: string
+  ) => {
+    if (found.access === "own") return
+    const owner = services.agents.current(found.owner) ?? found.owner
+    if (!services.agents.has(owner) || !services.agents.isBusy(owner)) return
+    await steerAgent(
+      services,
+      found.conversationId,
+      `[Job changed] ${agentLabel(services, caller)} ${what} ${found.job.name} (job ${found.job.id}).`,
+      `job:${found.job.id}:changed:${Date.now()}`
+    ).catch(() => undefined)
+  }
+
+  /**
+   * The running jobs of other agents that an agent may use, oldest first.
+   * With a reader, the records come from their documents (with their wait
+   * state); without, from the runner (for the prompt section).
+   */
+  const otherJobs = async (
+    services: HostServices,
+    api: { conversationId: ConversationId },
+    context: Context,
+    reader?: Pick<DocumentReader, "snapshot">
+  ) => {
+    const caller = agentIdOf(api.conversationId)
+    if (!services.agents.has(caller)) return []
+    const found: FoundJob[] = []
+    for (const item of runner.liveJobs()) {
+      const live = runner.live(item.id)
+      if (!live || live.conversationId === api.conversationId) continue
+      const access = jobAccess(services, caller, item.agentId)
+      if (!access || access === "own") continue
+      const job = reader
+        ? (await reader.snapshot(JobsDoc, live.conversationId, context))?.items[
+            item.id
+          ]
+        : live.job
+      if (job)
+        found.push({
+          job,
+          conversationId: live.conversationId,
+          owner: item.agentId,
+          access,
+        })
+    }
+    return found.sort((left, right) => left.job.startedAt - right.job.startedAt)
+  }
+
+  /** Whose job it is, and what this agent may do with it. */
+  const describeOwner = (services: HostServices, found: FoundJob) =>
+    `started by ${agentLabel(services, found.owner)}${found.access === "control" ? "; you control it" : "; read only for you"}`
+
   /** Refuse a call that brings in the user from a subagent. */
   const subagentRefusal = (
     services: HostServices,
@@ -1273,18 +1471,30 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
           : describeJob(job)
       }
       if (args.id) {
-        const job = await jobFor(api, args.id, context)
-        if (!job) return errorResult(`No job with id ${args.id}`)
+        const found = await findJob(api, args.id, context)
+        if (!found) return errorResult(`No job with id ${args.id}`)
+        const { job } = found
         const output = await readJobLog(dataDir, job.id, 20)
+        const owner =
+          found.access === "own" ? "" : `\n  ${describeOwner(services, found)}`
         return textResult(
-          `${describe(job)}${output ? `\nLast output:\n${clip(output, 3000)}` : ""}`
+          `${describe(job)}${owner}${output ? `\nLast output:\n${clip(output, 3000)}` : ""}`
         )
       }
       const jobs = await api.snapshot(JobsDoc, api.conversationId, context)
       const items = Object.values(jobs?.items ?? {})
         .sort((left, right) => right.startedAt - left.startedAt)
         .slice(0, 15)
-      const lines = [...items.map(describe), ...shells]
+      const others = (await otherJobs(services, api, context, api)).map(
+        (found) => `${describe(found.job)}\n  ${describeOwner(services, found)}`
+      )
+      const lines = [
+        ...items.map(describe),
+        ...shells,
+        ...(others.length > 0
+          ? ["Running jobs of other agents in this project:", ...others]
+          : []),
+      ]
       return textResult(lines.length > 0 ? lines.join("\n") : "No terminals.")
     }
   }
@@ -1301,7 +1511,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     context: Context
   ) => {
     {
-      const job = await jobFor(api, args.id, context)
+      const job = (await findJob(api, args.id, context))?.job
       if (!job) return errorResult(`No job with id ${args.id}`)
       const parts = jobLogParts(dataDir, job.id)
       let selected: string[]
@@ -1353,7 +1563,8 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       new_only?: boolean | undefined
       timeout_ms?: number | undefined
     },
-    context: Context
+    context: Context,
+    claim: boolean
   ) => {
     let match: ((line: string) => boolean) | undefined
     if (args.pattern) {
@@ -1377,6 +1588,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       timeoutMs,
       ...(context.abortSignal ? { signal: context.abortSignal } : {}),
       ...(args.new_only ? { newOnly: true } : {}),
+      claim,
     })
     const output = await readJobLog(dataDir, job.id, 15)
     return textResult(
@@ -1446,7 +1658,8 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     // Actions on one terminal depend on each other: run calls in order.
     executionMode: "sequential",
     description: [
-      "Use terminals: your jobs (from job_start or open) and the user's terminal tabs of this agent.",
+      "Use terminals: your jobs (from job_start or open), the running jobs of other agents in this project, and the user's terminal tabs of this agent.",
+      "Another agent's job is read only (list, output, read, wait), except the jobs of your subagents and of archived agents that no agent above controls: you may also stop them, type into them, and close them.",
       'Actions: list (all, with memory; with id, one job and its last output); output (the log of a job: the last `tail` lines, default 80, lines from `from_line`, or only lines that match `grep`); stop (stop a job: SIGTERM, then SIGKILL); open (a shell, or `command`, in a new terminal; it is a job); read (source visible: the screen now, for full-screen programs; recent: the last `lines` with scrollback); wait (until a line matches `pattern`, the job waits for input, or exits); send_text (type `text`, with `enter` to press Enter); send_keys (`keys`, for example ["up", "enter"] or ["ctrl+c"]); focus (bring the user to the terminal with `prompt`, only when the user is needed: a password, a login, a choice that is the user\'s); close (remove a finished job and its log).',
       "send_text and send_keys refuse when the terminal hides input: a secret is for the user. You can read the user's terminals, but not type in them.",
     ].join(" "),
@@ -1567,16 +1780,20 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       if (args.action === "stop" && !shell) {
         const denied = deniedAction(host, api.conversationId, "terminal.stop")
         if (denied) return denied
+        const found = await findJob(api, id, context)
+        if (!found) return errorResult(`No job with id ${id}`)
+        if (found.access === "view") return viewOnly(services, found)
         const result = await stopJob(
           services,
           runner,
           api,
-          api.conversationId,
-          id,
+          found.conversationId,
+          found.job.id,
           context
         )
+        if (result.ok) await tellOwner(services, found, agentId, "stopped")
         return result.ok
-          ? textResult(`Stopping job ${id}.`)
+          ? textResult(`Stopping job ${found.job.id}.`)
           : errorResult(result.error)
       }
 
@@ -1593,7 +1810,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
             describeScreen(`The user's terminal ${id}, ${source}`, view)
           )
         }
-        const job = await jobFor(api, id, context)
+        const job = (await findJob(api, id, context))?.job
         if (!job) return errorResult(`No terminal with id ${id}`)
         const terminalId = services.terminals.jobTerminalId(job.id)
         if (!terminalId) {
@@ -1616,11 +1833,19 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
         return errorResult(
           "That is the user's terminal: you can read it, but not wait on it, type in it, or close it. Open your own with the open action."
         )
-      const job = await jobFor(api, id, context)
-      if (!job) return errorResult(`No terminal with id ${id}`)
+      const found = await findJob(api, id, context)
+      if (!found) return errorResult(`No terminal with id ${id}`)
+      const { job } = found
 
-      if (args.action === "wait") return waitJob(job, args, context)
+      // The owner's wait and exit messages stay with the owner.
+      if (args.action === "wait")
+        return waitJob(job, args, context, found.access === "own")
+      if (found.access === "view") return viewOnly(services, found)
       if (args.action === "focus") {
+        if (found.access !== "own")
+          return errorResult(
+            `Only the agent that started ${job.name} (${job.id}) can bring in the user. Stop it, or type into it with send_text or send_keys.`
+          )
         const focused = await focusJob(
           api,
           job,
@@ -1636,10 +1861,10 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
           return errorResult(
             `${job.name} (${job.id}) still runs. Stop it with the stop action first.`
           )
-        await api.commit(async (tx) => {
+        await services.harness.commit(async (tx) => {
           const draft = (await tx.doc(
             JobsDoc,
-            api.conversationId
+            found.conversationId
           )) as unknown as JobsState
           delete draft.items[job.id]
         }, context)
@@ -1668,9 +1893,10 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       }
       const secret = await secretRefusal(job)
       if (secret) return errorResult(secret)
-      const settled = runner.settle(job.id)
+      const settled = runner.settle(job.id, found.access === "own")
       services.terminals.writeForAgent(terminalId, data)
       await settled
+      await tellOwner(services, found, agentId, "typed into")
       const view = await services.terminals.readText(terminalId, "visible", 0)
       return textResult(
         describeScreen(`Sent. ${job.name} (${job.id}) now shows`, view)
@@ -1683,6 +1909,29 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     extension: defineExtension({
       name: "jobs",
       tools: [startTool, terminalTool],
+      sections: [
+        section("project_jobs", async (input, context) => {
+          const services = host.current
+          if (
+            !services ||
+            !services.agents.has(agentIdOf(input.conversationId))
+          )
+            return undefined
+          // Only what changes seldom: a new line here is a new prompt entry.
+          const lines = (await otherJobs(services, input, context))
+            .filter((found) => !found.job.shell)
+            .map(
+              (found) =>
+                `- ${found.job.id} (${found.job.name}) in ${found.job.cwd}: ${clip(found.job.command, 200)}; ${describeOwner(services, found)}`
+            )
+          return lines.length > 0
+            ? [
+                "Background jobs of other agents run in this project. Use them (for example a dev server) before you start the same command again. Read them with the terminal tool.",
+                ...lines,
+              ].join("\n")
+            : "No other agent runs a background job in this project."
+        }),
+      ],
     }),
   }
 }
