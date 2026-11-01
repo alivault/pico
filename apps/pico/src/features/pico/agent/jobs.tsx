@@ -51,9 +51,12 @@ type Job = AgentJob
 
 function statusClass(job: Job) {
   const prompt = jobPrompt(job)
-  if (prompt && !prompt.quiet) return "bg-sky-500"
-  if (job.status === "running") return "bg-amber-500 animate-pulse"
-  if (job.status === "exited" && job.exitCode === 0) return "bg-emerald-500"
+  if (prompt && !prompt.quiet) return "animate-pulse bg-sky-500"
+  // The same colors as the job dots in the sidebar and the terminal tabs:
+  // green runs, gray ended, red failed. Only a wait for input pulses.
+  if (job.status === "running") return "bg-success"
+  if (job.status === "exited" && job.exitCode === 0)
+    return "bg-muted-foreground/50"
   if (job.status === "stopped") return "bg-muted-foreground"
   return "bg-destructive"
 }

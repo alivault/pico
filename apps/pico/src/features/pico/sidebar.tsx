@@ -30,6 +30,7 @@ import {
   FolderPlusIcon,
   FolderTreeIcon,
   GitForkIcon,
+  HourglassIcon,
   ListTodoIcon,
   MessageCircleQuestionIcon,
   PinIcon,
@@ -863,10 +864,10 @@ function SidebarAgentItem({
       ) : entry.waiting ? (
         <TitleTooltip title={`Waiting on ${entry.waiting}`} side="right">
           <span className={AGENT_STATUS_ICON_CLASS}>
-            {/* A hollow dot: the agent is not done. It goes on when the
-                job ends. */}
-            <span
-              className="size-2 rounded-full border-[1.5px] border-primary"
+            {/* An hourglass: the agent is not done. It goes on when the
+                job ends. The job's green dot is at the end of the row. */}
+            <HourglassIcon
+              className="size-3.5 text-sidebar-foreground/70"
               aria-label={`Waiting on ${entry.waiting}`}
             />
           </span>
