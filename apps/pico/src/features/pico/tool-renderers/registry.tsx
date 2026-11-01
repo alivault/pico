@@ -9,11 +9,15 @@ import type { ToolBlock } from "@/lib/pico"
  *   result the user must see or act on (questions, diagrams, subagents).
  * - `Body` replaces only the body of the collapsible tool card.
  * - `summary` replaces the one-line summary in the card header.
+ * - `showImages` shows the images of the result below the card header, also
+ *   when the card is closed, as for tools without a renderer. Without it, the
+ *   renderer shows the images itself.
  */
 export type ToolRenderer = {
   Card?: React.ComponentType<ToolRendererProps>
   Body?: React.ComponentType<ToolRendererProps>
   summary?: (block: ToolBlock) => string | undefined
+  showImages?: boolean
 }
 
 export type ToolRendererProps = {

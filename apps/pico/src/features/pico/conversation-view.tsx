@@ -1228,10 +1228,12 @@ function buildToolBlockHeaderSnapshot(
       block.name === "edit" && !block.running
         ? getEditDiffStats(toolPatchText(block))
         : null,
-    // Custom renderers show their own result, images included.
-    images: toolRenderer(block.name)
-      ? EMPTY_TOOL_IMAGES
-      : (block.images ?? EMPTY_TOOL_IMAGES),
+    // Custom renderers show their own result, images included, except
+    // when they ask for the header images.
+    images:
+      toolRenderer(block.name) && !toolRenderer(block.name)?.showImages
+        ? EMPTY_TOOL_IMAGES
+        : (block.images ?? EMPTY_TOOL_IMAGES),
     openStateKey: rememberedToolCollapsibleStateKey(block),
   }
 }

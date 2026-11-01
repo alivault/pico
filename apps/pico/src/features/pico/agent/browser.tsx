@@ -14,7 +14,8 @@ function ImageResult({ block }: ToolRendererProps) {
   const details = toolDetails<{ kind: "image"; title?: string; data: string }>(
     block
   )
-  if (!details.data)
+  // The header shows the images of the result, also when the card is closed.
+  if (!details.data || (block.images?.length ?? 0) > 0)
     return <pre className="text-xs whitespace-pre-wrap">{block.output}</pre>
   return (
     <ShowContent
@@ -30,6 +31,7 @@ for (const name of ["preview_screenshot", "browser_screenshot"]) {
       return title ?? ""
     },
     Body: ImageResult,
+    showImages: true,
   })
 }
 
@@ -54,6 +56,7 @@ registerToolRenderer("preview", {
       .join(" · ")
   },
   Body: ImageResult,
+  showImages: true,
 })
 
 function browserActSummary(args: Record<string, unknown>) {
@@ -84,6 +87,7 @@ registerToolRenderer("browser", {
     return browserActSummary(args)
   },
   Body: ImageResult,
+  showImages: true,
 })
 
 // The old browser tools, in earlier transcripts.
