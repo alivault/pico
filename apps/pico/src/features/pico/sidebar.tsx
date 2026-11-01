@@ -1485,13 +1485,18 @@ type ProjectStatusCounts = {
   live: number
 }
 
-/** The same counts as the machine heading, for the agents of one project. */
-function projectStatusCounts(
+/**
+ * The same counts as the machine heading, for some agents. A project
+ * heading skips the agents that the Pinned group shows.
+ */
+function agentStatusCounts(
   state: ProjectAgentsState,
-  project: string
+  agentKeys: Iterable<string>,
+  skipKeys?: ReadonlySet<string>
 ): ProjectStatusCounts {
   const counts = { working: 0, waiting: 0, done: 0, live: 0 }
-  for (const entryKey of state.agentKeysByProject[project] ?? []) {
+  for (const entryKey of agentKeys) {
+    if (skipKeys?.has(entryKey)) continue
     const entry = state.entriesByKey.get(entryKey)
     if (!entry) continue
     if (agentMatchesStatusFilter(entry, "working")) counts.working++
@@ -1683,17 +1688,23 @@ const ProjectAgentGroup = React.memo(function ProjectAgentGroup({
     projectAgentsStore,
     (state) => projectUnreadAgents(state, project).length > 0
   )
-  const statusCounts = useSelector(
-    projectAgentsStore,
-    (state) => projectStatusCounts(state, project),
-    { compare: sameProjectStatusCounts }
-  )
   const markAgentsRead = () => {
     onMarkAgentsRead?.(projectUnreadAgents(projectAgentsStore.state, project))
   }
   const pinnedAgentKeySet = usePinnedAgentTreeKeys(
     projectAgentsStore,
     pinnedAgentKeys
+  )
+  // The Pinned group shows the states of its agents, so they do not count here.
+  const statusCounts = useSelector(
+    projectAgentsStore,
+    (state) =>
+      agentStatusCounts(
+        state,
+        state.agentKeysByProject[project] ?? EMPTY_PROJECT_AGENT_KEYS,
+        pinnedAgentKeySet
+      ),
+    { compare: sameProjectStatusCounts }
   )
   const unpinnedAgentKeys = agentKeys.filter(
     (entryKey) => !pinnedAgentKeySet.has(entryKey)
@@ -2053,11 +2064,33 @@ function PinnedAgentGroup({
     PINNED_AGENT_GROUP_COLLAPSE_KEY,
     searchActive
   )
+  const [statusFilter, setStatusFilter] =
+    React.useState<AgentStatusFilters | null>(null)
   // Each pinned agent with its subagent tree.
-  const rows = useSelector(
+  const allRows = useSelector(
     projectAgentsStore,
     (state) => pinnedAgentRows(state.agentTree, pinnedAgentKeys),
     { compare: samePinnedAgentRows }
+  )
+  const rows = useSelector(
+    projectAgentsStore,
+    (state) => {
+      if (!statusFilter) return allRows
+      return allRows.filter(({ key }) => {
+        const entry = state.entriesByKey.get(key)
+        return entry ? agentMatchesStatusFilter(entry, statusFilter) : false
+      })
+    },
+    { compare: samePinnedAgentRows }
+  )
+  const statusCounts = useSelector(
+    projectAgentsStore,
+    (state) =>
+      agentStatusCounts(
+        state,
+        allRows.map((row) => row.key)
+      ),
+    { compare: sameProjectStatusCounts }
   )
   const pinnedAgentKeySet = new Set(pinnedAgentKeys)
 
@@ -2098,11 +2131,29 @@ function PinnedAgentGroup({
               )
             ) : null}
           </CollapsibleTrigger>
+          <ProjectCounts
+            project="Pinned"
+            counts={statusCounts}
+            activeFilter={statusFilter}
+            disabled={false}
+            onToggle={(filter) => {
+              collapsedProjectStore.setCollapsed(
+                PINNED_AGENT_GROUP_COLLAPSE_KEY,
+                false
+              )
+              setStatusFilter((current) => toggleStatusFilter(current, filter))
+            }}
+          />
         </div>
         <CollapsibleContent>
           <SidebarGroupContent>
+            {rows.length === 0 ? (
+              <div className="p-2 text-sm text-sidebar-foreground/70">
+                No matching pinned agents.
+              </div>
+            ) : null}
             <div className="relative flex flex-col">
-              <SidebarTreeLine level={0} />
+              {rows.length > 0 ? <SidebarTreeLine level={0} /> : null}
               <SidebarMenu>
                 {rows.map(({ key: entryKey, depth }) => (
                   <SidebarAgentItem
