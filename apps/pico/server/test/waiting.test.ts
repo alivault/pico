@@ -4,13 +4,30 @@ import { test } from "node:test"
 import type { JobsState } from "../src/extensions/jobs.ts"
 import { agentJobs, waitingLabel } from "../src/extensions/waiting.ts"
 
-void test("waitingLabel names running jobs that notify", () => {
+void test("waitingLabel names running jobs that the agent waits on", () => {
   const jobs = {
     items: {
-      j1: { status: "running", notifyOnExit: true, name: "build" },
+      j1: {
+        status: "running",
+        notifyOnExit: true,
+        waitOnExit: true,
+        name: "build",
+      },
       j2: { status: "running", notifyOnExit: false, name: "dev" },
-      j3: { status: "exited", notifyOnExit: true, name: "test" },
-      j4: { status: "running", notifyOnExit: true, name: "lint" },
+      j3: {
+        status: "exited",
+        notifyOnExit: true,
+        waitOnExit: true,
+        name: "test",
+      },
+      j4: {
+        status: "running",
+        notifyOnExit: true,
+        waitOnExit: true,
+        name: "lint",
+      },
+      // It reports its exit, but the agent does not wait on it.
+      j5: { status: "running", notifyOnExit: true, name: "server" },
     },
   } as unknown as JobsState
   assert.equal(waitingLabel(jobs), "2 jobs (build, lint)")

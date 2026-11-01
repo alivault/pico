@@ -296,8 +296,8 @@ export function subagentMessageKind(
 }
 
 /**
- * What an agent waits on when its turn ended: running jobs that report their
- * exit. Undefined when it waits on nothing.
+ * What an agent waits on when its turn ended: running jobs that it waits on
+ * (`waitOnExit`). Undefined when it waits on nothing.
  */
 export async function waitingOn(
   harness: Pick<Harness, "snapshot">,

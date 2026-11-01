@@ -355,6 +355,7 @@ void test("a subagent that waits on a job sends nothing until it is done", async
         status,
         startedAt: Date.now(),
         notifyOnExit: true,
+        waitOnExit: true,
       }
     }, ctx)
   const create = fake.agents.create.bind(fake.agents)

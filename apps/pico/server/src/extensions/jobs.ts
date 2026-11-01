@@ -81,7 +81,13 @@ export type Job = {
   signal?: number
   startedAt: number
   endedAt?: number
+  /** Report: the agent gets a message when the job ends. */
   notifyOnExit: boolean
+  /**
+   * Wait: the agent goes on when the job ends, so until then it is waiting,
+   * not done (see `waiting.ts`). Only with `notifyOnExit`.
+   */
+  waitOnExit?: boolean
   pid?: number
   /** The job waits for input (see `services/input-wait.ts`). */
   waiting?: { since: number; prompt: string; secret: boolean }
@@ -1257,6 +1263,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       cwd?: string | undefined
       name?: string | undefined
       notifyOnExit: boolean
+      waitOnExit?: boolean
       waitMs: number
       interactive?: { prompt: string } | undefined
       shell?: boolean
@@ -1313,6 +1320,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       status: "running",
       startedAt: Date.now(),
       notifyOnExit: input.notifyOnExit,
+      ...(input.notifyOnExit && input.waitOnExit ? { waitOnExit: true } : {}),
       callId: api.callId,
       ...(input.shell ? { shell: true } : {}),
       ...(input.interactive
@@ -1396,6 +1404,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       "Start a long command in the background and return at once: dev servers, watchers, long builds or test runs.",
       "The user can watch it live in the terminal panel. Use the terminal tool to list jobs, read their output, stop them, read the screen, wait for output, type into them, or bring in the user.",
       "With notify_on_exit (default true), you get a message with the exit code and the last output when it ends, also while you are busy (at your next turn boundary).",
+      "Set wait_on_exit (default false) when you continue your work after the job ends, for example a build or a test run: until then you show as waiting, not done. Do not set it for a job that runs until it is stopped, such as a dev server or a watcher. wait_on_exit also sets notify_on_exit.",
       "With interactive, the command shows as a live terminal in the chat, where the user types (a login, a password, a choice that is the user's), and the call returns when the command exits. Give a short prompt for the user.",
     ].join(" "),
     parameters: Type.Object({
@@ -1403,6 +1412,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       cwd: Type.Optional(Type.String()),
       name: Type.Optional(Type.String({ description: "A short label" })),
       notify_on_exit: Type.Optional(Type.Boolean()),
+      wait_on_exit: Type.Optional(Type.Boolean()),
       wait_ms: Type.Optional(
         Type.Number({
           description:
@@ -1423,7 +1433,10 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
         cwd: args.cwd,
         name: args.name,
         // An interactive call returns with the exit: no message after it.
-        notifyOnExit: args.interactive ? false : (args.notify_on_exit ?? true),
+        notifyOnExit: args.interactive
+          ? false
+          : Boolean(args.wait_on_exit) || (args.notify_on_exit ?? true),
+        waitOnExit: !args.interactive && Boolean(args.wait_on_exit),
         waitMs: Math.min(30_000, Math.max(0, args.wait_ms ?? 2000)),
         ...(args.interactive
           ? {
