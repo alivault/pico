@@ -1405,16 +1405,24 @@ export function createApi(api: ApiContext) {
     }
   })
 
+  router.get("/api/push/devices", () => ({
+    ok: true,
+    devices: api.notifier.devices,
+  }))
+
   router.post("/api/push/subscribe", async (request) => {
     const body = await request.body<{
       subscription?: unknown
       label?: unknown
+      origin?: unknown
+      userAgent?: unknown
     }>()
     try {
-      api.notifier.subscribe(
-        body.subscription as never,
-        stringField(body.label)?.slice(0, 80)
-      )
+      api.notifier.subscribe(body.subscription as never, {
+        label: stringField(body.label)?.slice(0, 80),
+        origin: stringField(body.origin)?.slice(0, 200),
+        userAgent: stringField(body.userAgent)?.slice(0, 400),
+      })
     } catch (error) {
       throw badRequest(error instanceof Error ? error.message : String(error))
     }

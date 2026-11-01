@@ -17,9 +17,41 @@ import { dirname, join } from "node:path"
 
 import webpush, { type PushSubscription } from "web-push"
 
+type StoredSubscription = PushSubscription & {
+  addedAt: number
+  /** A short name for the device, for example "Chrome on Linux". */
+  label?: string
+  /** The page origin that subscribed, for example "http://localhost:3141". */
+  origin?: string
+  /** The full user agent. It identifies the browser across origins. */
+  userAgent?: string
+}
+
 type PushFile = {
   vapid: { publicKey: string; privateKey: string }
-  subscriptions: Array<PushSubscription & { addedAt: number; label?: string }>
+  subscriptions: StoredSubscription[]
+}
+
+export type PushDevice = {
+  endpoint: string
+  label?: string
+  origin?: string
+  addedAt: number
+}
+
+export type SubscribeOptions = {
+  label?: string
+  origin?: string
+  userAgent?: string
+}
+
+/**
+ * Whether a stored subscription comes from the browser with this user agent.
+ * Older entries kept only the first 80 characters of the user agent as label.
+ */
+function sameBrowser(item: StoredSubscription, userAgent: string) {
+  if (item.userAgent) return item.userAgent === userAgent
+  return !item.origin && item.label === userAgent.slice(0, 80)
 }
 
 export type Notification = {
@@ -80,14 +112,40 @@ export class Notifier {
     return this.#data.subscriptions.length
   }
 
-  subscribe(subscription: PushSubscription, label?: string) {
+  get devices(): PushDevice[] {
+    return this.#data.subscriptions.map((item) => ({
+      endpoint: item.endpoint,
+      addedAt: item.addedAt,
+      ...(item.label ? { label: item.label } : {}),
+      ...(item.origin ? { origin: item.origin } : {}),
+    }))
+  }
+
+  /**
+   * Add a subscription. A browser keeps one subscription for each origin
+   * (localhost, a dev port, a Tailscale URL), and each one shows its own
+   * notification. So a new subscription replaces the older ones from the
+   * same browser: the same user agent.
+   */
+  subscribe(
+    subscription: PushSubscription,
+    { label, origin, userAgent }: SubscribeOptions = {}
+  ) {
     if (!subscription?.endpoint || !subscription.keys?.p256dh)
       throw new Error("Invalid push subscription")
     this.#data.subscriptions = [
       ...this.#data.subscriptions.filter(
-        (item) => item.endpoint !== subscription.endpoint
+        (item) =>
+          item.endpoint !== subscription.endpoint &&
+          !(userAgent && sameBrowser(item, userAgent))
       ),
-      { ...subscription, addedAt: Date.now(), ...(label ? { label } : {}) },
+      {
+        ...subscription,
+        addedAt: Date.now(),
+        ...(label ? { label } : {}),
+        ...(origin ? { origin } : {}),
+        ...(userAgent ? { userAgent } : {}),
+      },
     ]
     this.#save()
   }

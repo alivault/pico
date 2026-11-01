@@ -51,6 +51,72 @@ export async function pushEnabled(viewerContextId: string) {
   return Boolean(status.subscribed)
 }
 
+/** A short name for a browser, for example "Chrome on Linux". */
+export function browserLabel(userAgent: string) {
+  const browser = /Edg\//.test(userAgent)
+    ? "Edge"
+    : /Firefox\//.test(userAgent)
+      ? "Firefox"
+      : /Chrome\//.test(userAgent)
+        ? "Chrome"
+        : /Safari\//.test(userAgent)
+          ? "Safari"
+          : "Browser"
+  const system = /iPhone|iPad/.test(userAgent)
+    ? "iOS"
+    : /Android/.test(userAgent)
+      ? "Android"
+      : /Mac OS X/.test(userAgent)
+        ? "macOS"
+        : /Windows/.test(userAgent)
+          ? "Windows"
+          : /Linux/.test(userAgent)
+            ? "Linux"
+            : ""
+  return system ? `${browser} on ${system}` : browser
+}
+
+export type PushDevice = {
+  endpoint: string
+  label?: string
+  origin?: string
+  addedAt: number
+}
+
+/** The devices that get push notifications from the hub. */
+export async function listPushDevices(viewerContextId: string) {
+  const { devices } = await fetchJson<{ devices: PushDevice[] }>(
+    buildHubRequestUrl("/api/push/devices", { contextId: viewerContextId })
+  )
+  return devices
+}
+
+/** The endpoint of this browser's subscription, if it has one. */
+export async function currentPushEndpoint() {
+  if (!pushSupported()) return undefined
+  try {
+    const worker = await navigator.serviceWorker.getRegistration()
+    return (await worker?.pushManager.getSubscription())?.endpoint
+  } catch {
+    return undefined
+  }
+}
+
+/** Stop push notifications to a device. */
+export async function removePushDevice(
+  viewerContextId: string,
+  endpoint: string
+) {
+  await fetchJson(
+    buildHubRequestUrl("/api/push/unsubscribe", { contextId: viewerContextId }),
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ endpoint }),
+    }
+  )
+}
+
 export async function enablePush(viewerContextId: string) {
   if (!pushSupported())
     throw new Error(
@@ -76,7 +142,10 @@ export async function enablePush(viewerContextId: string) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         subscription: subscription.toJSON(),
-        label: navigator.userAgent.slice(0, 80),
+        label: browserLabel(navigator.userAgent),
+        origin: window.location.origin,
+        // The server keeps one subscription for each browser.
+        userAgent: navigator.userAgent,
       }),
     }
   )

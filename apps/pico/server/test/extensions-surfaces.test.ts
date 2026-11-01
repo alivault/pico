@@ -80,6 +80,55 @@ void test("notifications keep keys, drop gone devices, and post to ntfy", async 
   }
 })
 
+void test("a new subscription replaces the older ones from the same browser", async () => {
+  const dir = await tempDir()
+  const notifier = new Notifier(
+    dir,
+    () => "",
+    async () => {
+      throw new Error("not sent in this test")
+    }
+  )
+  const keys = {
+    p256dh:
+      "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM",
+    auth: "tBHItJI5svbpez7KI4CCXg",
+  }
+  const chrome = "Mozilla/5.0 (X11; Linux x86_64) Chrome/150.0 Safari/537.36"
+  const phone = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0) Safari/604.1"
+  // An entry from before origins were saved: the label is the user agent.
+  notifier.subscribe(
+    { endpoint: "https://push.example/old", keys },
+    { label: chrome.slice(0, 80) }
+  )
+  notifier.subscribe(
+    { endpoint: "https://push.example/phone", keys },
+    { label: "Safari on iOS", origin: "https://pico.ts.net", userAgent: phone }
+  )
+  notifier.subscribe(
+    { endpoint: "https://push.example/dev", keys },
+    {
+      label: "Chrome on Linux",
+      origin: "http://localhost:3000",
+      userAgent: chrome,
+    }
+  )
+  notifier.subscribe(
+    { endpoint: "https://push.example/app", keys },
+    {
+      label: "Chrome on Linux",
+      origin: "http://localhost:3141",
+      userAgent: chrome,
+    }
+  )
+  assert.deepEqual(
+    notifier.devices.map((device) => device.endpoint),
+    ["https://push.example/phone", "https://push.example/app"]
+  )
+  assert.equal(notifier.devices[1]!.origin, "http://localhost:3141")
+  assert.equal(new Notifier(dir, () => "").subscriptionCount, 2)
+})
+
 void test(
   "the durable browser reads, acts, and keeps cookies across restarts",
   { skip: findChrome() ? false : "No Chrome on this machine" },

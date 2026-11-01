@@ -21,10 +21,13 @@ import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { usePicoEvent } from "@/features/pico/agent/events"
 import {
+  currentPushEndpoint,
   disablePush,
   enablePush,
+  listPushDevices,
   pushEnabled,
   pushSupported,
+  removePushDevice,
 } from "@/features/pico/agent/push"
 import { errorText } from "@/features/pico/agent/shared"
 import {
@@ -185,7 +188,64 @@ function TextSetting({
   )
 }
 
+function PushDevicesRow({ viewerContextId }: { viewerContextId: string }) {
+  const queryClient = useQueryClient()
+  const devices = useQuery({
+    queryKey: ["pico", "push-devices", viewerContextId],
+    queryFn: async () => ({
+      devices: await listPushDevices(viewerContextId),
+      current: await currentPushEndpoint(),
+    }),
+  })
+  const [busy, setBusy] = React.useState<string>()
+  const list = devices.data?.devices ?? []
+  if (list.length === 0) return null
+  const remove = (endpoint: string) => {
+    setBusy(endpoint)
+    void removePushDevice(viewerContextId, endpoint)
+      .then(() =>
+        queryClient.invalidateQueries({
+          queryKey: ["pico", "push-enabled", viewerContextId],
+        })
+      )
+      .then(() => devices.refetch())
+      .catch((error: unknown) => toast.error(errorText(error)))
+      .finally(() => setBusy(undefined))
+  }
+  return (
+    <div className="space-y-1 py-3">
+      <div className="text-sm font-medium">Devices with notifications</div>
+      <ul className="space-y-1">
+        {list.map((device) => (
+          <li
+            key={device.endpoint}
+            className="flex items-center gap-2 text-sm text-muted-foreground"
+          >
+            <span className="min-w-0 flex-1 truncate">
+              {device.label ?? "Unknown browser"}
+              {device.origin ? ` · ${device.origin}` : ""}
+              {device.endpoint === devices.data?.current
+                ? " (this browser)"
+                : ""}
+            </span>
+            {busy === device.endpoint ? <Spinner size="xs" /> : null}
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy !== undefined}
+              onClick={() => remove(device.endpoint)}
+            >
+              Remove
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function DevicePushRow({ viewerContextId }: { viewerContextId: string }) {
+  const queryClient = useQueryClient()
   const status = useQuery({
     queryKey: ["pico", "push-enabled", viewerContextId],
     queryFn: () => pushEnabled(viewerContextId),
@@ -196,6 +256,9 @@ function DevicePushRow({ viewerContextId }: { viewerContextId: string }) {
     void work()
       .then(() => {
         toast.success(success)
+        void queryClient.invalidateQueries({
+          queryKey: ["pico", "push-devices", viewerContextId],
+        })
         return status.refetch()
       })
       .catch((error: unknown) => toast.error(errorText(error)))
@@ -319,6 +382,7 @@ export function AgentSettingsDialog({
           <div className="space-y-3">
             <SettingsSection title="Notifications">
               <DevicePushRow viewerContextId={viewerContextId} />
+              <PushDevicesRow viewerContextId={viewerContextId} />
               <Row
                 label="Notify when an agent finishes its turn"
                 control={(id) => (
