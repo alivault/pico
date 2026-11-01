@@ -3,9 +3,9 @@ packages:
   - apps/pico/server
 
 catalog:
-  vite: 8.0.8
-  vitest: npm:@voidzero-dev/vite-plus-test@latest
-  vite-plus: 0.1.19
+  vite: npm:@voidzero-dev/vite-plus-core@1.4.0
+  vitest: 5.0.5
+  vite-plus: 1.4.0
 onlyBuiltDependencies:
   - esbuild
   - protobufjs

@@ -515,23 +515,19 @@ export function createApi(api: ApiContext) {
       resume?: unknown
     }>()
     const edits: PendingEdit[] | undefined = Array.isArray(body.pendingMessages)
-      ? body.pendingMessages.map(
-          (message): PendingEdit => ({
-            ...(typeof message?.pendingId === "string" && message.pendingId
-              ? { pendingId: message.pendingId }
-              : {}),
-            ...(typeof message?.text === "string"
-              ? { text: message.text }
-              : {}),
-            ...(Array.isArray(message?.images)
-              ? { images: message.images as never }
-              : {}),
-            ...(message?.streamingBehavior === "steer" ||
-            message?.streamingBehavior === "followUp"
-              ? { streamingBehavior: message.streamingBehavior as never }
-              : {}),
-          })
-        )
+      ? body.pendingMessages.map((message): PendingEdit => ({
+          ...(typeof message?.pendingId === "string" && message.pendingId
+            ? { pendingId: message.pendingId }
+            : {}),
+          ...(typeof message?.text === "string" ? { text: message.text } : {}),
+          ...(Array.isArray(message?.images)
+            ? { images: message.images as never }
+            : {}),
+          ...(message?.streamingBehavior === "steer" ||
+          message?.streamingBehavior === "followUp"
+            ? { streamingBehavior: message.streamingBehavior as never }
+            : {}),
+        }))
       : Array.isArray(body.pendingIds)
         ? body.pendingIds.map((pendingId) => ({ pendingId: String(pendingId) }))
         : undefined

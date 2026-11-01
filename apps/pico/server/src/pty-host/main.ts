@@ -285,19 +285,17 @@ function handle(socket: Socket, request: HostRequest & { id: number }) {
         // Exits from before a host restart.
         ...[...journal.values()]
           .filter((entry) => !ptys.has(entry.ptyId))
-          .map(
-            (entry): PtyInfo => ({
-              ptyId: entry.ptyId,
-              pid: 0,
-              cols: 0,
-              rows: 0,
-              meta: entry.meta,
-              nextSeq: 1,
-              viewerSeqs: {},
-              exited: entry.exit,
-              journal: true,
-            })
-          ),
+          .map((entry): PtyInfo => ({
+            ptyId: entry.ptyId,
+            pid: 0,
+            cols: 0,
+            rows: 0,
+            meta: entry.meta,
+            nextSeq: 1,
+            viewerSeqs: {},
+            exited: entry.exit,
+            journal: true,
+          })),
       ]
     case "spawn":
       return spawn(socket, request)

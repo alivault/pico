@@ -123,13 +123,11 @@ function otherMachineAgentGroups(
           (left, right) =>
             (right.lastMessageAt ?? 0) - (left.lastMessageAt ?? 0)
         )
-        .map(
-          (agent): OtherMachineAgentItem => ({
-            key: `machine:${machine.id}:${agent.id}`,
-            machine,
-            agent,
-          })
-        ),
+        .map((agent): OtherMachineAgentItem => ({
+          key: `machine:${machine.id}:${agent.id}`,
+          machine,
+          agent,
+        })),
     }))
 }
 

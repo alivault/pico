@@ -1389,10 +1389,12 @@ function useAppShellAgentWorkspaceView({
     path: agentState.agentFile,
     id: activeAgentId,
   })
-  const currentAgentPinned = useAppShellSidebarValue(sidebarStore, (snapshot) =>
-    currentAgentPinKey
-      ? snapshot.state.pinnedSidebarAgentKeys.includes(currentAgentPinKey)
-      : false
+  const currentAgentPinned = useAppShellSidebarValue(
+    sidebarStore,
+    (snapshot) =>
+      currentAgentPinKey
+        ? snapshot.state.pinnedSidebarAgentKeys.includes(currentAgentPinKey)
+        : false
   )
   const currentAgentQueryScope = agentScrollKey(agentState)
   const contextUsageAgentScopeRef = React.useRef("")
