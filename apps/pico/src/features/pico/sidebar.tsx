@@ -135,6 +135,13 @@ import { useMachineId } from "@/lib/pico/machine-context"
 import { useSidebarSlot } from "@/features/pico/sidebar-slots"
 import { sortSidebarAgents } from "@/features/pico/agent-order"
 import {
+  buildAgentTree,
+  pinnedAgentRows,
+  pinnedAgentTreeKeys,
+  samePinnedAgentRows,
+  type AgentTree,
+} from "@/features/pico/pinned-agent-tree"
+import {
   AGENT_STATUS_GROUPS,
   agentStatusGroup,
   filterProjectAgentsByStatus,
@@ -698,6 +705,11 @@ type SidebarAgentItemProps = {
   activeAgentStore: ActiveSidebarAgentStore
   selectedAgentKeyStore: SelectedAgentKeyStore
   isPinned: boolean
+  /**
+   * The subagent depth of the row in its group. Without it, the depth in
+   * its project. The Pinned group gives the depth under the pinned agent.
+   */
+  depth?: number
   /** Show the project of the agent under its title, as pinned rows do. */
   showProjectLabel?: boolean
   isMobile: boolean
@@ -722,6 +734,7 @@ function SidebarAgentItem({
   activeAgentStore,
   selectedAgentKeyStore,
   isPinned,
+  depth,
   showProjectLabel = false,
   isMobile,
   overlay,
@@ -737,10 +750,11 @@ function SidebarAgentItem({
   onTogglePinnedAgent,
 }: SidebarAgentItemProps) {
   const entry = useProjectAgentEntry(projectAgentsStore, entryKey)
-  const subagentDepth = useSelector(
+  const projectDepth = useSelector(
     projectAgentsStore,
     (state) => state.depthByKey.get(entryKey) ?? 0
   )
+  const subagentDepth = depth ?? projectDepth
   // An agent in a project is one level in, under the project's line.
   const nestingDepth = (inProject ? 1 : 0) + subagentDepth
   const isSelected = useSidebarAgentSelected(selectedAgentKeyStore, entryKey)
@@ -781,7 +795,7 @@ function SidebarAgentItem({
     : ""
   // A subagent row does not repeat the project: its parent shows it.
   const projectLabel =
-    isPinned || (showProjectLabel && subagentDepth === 0)
+    (isPinned || showProjectLabel) && subagentDepth === 0
       ? formatFolderName(entry.cwd?.trim() || entry.path?.trim() || "")
       : ""
   const exactTimestamp =
@@ -1050,6 +1064,8 @@ type ProjectAgentsState = {
   entriesByKey: Map<string, AgentListEntry>
   /** Nesting depth per subagent; see `buildAgentDepths`. */
   depthByKey: Map<string, number>
+  /** The subagents of each agent, for the Pinned group. */
+  agentTree: AgentTree
   loadingByProject: Record<string, boolean>
 }
 
@@ -1292,8 +1308,28 @@ function buildProjectAgentsState(
     agentKeysByStatus: buildStatusAgentKeys(entriesByKey),
     entriesByKey,
     depthByKey: buildAgentDepths(agentsByProject),
+    agentTree: buildAgentTree(entriesByKey.values()),
     loadingByProject,
   }
+}
+
+/**
+ * The keys that the Pinned group draws: the pinned agents and their
+ * subagent trees. The project and state groups do not show them.
+ */
+function usePinnedAgentTreeKeys(
+  store: ProjectAgentsStore,
+  pinnedAgentKeys: Array<string>
+) {
+  const rows = useSelector(
+    store,
+    (state) => pinnedAgentRows(state.agentTree, pinnedAgentKeys),
+    { compare: samePinnedAgentRows }
+  )
+  return React.useMemo(
+    () => new Set([...pinnedAgentKeys, ...rows.map((row) => row.key)]),
+    [pinnedAgentKeys, rows]
+  )
 }
 
 function sameProjectAgentsSnapshot(
@@ -1655,7 +1691,10 @@ const ProjectAgentGroup = React.memo(function ProjectAgentGroup({
   const markAgentsRead = () => {
     onMarkAgentsRead?.(projectUnreadAgents(projectAgentsStore.state, project))
   }
-  const pinnedAgentKeySet = new Set(pinnedAgentKeys)
+  const pinnedAgentKeySet = usePinnedAgentTreeKeys(
+    projectAgentsStore,
+    pinnedAgentKeys
+  )
   const unpinnedAgentKeys = agentKeys.filter(
     (entryKey) => !pinnedAgentKeySet.has(entryKey)
   )
@@ -2014,6 +2053,13 @@ function PinnedAgentGroup({
     PINNED_AGENT_GROUP_COLLAPSE_KEY,
     searchActive
   )
+  // Each pinned agent with its subagent tree.
+  const rows = useSelector(
+    projectAgentsStore,
+    (state) => pinnedAgentRows(state.agentTree, pinnedAgentKeys),
+    { compare: samePinnedAgentRows }
+  )
+  const pinnedAgentKeySet = new Set(pinnedAgentKeys)
 
   if (pinnedAgentKeys.length === 0) return null
 
@@ -2058,7 +2104,7 @@ function PinnedAgentGroup({
             <div className="relative flex flex-col">
               <SidebarTreeLine level={0} />
               <SidebarMenu>
-                {pinnedAgentKeys.map((entryKey) => (
+                {rows.map(({ key: entryKey, depth }) => (
                   <SidebarAgentItem
                     key={entryKey}
                     entryKey={entryKey}
@@ -2066,7 +2112,8 @@ function PinnedAgentGroup({
                     projectAgentsStore={projectAgentsStore}
                     activeAgentStore={activeAgentStore}
                     selectedAgentKeyStore={selectedAgentKeyStore}
-                    isPinned
+                    isPinned={pinnedAgentKeySet.has(entryKey)}
+                    depth={depth}
                     isMobile={isMobile}
                     overlay={false}
                     agentDraggable={agentsDraggable}
@@ -2154,7 +2201,7 @@ function StatusAgentGroups(props: StatusAgentGroupsProps) {
   const { hasAgents, isLoading } = useSelector(
     projectAgentsStore,
     (state) => {
-      const pinned = new Set(pinnedAgentKeys)
+      const pinned = pinnedAgentTreeKeys(state.agentTree, pinnedAgentKeys)
       return {
         hasAgents: AGENT_STATUS_GROUPS.some((status) =>
           state.agentKeysByStatus[status].some((key) => !pinned.has(key))
@@ -2242,7 +2289,10 @@ const StatusAgentGroup = React.memo(function StatusAgentGroup({
     searchActive
   )
   const altKeyHeld = useAltKeyHeld()
-  const pinnedAgentKeySet = new Set(pinnedAgentKeys)
+  const pinnedAgentKeySet = usePinnedAgentTreeKeys(
+    projectAgentsStore,
+    pinnedAgentKeys
+  )
   const unpinnedAgentKeys = agentKeys.filter(
     (entryKey) => !pinnedAgentKeySet.has(entryKey)
   )
@@ -2650,7 +2700,11 @@ export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
   // that state.
   const grouped = React.useMemo(() => {
     if (!statusFilter) return allGrouped
-    const pinned = new Set(storedPinnedKeys)
+    // The subagents of a pinned agent show in the Pinned group too.
+    const pinned = pinnedAgentTreeKeys(
+      buildAgentTree(Object.values(allGrouped.agentsByProject).flat()),
+      storedPinnedKeys
+    )
     const filtered = filterProjectAgentsByStatus(
       allGrouped.projects,
       allGrouped.agentsByProject,

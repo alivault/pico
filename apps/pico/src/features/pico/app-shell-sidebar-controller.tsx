@@ -23,6 +23,10 @@ import {
 import type { AppShellAgentWorkspaceHandle } from "@/features/pico/app-shell-types"
 import { AppSidebar, createProjectAgentsStore } from "@/features/pico/sidebar"
 import {
+  buildAgentTree,
+  pinnedAgentTreeKeys,
+} from "@/features/pico/pinned-agent-tree"
+import {
   normalizeAgentSelectionKeys,
   normalizeStoredProjectList,
   PINNED_AGENTS_STORAGE_KEY,
@@ -163,7 +167,9 @@ function useAppShellSidebarControllerView({
         visibleProjects: searchedProjects,
         filteredProjectAgents: searchedProjectAgents,
       }
-    const pinnedKeys = new Set(
+    // The subagents of a pinned agent show in the Pinned group too.
+    const pinnedKeys = pinnedAgentTreeKeys(
+      buildAgentTree(Object.values(searchedProjectAgents).flat()),
       allPinnedSidebarAgents.map((entry) => agentListEntryKey(entry))
     )
     const filtered = filterProjectAgentsByStatus(
