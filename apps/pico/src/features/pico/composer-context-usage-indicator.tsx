@@ -728,7 +728,11 @@ export function ComposerContextUsageIndicator({
             <button
               type="button"
               className="shrink-0 text-foreground underline-offset-2 hover:underline"
-              onClick={() => emitPicoEvent("pico:open-agent-settings", {})}
+              onClick={() =>
+                emitPicoEvent("pico:open-agent-settings", {
+                  page: "agent-context",
+                })
+              }
             >
               Change
             </button>

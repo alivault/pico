@@ -179,6 +179,17 @@ export function useMachineFeature(feature: string) {
   return !features || features.includes(feature)
 }
 
+/** A function that tells whether the server of the page has a feature. */
+export function useMachineFeatureCheck() {
+  const { machines } = useMachines()
+  const machineId = useMachineId()
+  const features = isRemoteMachine(machineId)
+    ? machines.find((machine) => machine.id === machineId)?.features
+    : undefined
+  return (feature: string | undefined) =>
+    !feature || !features || features.includes(feature)
+}
+
 /** Render `children` only when the server of the page has `feature`. */
 export function MachineFeatureGate({
   feature,

@@ -23,16 +23,18 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Textarea } from "@/components/ui/textarea"
 import { TitleTooltip } from "@/components/ui/tooltip"
-import {
-  registerAgentSettingsSection,
-  SettingsSection,
-} from "@/features/pico/agent/agent-settings-dialog"
 import { agentExtensionsQueryKey } from "@/features/pico/agent/agent-extensions"
 import { errorText } from "@/features/pico/agent/shared"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { useMachineFeature } from "@/features/pico/machine-store"
+import {
+  registerSettingsPage,
+  SettingsEditPage,
+  SettingsListPage,
+  useOpenSettingsPage,
+  type SettingsPageProps,
+} from "@/features/pico/settings-pages"
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
 
@@ -231,97 +233,126 @@ const EXAMPLE = `{
   }
 }`
 
-function ProfilesSettings({ viewerContextId }: { viewerContextId: string }) {
-  const machineId = useMachineId()
-  const queryClient = useQueryClient()
-  const query = useProfiles(viewerContextId)
-  const [text, setText] = React.useState<string | null>(null)
+/** The profiles that the user made or changed, as the JSON to edit. */
+function customProfiles(profiles: Array<Profile>) {
   const builtIn = new Set(Object.keys(PROFILE_ICONS))
-  const custom = Object.fromEntries(
-    (query.data?.profiles ?? [])
-      .filter((profile) => !builtIn.has(profile.name) || false)
+  return Object.fromEntries(
+    profiles
+      .filter((profile) => !builtIn.has(profile.name))
       .map(({ name, ...profile }) => [name, profile])
-  )
-  const save = useMutation({
-    mutationFn: (profiles: unknown) =>
-      fetchJson(
-        buildRequestUrl("/api/settings/profiles", {
-          machineId,
-          contextId: viewerContextId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ profiles }),
-        }
-      ),
-    onSuccess: () => {
-      toast.success("Saved the profiles")
-      setText(null)
-      void queryClient.invalidateQueries({ queryKey: ["pico", "profiles"] })
-    },
-    onError: (error) => toast.error(errorText(error)),
-  })
-  const value =
-    text ??
-    (Object.keys(custom).length ? JSON.stringify(custom, null, 2) : "{}")
-  return (
-    <SettingsSection title="Tool profiles">
-      <div className="space-y-2 py-2 text-sm">
-        <ul className="space-y-1">
-          {(query.data?.profiles ?? []).map((profile) => (
-            <li key={profile.name} className="flex items-start gap-1.5 text-xs">
-              <ProfileIcon
-                name={profile.name}
-                className="mt-px size-3.5 text-muted-foreground"
-              />
-              <span>
-                <span className="font-medium">
-                  {profileLabel(profile.name)}
-                </span>
-                <span className="text-muted-foreground">
-                  {" "}
-                  — {profile.description}
-                </span>
-              </span>
-            </li>
-          ))}
-        </ul>
-        <div className="text-xs text-muted-foreground">
-          Your own profiles, as JSON: <code>extensions</code> (exactly these),{" "}
-          <code>removeTools</code>, <code>instructions</code>, and{" "}
-          <code>"bash": "sandbox"</code> (bash with a read-only filesystem and
-          no network). A profile with a built-in name replaces it.
-        </div>
-        <Textarea
-          className={cn("min-h-28 font-mono text-xs")}
-          value={value}
-          placeholder={EXAMPLE}
-          onChange={(event) => setText(event.target.value)}
-        />
-        <Button
-          size="sm"
-          disabled={text === null || save.isPending}
-          onClick={() => {
-            try {
-              save.mutate(JSON.parse(value || "{}"))
-            } catch (error) {
-              toast.error(`The JSON is not valid: ${errorText(error)}`)
-            }
-          }}
-        >
-          Save profiles
-        </Button>
-      </div>
-    </SettingsSection>
   )
 }
 
-registerAgentSettingsSection({
-  feature: "tool-profiles",
-  key: "profiles",
-  order: 10,
-  Component: ProfilesSettings,
+function ProfilesPage({ viewerContextId }: SettingsPageProps) {
+  const open = useOpenSettingsPage()
+  const query = useProfiles(viewerContextId)
+  const profiles = query.data?.profiles ?? []
+  const custom = customProfiles(profiles)
+  const edit = () => open({ key: "agent-profiles-edit" })
+  return (
+    <SettingsListPage
+      title="Tool profiles"
+      subtitle="Which tools an agent can use. Choose one in the composer."
+      loading={query.isPending}
+      groups={[
+        {
+          items: [
+            {
+              id: "edit",
+              title: "Edit your profiles",
+              description: "Add profiles, or change a built-in one, as JSON.",
+              value: Object.keys(custom).length
+                ? String(Object.keys(custom).length)
+                : undefined,
+              submenu: true,
+              onSelect: edit,
+            },
+          ],
+        },
+        {
+          heading: "Profiles",
+          items: profiles.map((profile) => ({
+            id: `profile:${profile.name}`,
+            icon: <ProfileIcon name={profile.name} />,
+            title: profileLabel(profile.name),
+            description: profile.description,
+            value: profile.name in custom ? "Yours" : "Built-in",
+            onSelect: edit,
+          })),
+        },
+      ]}
+    />
+  )
+}
+
+function EditProfilesPage({ viewerContextId }: SettingsPageProps) {
+  const machineId = useMachineId()
+  const queryClient = useQueryClient()
+  const query = useProfiles(viewerContextId)
+  if (!query.data) return null
+  const custom = customProfiles(query.data.profiles)
+  return (
+    <SettingsEditPage
+      multiline
+      title="Edit your profiles"
+      initial={
+        Object.keys(custom).length ? JSON.stringify(custom, null, 2) : ""
+      }
+      placeholder={EXAMPLE}
+      description={
+        <>
+          Each profile can have <code>description</code>,{" "}
+          <code>extensions</code> (exactly these), <code>removeTools</code>,{" "}
+          <code>instructions</code>, and <code>"bash": "sandbox"</code> (bash
+          with a read-only file system and no network). A profile with a
+          built-in name replaces it.
+        </>
+      }
+      onSave={async (value) => {
+        let profiles: unknown
+        try {
+          profiles = JSON.parse(value.trim() || "{}")
+        } catch (error) {
+          return `The JSON is not valid: ${errorText(error)}`
+        }
+        try {
+          await fetchJson(
+            buildRequestUrl("/api/settings/profiles", {
+              machineId,
+              contextId: viewerContextId,
+            }),
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ profiles }),
+            }
+          )
+        } catch (error) {
+          return errorText(error)
+        }
+        toast.success("Saved the profiles")
+        await queryClient.invalidateQueries({ queryKey: ["pico", "profiles"] })
+        return undefined
+      }}
+    />
+  )
+}
+
+registerSettingsPage({
+  key: "agent-profiles",
+  Component: ProfilesPage,
+  entry: {
+    group: "Agent",
+    title: "Tool profiles",
+    description: "Which tools an agent can use, and your own profiles.",
+    keywords: ["profiles", "tools", "builder", "reviewer", "read-only"],
+    order: 40,
+    feature: "tool-profiles",
+  },
+})
+registerSettingsPage({
+  key: "agent-profiles-edit",
+  Component: EditProfilesPage,
 })
 
 /** Hidden when the server of the page does not have the feature. */

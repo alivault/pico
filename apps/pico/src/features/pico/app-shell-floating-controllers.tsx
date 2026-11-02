@@ -1,6 +1,5 @@
 import * as React from "react"
 import "@/features/pico/agent/register"
-import { AgentSettingsDialogController } from "@/features/pico/agent/agent-settings-dialog"
 import { ResourcesDialogController } from "@/features/pico/resources-dialog"
 import { usePicoEvent } from "@/features/pico/agent/events"
 import { toast } from "@/lib/pico/toast"
@@ -571,8 +570,8 @@ const AppShellSettingsDialogHost = React.memo(
       { compare: shallowRecordEqual }
     )
 
-    usePicoEvent("pico:open-agent-settings", () => {
-      settingsDialogRef.current?.close()
+    usePicoEvent("pico:open-agent-settings", ({ page }) => {
+      settingsDialogRef.current?.openPage(page ?? "agent-notifications")
     })
 
     const openAuthFromSettings = (mode: "login" | "logout") => {
@@ -584,7 +583,6 @@ const AppShellSettingsDialogHost = React.memo(
 
     return (
       <>
-        <AgentSettingsDialogController viewerContextId={viewerContextId} />
         <ResourcesDialogController viewerContextId={viewerContextId} />
         <AppShellSettingsDialogController
           ref={settingsDialogRef}

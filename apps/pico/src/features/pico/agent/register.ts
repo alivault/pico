@@ -2,6 +2,7 @@
  * Registers the tool renderers, Agent panel sections, and agent settings
  * sections of Pico's own extensions. Import it once where they render.
  */
+import "@/features/pico/agent/agent-settings"
 import "@/features/pico/agent/ask"
 import "@/features/pico/agent/browser"
 import "@/features/pico/agent/subagents"

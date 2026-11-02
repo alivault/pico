@@ -28,7 +28,6 @@ import {
 } from "@/components/ui/sidebar"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { SettingsSection } from "@/features/pico/agent/agent-settings-dialog"
 import { emitPicoEvent, usePicoEvent } from "@/features/pico/agent/events"
 import { errorText } from "@/features/pico/agent/shared"
 import { fetchJson } from "@/features/pico/app-shell-utils"
@@ -778,4 +777,19 @@ export function MachinesDialogController() {
   usePicoEvent("pico:open-machines", () => setOpen(true))
   if (!open) return null
   return <MachinesDialog open={open} onOpenChange={setOpen} />
+}
+
+function SettingsSection({
+  children,
+  title,
+}: {
+  children: React.ReactNode
+  title: string
+}) {
+  return (
+    <section className="space-y-1">
+      <h3 className="pt-3 text-sm font-semibold">{title}</h3>
+      <div className="divide-y rounded-lg border px-3">{children}</div>
+    </section>
+  )
 }

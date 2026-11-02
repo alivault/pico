@@ -1,14 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "@/lib/pico/toast"
 
-import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
-import {
-  registerAgentSettingsSection,
-  SettingsSection,
-} from "@/features/pico/agent/agent-settings-dialog"
 import { errorText } from "@/features/pico/agent/shared"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import {
+  registerSettingsPage,
+  SettingsListPage,
+  useOpenSettingsPage,
+  type SettingsPageProps,
+} from "@/features/pico/settings-pages"
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
 
@@ -22,10 +22,35 @@ type McpServer = {
   signedIn: boolean
 }
 
-function McpSettings({ viewerContextId }: { viewerContextId: string }) {
+function statusText(server: McpServer) {
+  const status = server.connected
+    ? `Connected · ${server.toolCount} tools`
+    : server.needsAuth
+      ? "Needs sign-in"
+      : (server.error ?? "Not connected")
+  return server.signedIn ? `${status} · signed in` : status
+}
+
+function StatusDot({ server }: { server: McpServer }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "size-2 rounded-full",
+        server.connected
+          ? "bg-emerald-500"
+          : server.needsAuth
+            ? "bg-amber-500"
+            : "bg-destructive"
+      )}
+    />
+  )
+}
+
+function useMcpServers(viewerContextId: string) {
   const machineId = useMachineId()
   const queryClient = useQueryClient()
-  const queryKey = ["pico", "mcp-servers", viewerContextId]
+  const queryKey = ["pico", "mcp-servers", machineId, viewerContextId]
   const query = useQuery({
     queryKey,
     queryFn: () =>
@@ -75,98 +100,104 @@ function McpSettings({ viewerContextId }: { viewerContextId: string }) {
             ? `Signed in to ${variables.name}`
             : `Finish the sign-in to ${variables.name} in the new tab`
         )
+      else if (variables.kind === "signout")
+        toast.success(`Signed out of ${variables.name}`)
+      else toast.success(`Reconnected ${variables.name}`)
       void queryClient.invalidateQueries({ queryKey })
     },
     onError: (error) => toast.error(errorText(error)),
   })
-  const servers = query.data?.servers ?? []
+  return { query, action }
+}
+
+function McpServersPage({ viewerContextId }: SettingsPageProps) {
+  const open = useOpenSettingsPage()
+  const { query } = useMcpServers(viewerContextId)
   return (
-    <SettingsSection title="MCP servers">
-      {query.isPending ? (
-        <div className="py-2">
-          <Spinner size="xs" />
-        </div>
-      ) : servers.length === 0 ? (
-        <div className="py-2 text-xs text-muted-foreground">
-          No MCP servers. Add them to Pi&apos;s mcp.json.
-        </div>
-      ) : (
-        servers.map((server) => (
-          <div
-            key={server.name}
-            className="flex items-center justify-between gap-3 py-3"
-          >
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "size-2 rounded-full",
-                    server.connected
-                      ? "bg-emerald-500"
-                      : server.needsAuth
-                        ? "bg-amber-500"
-                        : "bg-destructive"
-                  )}
-                />
-                {server.name}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {server.connected
-                  ? `Connected · ${server.toolCount} tools`
-                  : server.needsAuth
-                    ? "Needs sign-in"
-                    : (server.error ?? "Not connected")}
-                {server.signedIn ? " · signed in" : ""}
-              </div>
-            </div>
-            <div className="flex shrink-0 gap-1">
-              {server.transport === "http" ? (
-                server.signedIn ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={action.isPending}
-                    onClick={() =>
-                      action.mutate({ name: server.name, kind: "signout" })
-                    }
-                  >
-                    Sign out
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant={server.needsAuth ? "default" : "outline"}
-                    disabled={action.isPending}
-                    onClick={() =>
-                      action.mutate({ name: server.name, kind: "auth" })
-                    }
-                  >
-                    Sign in
-                  </Button>
-                )
-              ) : null}
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={action.isPending}
-                onClick={() =>
-                  action.mutate({ name: server.name, kind: "reconnect" })
-                }
-              >
-                Reconnect
-              </Button>
-            </div>
-          </div>
-        ))
-      )}
-    </SettingsSection>
+    <SettingsListPage
+      title="MCP servers"
+      subtitle="Add servers to the mcp.json file of Pi."
+      loading={query.isPending}
+      emptyText="No MCP servers. Add them to the mcp.json file of Pi."
+      groups={[
+        {
+          items: (query.data?.servers ?? []).map((server) => ({
+            id: server.name,
+            icon: <StatusDot server={server} />,
+            title: server.name,
+            description: statusText(server),
+            submenu: true,
+            onSelect: () =>
+              open({ key: "agent-mcp-server", params: { name: server.name } }),
+          })),
+        },
+      ]}
+    />
   )
 }
 
-registerAgentSettingsSection({
-  feature: "mcp",
-  key: "mcp",
-  order: 20,
-  Component: McpSettings,
+function McpServerPage({ viewerContextId, params }: SettingsPageProps) {
+  const { query, action } = useMcpServers(viewerContextId)
+  const server = query.data?.servers.find((item) => item.name === params.name)
+  const name = params.name ?? ""
+  const busy = action.isPending
+  const run = (kind: "auth" | "signout" | "reconnect") =>
+    action.mutate({ name, kind })
+  return (
+    <SettingsListPage
+      title={name}
+      subtitle={server ? statusText(server) : undefined}
+      loading={query.isPending}
+      emptyText="This server is not in mcp.json now."
+      groups={[
+        {
+          items: server
+            ? [
+                ...(server.transport === "http"
+                  ? [
+                      server.signedIn
+                        ? {
+                            id: "signout",
+                            title: "Sign out",
+                            busy,
+                            disabled: busy,
+                            onSelect: () => run("signout"),
+                          }
+                        : {
+                            id: "auth",
+                            title: "Sign in",
+                            description: "Opens the sign-in page in a new tab.",
+                            busy,
+                            disabled: busy,
+                            onSelect: () => run("auth"),
+                          },
+                    ]
+                  : []),
+                {
+                  id: "reconnect",
+                  title: "Reconnect",
+                  busy,
+                  disabled: busy,
+                  onSelect: () => run("reconnect"),
+                },
+              ]
+            : [],
+        },
+      ]}
+    />
+  )
+}
+
+registerSettingsPage({
+  key: "agent-mcp",
+  Component: McpServersPage,
+  entry: {
+    group: "Agent",
+    title: "MCP servers",
+    description: "The state of each server, sign-in, and reconnect.",
+    keywords: ["mcp", "servers", "sign in", "oauth", "reconnect"],
+    order: 50,
+    feature: "mcp",
+  },
 })
+registerSettingsPage({ key: "agent-mcp-server", Component: McpServerPage })

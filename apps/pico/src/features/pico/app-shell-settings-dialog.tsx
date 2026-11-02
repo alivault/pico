@@ -1,5 +1,13 @@
 import * as React from "react"
 import { emitPicoEvent } from "@/features/pico/agent/events"
+import { useMachineFeatureCheck } from "@/features/pico/machine-store"
+import {
+  SettingsItemTrailing,
+  SettingsPageHost,
+  settingsPageEntries,
+  settingsSearchFilter,
+  type SettingsPageRef,
+} from "@/features/pico/settings-pages"
 import { ArrowLeftIcon } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "@/lib/pico/toast"
@@ -254,6 +262,8 @@ type SettingsCommand = {
   shortcut?: string
   /** The current state of an on/off setting. Not set for other settings. */
   toggled?: boolean
+  /** The key of the settings page that the command opens. */
+  page?: string
   keywords: Array<string>
   onSelect: () => void | Promise<void>
 }
@@ -294,30 +304,14 @@ function settingsCommandKeywords(command: SettingsCommand) {
   ]
 }
 
-function settingsCommandFilter(
-  value: string,
-  search: string,
-  keywords?: Array<string>
-) {
-  // Each search word must appear in the text. The default fuzzy match of
-  // cmdk matches almost every item for longer queries.
-  const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
-
-  if (words.length === 0) {
-    return 1
-  }
-
-  const searchableText = [value, ...(keywords ?? [])].join(" ").toLowerCase()
-
-  return words.every((word) => searchableText.includes(word)) ? 1 : 0
-}
-
 export type AppShellSettingsDialogHandle = {
   open: () => void
   close: () => void
   isOpen: () => boolean
   /** Open the dialog on the theme picker. */
   openTheme: () => void
+  /** Open the dialog on a settings page, for example "agent-context". */
+  openPage: (page: string) => void
   /** The settings as command palette commands, with their current values. */
   getPaletteCommands: () => Array<AppCommand>
 }
@@ -325,6 +319,7 @@ export type AppShellSettingsDialogHandle = {
 type SettingsDialogCommandsHandle = {
   getGroups: () => Array<SettingsCommandGroup>
   openTheme: () => void
+  openPage: (page: string) => void
 }
 
 // The command palette has its own login and logout commands. The settings
@@ -336,7 +331,8 @@ const PALETTE_EXCLUDED_SETTING_IDS = new Set([
 
 function settingsPaletteCommands(
   groups: Array<SettingsCommandGroup>,
-  openTheme: () => void
+  openTheme: () => void,
+  openPage: (page: string) => void
 ): Array<AppCommand> {
   return groups.flatMap((group) =>
     group.commands
@@ -346,20 +342,22 @@ function settingsPaletteCommands(
         group: "Settings",
         title: command.title,
         description: command.description,
-        valueLabel: command.valueLabel,
+        valueLabel: command.page ? undefined : command.valueLabel,
         shortcut: command.shortcut,
         keywords: ["settings", group.heading, ...command.keywords],
         onSelect:
           command.id === "theme"
             ? openTheme
-            : async () => {
-                await command.onSelect()
-                if (command.toggled !== undefined) {
-                  toast.info(
-                    `${command.title}: ${formatToggleValue(!command.toggled)}`
-                  )
-                }
-              },
+            : command.page
+              ? () => openPage(command.page!)
+              : async () => {
+                  await command.onSelect()
+                  if (command.toggled !== undefined) {
+                    toast.info(
+                      `${command.title}: ${formatToggleValue(!command.toggled)}`
+                    )
+                  }
+                },
       }))
   )
 }
@@ -414,6 +412,10 @@ type SettingsCommandGroupsOptions = Pick<
   | "onLogoutProviders"
 > & {
   onThemeCommand: () => void
+  /** Open a settings page, such as the agent notifications. */
+  onOpenPage: (page: string) => void
+  /** Whether the server of the machine has a feature. */
+  hasFeature: (feature: string | undefined) => boolean
   showAgentPreviews: boolean
   /** The sidebar groups the agents of this machine by state. */
   groupByStatus: boolean
@@ -459,6 +461,8 @@ function getSettingsCommandGroups({
   onLoginProviders,
   onLogoutProviders,
   onThemeCommand,
+  onOpenPage,
+  hasFeature,
   showAgentPreviews,
   groupByStatus,
   onGroupByStatusChange,
@@ -611,24 +615,18 @@ function getSettingsCommandGroups({
     {
       heading: "Agent",
       commands: [
-        {
-          id: "agent-settings",
-          title: "Agent settings",
-          description:
-            "Push notifications, subagents, worktrees, tool profiles, and MCP servers.",
-          valueLabel: "Open",
-          keywords: [
-            "agent",
-            "push",
-            "notifications",
-            "ntfy",
-            "worktree",
-            "profile",
-            "mcp",
-            "tools",
-          ],
-          onSelect: () => emitPicoEvent("pico:open-agent-settings", {}),
-        },
+        ...settingsPageEntries()
+          .filter((entry) => entry.group === "Agent")
+          .filter((entry) => hasFeature(entry.feature))
+          .map((entry): SettingsCommand => ({
+            id: entry.key,
+            title: entry.title,
+            description: entry.description,
+            valueLabel: "",
+            page: entry.key,
+            keywords: ["agent", ...entry.keywords],
+            onSelect: () => onOpenPage(entry.key),
+          })),
         {
           id: "machines",
           title: "Machines",
@@ -716,6 +714,15 @@ function getSettingsCommandGroups({
   ]
 }
 
+/** Whether a command opens a page or a dialog: it shows a chevron. */
+function opensPage(command: SettingsCommand) {
+  return (
+    Boolean(command.page) ||
+    command.id === "theme" ||
+    command.valueLabel === "Open"
+  )
+}
+
 type SettingsBrowseBodyProps = {
   query: string
   selectedCommandId: string
@@ -744,7 +751,7 @@ function SettingsBrowseBody({
   return (
     <Command
       shouldFilter
-      filter={settingsCommandFilter}
+      filter={settingsSearchFilter}
       loop
       value={selectedCommandId}
       onValueChange={onSelectedCommandIdChange}
@@ -775,14 +782,21 @@ function SettingsBrowseBody({
                     {command.description}
                   </span>
                 </div>
-                <CommandShortcut className="inline shrink-0 tracking-normal normal-case">
-                  {command.valueLabel}
-                </CommandShortcut>
                 {command.shortcut ? (
-                  <CommandShortcut className="shrink-0">
+                  <CommandShortcut className="shrink-0 self-center">
                     {command.shortcut}
                   </CommandShortcut>
                 ) : null}
+                <SettingsItemTrailing
+                  checked={command.toggled}
+                  submenu={opensPage(command)}
+                  value={
+                    command.toggled === undefined &&
+                    command.valueLabel !== "Open"
+                      ? command.valueLabel
+                      : undefined
+                  }
+                />
               </CommandItem>
             ))}
           </CommandGroup>
@@ -790,7 +804,7 @@ function SettingsBrowseBody({
       </CommandList>
       <div className="flex items-center gap-3 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
         <span className="hidden min-w-0 flex-1 md:block">
-          Use ↑/↓ to select, Enter to open or toggle, and Esc to close.
+          Use ↑/↓ to select, Return to open or toggle, and Esc to close.
         </span>
         <span className="ml-auto shrink-0 tabular-nums">
           Pico v{__PICO_VERSION__}
@@ -865,7 +879,7 @@ function SettingsThemeBody({
       </div>
       <Command
         shouldFilter
-        filter={settingsCommandFilter}
+        filter={settingsSearchFilter}
         loop
         value={themeSelectionKey(selectedTheme)}
         onValueChange={(value) => {
@@ -936,14 +950,19 @@ function SettingsDialogBody({
   stage,
   browseBodyProps,
   themeBodyProps,
+  pageBody,
 }: {
   stage: SettingsDialogStage
   browseBodyProps: SettingsBrowseBodyProps
   themeBodyProps: SettingsThemeBodyProps
+  /** The open settings page, over the settings list. */
+  pageBody?: React.ReactNode
 }) {
   if (stage === "theme") {
     return <SettingsThemeBody {...themeBodyProps} />
   }
+
+  if (pageBody) return pageBody
 
   return <SettingsBrowseBody {...browseBodyProps} />
 }
@@ -1039,9 +1058,14 @@ function AppShellSettingsDialog({
     themeSelectionForCurrent(currentTheme, currentThemeColorMode)
   )
   const isMobile = useIsMobile()
+  const hasFeature = useMachineFeatureCheck()
+  // The open settings pages. The last one shows; Escape goes back one.
+  const [pages, setPages] = React.useState<Array<SettingsPageRef>>([])
+  const topPage = pages.at(-1)
 
   React.useEffect(() => {
     if (open) return
+    setPages([])
 
     if (state.stage === "theme") {
       onThemePreviewChange(
@@ -1066,6 +1090,8 @@ function AppShellSettingsDialog({
     )
     dispatch({ type: "open-theme", currentTheme, currentThemeColorMode })
   }
+
+  const openPage = (page: string) => setPages([{ key: page }])
 
   const handleSelect = (command: SettingsCommand) => {
     void Promise.resolve(command.onSelect()).catch((error: unknown) => {
@@ -1134,11 +1160,14 @@ function AppShellSettingsDialog({
       })
     },
     onThemeCommand: openThemeStage,
+    onOpenPage: openPage,
+    hasFeature,
   })
 
   React.useImperativeHandle(commandsRef, () => ({
     getGroups: () => settingGroups,
     openTheme: openThemeStage,
+    openPage,
   }))
 
   const settingsCommandBody = (
@@ -1165,6 +1194,24 @@ function AppShellSettingsDialog({
         onThemeSelect: handleThemeSelect,
         onCancelThemePreview: cancelThemePreview,
       }}
+      pageBody={
+        topPage ? (
+          <SettingsPageHost
+            key={pages.length}
+            page={topPage}
+            viewerContextId={viewerContextId}
+            onPush={(page) => setPages((current) => [...current, page])}
+            onPop={() => setPages((current) => current.slice(0, -1))}
+            onSelectedChange={(selected) =>
+              setPages((current) =>
+                current.map((page, index) =>
+                  index === current.length - 1 ? { ...page, selected } : page
+                )
+              )
+            }
+          />
+        ) : undefined
+      }
     />
   )
 
@@ -1238,11 +1285,22 @@ export function AppShellSettingsDialogController({
         setOpenState(true)
         commandsRef.current?.openTheme()
       },
+      openPage: (page) => {
+        setOpenState(true)
+        commandsRef.current?.openPage(page)
+      },
       getPaletteCommands: () =>
-        settingsPaletteCommands(commandsRef.current?.getGroups() ?? [], () => {
-          setOpenState(true)
-          commandsRef.current?.openTheme()
-        }),
+        settingsPaletteCommands(
+          commandsRef.current?.getGroups() ?? [],
+          () => {
+            setOpenState(true)
+            commandsRef.current?.openTheme()
+          },
+          (page) => {
+            setOpenState(true)
+            commandsRef.current?.openPage(page)
+          }
+        ),
     }),
     []
   )
