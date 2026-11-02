@@ -246,17 +246,21 @@ export function setMachineNavigator(navigator: MachineNavigator | undefined) {
 }
 
 /**
- * An action for the app shell of a machine: a new agent in a project
- * (optionally with a prompt draft to put in its composer), or the Add
- * project dialog.
+ * An action for the app shell of a machine: a new agent (in a project, or in
+ * the default project when `project` is not set; optionally with a prompt
+ * draft to put in its composer), or a dialog or panel of that machine.
  */
 export type MachineAction =
   | {
       type: "new-agent"
-      project: string
+      project?: string
       draft?: { text: string; images: Array<PromptImage> }
     }
   | { type: "add-project" }
+  | { type: "open-settings" }
+  | { type: "open-terminal" }
+  | { type: "open-resources" }
+  | { type: "open-archived-agents" }
 
 const pendingActions = new Map<string, Array<MachineAction>>()
 const actionListeners = new Map<string, Set<() => void>>()

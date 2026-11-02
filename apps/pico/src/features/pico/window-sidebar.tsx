@@ -83,6 +83,7 @@ function MachineProjectActions({
       machineId={machine.id}
       title={shown ? "Add project" : `Add project on ${machine.label}`}
       showShortcut={shown}
+      showGroupBy={false}
       onOpenAddProjectDialog={() => {
         if (isMobile) setOpenMobile(false)
         if (shown) queueMachineAction(machine.id, { type: "add-project" })

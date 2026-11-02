@@ -2576,33 +2576,38 @@ export function ProjectActions({
   onOpenAddProjectDialog,
   title = "Add project",
   showShortcut = true,
+  showGroupBy = true,
 }: {
   machineId: string
   onOpenAddProjectDialog: () => void
   title?: string
   showShortcut?: boolean
+  /** The machine headings have Group by in their context menu instead. */
+  showGroupBy?: boolean
 }) {
   const groupBy = useSidebarGroupBy(machineId)
   const groupByTitle =
     groupBy === "status" ? "Group by project" : "Group by state"
   return (
     <span className="flex items-center gap-1">
-      <TitleTooltip title={groupByTitle}>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-          onClick={() =>
-            setSidebarGroupBy(
-              machineId,
-              groupBy === "status" ? "project" : "status"
-            )
-          }
-          aria-label={groupByTitle}
-        >
-          {groupBy === "status" ? <FolderTreeIcon /> : <ListTodoIcon />}
-        </Button>
-      </TitleTooltip>
+      {showGroupBy ? (
+        <TitleTooltip title={groupByTitle}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+            onClick={() =>
+              setSidebarGroupBy(
+                machineId,
+                groupBy === "status" ? "project" : "status"
+              )
+            }
+            aria-label={groupByTitle}
+          >
+            {groupBy === "status" ? <FolderTreeIcon /> : <ListTodoIcon />}
+          </Button>
+        </TitleTooltip>
+      ) : null}
       <TitleTooltip
         title={title}
         kbd={showShortcut ? formatShortcutLabel(appShortcut("D")) : undefined}
@@ -2805,6 +2810,10 @@ export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
     ],
     [groupByStatus, grouped.projects]
   )
+  usePicoEvent("pico:collapse-projects", (detail) => {
+    if (detail.machineId === machine.id)
+      stores.collapsed.setAll(collapseAllKeys, detail.collapsed)
+  })
   const [renameEntry, setRenameEntry] = React.useState<AgentListEntry>()
   const [archiveEntry, setArchiveEntry] = React.useState<AgentListEntry>()
   const agentActions = online
@@ -3070,6 +3079,11 @@ function useAppSidebarView({
   React.useEffect(() => {
     collapsedProjectStore.loadStored()
   }, [collapsedProjectStore])
+
+  usePicoEvent("pico:collapse-projects", (detail) => {
+    if (detail.machineId === machineId)
+      collapsedProjectStore.setAll(collapseAllKeys, detail.collapsed)
+  })
 
   usePicoEvent(
     "pico:sidebar-state",

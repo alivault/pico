@@ -7,7 +7,33 @@ import {
 } from "lucide-react"
 import { toast } from "@/lib/pico/toast"
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import {
+  ContextMenu,
+  ContextMenuCheckboxItem,
+  ContextMenuContent,
+  ContextMenuGroup,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuRadioGroup,
+  ContextMenuRadioItem,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
 import {
   Collapsible,
   CollapsibleContent,
@@ -25,14 +51,31 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { emitPicoEvent, usePicoEvent } from "@/features/pico/agent/events"
-import { errorText } from "@/features/pico/agent/shared"
+import { errorText, relativeTime } from "@/features/pico/agent/shared"
 import { fetchJson } from "@/features/pico/app-shell-utils"
 import { useMachineId } from "@/lib/pico/machine-context"
-import { hubUrl, LOCAL_MACHINE_ID, openMachine } from "@/lib/pico/machine"
+import {
+  hubUrl,
+  LOCAL_MACHINE_ID,
+  machinePageUrl,
+  openMachine,
+  queueMachineAction,
+  type MachineAction,
+} from "@/lib/pico/machine"
+import {
+  appShortcut,
+  formatShortcutLabel,
+} from "@/features/pico/keyboard-shortcuts"
+import {
+  setSidebarGroupBy,
+  useSidebarGroupBy,
+  type SidebarGroupBy,
+} from "@/features/pico/sidebar-display-settings"
 import { cn } from "@/lib/utils"
 import {
   hasLiveJob,
@@ -281,14 +324,26 @@ function MachineGroupLabel({
   collapsed,
   active = false,
   actions,
+  renaming = false,
+  onRenameDone,
 }: {
   machine: MachineInfo
   collapsed: boolean
   active?: boolean
   /** Icon buttons of the group, after the counts. */
   actions?: React.ReactNode
+  /** Show a text field for the label in place of the label. */
+  renaming?: boolean
+  onRenameDone?: () => void
 }) {
   const attention = machine.state === "attention"
+  if (renaming)
+    return (
+      <SidebarGroupLabel className="gap-2">
+        <MachineStateDot state={machine.state} />
+        <MachineLabelField machine={machine} onDone={() => onRenameDone?.()} />
+      </SidebarGroupLabel>
+    )
   return (
     // pr-0 when there is an icon button: it already holds the item-pad.
     <SidebarGroupLabel
@@ -418,25 +473,46 @@ type RenderMachine = (machine: MachineInfo) => React.ReactNode
 function MachineGroup({
   machine,
   shown,
+  shownMachineId,
   shownContent,
   renderContent,
   renderActions,
 }: {
   machine: MachineInfo
   shown: boolean
+  shownMachineId: string
   shownContent: React.ReactNode
   renderContent: RenderMachine
   renderActions?: (machine: MachineInfo, shown: boolean) => React.ReactNode
 }) {
   const collapsed = useMachineCollapsed(machine.id)
   const onOpenChange = useMachineOpenChange(machine.id)
+  const [renaming, setRenaming] = React.useState(false)
+  const [removing, setRemoving] = React.useState(false)
   const dimmed = machine.state !== "online"
   const label = (
-    <MachineGroupLabel
+    <MachineContextMenu
       machine={machine}
-      collapsed={collapsed}
-      active={shown}
-      actions={renderActions?.(machine, shown)}
+      shown={shown}
+      shownMachineId={shownMachineId}
+      onRename={() => setRenaming(true)}
+      onRemove={() => setRemoving(true)}
+    >
+      <MachineGroupLabel
+        machine={machine}
+        collapsed={collapsed}
+        active={shown}
+        actions={renderActions?.(machine, shown)}
+        renaming={renaming}
+        onRenameDone={() => setRenaming(false)}
+      />
+    </MachineContextMenu>
+  )
+  const removeDialog = (
+    <RemoveMachineDialog
+      machine={machine}
+      open={removing}
+      onOpenChange={setRemoving}
     />
   )
   if (shown)
@@ -444,6 +520,7 @@ function MachineGroup({
       <Collapsible open={!collapsed} onOpenChange={onOpenChange}>
         <SidebarGroup className="pt-1 pb-0">{label}</SidebarGroup>
         <CollapsibleContent>{shownContent}</CollapsibleContent>
+        {removeDialog}
       </Collapsible>
     )
   return (
@@ -456,8 +533,522 @@ function MachineGroup({
           </SidebarGroupContent>
         </CollapsibleContent>
       </SidebarGroup>
+      {removeDialog}
     </Collapsible>
   )
+}
+
+/** A text field that renames a machine. Return saves; Escape cancels. */
+function MachineLabelField({
+  machine,
+  onDone,
+}: {
+  machine: MachineInfo
+  onDone: () => void
+}) {
+  const ref = React.useRef<HTMLInputElement>(null)
+  const doneRef = React.useRef(false)
+  React.useEffect(() => {
+    // The context menu gives the focus back to its trigger when it closes.
+    // Take it after that.
+    const frame = window.requestAnimationFrame(() => {
+      ref.current?.focus()
+      ref.current?.select()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [])
+  const finish = (save: boolean) => {
+    if (doneRef.current) return
+    doneRef.current = true
+    const next = ref.current?.value.trim() ?? ""
+    if (save && next && next !== machine.label)
+      void machineAction(machine.id, "rename", { label: next })
+    onDone()
+  }
+  return (
+    <Input
+      ref={ref}
+      defaultValue={machine.label}
+      aria-label={`Name of ${machine.label}`}
+      className="h-6 min-w-0 flex-1 px-1.5 text-xs md:text-xs"
+      onBlur={() => finish(true)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault()
+          finish(true)
+        } else if (event.key === "Escape") {
+          event.preventDefault()
+          event.stopPropagation()
+          finish(false)
+        }
+      }}
+    />
+  )
+}
+
+function RemoveMachineDialog({
+  machine,
+  open,
+  onOpenChange,
+}: {
+  machine: MachineInfo
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const [busy, setBusy] = React.useState(false)
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove {machine.label}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This hub stops showing {machine.label}. Pico and its agents keep
+            running on {machine.label}. To add it again, run{" "}
+            <code>pico-app machine add {machine.target}</code> on the hub.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={busy}
+            onClick={() => {
+              setBusy(true)
+              void machineAction(machine.id, "remove").finally(() => {
+                setBusy(false)
+                onOpenChange(false)
+              })
+            }}
+          >
+            Remove
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+/** The state, version, and connection time of a machine, in one line. */
+function machineStatusText(machine: MachineInfo) {
+  const parts = [machineStateLabel(machine)]
+  const version = machine.version ?? machine.summary?.version
+  if (version) parts.push(`Pico ${version}`)
+  if (machine.id === LOCAL_MACHINE_ID) parts.push("this hub")
+  else if (machine.state === "online" && machine.since)
+    parts.push(`connected ${relativeTime(machine.since)}`)
+  return parts.join(" · ")
+}
+
+async function copyText(text: string, what: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    toast.success(`Copied ${what}`)
+  } catch {
+    toast.error(`Could not copy ${what}`)
+  }
+}
+
+/**
+ * The context menu of a machine heading: new agents and projects, the
+ * view of the group, the activity of the machine, its connection, and its
+ * settings. Each action names its machine; it works for the shown machine
+ * and for the others.
+ */
+function MachineContextMenu({
+  machine,
+  shown,
+  shownMachineId,
+  onRename,
+  onRemove,
+  children,
+}: {
+  machine: MachineInfo
+  shown: boolean
+  shownMachineId: string
+  onRename: () => void
+  onRemove: () => void
+  children: React.ReactNode
+}) {
+  const { machines } = useMachines()
+  const prefs = useMachineSidebarPrefs()
+  const { isMobile, setOpenMobile } = useSidebar()
+  const groupBy = useSidebarGroupBy(machine.id)
+  const filters = useAgentStatusFilter(machine.id)
+  const counts = agentCounts(machine)
+  const local = machine.id === LOCAL_MACHINE_ID
+  const online = machine.state === "online"
+  const visible = visibleMachines(machines, prefs, shownMachineId)
+  const position = visible.findIndex((entry) => entry.id === machine.id)
+  const hidden = orderMachines(machines, prefs.order).filter(
+    (entry) => entry.id !== shownMachineId && prefs.hidden.includes(entry.id)
+  )
+  const run = (action: MachineAction) => {
+    if (isMobile) setOpenMobile(false)
+    if (shown) queueMachineAction(machine.id, action)
+    else openMachine(machine.id, { action })
+  }
+  const showFilter = (filter: AgentStatusFilter) => {
+    setMachinesCollapsed([machine.id], false)
+    toggleAgentStatusFilter(machine.id, filter)
+  }
+  const collapseProjects = (collapsed: boolean) => {
+    if (!collapsed) setMachinesCollapsed([machine.id], false)
+    emitPicoEvent("pico:collapse-projects", {
+      machineId: machine.id,
+      collapsed,
+    })
+  }
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger render={<div />}>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="w-72">
+        <ContextMenuGroup>
+          <ContextMenuLabel className="flex items-center gap-2 text-foreground">
+            <MachineStateDot state={machine.state} />
+            <span className="truncate">{machine.label}</span>
+          </ContextMenuLabel>
+          <div className="truncate px-1.5 pb-1 text-xs text-muted-foreground">
+            {machineStatusText(machine)}
+          </div>
+        </ContextMenuGroup>
+        <ContextMenuSeparator />
+        <ContextMenuGroup>
+          <ContextMenuItem
+            disabled={!online}
+            onClick={() => run({ type: "new-agent" })}
+          >
+            New agent on {machine.label}
+            {shown ? (
+              <ContextMenuShortcut>
+                {formatShortcutLabel(appShortcut("N"))}
+              </ContextMenuShortcut>
+            ) : null}
+          </ContextMenuItem>
+          <ContextMenuItem
+            disabled={!online}
+            onClick={() => run({ type: "add-project" })}
+          >
+            Add project…
+            {shown ? (
+              <ContextMenuShortcut>
+                {formatShortcutLabel(appShortcut("D"))}
+              </ContextMenuShortcut>
+            ) : null}
+          </ContextMenuItem>
+          {shown ? null : (
+            <ContextMenuItem
+              onClick={() => {
+                if (isMobile) setOpenMobile(false)
+                openMachine(machine.id)
+              }}
+            >
+              Switch to {machine.label}
+            </ContextMenuItem>
+          )}
+        </ContextMenuGroup>
+        <ContextMenuSeparator />
+        <ContextMenuGroup>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>Group by</ContextMenuSubTrigger>
+            <ContextMenuSubContent className="w-40">
+              <ContextMenuRadioGroup
+                value={groupBy}
+                onValueChange={(value: SidebarGroupBy) =>
+                  setSidebarGroupBy(machine.id, value)
+                }
+              >
+                <ContextMenuRadioItem value="project">
+                  Project
+                </ContextMenuRadioItem>
+                <ContextMenuRadioItem value="status">
+                  State
+                </ContextMenuRadioItem>
+              </ContextMenuRadioGroup>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+          <ContextMenuItem onClick={() => collapseProjects(true)}>
+            Collapse all groups
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => collapseProjects(false)}>
+            Expand all groups
+          </ContextMenuItem>
+          <ContextMenuItem
+            disabled={position <= 0}
+            onClick={() =>
+              moveMachine(machines, shownMachineId, machine.id, -1)
+            }
+          >
+            Move up
+          </ContextMenuItem>
+          <ContextMenuItem
+            disabled={position < 0 || position >= visible.length - 1}
+            onClick={() => moveMachine(machines, shownMachineId, machine.id, 1)}
+          >
+            Move down
+          </ContextMenuItem>
+          {shown ? null : (
+            <ContextMenuItem onClick={() => setMachineHidden(machine.id, true)}>
+              Hide in sidebar
+            </ContextMenuItem>
+          )}
+          {hidden.length > 0 ? (
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>Show hidden machine</ContextMenuSubTrigger>
+              <ContextMenuSubContent className="w-48">
+                {hidden.map((entry) => (
+                  <ContextMenuItem
+                    key={entry.id}
+                    onClick={() => setMachineHidden(entry.id, false)}
+                  >
+                    <MachineStateDot state={entry.state} />
+                    <span className="truncate">{entry.label}</span>
+                  </ContextMenuItem>
+                ))}
+                {hidden.length > 1 ? (
+                  <>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem
+                      onClick={() =>
+                        setMachineSidebarPrefs({ ...prefs, hidden: [] })
+                      }
+                    >
+                      Show all
+                    </ContextMenuItem>
+                  </>
+                ) : null}
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+          ) : null}
+        </ContextMenuGroup>
+        <ContextMenuSeparator />
+        <ContextMenuGroup>
+          <ContextMenuCheckboxItem
+            disabled={!online}
+            checked={Boolean(filters?.includes("working"))}
+            onCheckedChange={() => showFilter("working")}
+          >
+            Only working agents ({counts.working})
+          </ContextMenuCheckboxItem>
+          <ContextMenuCheckboxItem
+            disabled={!online}
+            checked={Boolean(filters?.includes("live"))}
+            onCheckedChange={() => showFilter("live")}
+          >
+            Only agents with running jobs ({counts.live})
+          </ContextMenuCheckboxItem>
+          <ContextMenuItem
+            disabled={!online}
+            onClick={() => run({ type: "open-archived-agents" })}
+          >
+            Archived agents…
+          </ContextMenuItem>
+          <ContextMenuItem
+            disabled={!online}
+            onClick={() => run({ type: "open-resources" })}
+          >
+            Resources…
+          </ContextMenuItem>
+          <ContextMenuItem
+            disabled={!online}
+            onClick={() => run({ type: "open-terminal" })}
+          >
+            Open terminal
+          </ContextMenuItem>
+        </ContextMenuGroup>
+        {local ? null : (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>Connection</ContextMenuSubTrigger>
+              <ContextMenuSubContent className="w-64">
+                <div className="px-1.5 py-1 text-xs text-muted-foreground">
+                  <div className="truncate">{machineStatusText(machine)}</div>
+                  {machine.problem ? (
+                    <div className="line-clamp-3 text-destructive">
+                      {machine.problem.message}
+                    </div>
+                  ) : null}
+                </div>
+                <ContextMenuSeparator />
+                <ContextMenuItem
+                  disabled={!machine.enabled || machine.state === "connecting"}
+                  onClick={() => void machineAction(machine.id, "retry")}
+                >
+                  Reconnect
+                </ContextMenuItem>
+                <ContextMenuItem
+                  onClick={() =>
+                    void copyText(machine.target, "the SSH target")
+                  }
+                >
+                  Copy SSH target
+                  <ContextMenuShortcut className="max-w-28 truncate">
+                    {machine.target}
+                  </ContextMenuShortcut>
+                </ContextMenuItem>
+                <ContextMenuItem
+                  onClick={() =>
+                    void copyText(
+                      new URL(
+                        machinePageUrl(machine.id),
+                        window.location.origin
+                      ).toString(),
+                      "the link"
+                    )
+                  }
+                >
+                  Copy link to {machine.label}
+                </ContextMenuItem>
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+          </>
+        )}
+        <ContextMenuSeparator />
+        <ContextMenuGroup>
+          <ContextMenuItem
+            disabled={!online}
+            onClick={() => run({ type: "open-settings" })}
+          >
+            Settings for {machine.label}…
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => emitOpenMachines()}>
+            Manage machines…
+          </ContextMenuItem>
+          {local ? null : (
+            <>
+              <ContextMenuItem onClick={onRename}>Rename…</ContextMenuItem>
+              <ContextMenuItem
+                onClick={() =>
+                  void machineAction(
+                    machine.id,
+                    machine.enabled ? "disable" : "enable"
+                  )
+                }
+              >
+                {machine.enabled ? "Disable" : "Enable"}
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem variant="destructive" onClick={onRemove}>
+                Remove {machine.label}…
+              </ContextMenuItem>
+            </>
+          )}
+        </ContextMenuGroup>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
+
+/**
+ * The order of the machine groups and the hidden machines. It is window
+ * state: one copy for the browser, in local storage.
+ */
+type MachineSidebarPrefs = { order: Array<string>; hidden: Array<string> }
+
+// Stored name: do not change.
+const MACHINE_SIDEBAR_STORAGE_KEY = "pico-sidebar-machines"
+
+let prefsSnapshot: MachineSidebarPrefs | undefined
+const prefsListeners = new Set<() => void>()
+
+function stringList(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : []
+}
+
+function getMachineSidebarPrefs(): MachineSidebarPrefs {
+  if (prefsSnapshot) return prefsSnapshot
+  try {
+    const value = JSON.parse(
+      window.localStorage.getItem(MACHINE_SIDEBAR_STORAGE_KEY) ?? "{}"
+    ) as Partial<Record<keyof MachineSidebarPrefs, unknown>> | null
+    prefsSnapshot = {
+      order: stringList(value?.order),
+      hidden: stringList(value?.hidden),
+    }
+  } catch {
+    prefsSnapshot = { order: [], hidden: [] }
+  }
+  return prefsSnapshot
+}
+
+function setMachineSidebarPrefs(next: MachineSidebarPrefs) {
+  prefsSnapshot = next
+  try {
+    window.localStorage.setItem(
+      MACHINE_SIDEBAR_STORAGE_KEY,
+      JSON.stringify(next)
+    )
+  } catch {
+    // Ignore storage failures.
+  }
+  for (const listener of prefsListeners) listener()
+}
+
+function useMachineSidebarPrefs() {
+  return React.useSyncExternalStore(
+    (listener) => {
+      prefsListeners.add(listener)
+      return () => {
+        prefsListeners.delete(listener)
+      }
+    },
+    getMachineSidebarPrefs,
+    getMachineSidebarPrefs
+  )
+}
+
+/** The machines in the order of the user; new machines in hub order last. */
+function orderMachines(machines: Array<MachineInfo>, order: Array<string>) {
+  const rank = (machine: MachineInfo, index: number) => {
+    const position = order.indexOf(machine.id)
+    return position < 0 ? order.length + index : position
+  }
+  return machines
+    .map((machine, index) => ({ machine, rank: rank(machine, index) }))
+    .sort((left, right) => left.rank - right.rank)
+    .map((entry) => entry.machine)
+}
+
+/** The machines that the sidebar shows. The shown machine never hides. */
+function visibleMachines(
+  machines: Array<MachineInfo>,
+  prefs: MachineSidebarPrefs,
+  shownMachineId: string
+) {
+  return orderMachines(machines, prefs.order).filter(
+    (machine) =>
+      machine.id === shownMachineId || !prefs.hidden.includes(machine.id)
+  )
+}
+
+/** Move a machine group up (-1) or down (1), past the next shown group. */
+function moveMachine(
+  machines: Array<MachineInfo>,
+  shownMachineId: string,
+  id: string,
+  delta: -1 | 1
+) {
+  const prefs = getMachineSidebarPrefs()
+  const all = orderMachines(machines, prefs.order).map((machine) => machine.id)
+  const visible = visibleMachines(machines, prefs, shownMachineId).map(
+    (machine) => machine.id
+  )
+  const neighbor = visible[visible.indexOf(id) + delta]
+  if (!neighbor) return
+  const from = all.indexOf(id)
+  const to = all.indexOf(neighbor)
+  all[from] = neighbor
+  all[to] = id
+  setMachineSidebarPrefs({ ...prefs, order: all })
+}
+
+function setMachineHidden(id: string, hidden: boolean) {
+  const prefs = getMachineSidebarPrefs()
+  const rest = prefs.hidden.filter((entry) => entry !== id)
+  setMachineSidebarPrefs({ ...prefs, hidden: hidden ? [...rest, id] : rest })
 }
 
 /** Whether the hub has more than one machine, so the sidebar has groups. */
@@ -474,7 +1065,8 @@ export function useHasMachineGroupsFor(machineId: string) {
 }
 
 /**
- * One group for each machine of the hub, in the order of the hub's list.
+ * One group for each machine of the hub, in the order that the user chose
+ * (the hub's order by default), without the machines that the user hid.
  * The order does not change when the page shows another machine: only the
  * content of the groups changes. With one machine, `shownContent` shows
  * without a heading.
@@ -494,14 +1086,16 @@ export function SidebarMachineGroups({
   renderActions?: (machine: MachineInfo, shown: boolean) => React.ReactNode
 }) {
   const { machines } = useMachines()
+  const prefs = useMachineSidebarPrefs()
   if (!useHasMachineGroupsFor(shownMachineId)) return <>{shownContent}</>
   return (
     <>
-      {machines.map((machine) => (
+      {visibleMachines(machines, prefs, shownMachineId).map((machine) => (
         <MachineGroup
           key={machine.id}
           machine={machine}
           shown={machine.id === shownMachineId}
+          shownMachineId={shownMachineId}
           shownContent={shownContent}
           renderContent={renderContent}
           renderActions={renderActions}

@@ -20,6 +20,8 @@ export type PicoEventMap = {
   }
   /** Open a page of agent settings in the settings dialog. */
   "pico:open-agent-settings": { page?: string }
+  /** Collapse or expand all project groups of a machine in the sidebar. */
+  "pico:collapse-projects": { machineId: string; collapsed: boolean }
   /** Open the machines dialog. */
   "pico:open-machines": Record<string, never>
   /** Open the resources dialog of the shown machine. */

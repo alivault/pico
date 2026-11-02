@@ -2680,9 +2680,29 @@ function useAppShellAgentWorkspaceView({
   // of another machine's new-agent composer. The effect runs again when
   // the shell shows, so actions that came while it was hidden run then.
   const runMachineAction = React.useEffectEvent((action: MachineAction) => {
-    if (action.type === "add-project") {
-      addProjectDialogRef.current?.open()
-      return
+    switch (action.type) {
+      case "add-project":
+        addProjectDialogRef.current?.open()
+        return
+      case "open-settings":
+        settingsDialogRef.current?.open()
+        return
+      case "open-terminal":
+        if (!terminalsAvailable) {
+          toast.info("This machine has no terminals. Update Pico on it.")
+          return
+        }
+        if (isMobile) setCurrentTab("terminal")
+        else setTerminalPanelOpen(true)
+        return
+      case "open-resources":
+        emitPicoEvent("pico:open-resources", {})
+        return
+      case "open-archived-agents":
+        emitPicoEvent("pico:open-archived-agents", {})
+        return
+      case "new-agent":
+        break
     }
     const draft = action.draft
     void createAgent(action.project).then(() => {
