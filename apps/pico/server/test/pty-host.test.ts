@@ -282,13 +282,13 @@ void test("after a restart, the server takes over running jobs and records jobs 
       index.running.jlong = Number(id)
       index.running.jshort = Number(id)
     }, ctx)
-    for (const jobId of ["jlong", "jshort"])
-      await first.terminals.spawnJob(
-        jobId,
-        jobId === "jlong" ? "sleep 30" : "sleep 0.2; exit 4",
-        dataDir,
-        noHandlers
-      )
+    await first.terminals.spawnJob("jlong", "sleep 30", dataDir, noHandlers)
+    const short = await first.terminals.spawnJob(
+      "jshort",
+      "sleep 0.2; exit 4",
+      dataDir,
+      noHandlers
+    )
     // A job pty that no record knows (its record was deleted).
     const orphan = await first.terminals.spawnJob(
       "jorphan",
@@ -299,7 +299,8 @@ void test("after a restart, the server takes over running jobs and records jobs 
     first.host.stopping = true
     first.terminals.shutdown()
     await first.harness.close(ctx)
-    await new Promise((resolve) => setTimeout(resolve, 600))
+    // Wait until the short job has ended; a fixed delay is too short on slow CI.
+    await eventually(() => !alive(short.pid))
 
     first = await open()
     await first.host.started()
