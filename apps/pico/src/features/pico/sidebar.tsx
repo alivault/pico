@@ -1061,6 +1061,11 @@ type ProjectAgentsState = {
   agentKeysByProject: Record<string, Array<string>>
   /** All agents in groups by state; see `buildStatusAgentKeys`. */
   agentKeysByStatus: Record<AgentStatusGroup, Array<string>>
+  /**
+   * The keys in `agentKeysByStatus` that only show as the parents of
+   * subagents in the group, not for their own state.
+   */
+  contextKeysByStatus: Record<AgentStatusGroup, Set<string>>
   entriesByKey: Map<string, AgentListEntry>
   /** Nesting depth per subagent; see `buildAgentDepths`. */
   depthByKey: Map<string, number>
@@ -1272,30 +1277,57 @@ function buildProjectAgentKeys(
 }
 
 /**
- * The keys of all agents in their state groups, in sidebar order. A
- * subagent stays after its parent, in the group of its top-level agent,
- * so the tree of an agent stays together.
+ * The keys of all agents in their state groups, in sidebar order. Each
+ * agent is in the group of its own state. An idle subagent stays in the
+ * group of its parent, so the tree of an agent stays together. A group also
+ * shows the ancestors of its subagents, after which the subagents nest, so
+ * you see who owns them. These context rows can also show in their own
+ * group, and are in `contextKeys`.
  */
 function buildStatusAgentKeys(entriesByKey: Map<string, AgentListEntry>) {
   const entries = [...entriesByKey.values()]
-  const ids = new Set(entries.flatMap((entry) => (entry.id ? [entry.id] : [])))
-  const groups: Record<AgentStatusGroup, Array<string>> = {
-    waiting: [],
-    done: [],
-    working: [],
-    idle: [],
+  const byId = new Map<string, AgentListEntry>()
+  for (const entry of entries) {
+    if (entry.id && !byId.has(entry.id)) byId.set(entry.id, entry)
   }
-  let rootGroup: AgentStatusGroup = "idle"
-  for (const entry of nestSubagents(sortSidebarAgents(entries))) {
-    const key = agentListEntryKey(entry)
-    if (!key) continue
-    const isSubagent = Boolean(
-      entry.parent && entry.parent !== entry.id && ids.has(entry.parent)
+  const parentOf = (entry: AgentListEntry) =>
+    entry.parent && entry.parent !== entry.id
+      ? byId.get(entry.parent)
+      : undefined
+  const ordered = nestSubagents(sortSidebarAgents(entries))
+  // Parents come before their subagents in `ordered`, so the group of a
+  // parent is known when its subagents need it.
+  const groupOf = new Map<AgentListEntry, AgentStatusGroup>()
+  for (const entry of ordered) {
+    const own = agentStatusGroup(entry)
+    const parent = parentOf(entry)
+    groupOf.set(
+      entry,
+      own === "idle" && parent ? (groupOf.get(parent) ?? own) : own
     )
-    if (!isSubagent) rootGroup = agentStatusGroup(entry)
-    groups[rootGroup].push(key)
   }
-  return groups
+  const keys = {} as Record<AgentStatusGroup, Array<string>>
+  const contextKeys = {} as Record<AgentStatusGroup, Set<string>>
+  for (const status of AGENT_STATUS_GROUPS) {
+    const shown = new Set<AgentListEntry>()
+    for (const entry of ordered) {
+      if (groupOf.get(entry) !== status) continue
+      let current: AgentListEntry | undefined = entry
+      while (current && !shown.has(current)) {
+        shown.add(current)
+        current = parentOf(current)
+      }
+    }
+    keys[status] = []
+    contextKeys[status] = new Set()
+    for (const entry of ordered) {
+      const key = agentListEntryKey(entry)
+      if (!key || !shown.has(entry)) continue
+      keys[status].push(key)
+      if (groupOf.get(entry) !== status) contextKeys[status].add(key)
+    }
+  }
+  return { keys, contextKeys }
 }
 
 function buildProjectAgentsState(
@@ -1303,9 +1335,11 @@ function buildProjectAgentsState(
   loadingByProject: Record<string, boolean>
 ): ProjectAgentsState {
   const entriesByKey = buildProjectAgentEntryMap(agentsByProject)
+  const statusKeys = buildStatusAgentKeys(entriesByKey)
   return {
     agentKeysByProject: buildProjectAgentKeys(agentsByProject),
-    agentKeysByStatus: buildStatusAgentKeys(entriesByKey),
+    agentKeysByStatus: statusKeys.keys,
+    contextKeysByStatus: statusKeys.contextKeys,
     entriesByKey,
     depthByKey: buildAgentDepths(agentsByProject),
     agentTree: buildAgentTree(entriesByKey.values()),
@@ -2255,7 +2289,10 @@ function StatusAgentGroups(props: StatusAgentGroupsProps) {
       const pinned = pinnedAgentTreeKeys(state.agentTree, pinnedAgentKeys)
       return {
         hasAgents: AGENT_STATUS_GROUPS.some((status) =>
-          state.agentKeysByStatus[status].some((key) => !pinned.has(key))
+          state.agentKeysByStatus[status].some(
+            (key) =>
+              !pinned.has(key) && !state.contextKeysByStatus[status].has(key)
+          )
         ),
         isLoading: Object.values(state.loadingByProject).some(Boolean),
       }
@@ -2347,6 +2384,14 @@ const StatusAgentGroup = React.memo(function StatusAgentGroup({
   const unpinnedAgentKeys = agentKeys.filter(
     (entryKey) => !pinnedAgentKeySet.has(entryKey)
   )
+  // The parents that only show for context do not count.
+  const memberCount = useSelector(
+    projectAgentsStore,
+    (state) =>
+      unpinnedAgentKeys.filter(
+        (entryKey) => !state.contextKeysByStatus[status].has(entryKey)
+      ).length
+  )
   const visibleCount = searchActive
     ? unpinnedAgentKeys.length
     : Math.min(unpinnedAgentKeys.length, renderCount)
@@ -2358,11 +2403,12 @@ const StatusAgentGroup = React.memo(function StatusAgentGroup({
     !searchActive &&
     visibleCount > INITIAL_PROJECT_AGENT_RENDER_COUNT
 
-  if (unpinnedAgentKeys.length === 0) return null
+  if (memberCount === 0) return null
 
   const markAgentsRead = () => {
     const state = projectAgentsStore.state
     const entries = state.agentKeysByStatus[status].flatMap((entryKey) => {
+      if (state.contextKeysByStatus[status].has(entryKey)) return []
       const entry = state.entriesByKey.get(entryKey)
       return entry?.unread && entry.path ? [entry] : []
     })
@@ -2389,7 +2435,7 @@ const StatusAgentGroup = React.memo(function StatusAgentGroup({
         ) : null}
       </CollapsibleTrigger>
       <span className="shrink-0 text-[11px] text-sidebar-foreground/50 tabular-nums">
-        {unpinnedAgentKeys.length}
+        {memberCount}
       </span>
     </div>
   )

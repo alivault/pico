@@ -812,7 +812,8 @@ function useAppShellSidebarControllerView({
     const normalizedTargetKey = targetKey.trim()
     if (!normalizedTargetKey) return
 
-    const orderedKeys = getRenderedSidebarAgentKeys()
+    // A parent can show in more than one state group; keep its first row.
+    const orderedKeys = [...new Set(getRenderedSidebarAgentKeys())]
     const targetIndex = orderedKeys.indexOf(normalizedTargetKey)
     if (targetIndex < 0) {
       setSidebarSelection([normalizedTargetKey], normalizedTargetKey)
