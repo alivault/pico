@@ -756,8 +756,20 @@ export const ComposerPendingMessages = React.memo(
         data-queue-editing={agent ? "true" : undefined}
       >
         {/* One header for both modes, so that the queue keeps its height
-            when editing starts. */}
-        <div className="flex h-7 shrink-0 items-center gap-2 pr-0.5 pl-2 text-xs">
+            when editing starts. A click on the header, but not on its
+            buttons, shows or hides the queue. */}
+        <div
+          className="flex h-7 shrink-0 items-center gap-2 pr-0.5 pl-2 text-xs"
+          onMouseDown={(event) => {
+            if (!editing) keepFocus(event)
+          }}
+          onClick={(event) => {
+            if (editing) return
+            const target = event.target
+            if (target instanceof Element && target.closest("button")) return
+            toggleCollapsed()
+          }}
+        >
           <button
             type="button"
             aria-expanded={!collapsed}
