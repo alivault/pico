@@ -46,6 +46,7 @@ export const TERMINAL_PANEL_HEIGHT_STORAGE_KEY = "pico-terminal-panel-height"
 export const TERMINAL_TABS_STORAGE_KEY = "pico-terminal-tabs"
 export const JOB_FOCUS_SEEN_STORAGE_KEY = "pico-job-focus-seen"
 export const JOBS_SEEN_STORAGE_KEY = "pico-jobs-seen"
+export const QUEUE_COLLAPSED_STORAGE_KEY = "pico-queue-collapsed"
 const PROMPT_DRAFTS_STORAGE_KEY = "pico-prompt-drafts"
 export const VIEWER_CONTEXT_STORAGE_KEY = "pico-context-id"
 

@@ -21,7 +21,12 @@ import { CSS } from "@dnd-kit/utilities"
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  ChevronRightIcon,
+  GripVerticalIcon,
   ImageIcon,
+  KeyboardIcon,
+  ListXIcon,
+  PlayIcon,
   PlusIcon,
   Trash2Icon,
   Undo2Icon,
@@ -29,9 +34,14 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Kbd } from "@/components/ui/kbd"
+import { TitleTooltip } from "@/components/ui/tooltip"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
+import {
+  QUEUE_COLLAPSED_STORAGE_KEY,
+  safeLocalStorageGetItem,
+  safeLocalStorageSetItem,
+} from "@/lib/pico/storage"
 import {
   getClipboardImageFiles,
   readFileAsPromptImage,
@@ -59,6 +69,8 @@ import {
 export type ComposerPendingMessagesHandle = {
   /** Start editing at the row queued last. False when the queue is empty. */
   beginEditing: () => boolean
+  /** Show or hide the queue. False when it is empty or open for editing. */
+  toggleCollapsed: () => boolean
   /**
    * Enter on an empty composer: start a paused queue, or send the oldest
    * follow-up as a steer now. False when there is nothing to do.
@@ -91,7 +103,6 @@ const LANES: Array<{
   hint: string
   readyIcon: string
   laterIcon: string
-  boxClassName: string
   titleClassName: string
   selectedClassName: string
 }> = [
@@ -101,9 +112,8 @@ const LANES: Array<{
     hint: "at the next turn",
     readyIcon: "◆",
     laterIcon: "◇",
-    boxClassName: "border-amber-500/40 bg-amber-500/5",
     titleClassName: "text-amber-700 dark:text-amber-300",
-    selectedClassName: "bg-amber-500/10 ring-1 ring-amber-500/50",
+    selectedClassName: "bg-amber-500/10 ring-1 ring-amber-500/50 ring-inset",
   },
   {
     lane: "followUp",
@@ -111,10 +121,20 @@ const LANES: Array<{
     hint: "after the turn",
     readyIcon: "●",
     laterIcon: "○",
-    boxClassName: "border-sky-500/40 bg-sky-500/5",
     titleClassName: "text-sky-700 dark:text-sky-300",
-    selectedClassName: "bg-sky-500/10 ring-1 ring-sky-500/50",
+    selectedClassName: "bg-sky-500/10 ring-1 ring-sky-500/50 ring-inset",
   },
+]
+
+const SHORTCUTS = [
+  { title: "Edit the queue", kbd: "Alt+Q" },
+  { title: "Show or hide the queue", kbd: "Shift+Alt+Q" },
+  { title: "Select", kbd: "↑↓" },
+  { title: "Move, also to the other lane", kbd: "Alt+↑↓" },
+  { title: "Insert", kbd: "Shift+Alt+↑↓" },
+  { title: "Remove", kbd: "Alt+X" },
+  { title: "Save", kbd: "Enter" },
+  { title: "Cancel", kbd: "Esc" },
 ]
 
 /** The most images one prompt can have, as in the composer. */
@@ -165,6 +185,23 @@ const QUEUE_DRAG_MODIFIERS = [restrictToVerticalAxis]
 
 const LANE_DROP_PREFIX = "queue-lane:"
 
+/** One line of a row that is not edited. */
+function QueueRowSummary({ row }: { row: QueueEditRow }) {
+  return (
+    <div
+      title={row.text || undefined}
+      className={cn(
+        "truncate leading-6",
+        row.removed && "text-muted-foreground line-through",
+        !row.text && "text-muted-foreground italic"
+      )}
+    >
+      {row.text.replace(/\s+/g, " ").trim() ||
+        (row.images.length > 0 ? "Image prompt" : "Empty prompt")}
+    </div>
+  )
+}
+
 function QueueLaneSection({
   lane,
   className,
@@ -184,12 +221,14 @@ function SortableQueueRow({
   disabled,
   className,
   onMouseDown,
+  onClick,
   children,
 }: {
   id: string
   disabled: boolean
   className: string
   onMouseDown: (event: React.MouseEvent<HTMLLIElement>) => void
+  onClick: () => void
   children: React.ReactNode
 }) {
   const { listeners, setNodeRef, transform, transition, isDragging } =
@@ -198,11 +237,12 @@ function SortableQueueRow({
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={cn(className, isDragging && "opacity-40")}
+      className={cn(className, isDragging && "invisible")}
       onMouseDown={(event) => {
         listeners?.onMouseDown?.(event)
         onMouseDown(event)
       }}
+      onClick={onClick}
     >
       {children}
     </li>
@@ -310,6 +350,20 @@ export const ComposerPendingMessages = React.memo(
       []
     )
 
+    // A collapsed queue shows only its header. An open editor shows all.
+    const [collapsedQueue, setCollapsedQueue] = React.useState(
+      () => safeLocalStorageGetItem(QUEUE_COLLAPSED_STORAGE_KEY) === "1"
+    )
+    const toggleCollapsed = React.useCallback(() => {
+      setCollapsedQueue((current) => {
+        safeLocalStorageSetItem(
+          QUEUE_COLLAPSED_STORAGE_KEY,
+          current ? "0" : "1"
+        )
+        return !current
+      })
+    }, [])
+
     const isMobile = useIsMobile()
     const dragSensors = useSensors(
       useSensor(QueueRowMouseSensor, { activationConstraint: { distance: 6 } })
@@ -372,6 +426,13 @@ export const ComposerPendingMessages = React.memo(
       ref,
       () => ({
         beginEditing: () => begin(mostRecentQueueKey(currentPendingMessages)),
+        toggleCollapsed: () => {
+          if (agentRef.current || currentPendingMessages.length === 0) {
+            return false
+          }
+          toggleCollapsed()
+          return true
+        },
         runEmptyEnter: () => {
           if (agentRef.current || currentPendingMessages.length === 0) {
             return false
@@ -407,6 +468,7 @@ export const ComposerPendingMessages = React.memo(
         isStreaming,
         onSavePendingQueue,
         onStartPendingQueue,
+        toggleCollapsed,
       ]
     )
 
@@ -483,6 +545,24 @@ export const ComposerPendingMessages = React.memo(
           row.key === key ? { ...row, removed: !row.removed } : row
         ),
       }))
+    }
+
+    // Mark all rows to remove, or keep them all again. Save removes them.
+    const allRemoved = rows.every((row) => row.removed)
+    const toggleRemoveAll = () => {
+      const mark = (current: Array<QueueEditRow>) =>
+        current.map((row) => ({ ...row, removed: !allRemoved }))
+      if (!agent) {
+        const key = mostRecentQueueKey(currentPendingMessages) ?? rows[0]?.key
+        if (!key) return
+        setAgent({
+          rows: mark(rows),
+          selectedKey: key,
+          caret: "end",
+        })
+        return
+      }
+      updateAgent((current) => ({ ...current, rows: mark(current.rows) }))
     }
 
     const setText = (key: string, text: string) => {
@@ -600,9 +680,13 @@ export const ComposerPendingMessages = React.memo(
       return row ? { lane: row.lane, row } : null
     }
 
+    // A drag opens the editor at the dragged row. The editor has the same
+    // layout, so that the rows do not move under the pointer.
     const handleDragStart = (event: DragStartEvent) => {
-      dragStartRowsRef.current = agentRef.current?.rows ?? null
-      setDragKey(String(event.active.id))
+      const key = String(event.active.id)
+      dragStartRowsRef.current = agentRef.current?.rows ?? rows
+      if (!agentRef.current) begin(key)
+      setDragKey(key)
     }
 
     // A row that goes over the other lane moves to that lane at once, so
@@ -655,19 +739,121 @@ export const ComposerPendingMessages = React.memo(
       if (startRows) updateAgent((current) => ({ ...current, rows: startRows }))
     }
 
-    const firstLane = rows[0]?.lane
     // The hold of an open edit is not a pause.
     const paused = canStartQueue && !heldForEdit
     const selectedLane = selectedRow
+      ? LANES.find((lane) => lane.lane === selectedRow.lane)
+      : undefined
+    const selectedLaneRows = selectedRow
       ? laneRows(rows, selectedRow.lane)
       : undefined
+    const keepFocus = (event: React.MouseEvent) => event.preventDefault()
+    const collapsed = collapsedQueue && !editing
 
     return (
       <div
-        className="flex max-h-[min(45vh,420px)] flex-col gap-1.5"
+        className="flex max-h-[min(45vh,420px)] flex-col rounded-xl border bg-muted/30 p-1"
         data-queue-editing={agent ? "true" : undefined}
       >
-        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
+        {/* One header for both modes, so that the queue keeps its height
+            when editing starts. */}
+        <div className="flex h-7 shrink-0 items-center gap-2 pr-0.5 pl-2 text-xs">
+          <button
+            type="button"
+            aria-expanded={!collapsed}
+            disabled={editing}
+            title={`${collapsed ? "Show" : "Hide"} the queue (Shift+Alt+Q)`}
+            className="-ml-1 flex shrink-0 items-center gap-1 rounded-sm pr-1 font-medium hover:bg-foreground/5 disabled:hover:bg-transparent"
+            onMouseDown={keepFocus}
+            onClick={toggleCollapsed}
+          >
+            <ChevronRightIcon
+              className={cn(
+                "size-3.5 text-muted-foreground transition-transform",
+                !collapsed && "rotate-90",
+                editing && "invisible"
+              )}
+            />
+            {editing ? "Editing" : "Queue"}
+          </button>
+          <span className="-ml-1 min-w-0 truncate text-muted-foreground">
+            {selectedRow && selectedLane && selectedLaneRows
+              ? `${selectedLane.title} ${selectedLaneRows.indexOf(selectedRow) + 1} of ${selectedLaneRows.length}`
+              : `${rows.length} ${rows.length === 1 ? "prompt" : "prompts"}`}
+            {heldForEdit ? " · held" : ""}
+            {unsaved ? " · unsaved" : ""}
+          </span>
+          <span className="ml-auto flex shrink-0 items-center gap-1">
+            {paused ? (
+              <Button
+                size="xs"
+                variant="outline"
+                onMouseDown={keepFocus}
+                onClick={onStartPendingQueue}
+              >
+                <PlayIcon />
+                Resume
+              </Button>
+            ) : null}
+            {isMobile ? null : (
+              <TitleTooltip title="Shortcuts" rows={SHORTCUTS}>
+                <Button
+                  size="icon-xs"
+                  variant="ghost"
+                  aria-label="Shortcuts"
+                  onMouseDown={keepFocus}
+                >
+                  <KeyboardIcon />
+                </Button>
+              </TitleTooltip>
+            )}
+            <TitleTooltip title={allRemoved ? "Keep all" : "Remove all"}>
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                aria-label={allRemoved ? "Keep all" : "Remove all"}
+                onMouseDown={keepFocus}
+                onClick={toggleRemoveAll}
+              >
+                {allRemoved ? <Undo2Icon /> : <ListXIcon />}
+              </Button>
+            </TitleTooltip>
+            {agent ? (
+              <>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  onMouseDown={keepFocus}
+                  onClick={end}
+                >
+                  Cancel
+                </Button>
+                <Button size="xs" onMouseDown={keepFocus} onClick={save}>
+                  Save
+                </Button>
+              </>
+            ) : (
+              <TitleTooltip title="Edit the queue" kbd="Alt+Q">
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  onClick={() =>
+                    begin(mostRecentQueueKey(currentPendingMessages))
+                  }
+                >
+                  Edit
+                </Button>
+              </TitleTooltip>
+            )}
+          </span>
+        </div>
+
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto",
+            collapsed && "hidden"
+          )}
+        >
           <DndContext
             sensors={dragSensors}
             collisionDetection={closestCorners}
@@ -679,72 +865,49 @@ export const ComposerPendingMessages = React.memo(
           >
             {LANES.map((lane) => {
               const items = laneRows(rows, lane.lane)
-              if (items.length === 0 && !agent) return null
 
               return (
                 <QueueLaneSection
                   key={lane.lane}
                   lane={lane.lane}
                   aria-label={`${lane.title} queue`}
-                  className={cn(
-                    "rounded-xl border px-1.5 pb-1.5",
-                    lane.boxClassName
-                  )}
                 >
-                  <div className="flex min-h-7 items-center gap-2 px-1.5 pt-1 text-xs">
+                  <div className="flex h-6 items-center gap-1 pr-0.5 pl-1 text-xs">
                     <span className={cn("font-medium", lane.titleClassName)}>
                       {lane.title}
                     </span>
-                    <span className="text-muted-foreground">
-                      {items.length} · {lane.hint}
+                    {items.length > 0 ? (
+                      <span className="text-muted-foreground tabular-nums">
+                        {items.length}
+                      </span>
+                    ) : null}
+                    <span className="truncate text-muted-foreground">
+                      · {lane.hint}
                     </span>
-                    <span className="ml-auto flex items-center gap-1">
-                      {!agent && lane.lane === firstLane ? (
-                        <span className="hidden items-center gap-1 text-muted-foreground md:inline-flex">
-                          <Kbd>Alt+Q</Kbd> edit
-                        </span>
-                      ) : null}
-                      {lane.lane === "followUp" && paused ? (
-                        <>
-                          <span className="text-muted-foreground">
-                            ⏸ Paused
-                          </span>
-                          <Button
-                            size="xs"
-                            variant="outline"
-                            onClick={onStartPendingQueue}
-                          >
-                            Resume
-                          </Button>
-                        </>
-                      ) : null}
-                      {agent ? (
-                        <Button
-                          size="icon-xs"
-                          variant="ghost"
-                          title={`Add a ${lane.title.toLowerCase()} row`}
-                          onClick={() => append(lane.lane)}
-                        >
-                          <PlusIcon />
-                        </Button>
-                      ) : null}
-                    </span>
+                    <TitleTooltip title={`Add a ${lane.title.toLowerCase()}`}>
+                      <Button
+                        size="icon-xs"
+                        variant="ghost"
+                        aria-label={`Add a ${lane.title.toLowerCase()}`}
+                        className="ml-auto"
+                        onMouseDown={keepFocus}
+                        onClick={() => append(lane.lane)}
+                      >
+                        <PlusIcon />
+                      </Button>
+                    </TitleTooltip>
                   </div>
 
-                  {items.length === 0 ? (
-                    <div className="px-1.5 pb-1 text-xs text-muted-foreground">
-                      Empty. {isMobile ? "Move" : "Drag or move"} a row here
-                      with{" "}
-                      <Kbd>{lane.lane === "steer" ? "Alt+↑" : "Alt+↓"}</Kbd>.
-                    </div>
-                  ) : (
+                  {items.length === 0 ? null : (
                     <SortableContext
                       items={items.map((row) => row.key)}
                       strategy={verticalListSortingStrategy}
                     >
-                      <ol className="flex flex-col gap-0.5">
+                      <ol className="flex flex-col">
                         {items.map((row, index) => {
                           const selected = row.key === agent?.selectedKey
+                          // A dragged row stays one line high.
+                          const editing = selected && row.key !== dragKey
                           const icon = rowIcon(row, index, lane, {
                             selected,
                             paused,
@@ -758,17 +921,26 @@ export const ComposerPendingMessages = React.memo(
                               id={row.key}
                               disabled={isMobile}
                               className={cn(
-                                "flex items-start gap-2 rounded-lg px-1.5 py-1 text-sm",
+                                "group/row flex items-start gap-1.5 rounded-lg px-1 py-0.5 text-sm",
                                 selected
                                   ? lane.selectedClassName
-                                  : "cursor-text hover:bg-foreground/5"
+                                  : "cursor-default hover:bg-foreground/5"
                               )}
                               onMouseDown={(event) => {
-                                if (selected) return
-                                event.preventDefault()
-                                select(row.key, "end")
+                                if (!selected) keepFocus(event)
+                              }}
+                              onClick={() => {
+                                if (!selected) select(row.key, "end")
                               }}
                             >
+                              {isMobile ? null : (
+                                <span
+                                  aria-hidden="true"
+                                  className="flex h-6 shrink-0 cursor-grab items-center text-muted-foreground/40 group-hover/row:text-muted-foreground active:cursor-grabbing"
+                                >
+                                  <GripVerticalIcon className="size-3.5" />
+                                </span>
+                              )}
                               <span
                                 aria-hidden="true"
                                 className={cn(
@@ -782,7 +954,7 @@ export const ComposerPendingMessages = React.memo(
                               </span>
 
                               <div className="min-w-0 flex-1">
-                                {selected ? (
+                                {editing ? (
                                   <textarea
                                     ref={attachEditor}
                                     value={row.text}
@@ -808,24 +980,10 @@ export const ComposerPendingMessages = React.memo(
                                     }
                                   />
                                 ) : (
-                                  <div
-                                    title={row.text || undefined}
-                                    className={cn(
-                                      "truncate leading-6",
-                                      row.removed &&
-                                        "text-muted-foreground line-through",
-                                      !row.text &&
-                                        "text-muted-foreground italic"
-                                    )}
-                                  >
-                                    {row.text.replace(/\s+/g, " ").trim() ||
-                                      (row.images.length > 0
-                                        ? "Image prompt"
-                                        : "Empty prompt")}
-                                  </div>
+                                  <QueueRowSummary row={row} />
                                 )}
 
-                                {selected && row.images.length > 0 ? (
+                                {editing && row.images.length > 0 ? (
                                   <div className="flex flex-wrap gap-2 py-1">
                                     {row.images.map((image, imageIndex) => (
                                       <div
@@ -843,9 +1001,7 @@ export const ComposerPendingMessages = React.memo(
                                           variant="ghost"
                                           title="Remove image"
                                           className="absolute top-0.5 right-0.5 size-5 rounded-full bg-background/90 shadow-sm"
-                                          onMouseDown={(event) =>
-                                            event.preventDefault()
-                                          }
+                                          onMouseDown={keepFocus}
                                           onClick={() =>
                                             setImages(row.key, (images) =>
                                               images.filter(
@@ -861,33 +1017,33 @@ export const ComposerPendingMessages = React.memo(
                                     ))}
                                   </div>
                                 ) : null}
-
-                                {(!selected && row.images.length > 0) ||
-                                (changed && (row.moved || row.isNew)) ? (
-                                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                    {!selected && row.images.length > 0 ? (
-                                      <span className="inline-flex items-center gap-1">
-                                        <ImageIcon className="size-3" />
-                                        {row.images.length}
-                                      </span>
-                                    ) : null}
-                                    {row.isNew ? <span>new</span> : null}
-                                    {row.moved && !row.isNew ? (
-                                      <span>saves in new position</span>
-                                    ) : null}
-                                  </div>
-                                ) : null}
                               </div>
 
-                              {selected ? (
+                              {/* The tags stay on the line of the row, so
+                                  that they do not change its height. */}
+                              {changed && row.isNew ? (
+                                <span className="shrink-0 text-xs leading-6 text-muted-foreground">
+                                  new
+                                </span>
+                              ) : changed && row.moved ? (
+                                <span className="shrink-0 text-xs leading-6 text-muted-foreground">
+                                  moved
+                                </span>
+                              ) : null}
+                              {!editing && row.images.length > 0 ? (
+                                <span className="flex h-6 shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                                  <ImageIcon className="size-3" />
+                                  {row.images.length}
+                                </span>
+                              ) : null}
+
+                              {editing ? (
                                 <span className="flex shrink-0 items-center">
                                   <Button
                                     size="icon-xs"
                                     variant="ghost"
                                     title="Move up"
-                                    onMouseDown={(event) =>
-                                      event.preventDefault()
-                                    }
+                                    onMouseDown={keepFocus}
                                     onClick={() => move(row.key, -1)}
                                   >
                                     <ArrowUpIcon />
@@ -896,9 +1052,7 @@ export const ComposerPendingMessages = React.memo(
                                     size="icon-xs"
                                     variant="ghost"
                                     title="Move down"
-                                    onMouseDown={(event) =>
-                                      event.preventDefault()
-                                    }
+                                    onMouseDown={keepFocus}
                                     onClick={() => move(row.key, 1)}
                                   >
                                     <ArrowDownIcon />
@@ -907,9 +1061,7 @@ export const ComposerPendingMessages = React.memo(
                                     size="icon-xs"
                                     variant="ghost"
                                     title={row.removed ? "Keep" : "Remove"}
-                                    onMouseDown={(event) =>
-                                      event.preventDefault()
-                                    }
+                                    onMouseDown={keepFocus}
                                     onClick={() => toggleRemove(row.key)}
                                   >
                                     {row.removed ? (
@@ -931,7 +1083,13 @@ export const ComposerPendingMessages = React.memo(
             })}
             <DragOverlay dropAnimation={null}>
               {dragRow ? (
-                <div className="flex cursor-grabbing items-start gap-2 rounded-lg border bg-background px-1.5 py-1 text-sm shadow-md">
+                <div className="flex cursor-grabbing items-start gap-1.5 rounded-lg border bg-background px-1 py-0.5 text-sm opacity-70 shadow-md">
+                  <span
+                    aria-hidden="true"
+                    className="flex h-6 shrink-0 items-center text-muted-foreground"
+                  >
+                    <GripVerticalIcon className="size-3.5" />
+                  </span>
                   <span
                     aria-hidden="true"
                     className={cn(
@@ -942,73 +1100,14 @@ export const ComposerPendingMessages = React.memo(
                   >
                     ›
                   </span>
-                  <div
-                    className={cn(
-                      "min-w-0 flex-1 truncate leading-6",
-                      dragRow.removed && "text-muted-foreground line-through",
-                      !dragRow.text && "text-muted-foreground italic"
-                    )}
-                  >
-                    {dragRow.text.replace(/\s+/g, " ").trim() ||
-                      (dragRow.images.length > 0
-                        ? "Image prompt"
-                        : "Empty prompt")}
+                  <div className="min-w-0 flex-1">
+                    <QueueRowSummary row={dragRow} />
                   </div>
                 </div>
               ) : null}
             </DragOverlay>
           </DndContext>
         </div>
-
-        {agent ? (
-          <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-muted-foreground">
-            <span className="hidden flex-wrap items-center gap-x-3 gap-y-1 md:flex">
-              <span className="inline-flex items-center gap-1">
-                <Kbd>↑↓</Kbd> select
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Kbd>Alt+↑↓</Kbd> move
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Kbd>Shift+Alt+↑↓</Kbd> insert
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Kbd>Alt+X</Kbd> remove
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Kbd>Enter</Kbd> save
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Kbd>Esc</Kbd> cancel
-              </span>
-            </span>
-            {selectedRow && selectedLane ? (
-              <span>
-                {selectedRow.lane === "steer" ? "steer" : "follow-up"}{" "}
-                {selectedLane.indexOf(selectedRow) + 1}/{selectedLane.length}
-                {heldForEdit ? " • held while editing" : ""}
-                {unsaved ? " • unsaved" : ""}
-              </span>
-            ) : null}
-            <span className="ml-auto flex items-center gap-1">
-              <Button
-                size="xs"
-                variant="ghost"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={end}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="xs"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={save}
-              >
-                Save
-              </Button>
-            </span>
-          </div>
-        ) : null}
       </div>
     )
   }
