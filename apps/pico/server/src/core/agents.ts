@@ -1990,6 +1990,31 @@ export class Agents implements HostAgents {
     )
   }
 
+  async withdrawFollowUp(id: string, requestId: string) {
+    const target = this.current(id) ?? id
+    if (!this.#metas.has(target)) return false
+    const held = await this.#heldItems(target)
+    if (held.some((item) => item.requestId === requestId)) {
+      await this.#setHeld(
+        target,
+        held.filter((item) => item.requestId !== requestId)
+      )
+      return true
+    }
+    const conversationId = conversationIdOf(target)
+    const submission = await this.#harness.commit(
+      (tx) => tx.submissionByRequest(conversationId, requestId),
+      ctx
+    )
+    if (submission?.status !== "queued") return false
+    const result = await this.#harness.abortSubmission(
+      submission.id,
+      ctx,
+      conversationId
+    )
+    return result === "aborted"
+  }
+
   /** Change the todo list of an agent from the web client. */
   async changeTodo(id: string, change: TodoChange) {
     this.meta(id)

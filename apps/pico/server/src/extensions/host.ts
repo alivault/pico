@@ -44,6 +44,12 @@ export type HostAgents = {
    * answers, and an idle agent starts a turn. A paused queue keeps it.
    */
   followUp(id: string, message: string, requestId: string): Promise<void>
+  /**
+   * Take back the follow-up with `requestId` while it is still queued or
+   * held. True when it was withdrawn; false when it is not there, or the
+   * agent already got it.
+   */
+  withdrawFollowUp(id: string, requestId: string): Promise<boolean>
   /** Give tools to an agent or take them away, and apply its profile again. */
   changeLimits(
     id: string,

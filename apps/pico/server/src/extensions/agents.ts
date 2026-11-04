@@ -48,6 +48,7 @@ import { createWorktree } from "../services/worktree.ts"
 import {
   conversationOf,
   agentIdOf,
+  type HostAgents,
   type HostBridge,
   type HostServices,
 } from "./host.ts"
@@ -181,14 +182,60 @@ async function addDelivered(
   }
 }
 
-/** Record that the calling agent saw `key`, an answer of `agent`. */
+/** The request ID of the report that sends answer `key` of `agent`. */
+function reportRequest(agent: string, key: string) {
+  return `report:${agent}:${key}`
+}
+
+/**
+ * Record that the calling agent saw `key`, an answer of `agent`, and take
+ * back a report of that answer that is still in its queue. Returns the
+ * `agent:key` of each report that it took back.
+ *
+ * The mark comes before the withdrawal, and a report task looks at the marks
+ * again after it sends (see `sendReport`). So when a tool and a report give
+ * the same answer at the same time, one of them always removes the report.
+ */
 async function markDelivered(
+  agents: Pick<HostAgents, "withdrawFollowUp">,
   api: Pick<ToolExecutionApi, "commit" | "conversationId">,
   marks: Array<{ agent: string; key: string }>,
   context: Context
 ) {
-  if (marks.length === 0) return
+  const withdrawn = new Set<string>()
+  if (marks.length === 0) return withdrawn
   await api.commit((tx) => addDelivered(tx, api.conversationId, marks), context)
+  const caller = agentIdOf(api.conversationId)
+  for (const { agent, key } of marks)
+    if (await agents.withdrawFollowUp(caller, reportRequest(agent, key)))
+      withdrawn.add(`${agent}:${key}`)
+  return withdrawn
+}
+
+/**
+ * Send a report to `parent`, unless it saw the answer. If a tool showed the
+ * answer while the report went out, take the report back.
+ */
+async function sendReport(
+  services: Pick<HostServices, "agents" | "harness">,
+  input: {
+    parent: string
+    agent: string
+    key: string | undefined
+    fallbackKey: string
+    message: () => string
+  },
+  context: Context
+) {
+  const { agents, harness } = services
+  const watcher = conversationOf(input.parent)
+  const seen = () =>
+    input.key !== undefined &&
+    wasDelivered(harness, watcher, input.agent, input.key, context)
+  if (!agents.has(input.parent) || (await seen())) return
+  const request = reportRequest(input.agent, input.key ?? input.fallbackKey)
+  await agents.followUp(input.parent, input.message(), request)
+  if (await seen()) await agents.withdrawFollowUp(input.parent, request)
 }
 
 /** The agent that a conversation ID names now, after tree navigation. */
@@ -462,31 +509,26 @@ function createReportTask(host: HostBridge) {
         )
         // Tree navigation can replace the parent after the spawn.
         const parent = currentAgent(services, input.parent)
-        const parentConversation = conversationOf(parent)
-        const { answerKey: key } = task.state.checkpoint
-        const seen =
-          key !== undefined &&
-          (await wasDelivered(
-            services.harness,
-            parentConversation,
-            input.child,
-            key,
-            context
-          ))
-        if (services.agents.has(parent) && !seen)
-          await services.agents.followUp(
+        await sendReport(
+          services,
+          {
             parent,
-            reportMessage({
-              name: input.child,
-              title: input.childTitle,
-              answer: task.state.checkpoint.answer,
-              needsInput,
-              subagent:
-                services.agents.has(input.child) &&
-                services.agents.meta(input.child).parent === parent,
-            }),
-            `report:${input.child}:${key ?? input.key}`
-          )
+            agent: input.child,
+            key: task.state.checkpoint.answerKey,
+            fallbackKey: input.key,
+            message: () =>
+              reportMessage({
+                name: input.child,
+                title: input.childTitle,
+                answer: task.state.checkpoint.answer,
+                needsInput,
+                subagent:
+                  services.agents.has(input.child) &&
+                  services.agents.meta(input.child).parent === parent,
+              }),
+          },
+          context
+        )
         await runtime.commit(
           () => ({
             status: "terminal",
@@ -753,30 +795,24 @@ function createRemoteReportTask(host: HostBridge) {
         const label =
           services.machines?.find(input.machine)?.profile.label ?? input.machine
         const name = `${label}:${input.child}`
-        const parent = currentAgent(services, input.parent)
-        const parentConversation = conversationOf(parent)
-        const key = checkpoint.answerKey
-        const seen =
-          key !== undefined &&
-          (await wasDelivered(
-            services.harness,
-            parentConversation,
-            `${input.machine}:${input.child}`,
-            key,
-            context
-          ))
-        if (services.agents.has(parent) && !seen)
-          await services.agents.followUp(
-            parent,
-            reportMessage({
-              name,
-              title: input.childTitle,
-              answer: checkpoint.answer,
-              needsInput: checkpoint.needsInput,
-              subagent: false,
-            }),
-            `report:${input.machine}:${input.child}:${key ?? input.key}`
-          )
+        await sendReport(
+          services,
+          {
+            parent: currentAgent(services, input.parent),
+            agent: `${input.machine}:${input.child}`,
+            key: checkpoint.answerKey,
+            fallbackKey: input.key,
+            message: () =>
+              reportMessage({
+                name,
+                title: input.childTitle,
+                answer: checkpoint.answer,
+                needsInput: checkpoint.needsInput,
+                subagent: false,
+              }),
+          },
+          context
+        )
         await runtime.commit(
           () => ({
             status: "terminal",
@@ -994,6 +1030,7 @@ export function createAgentsExtension(host: HostBridge) {
           )
           if (done)
             await markDelivered(
+              services.agents,
               api,
               [
                 {
@@ -1167,6 +1204,7 @@ export function createAgentsExtension(host: HostBridge) {
       )
       if (finished && found)
         await markDelivered(
+          services.agents,
           api,
           [{ agent: subagent, key: answerKey(found.text, found.id) }],
           context
@@ -1272,6 +1310,7 @@ export function createAgentsExtension(host: HostBridge) {
         )
         if (done)
           await markDelivered(
+            services.agents,
             api,
             [
               {
@@ -1384,6 +1423,7 @@ export function createAgentsExtension(host: HostBridge) {
     )
     if (finished && found)
       await markDelivered(
+        services.agents,
         api,
         [{ agent: target, key: answerKey(found.text, found.id) }],
         context
@@ -1453,6 +1493,7 @@ export function createAgentsExtension(host: HostBridge) {
       )
       if (found)
         await markDelivered(
+          services.agents,
           api,
           [{ agent: target, key: answerKey(found.text, found.id) }],
           context
@@ -1747,19 +1788,27 @@ export function createAgentsExtension(host: HostBridge) {
     const finished = args.any
       ? hows.some((how) => how === "new" || how === "queued")
       : states.every((state) => state.state !== "working")
-    // The caller sees the new answers now: no report sends them again.
-    await markDelivered(
+    // The caller sees the new answers now: no report sends them again, and
+    // the reports that are still queued are taken back.
+    const withdrawn = await markDelivered(
+      services.agents,
       api,
       states.flatMap((state, index) =>
-        hows[index] === "new" && state.key
+        (hows[index] === "new" || hows[index] === "queued") && state.key
           ? [{ agent: state.agent, key: state.key }]
           : []
       ),
       context
     )
-    const rank = { new: 0, queued: 1, read: 2, shown: 2, none: 3 } as const
+    // A queued report that is not there now already came to the caller.
+    const shown = states.map((state, index) => {
+      const how = hows[index]!
+      if (how !== "queued") return how
+      return withdrawn.has(`${state.agent}:${state.key}`) ? "new" : "read"
+    })
+    const rank = { new: 0, read: 1, shown: 1, none: 2 } as const
     const parts = states
-      .map((state, index) => ({ state, how: hows[index]! }))
+      .map((state, index) => ({ state, how: shown[index]! }))
       .toSorted((a, b) => rank[a.how] - rank[b.how])
       .map(({ state, how }) => {
         if (state.state === "unknown")
@@ -1767,8 +1816,6 @@ export function createAgentsExtension(host: HostBridge) {
         if (state.state === "working") return `## ${state.name} (still working)`
         if (state.state === "waiting")
           return `## ${state.name} (idle, waiting on ${state.waiting})\n${clip(state.answer ?? "(no answer)", 8000)}`
-        if (how === "queued")
-          return `## ${state.name} (idle, new answer: it is in your follow-up queue as a message, so it is not repeated here)`
         if (how === "new")
           return `## ${state.name} (idle, new answer)\n${clip(state.answer ?? "(no answer)", 8000)}`
         return `## ${state.name} (idle, you saw this answer before)\n${clip(state.answer ?? "(no answer)", 2000)}`

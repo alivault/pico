@@ -52,11 +52,13 @@ function lastUser(messages: readonly Message[]) {
 function fakeAgents(harness: Harness) {
   const metas = new Map<string, HostAgentMeta & { createdAt: number }>()
   const unread = new Set<string>()
+  /** The agents that a test marks busy; the others are idle. */
+  const busy = new Set<string>()
   const agents = {
     has: (id: string | undefined): id is string => Boolean(id && metas.has(id)),
     current: (id: string | undefined) => id,
     meta: (id: string) => metas.get(id)!,
-    isBusy: () => false,
+    isBusy: (id: string) => busy.has(id),
     runningTools: () => [],
     subagents: (id: string) =>
       [...metas.entries()]
@@ -140,6 +142,20 @@ function fakeAgents(harness: Harness) {
         ctx
       )
     },
+    async withdrawFollowUp(id: string, requestId: string) {
+      const submission = await harness.commit(
+        (tx) => tx.submissionByRequest(conversationOf(id), requestId),
+        ctx
+      )
+      if (submission?.status !== "queued") return false
+      return (
+        (await harness.abortSubmission(
+          submission.id,
+          ctx,
+          conversationOf(id)
+        )) === "aborted"
+      )
+    },
     async changeLimits(
       id: string,
       change: { add?: string[]; remove?: string[] }
@@ -171,7 +187,7 @@ function fakeAgents(harness: Harness) {
     extensionStateChanged: () => undefined,
     availableModels: () => [{ id: "test", provider: "test" }],
   }
-  return { agents, metas, unread }
+  return { agents, metas, unread, busy }
 }
 
 function bind(host: HostBridge, harness: Harness, dataDir: string) {
@@ -789,10 +805,13 @@ void test("agents wait and the report give an answer one time", async () => {
   let release = false
   const script: Script = (messages) => {
     const user = lastUser(messages)
-    if (user.startsWith("Name a color"))
-      return release
-        ? { text: "Blue." }
-        : { tools: [{ name: "agents", arguments: { action: "list" } }] }
+    if (user.startsWith("Name a color")) {
+      if (!release)
+        return { tools: [{ name: "agents", arguments: { action: "list" } }] }
+      // The subagent is busy until its answer is in its conversation.
+      setTimeout(() => fake.busy.delete(subagent), 100)
+      return { text: "Blue." }
+    }
     if (user.startsWith("[Subagent")) return { text: "Got a report." }
     const result = lastToolResult(messages)
     if (result?.includes("Started subagent")) {
@@ -819,6 +838,12 @@ void test("agents wait and the report give an answer one time", async () => {
     dir
   )
   const fake = bind(host, harness, dir)
+  const create = fake.agents.create.bind(fake.agents)
+  fake.agents.create = async (cwd, options) => {
+    const id = await create(cwd, options)
+    if (options?.parent) fake.busy.add(id)
+    return id
+  }
   try {
     const parent = await fake.agents.create(dir)
     const conversation = (await harness.conversation(
@@ -835,10 +860,12 @@ void test("agents wait and the report give an answer one time", async () => {
       .filter((entry) => entry.kind === "pi.tool-result")
       .map((entry) => JSON.stringify(entry.model))
       .at(-1)!
-    assert.match(wait, /new answer/)
+    // The report is often queued before the wait sees the answer: the wait
+    // takes it back and gives the answer itself.
     const reports = await reportsIn(harness, parent)
-    const shown = (wait.includes("Blue.") ? 1 : 0) + reports.length
-    assert.equal(shown, 1, `wait: ${wait}\nreports: ${reports.join("\n")}`)
+    assert.match(wait, /new answer/)
+    assert.match(wait, /Blue\./, `reports: ${reports.join("\n")}`)
+    assert.equal(reports.length, 0, `wait: ${wait}`)
   } finally {
     await harness.close(ctx)
   }
