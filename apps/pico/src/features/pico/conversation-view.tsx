@@ -2492,7 +2492,7 @@ export const UserMessageCard = React.memo(function UserMessageCard({
       : (item.images[selectedImageIndex] ?? null)
 
   return (
-    <div className="mr-2 ml-auto w-fit max-w-[80%]">
+    <div className="mr-2 ml-auto w-fit max-w-[calc(100%-0.5rem)] sm:max-w-[80%]">
       <div className="relative rounded-3xl bg-primary px-5 py-2.5 text-primary-foreground before:absolute before:-right-1.75 before:bottom-0 before:h-5.5 before:w-4 before:rounded-bl-[16px_14px] before:bg-primary before:content-[''] after:absolute after:-right-6.5 after:bottom-0 after:h-6.25 after:w-6.5 after:rounded-bl-[10px] after:bg-background after:content-['']">
         {labelText ? (
           <div className="mb-2 flex items-center gap-2">
@@ -2505,7 +2505,9 @@ export const UserMessageCard = React.memo(function UserMessageCard({
           </div>
         ) : null}
         {item.text ? (
-          <MarkdownBlock breaks text={item.text} className="user-markdown" />
+          <CollapsibleUserText>
+            <MarkdownBlock breaks text={item.text} className="user-markdown" />
+          </CollapsibleUserText>
         ) : (
           <div className="text-sm text-primary-foreground/80">Image prompt</div>
         )}
@@ -2550,6 +2552,56 @@ export const UserMessageCard = React.memo(function UserMessageCard({
     </div>
   )
 })
+
+/** Height in px above which a user message folds behind Read more. */
+const USER_MESSAGE_COLLAPSED_HEIGHT = 320
+
+function CollapsibleUserText({ children }: { children: React.ReactNode }) {
+  const contentRef = React.useRef<HTMLDivElement | null>(null)
+  const [overflows, setOverflows] = React.useState(false)
+  const [expanded, setExpanded] = React.useState(false)
+
+  React.useLayoutEffect(() => {
+    const content = contentRef.current
+    if (!content) return
+    const measure = () => {
+      // Fold only when it hides a useful part, not a line or two.
+      setOverflows(content.offsetHeight > USER_MESSAGE_COLLAPSED_HEIGHT + 80)
+    }
+    measure()
+    if (typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(measure)
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [])
+
+  const collapsed = overflows && !expanded
+
+  return (
+    <>
+      <div
+        className={cn(
+          collapsed && "overflow-hidden mask-b-from-60% mask-b-to-100%"
+        )}
+        style={
+          collapsed ? { maxHeight: USER_MESSAGE_COLLAPSED_HEIGHT } : undefined
+        }
+      >
+        <div ref={contentRef}>{children}</div>
+      </div>
+      {overflows ? (
+        <button
+          type="button"
+          className="mt-1 mb-1 rounded-sm text-sm font-medium text-primary-foreground/90 underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-primary-foreground/70 focus-visible:outline-none"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? "Show less" : "Read more"}
+        </button>
+      ) : null}
+    </>
+  )
+}
 
 export type UserMessageActions = {
   /** Fork at the message's parent and put its text back in the composer. */
