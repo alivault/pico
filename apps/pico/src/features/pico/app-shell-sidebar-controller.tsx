@@ -292,6 +292,7 @@ function useAppShellSidebarControllerView({
     activeAgentKey: string
     activeAgentPath: string
     revisions: Record<string, string>
+    counts: Record<string, number>
   } | null>(null)
 
   const startProjectIndexRequest = (projects: Array<string>) => {
@@ -444,12 +445,17 @@ function useAppShellSidebarControllerView({
 
     const previousSnapshot = sidebarProjectAgentsSnapshotRef.current
     const nextRevisions: Record<string, string> = {}
+    const nextCounts: Record<string, number> = {}
     const projectsToRefresh: Array<string> = []
 
     for (const project of baseSidebarProjects) {
-      const nextRevision = projectStateByPath.get(project)?.revision || ""
+      const projectState = projectStateByPath.get(project)
+      const nextRevision = projectState?.revision || ""
       const previousRevision = previousSnapshot?.revisions[project] || ""
       nextRevisions[project] = nextRevision
+      const nextCount = projectState?.totalCount ?? 0
+      const previousCount = previousSnapshot?.counts[project] ?? nextCount
+      nextCounts[project] = nextCount
 
       if (payloadProjectSet.has(project)) {
         continue
@@ -465,6 +471,9 @@ function useAppShellSidebarControllerView({
         projectIndexLoading[project] ||
         projectIndexRequestIdsByPathRef.current[project]
       ) {
+        // The load can be older than the change. Look at the count again
+        // when the load ends.
+        nextCounts[project] = previousCount
         continue
       }
 
@@ -472,7 +481,9 @@ function useAppShellSidebarControllerView({
         continue
       }
 
-      if (activeSidebarAgentStreaming) {
+      // A new or removed agent (for example a subagent that the streaming
+      // agent spawned) shows at once. Other changes wait for the stream.
+      if (activeSidebarAgentStreaming && previousCount === nextCount) {
         // Keep the old revision, so the index refreshes when streaming stops.
         nextRevisions[project] = previousRevision
         continue
@@ -486,6 +497,7 @@ function useAppShellSidebarControllerView({
       activeAgentKey: activeSidebarAgentKey,
       activeAgentPath: activeSidebarAgentPath,
       revisions: nextRevisions,
+      counts: nextCounts,
     }
 
     if (projectsToRefresh.length === 0) {
