@@ -1,5 +1,11 @@
 import * as React from "react"
-import { FileTextIcon, SquareIcon, SquareTerminalIcon } from "lucide-react"
+import {
+  CornerDownLeftIcon,
+  FileTextIcon,
+  KeyRoundIcon,
+  SquareIcon,
+  SquareTerminalIcon,
+} from "lucide-react"
 import { toast } from "@/lib/pico/toast"
 
 import {
@@ -11,6 +17,8 @@ import {
   ItemMedia,
   ItemTitle,
 } from "@/components/ui/item"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { FADE_UNDER_ACTIONS, REVEAL_ON_HOVER } from "@/features/pico/agent/todo"
 import { registerAgentSection } from "@/features/pico/agent/agent-panel"
@@ -232,6 +240,80 @@ const InlineJobTerminal = React.lazy(
   () => import("@/features/pico/agent/inline-job-terminal")
 )
 
+type TerminalInput = (data: string) => boolean
+
+/**
+ * A password field for a job that asks for a secret (echo off). What the
+ * user types goes to the job's terminal, with Enter. It does not go to the
+ * conversation or to the agent.
+ */
+function JobSecretInput({
+  prompt,
+  inputRef,
+  showTerminal,
+  onShowTerminalChange,
+}: {
+  prompt: string
+  inputRef: React.RefObject<TerminalInput | null>
+  showTerminal: boolean
+  onShowTerminalChange: (show: boolean) => void
+}) {
+  const [value, setValue] = React.useState("")
+  const submit = () => {
+    if (!inputRef.current?.(`${value}\r`)) {
+      toast.error("The terminal is not connected. Try again in a moment.")
+      return
+    }
+    setValue("")
+  }
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-2">
+        <div className="relative min-w-0 flex-1">
+          <KeyRoundIcon
+            className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            type="password"
+            // Not a site login: do not offer to save it.
+            autoComplete="off"
+            data-1p-ignore
+            data-lpignore="true"
+            autoFocus
+            aria-label={prompt || "Password"}
+            placeholder={prompt || "Password"}
+            className="pl-8"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || event.nativeEvent.isComposing) return
+              event.preventDefault()
+              submit()
+            }}
+          />
+        </div>
+        <Button type="button" variant="outline" onClick={submit}>
+          <CornerDownLeftIcon aria-hidden="true" />
+          Enter
+        </Button>
+      </div>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <span className="min-w-0 flex-1">
+          Goes only to the terminal. The agent does not see it.
+        </span>
+        <button
+          type="button"
+          className="shrink-0 rounded-sm underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
+          onClick={() => onShowTerminalChange(!showTerminal)}
+        >
+          {showTerminal ? "Hide terminal" : "Show terminal"}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /** An interactive job_start call: its job's live terminal, while it runs. */
 function JobStartCard({ block, fallback }: ToolRendererProps) {
   const { viewerContextId, agentId } = useToolRenderContext()
@@ -249,7 +331,11 @@ function JobStartCard({ block, fallback }: ToolRendererProps) {
       : undefined,
     "terminal"
   )
+  const terminalInputRef = React.useRef<TerminalInput | null>(null)
+  const [showTerminal, setShowTerminal] = React.useState(false)
   if (!interactive) return <>{fallback}</>
+  const running = job?.status === "running"
+  const secret = running && job.waiting?.secret === true
   const args = toolArgs(block)
   const prompt = job?.focus?.prompt ?? args.prompt
   const name = job?.name ?? (typeof args.name === "string" ? args.name : "")
@@ -265,20 +351,32 @@ function JobStartCard({ block, fallback }: ToolRendererProps) {
           <span className="truncate text-muted-foreground">· {prompt}</span>
         ) : null}
       </div>
-      {job && job.status === "running" ? (
+      {secret ? (
+        <JobSecretInput
+          prompt={job.waiting?.prompt.trim() ?? ""}
+          inputRef={terminalInputRef}
+          showTerminal={showTerminal}
+          onShowTerminalChange={setShowTerminal}
+        />
+      ) : null}
+      {running ? (
         <React.Suspense
-          fallback={<div className="h-56 rounded-md border bg-background" />}
+          fallback={
+            secret && !showTerminal ? null : (
+              <div className="h-56 rounded-md border bg-background" />
+            )
+          }
         >
-          <InlineJobTerminal jobId={job.id} />
+          {/* The terminal stays connected while the password field shows. */}
+          <InlineJobTerminal
+            jobId={job.id}
+            hidden={secret && !showTerminal}
+            inputRef={terminalInputRef}
+          />
         </React.Suspense>
       ) : (
         <div className="text-xs text-muted-foreground">Starting…</div>
       )}
-      {job?.waiting?.secret ? (
-        <div className="text-xs text-muted-foreground">
-          What you type is not shown.
-        </div>
-      ) : null}
     </div>
   )
 }

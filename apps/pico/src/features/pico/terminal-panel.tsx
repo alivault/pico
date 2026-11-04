@@ -161,6 +161,12 @@ type TerminalTabPaneProps = {
   agentId?: string | undefined
   tabId: string
   viewerContextId: string
+  /**
+   * Gets a function that types text into the terminal, for input that does
+   * not come from its keyboard, such as a password field. It returns false
+   * when the terminal is not connected or the machine is offline.
+   */
+  inputRef?: React.Ref<((data: string) => boolean) | null>
 }
 
 type TerminalAnsiTheme = Required<
@@ -570,8 +576,15 @@ export function TerminalTabPane({
   agentId,
   tabId,
   viewerContextId,
+  inputRef,
 }: TerminalTabPaneProps) {
   const machineId = useMachineId()
+  const sendInputRef = React.useRef<(data: string) => boolean>(() => false)
+  React.useImperativeHandle(
+    inputRef,
+    () => (data: string) => sendInputRef.current(data),
+    []
+  )
   const terminalElementRef = React.useRef<HTMLDivElement | null>(null)
   const terminalRef = React.useRef<XtermTerminal | null>(null)
   const terminalIdRef = React.useRef<string | null>(null)
@@ -726,6 +739,13 @@ export function TerminalTabPane({
     }
 
     fitAndResizeRef.current = scheduleFitAndResize
+    sendInputRef.current = (data) => {
+      if (!terminalIdRef.current || !terminalTransportReady) return false
+      if (machineOfflineLabel(machineId) !== undefined) return false
+      inputBuffer += data
+      flushInput()
+      return true
+    }
 
     const clearPingTimer = () => {
       if (pingTimer === null) return
@@ -983,6 +1003,7 @@ export function TerminalTabPane({
       terminalRef.current = null
       terminalIdRef.current = null
       fitAndResizeRef.current = () => {}
+      sendInputRef.current = () => false
     }
   }, [cwd, agentId, tabId, viewerContextId])
 
