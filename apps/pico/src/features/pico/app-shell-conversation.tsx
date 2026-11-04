@@ -751,6 +751,7 @@ function AppShellConversationItemGroups({
   hideFooter,
   hideThinking,
   hideToolBlocks,
+  streaming,
   workingFooter,
 }: {
   centerMessages: boolean
@@ -759,6 +760,7 @@ function AppShellConversationItemGroups({
   hideFooter: boolean
   hideThinking: boolean
   hideToolBlocks: boolean
+  streaming: boolean
   workingFooter: React.ReactNode
 }) {
   const conversationMessageColumnClassName = centerMessages
@@ -771,7 +773,7 @@ function AppShellConversationItemGroups({
     hideToolBlocks,
   })
   const { groups: renderedConversationGroups, rowKey } =
-    usePendingCompactionRow(conversationGroups, compacting)
+    usePendingCompactionRow(conversationGroups, compacting, streaming)
 
   if (renderedConversationGroups.length === 0) {
     return (
@@ -963,6 +965,10 @@ function AppShellConversationMessageStack({
     workingStateStore,
     (workingState) => workingState?.label === COMPACT_WORKING_LABEL
   )
+  const streaming = useSelector(
+    agentStore,
+    (agentState) => agentState.streaming
+  )
   const hasMessages = useConversationHasMessages(conversationItemsStore)
   if (!hasMessages) return null
 
@@ -974,6 +980,7 @@ function AppShellConversationMessageStack({
       hideFooter={false}
       hideThinking={hideThinking}
       hideToolBlocks={hideToolBlocks}
+      streaming={streaming}
       workingFooter={workingFooter}
     />
   )

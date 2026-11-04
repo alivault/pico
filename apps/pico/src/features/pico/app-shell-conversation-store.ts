@@ -499,9 +499,16 @@ function lastCompactionGroupKey(
 // summary that arrives takes over the row key of the pending row, so React
 // keeps the same row element. The scroller anchors to the pending row as a
 // new turn and then keeps the summary in that place.
+//
+// A compaction that starts while the agent runs (a background compaction)
+// gets no pending row. The stream continues in the row above it, and the
+// scroller would anchor to the pending row again on each resize, so the
+// scroll position would reset while the answer streams. The working footer
+// stays in the streaming row and shows the compaction state.
 export function usePendingCompactionRow(
   groups: Array<RenderConversationGroupDescriptor>,
-  compacting: boolean
+  compacting: boolean,
+  streaming: boolean
 ) {
   const stateRef = React.useRef<PendingCompactionRowState>({
     phase: "idle",
@@ -513,7 +520,7 @@ export function usePendingCompactionRow(
   const state = stateRef.current
   const lastKey = lastCompactionGroupKey(groups)
 
-  if (state.phase === "idle" && compacting) {
+  if (state.phase === "idle" && compacting && !streaming) {
     state.count += 1
     state.phase = "pending"
     state.rowKey = `compaction-pending:${state.count}`
