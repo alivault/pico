@@ -181,6 +181,11 @@ function agentCounts(machine: MachineInfo) {
   }
 }
 
+/** The machine has a done agent that nobody has read yet. */
+export function machineHasUnreadAgents(machine: MachineInfo) {
+  return agentCounts(machine).done > 0
+}
+
 /**
  * A count in a machine heading. A click shows only the agents with that
  * state; a second click shows all agents again.

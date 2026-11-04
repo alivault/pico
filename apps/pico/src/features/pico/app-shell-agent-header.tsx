@@ -20,7 +20,8 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { SidebarTrigger } from "@/components/ui/sidebar"
+import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
+import type { AppShellSidebarStore } from "@/features/pico/app-shell-sidebar-store"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import {
   formatDisplayPath,
@@ -43,8 +44,12 @@ import { cn } from "@/lib/utils"
 import {
   useActiveMachine,
   useMachineFeature,
+  useMachines,
 } from "@/features/pico/machine-store"
-import { useHasMachineGroups } from "@/features/pico/machines"
+import {
+  machineHasUnreadAgents,
+  useHasMachineGroups,
+} from "@/features/pico/machines"
 
 export type AppShellAgentHeaderActions = {
   createAgent: (cwdOverride?: string) => void | Promise<unknown>
@@ -77,6 +82,7 @@ type AppShellAgentHeaderProps = {
   onToggleGitPanel: () => void
   onToggleTerminalPanel: () => void
   agentStore: PicoStore<AgentState>
+  sidebarStore: AppShellSidebarStore
   viewerContextId: string
 }
 
@@ -94,11 +100,13 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
   onToggleGitPanel,
   onToggleTerminalPanel,
   agentStore,
+  sidebarStore,
   viewerContextId,
 }: AppShellAgentHeaderProps) {
   const terminalsAvailable = useMachineFeature("native-pty")
   const hasMachineGroups = useHasMachineGroups()
   const activeMachine = useActiveMachine()
+  const hasUnreadAgents = useHasUnreadSidebarAgents(sidebarStore)
   const agentHeaderState = useSelector(
     agentStore,
     (agentState) => ({
@@ -149,7 +157,7 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
   return (
     <div className="sticky top-0 z-50 flex h-[var(--header-height)] w-full shrink-0 items-center border-b border-border/70 bg-background p-(--sidebar-gutter) pt-[calc(var(--sidebar-gutter)+env(safe-area-inset-top))]">
       <div className="flex w-full min-w-0 items-center gap-1">
-        <SidebarTrigger className="shrink-0" />
+        <SidebarTrigger className="shrink-0" dot={hasUnreadAgents} />
         <TitleTooltip
           title={
             defaultNewAgentProject
@@ -434,3 +442,25 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
     </div>
   )
 })
+
+/**
+ * On mobile, the sidebar is hidden, so its toggle shows a dot when an agent
+ * in the sidebar is done and not read: on the shown machine, or on another
+ * machine of the hub.
+ */
+function useHasUnreadSidebarAgents(sidebarStore: AppShellSidebarStore) {
+  const { isMobile } = useSidebar()
+  const activeMachine = useActiveMachine()
+  const { machines } = useMachines()
+  const shownMachineUnread = useSelector(sidebarStore, (snapshot) =>
+    snapshot.derived.sidebarAgents.some(
+      (agent) => Boolean(agent.unread) && !agent.streaming
+    )
+  )
+  if (!isMobile) return false
+  if (shownMachineUnread) return true
+  return machines.some(
+    (machine) =>
+      machine.id !== activeMachine?.id && machineHasUnreadAgents(machine)
+  )
+}

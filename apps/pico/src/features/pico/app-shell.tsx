@@ -3893,6 +3893,7 @@ function useAppShellAgentWorkspaceView({
                 onToggleGitPanel={toggleGitPanel}
                 onToggleTerminalPanel={toggleTerminalPanel}
                 agentStore={agentStore}
+                sidebarStore={sidebarStore}
                 viewerContextId={viewerContextId}
               />
             }

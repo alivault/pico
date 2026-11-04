@@ -504,8 +504,12 @@ function Sidebar({
 function SidebarTrigger({
   className,
   onClick,
+  dot = false,
   ...props
-}: React.ComponentProps<typeof Button>) {
+}: React.ComponentProps<typeof Button> & {
+  /** Show a dot on the button, for example for unread agents. */
+  dot?: boolean
+}) {
   const { toggleSidebar } = useSidebar()
 
   return (
@@ -515,7 +519,7 @@ function SidebarTrigger({
         data-slot="sidebar-trigger"
         variant="ghost"
         size="icon"
-        className={cn(className)}
+        className={cn("relative", className)}
         onClick={(event) => {
           onClick?.(event)
           toggleSidebar()
@@ -523,6 +527,12 @@ function SidebarTrigger({
         {...props}
       >
         <PanelLeftIcon />
+        {dot ? (
+          <span
+            data-slot="sidebar-trigger-dot"
+            className="absolute top-1 right-1 size-2 rounded-full bg-primary ring-2 ring-background"
+          />
+        ) : null}
         <span className="sr-only">Toggle Sidebar</span>
       </Button>
     </TitleTooltip>
