@@ -15,9 +15,9 @@
  * window, for example to log in), and Chrome closes when no context remains. The next tool call
  * opens them again.
  */
-import { existsSync } from "node:fs"
+import { existsSync, statSync } from "node:fs"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
-import { join } from "node:path"
+import { delimiter, join } from "node:path"
 
 import type { Browser, BrowserContext, Page } from "playwright-core"
 
@@ -34,10 +34,35 @@ const CHROME_PATHS = [
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
 ]
 
+/** Names to look up in PATH, for systems such as NixOS without /usr/bin. */
+const CHROME_COMMANDS = [
+  "google-chrome",
+  "google-chrome-stable",
+  "chromium",
+  "chromium-browser",
+  "brave",
+  "microsoft-edge",
+]
+
+// A file, not `existsSync`: in some sandboxes access() passes for a path
+// that does not exist.
+function isFile(path: string) {
+  return statSync(path, { throwIfNoEntry: false })?.isFile() ?? false
+}
+
 export function findChrome() {
   const explicit = process.env.PICO_BROWSER_PATH?.trim()
   if (explicit) return explicit
-  return CHROME_PATHS.find((path) => existsSync(path))
+  const found = CHROME_PATHS.find(isFile)
+  if (found) return found
+  const dirs = (process.env.PATH ?? "").split(delimiter).filter(Boolean)
+  for (const command of CHROME_COMMANDS) {
+    for (const dir of dirs) {
+      const path = join(dir, command)
+      if (isFile(path)) return path
+    }
+  }
+  return undefined
 }
 
 /** Close a conversation's context after this long without use. */
