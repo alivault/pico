@@ -84,6 +84,10 @@ import {
 } from "@/features/pico/sidebar-display-settings"
 import { Spinner } from "@/components/ui/spinner"
 import {
+  PortalContainerProvider,
+  usePortalContainer,
+} from "@/components/ui/portal-container"
+import {
   COLLAPSED_PROJECTS_STORAGE_KEY,
   PROJECT_AGENT_LOAD_MORE_COUNT,
   INITIAL_PROJECT_AGENT_RENDER_COUNT,
@@ -3317,9 +3321,14 @@ function useAppSidebarView({
   )
   const contentSlot = useSidebarSlot("content", machineId)
   const bottomSlot = useSidebarSlot("bottom", machineId)
+  // On mobile, the menus of the rows render in the sidebar sheet.
+  const portalsSlot = useSidebarSlot("portals", machineId)
+  const shellPortalContainer = usePortalContainer()
 
   return (
-    <>
+    <PortalContainerProvider
+      value={portalsSlot ?? shellPortalContainer ?? null}
+    >
       {topSlot
         ? createPortal(
             <AppSidebarSearchButton onOpenAgentsDialog={onOpenAgentsDialog} />,
@@ -3576,6 +3585,6 @@ function useAppSidebarView({
             bottomSlot
           )
         : null}
-    </>
+    </PortalContainerProvider>
   )
 }

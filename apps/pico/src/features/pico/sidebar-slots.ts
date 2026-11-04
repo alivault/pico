@@ -9,8 +9,13 @@ import * as React from "react"
  * The window draws the slots of the shown machine only. The shell of a
  * hidden machine finds no slot and draws nothing, so the sidebar never has
  * the rows of two shells.
+ *
+ * On mobile, the sidebar is a modal sheet. There the window also draws a
+ * "portals" slot in the sheet, for the floating UI of the sidebar rows
+ * (menus, tooltips). In the shell's own portal container, a menu shows
+ * under the sheet, and a tap on it closes the sheet.
  */
-export type SidebarSlotKind = "top" | "content" | "bottom"
+export type SidebarSlotKind = "top" | "content" | "bottom" | "portals"
 
 function slotKey(kind: SidebarSlotKind, machineId: string) {
   return `${kind}:${machineId}`

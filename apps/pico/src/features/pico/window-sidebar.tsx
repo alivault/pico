@@ -23,6 +23,7 @@ import { MachineProvider } from "@/lib/pico/machine-context"
  * summaries.
  */
 export function WindowSidebar({ shownMachineId }: { shownMachineId: string }) {
+  const { isMobile } = useSidebar()
   return (
     <Sidebar
       collapsible="offcanvas"
@@ -59,6 +60,13 @@ export function WindowSidebar({ shownMachineId }: { shownMachineId: string }) {
           className="mt-auto"
         />
       </SidebarContent>
+      {/* In the modal sheet, the menus of the rows render here. */}
+      {isMobile ? (
+        <div
+          key={`portals:${shownMachineId}`}
+          ref={sidebarSlotRef("portals", shownMachineId)}
+        />
+      ) : null}
       <SidebarRail />
     </Sidebar>
   )
