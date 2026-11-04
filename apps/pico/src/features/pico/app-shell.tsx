@@ -1263,16 +1263,23 @@ function useAppShellAgentWorkspaceView({
     reorderRightSidebarFiles(rightSidebarStore, paths)
   }
 
-  usePicoEvent("pico:open-sidebar-tab", (detail) => {
-    if (isMobile && detail.tab === "agent") {
+  const openRightSidebarTab = (tab: "agent" | "review" | "history") => {
+    if (isMobile && tab === "agent") {
       setCurrentTab("agent")
       return
     }
+    // The sidebar is open but hidden because the window is too narrow.
+    if (!isMobile && gitPanelOpen && !getShellLayout().rightShown)
+      focusShellSide("right")
     batch(() => {
-      setRightSidebarActiveTab(rightSidebarStore, detail.tab)
+      setRightSidebarActiveTab(rightSidebarStore, tab)
       setGitPanelOpen(true)
       if (isMobile) setCurrentTab("git")
     })
+  }
+
+  usePicoEvent("pico:open-sidebar-tab", (detail) => {
+    openRightSidebarTab(detail.tab)
   })
 
   // Open the right sidebar on a pane. If the pane already shows, close the
@@ -3736,6 +3743,7 @@ function useAppShellAgentWorkspaceView({
     onMoveCurrentAgent: moveCurrentAgentToProject,
     onMoveCurrentAgentToAnyProject: openMoveAgentProjectDialogForCurrentAgent,
     onOpenCommandPalette: openCommandPalette,
+    onOpenRightSidebarTab: openRightSidebarTab,
     onOpenSettings: openSettingsDialog,
     onRenameAgent: openRenameDialog,
     onRunCompact: runCompact,

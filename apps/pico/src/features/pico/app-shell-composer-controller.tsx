@@ -344,7 +344,14 @@ export function NewAgentComposerSelectors({
           }
         >
           <FolderIcon className="size-4 shrink-0" aria-hidden="true" />
-          <span className="truncate">{selectedProjectLabel}</span>
+          <span className="truncate">
+            {hasMachineGroups ? (
+              <span className="opacity-70">
+                {thisMachine?.label ?? "This machine"}:
+              </span>
+            ) : null}
+            {selectedProjectLabel}
+          </span>
           <ChevronDownIcon className="size-5 shrink-0" aria-hidden="true" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-80">

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { Badge } from "@/components/ui/badge"
+import { TitleTooltip } from "@/components/ui/tooltip"
 import {
   formatGitWorkingTreeSummary,
   formatHeaderGitStatusText,
@@ -37,14 +38,28 @@ export function GitTabStatusText({
   return <span className="max-w-48 truncate">{text}</span>
 }
 
+const headerGitLinkClassName =
+  "rounded-sm underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
+
+function plural(count: number, word: string) {
+  return `${count} ${word}${count === 1 ? "" : "s"}`
+}
+
+/**
+ * The branch and the git state of the header, for example
+ * "main · 4 changes · ↑2 ↓1". The changes open the Review tab, and the
+ * commits ahead and behind open the History tab.
+ */
 export function HeaderGitStatusText({
   viewerContextId,
   cwd,
   className,
+  onOpenTab,
 }: {
   viewerContextId: string
   cwd?: string
   className?: string
+  onOpenTab: (tab: "review" | "history") => void
 }) {
   const machineId = useMachineId()
   const normalizedCwd = normalizeCwd(cwd)
@@ -58,16 +73,56 @@ export function HeaderGitStatusText({
     select: selectGitStatusSummary,
     notifyOnChangeProps: ["data"],
   })
-  const text = formatHeaderGitStatusText(statusQuery.data)
-
-  if (!text) return null
+  const gitStatus = statusQuery.data
+  if (!gitStatus) return null
+  const label = gitStatus.label || formatHeaderGitStatusText(gitStatus)
+  if (!label) return null
+  const changed = gitStatus.changedFileCount
+  const { ahead, behind } = gitStatus
+  const commitsTitle = [
+    ahead > 0 ? `${plural(ahead, "commit")} ahead` : "",
+    behind > 0 ? `${plural(behind, "commit")} behind` : "",
+  ]
+    .filter(Boolean)
+    .join(", ")
 
   return (
     <span
-      className={`inline-flex items-center text-xs text-muted-foreground ${className ?? ""}`}
-      title={statusQuery.data?.title || text}
+      className={`inline-flex min-w-0 items-center gap-1 text-xs whitespace-nowrap text-muted-foreground ${className ?? ""}`}
     >
-      <span className="truncate">{text}</span>
+      <span className="min-w-0 truncate">{label}</span>
+      {changed > 0 ? (
+        <>
+          <span aria-hidden="true">·</span>
+          <TitleTooltip
+            title={`${plural(changed, "changed file")}. Open the review.`}
+          >
+            <button
+              type="button"
+              className={`shrink-0 ${headerGitLinkClassName}`}
+              onClick={() => onOpenTab("review")}
+            >
+              {plural(changed, "change")}
+            </button>
+          </TitleTooltip>
+        </>
+      ) : null}
+      {commitsTitle ? (
+        <>
+          <span aria-hidden="true">·</span>
+          <TitleTooltip title={`${commitsTitle}. Open the history.`}>
+            <button
+              type="button"
+              className={`shrink-0 tabular-nums ${headerGitLinkClassName}`}
+              onClick={() => onOpenTab("history")}
+            >
+              {[ahead > 0 ? `↑${ahead}` : "", behind > 0 ? `↓${behind}` : ""]
+                .filter(Boolean)
+                .join(" ")}
+            </button>
+          </TitleTooltip>
+        </>
+      ) : null}
     </span>
   )
 }

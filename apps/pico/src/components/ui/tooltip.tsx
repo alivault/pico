@@ -79,20 +79,37 @@ function TitleTooltip({
   sideOffset,
   className,
   positionerClassName,
+  onlyWhenTruncated = false,
 }: {
   title: React.ReactNode
   children: React.ReactElement
   kbd?: React.ReactNode
   rows?: Array<{ title: React.ReactNode; kbd?: React.ReactNode }>
+  /** Open only when the text of the trigger does not fit, so it is cut off. */
+  onlyWhenTruncated?: boolean
 } & Pick<
   React.ComponentProps<typeof TooltipContent>,
   "align" | "className" | "positionerClassName" | "side" | "sideOffset"
 >) {
+  const triggerRef = React.useRef<HTMLButtonElement>(null)
+  const [open, setOpen] = React.useState(false)
   if (!title) return children
 
+  const truncatedProps = onlyWhenTruncated
+    ? {
+        open,
+        onOpenChange: (nextOpen: boolean) => {
+          const trigger = triggerRef.current
+          if (nextOpen && trigger && trigger.scrollWidth <= trigger.clientWidth)
+            return
+          setOpen(nextOpen)
+        },
+      }
+    : {}
+
   return (
-    <Tooltip>
-      <TooltipTrigger render={children} />
+    <Tooltip {...truncatedProps}>
+      <TooltipTrigger ref={triggerRef} render={children} />
       <TooltipContent
         side={side}
         align={align}

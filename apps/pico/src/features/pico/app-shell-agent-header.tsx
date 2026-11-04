@@ -40,7 +40,11 @@ import {
 } from "@/features/pico/tanstack-store-utils"
 import type { AgentState } from "@/lib/pico"
 import { cn } from "@/lib/utils"
-import { useMachineFeature } from "@/features/pico/machine-store"
+import {
+  useActiveMachine,
+  useMachineFeature,
+} from "@/features/pico/machine-store"
+import { useHasMachineGroups } from "@/features/pico/machines"
 
 export type AppShellAgentHeaderActions = {
   createAgent: (cwdOverride?: string) => void | Promise<unknown>
@@ -49,6 +53,7 @@ export type AppShellAgentHeaderActions = {
   onMoveCurrentAgent: (project: string) => void | Promise<unknown>
   onMoveCurrentAgentToAnyProject: () => void
   onOpenCommandPalette: () => void
+  onOpenRightSidebarTab: (tab: "review" | "history") => void
   onOpenSettings: () => void
   onRenameAgent: () => void
   onRunCompact: () => void | Promise<unknown>
@@ -92,6 +97,8 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
   viewerContextId,
 }: AppShellAgentHeaderProps) {
   const terminalsAvailable = useMachineFeature("native-pty")
+  const hasMachineGroups = useHasMachineGroups()
+  const activeMachine = useActiveMachine()
   const agentHeaderState = useSelector(
     agentStore,
     (agentState) => ({
@@ -113,6 +120,28 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
   const agentInfo = useAgentInfo(viewerContextId, agentHeaderState.agentId)
   // A worktree folder has the branch name, so the branch text covers it.
   const showFolderName = Boolean(displayAgentCwd && !agentInfo?.worktree)
+  // "machine:folder", like ssh and scp, when the hub has more machines.
+  const locationLabel = [
+    hasMachineGroups ? (activeMachine?.label ?? "This machine") : "",
+    showFolderName && displayAgentCwd ? formatFolderName(displayAgentCwd) : "",
+  ]
+    .filter(Boolean)
+    .join(":")
+  const hostname = activeMachine?.summary?.hostname
+  const locationTitle = displayAgentCwd
+    ? [
+        formatDisplayPath(displayAgentCwd),
+        hasMachineGroups
+          ? `on ${activeMachine?.label ?? "this machine"}${
+              hostname && hostname !== activeMachine?.label
+                ? ` (${hostname})`
+                : ""
+            }`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : ""
   const moveAgentProjectOptions = newAgentProjectOptions.filter(
     (path) => path !== displayAgentCwd
   )
@@ -145,29 +174,34 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
         </TitleTooltip>
         <div className="ml-1 flex min-w-0 flex-1 flex-col items-start justify-center gap-0 text-left">
           <div className="flex max-w-full min-w-0 items-center gap-1.5">
-            <TitleTooltip title={displayAgentTitle}>
+            <TitleTooltip title={displayAgentTitle} onlyWhenTruncated>
               <h2 className="min-w-0 truncate text-[13px] leading-tight font-semibold">
                 {displayAgentTitle}
               </h2>
             </TitleTooltip>
           </div>
-          <div className="flex max-w-full min-w-0 items-center gap-x-2">
-            {showFolderName && displayAgentCwd ? (
-              <span className="inline-flex min-w-0 items-center text-xs text-muted-foreground">
-                <span className="truncate">
-                  {formatFolderName(displayAgentCwd)}
+          <div className="flex max-w-full min-w-0 items-center gap-x-1">
+            {locationLabel ? (
+              <TitleTooltip title={locationTitle}>
+                <span className="inline-flex min-w-0 items-center text-xs text-muted-foreground">
+                  <span className="truncate">{locationLabel}</span>
                 </span>
-              </span>
+              </TitleTooltip>
             ) : null}
             <HeaderGitStatusText
               viewerContextId={viewerContextId}
-              className="min-w-0"
+              className={cn(locationLabel && "before:content-['·']")}
               cwd={displayAgentCwd}
+              onOpenTab={(tab) => {
+                actionsRef.current.onOpenRightSidebarTab(tab)
+              }}
             />
-            <AgentLineage
-              agentId={agentHeaderState.agentId}
-              viewerContextId={viewerContextId}
-            />
+            <span className="ml-1 inline-flex shrink-0 items-center gap-x-2 empty:hidden">
+              <AgentLineage
+                agentId={agentHeaderState.agentId}
+                viewerContextId={viewerContextId}
+              />
+            </span>
           </div>
         </div>
         <div className="ml-auto flex shrink-0 flex-wrap items-center gap-1">
