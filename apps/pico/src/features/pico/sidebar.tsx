@@ -2549,11 +2549,19 @@ type AppSidebarSearchButtonProps = {
 function AppSidebarSearchButton({
   onOpenAgentsDialog,
 }: AppSidebarSearchButtonProps) {
+  const { isMobile, setOpenMobile } = useSidebar()
   return (
     <SidebarGroup className="pb-0">
       <SidebarMenu>
         <SidebarMenuItem>
-          <SidebarMenuButton type="button" onClick={onOpenAgentsDialog}>
+          <SidebarMenuButton
+            type="button"
+            onClick={() => {
+              // On mobile, the sidebar sheet covers the search dialog.
+              if (isMobile) setOpenMobile(false)
+              onOpenAgentsDialog()
+            }}
+          >
             <SearchIcon />
             <span>Search agents…</span>
             <span className="ml-auto hidden items-center md:flex">
