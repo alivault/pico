@@ -20,7 +20,8 @@ export function waitingLabel(jobs: JobsState | undefined) {
  * - `running`: the process runs.
  * - `input`: the process runs and waits for input.
  * - `failed`: the process ended with an error, and the agent did not hear of
- *   it (the job does not report its exit).
+ *   it (the job does not report its exit). The next turn of the agent clears
+ *   it.
  */
 export type AgentJob = {
   id: string
@@ -33,8 +34,11 @@ export type AgentJob = {
 /** The most dots that one agent row shows data for. */
 const AGENT_JOBS_LIMIT = 10
 
-/** The jobs of an agent for the sidebar, oldest first, or undefined. */
-export function agentJobs(jobs: JobsState | undefined) {
+/**
+ * The jobs of an agent for the sidebar, oldest first, or undefined. A failure
+ * that ended before `turnStartedAt` does not show: a new turn clears it.
+ */
+export function agentJobs(jobs: JobsState | undefined, turnStartedAt?: number) {
   const result: AgentJob[] = []
   const items = Object.values(jobs?.items ?? {}).sort(
     (left, right) => left.startedAt - right.startedAt
@@ -53,7 +57,8 @@ export function agentJobs(jobs: JobsState | undefined) {
       (job.status === "failed" ||
         job.status === "lost" ||
         (job.status === "exited" &&
-          (job.exitCode !== 0 || job.signal !== undefined)))
+          (job.exitCode !== 0 || job.signal !== undefined))) &&
+      (turnStartedAt === undefined || (job.endedAt ?? 0) > turnStartedAt)
     ) {
       result.push({
         id: job.id,

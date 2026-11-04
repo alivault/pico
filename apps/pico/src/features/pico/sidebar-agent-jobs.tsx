@@ -14,7 +14,8 @@ import { cn } from "@/lib/utils"
  * - green: the process runs (a dev server, a watcher).
  * - sky, pulsing: the process waits for input.
  * - red: the process ended with an error that the agent did not hear of.
- *   The dot stays until this device shows the job in the terminal panel.
+ *   The dot stays until this device shows the job in the terminal panel, or
+ *   until the agent starts a new turn.
  */
 
 /** The most dots that a row shows. More jobs show as "+N". */

@@ -129,6 +129,11 @@ export type AgentMeta = {
   lastMessagePreview?: string
   lastUserMessageAt?: number
   lastMessageAt?: number
+  /**
+   * When the agent last started a turn. The sidebar stops showing job
+   * failures from before it (see `agentJobs`).
+   */
+  turnStartedAt?: number
   messageCount: number
   labels?: Record<string, { label: string; timestamp: number }>
   /** The agent that spawned this one with `spawn_subagent`. */
@@ -519,7 +524,7 @@ export class Agents implements HostAgents {
         const jobs = await this.#harness.snapshot(JobsDoc, conversationId, ctx)
         const waiting = waitingLabel(jobs)
         if (waiting) this.#waiting.set(id, waiting)
-        const shown = agentJobs(jobs)
+        const shown = agentJobs(jobs, meta.turnStartedAt)
         if (shown) this.#jobs.set(id, shown)
       })
     )
@@ -972,7 +977,21 @@ export class Agents implements HostAgents {
 
   /** Keep `#jobs` current when the jobs of an agent change. */
   #updateJobs(id: string, jobs: JobsState | undefined) {
-    const shown = agentJobs(jobs)
+    this.#showJobs(id, agentJobs(jobs, this.#metas.get(id)?.turnStartedAt))
+  }
+
+  /** A new turn clears the job failures from before it (see `agentJobs`). */
+  #clearJobFailures(id: string, turnStartedAt: number) {
+    const jobs = this.#jobs
+      .get(id)
+      ?.filter(
+        (job) => job.state !== "failed" || (job.endedAt ?? 0) > turnStartedAt
+      )
+    this.#showJobs(id, jobs?.length ? jobs : undefined)
+  }
+
+  /** Set the jobs that the sidebar shows for an agent, and tell clients. */
+  #showJobs(id: string, shown: AgentJob[] | undefined) {
     const before = this.#jobs.get(id)
     if (agentJobsSignature(shown) === agentJobsSignature(before)) return
     if (shown) this.#jobs.set(id, shown)
@@ -1066,6 +1085,11 @@ export class Agents implements HostAgents {
     this.#busy.set(id, busy)
     this.#compacting.set(id, compacting)
 
+    if (busy && !wasBusy) {
+      const turnStartedAt = Date.now()
+      this.#updateMeta(id, { turnStartedAt })
+      this.#clearJobFailures(id, turnStartedAt)
+    }
     if (busy !== wasBusy) {
       const parent = this.#metas.get(id)?.parent
       if (parent && this.#metas.has(parent))
