@@ -26,6 +26,7 @@ import {
   type PicoStore,
 } from "@/features/pico/tanstack-store-utils"
 import type { AgentState } from "@/lib/pico"
+import { cn } from "@/lib/utils"
 import { toast } from "@/lib/pico/toast"
 import { useMachineId } from "@/lib/pico/machine-context"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
@@ -95,6 +96,10 @@ export function AppShellAgentContent({
     { compare: shallowRecordEqual }
   )
   const hasMessages = useConversationHasMessages(conversationItemsStore)
+  const centerMessages = useSelector(
+    displaySettingsStore,
+    (settings) => settings.centerMessages
+  )
   const toolRenderContext = React.useMemo(
     () => ({
       viewerContextId,
@@ -199,7 +204,13 @@ export function AppShellAgentContent({
       </UserMessageActionsContext.Provider>
 
       {toolRenderContext.agentId ? (
-        <div className="flex shrink-0 flex-wrap justify-center gap-x-2 px-4">
+        <div
+          className={cn(
+            "flex shrink-0 flex-wrap justify-center gap-x-2 px-4",
+            // The chips are no wider than the messages and the composer.
+            centerMessages && "mx-auto w-full max-w-[calc(80ch+2rem)]"
+          )}
+        >
           <WaitingCardChip
             agentId={toolRenderContext.agentId}
             viewerContextId={viewerContextId}

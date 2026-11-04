@@ -47,9 +47,11 @@ export const TodoDoc = defineDoc<TodoState>({
 
 const STATUSES = ["pending", "active", "done", "blocked"] as const
 
+type TodoInput = { text: string; status?: TodoStatus; note?: string }
+
 export type TodoChange =
-  | { op: "set"; items: Array<{ text: string; status?: TodoStatus }> }
-  | { op: "add"; items: Array<{ text: string; status?: TodoStatus }> }
+  | { op: "set"; items: Array<TodoInput> }
+  | { op: "add"; items: Array<TodoInput> }
   | {
       op: "update"
       id: string
@@ -62,10 +64,16 @@ export type TodoChange =
 
 /** Apply a change to the list. Throws when an item does not exist. */
 export function applyTodo(state: TodoState, change: TodoChange) {
-  const add = (text: string, status: TodoStatus = "pending") => {
-    const trimmed = text.trim()
+  const add = ({ text, status = "pending", note }: TodoInput) => {
+    const trimmed = typeof text === "string" ? text.trim() : ""
     if (!trimmed) return
-    state.items.push({ id: String(state.nextId++), text: trimmed, status })
+    const trimmedNote = typeof note === "string" ? note.trim() : ""
+    state.items.push({
+      id: String(state.nextId++),
+      text: trimmed,
+      status,
+      ...(trimmedNote ? { note: trimmedNote } : {}),
+    })
   }
   const find = (id: string) => {
     const item = state.items.find((entry) => entry.id === String(id).trim())
@@ -75,10 +83,10 @@ export function applyTodo(state: TodoState, change: TodoChange) {
   switch (change.op) {
     case "set":
       state.items.splice(0, state.items.length)
-      for (const item of change.items) add(item.text, item.status)
+      for (const item of change.items) add(item)
       break
     case "add":
-      for (const item of change.items) add(item.text, item.status)
+      for (const item of change.items) add(item)
       break
     case "update": {
       const item = find(change.id)
@@ -166,11 +174,17 @@ export async function updateTodo(
   }, context)
 }
 
+const TEXT_DESCRIPTION =
+  "A short title of the step, at most about 8 words, for example 'Add the permission dialog'. The user sees it in a one-line progress chip. Put details in note."
+const NOTE_DESCRIPTION =
+  "Optional details of the step: the plan, sub-steps, links, agent IDs, decisions, or why it is blocked. Shown under the title in the Agent panel."
+
 const itemSchema = Type.Object({
-  text: Type.String({ description: "What to do, as one short line" }),
+  text: Type.String({ description: TEXT_DESCRIPTION }),
   status: Type.Optional(
     Type.Union(STATUSES.map((status) => Type.Literal(status)))
   ),
+  note: Type.Optional(Type.String({ description: NOTE_DESCRIPTION })),
 })
 
 const todoTool = defineTool({
@@ -178,6 +192,7 @@ const todoTool = defineTool({
   description: [
     "Keep a todo list for multi-step work. The user sees it as a live checklist, and it survives context compaction.",
     "Ops: set (replace the list), add, update (status, text, or note of one item by id), remove, clear (done items, or all), list.",
+    "Each item has a short title (text) and optional details (note). Keep the title short and put everything else in the note.",
     "Mark one item active while you work on it, and done when it is finished. Use it for tasks with 3 or more steps.",
   ].join(" "),
   parameters: Type.Object({
@@ -191,8 +206,8 @@ const todoTool = defineTool({
     status: Type.Optional(
       Type.Union(STATUSES.map((status) => Type.Literal(status)))
     ),
-    text: Type.Optional(Type.String()),
-    note: Type.Optional(Type.String()),
+    text: Type.Optional(Type.String({ description: TEXT_DESCRIPTION })),
+    note: Type.Optional(Type.String({ description: NOTE_DESCRIPTION })),
     scope: Type.Optional(
       Type.Union([Type.Literal("done"), Type.Literal("all")])
     ),
@@ -225,7 +240,7 @@ const todoTool = defineTool({
 function toChange(args: Record<string, unknown>): TodoChange | undefined {
   const op = String(args.op)
   const items = Array.isArray(args.items)
-    ? (args.items as Array<{ text: string; status?: TodoStatus }>)
+    ? (args.items as Array<TodoInput>)
     : []
   const id = typeof args.id === "string" ? args.id : undefined
   switch (op) {
@@ -233,7 +248,15 @@ function toChange(args: Record<string, unknown>): TodoChange | undefined {
       return { op, items }
     case "add":
       if (items.length === 0 && typeof args.text === "string")
-        return { op, items: [{ text: args.text }] }
+        return {
+          op,
+          items: [
+            {
+              text: args.text,
+              ...(typeof args.note === "string" ? { note: args.note } : {}),
+            },
+          ],
+        }
       return { op, items }
     case "update":
       if (!id) throw new Error("update needs an id")

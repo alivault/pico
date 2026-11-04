@@ -49,6 +49,20 @@ void test("todo changes keep ids, one active item, and render a section", async 
     ]
   )
   assert.throws(() => applyTodo(state, { op: "remove", id: "9" }), /No todo/)
+  applyTodo(state, {
+    op: "add",
+    items: [
+      { text: "c", note: "  details  " },
+      { text: "d", note: " " },
+    ],
+  })
+  assert.deepEqual(
+    state.items.slice(2).map((item) => [item.text, item.note]),
+    [
+      ["c", "details"],
+      ["d", undefined],
+    ]
+  )
 
   const dir = await tempDir()
   let step = 0
