@@ -1039,11 +1039,6 @@ type ProjectAgentsState = {
   agentKeysByProject: Record<string, Array<string>>
   /** All agents in groups by state; see `buildStatusAgentKeys`. */
   agentKeysByStatus: Record<AgentStatusGroup, Array<string>>
-  /**
-   * The keys in `agentKeysByStatus` that only show as the parents of
-   * subagents in the group, not for their own state.
-   */
-  contextKeysByStatus: Record<AgentStatusGroup, Set<string>>
   entriesByKey: Map<string, AgentListEntry>
   /** Nesting depth per subagent; see `buildAgentDepths`. */
   depthByKey: Map<string, number>
@@ -1255,12 +1250,10 @@ function buildProjectAgentKeys(
 }
 
 /**
- * The keys of all agents in their state groups, in sidebar order. Each
- * agent is in the group of its own state. An idle subagent stays in the
- * group of its parent, so the tree of an agent stays together. A group also
- * shows the ancestors of its subagents, after which the subagents nest, so
- * you see who owns them. These context rows can also show in their own
- * group, and are in `contextKeys`.
+ * The keys of all agents in their state groups, in sidebar order. An agent
+ * tree (a top-level agent and all its subagents) stays together and shows
+ * one time, in the group of its most urgent agent. The status icon of each
+ * row shows its own state.
  */
 function buildStatusAgentKeys(entriesByKey: Map<string, AgentListEntry>) {
   const entries = [...entriesByKey.values()]
@@ -1272,40 +1265,36 @@ function buildStatusAgentKeys(entriesByKey: Map<string, AgentListEntry>) {
     entry.parent && entry.parent !== entry.id
       ? byId.get(entry.parent)
       : undefined
+  const rootOf = (entry: AgentListEntry) => {
+    const seen = new Set<AgentListEntry>()
+    let current = entry
+    for (;;) {
+      seen.add(current)
+      const parent = parentOf(current)
+      if (!parent || seen.has(parent)) return current
+      current = parent
+    }
+  }
   const ordered = nestSubagents(sortSidebarAgents(entries))
-  // Parents come before their subagents in `ordered`, so the group of a
-  // parent is known when its subagents need it.
-  const groupOf = new Map<AgentListEntry, AgentStatusGroup>()
+  // The most urgent group in each tree, by the order of the groups.
+  const rankOfRoot = new Map<AgentListEntry, number>()
+  const rootOfEntry = new Map<AgentListEntry, AgentListEntry>()
   for (const entry of ordered) {
-    const own = agentStatusGroup(entry)
-    const parent = parentOf(entry)
-    groupOf.set(
-      entry,
-      own === "idle" && parent ? (groupOf.get(parent) ?? own) : own
-    )
+    const root = rootOf(entry)
+    rootOfEntry.set(entry, root)
+    const rank = AGENT_STATUS_GROUPS.indexOf(agentStatusGroup(entry))
+    rankOfRoot.set(root, Math.min(rankOfRoot.get(root) ?? rank, rank))
   }
-  const keys = {} as Record<AgentStatusGroup, Array<string>>
-  const contextKeys = {} as Record<AgentStatusGroup, Set<string>>
-  for (const status of AGENT_STATUS_GROUPS) {
-    const shown = new Set<AgentListEntry>()
-    for (const entry of ordered) {
-      if (groupOf.get(entry) !== status) continue
-      let current: AgentListEntry | undefined = entry
-      while (current && !shown.has(current)) {
-        shown.add(current)
-        current = parentOf(current)
-      }
-    }
-    keys[status] = []
-    contextKeys[status] = new Set()
-    for (const entry of ordered) {
-      const key = agentListEntryKey(entry)
-      if (!key || !shown.has(entry)) continue
-      keys[status].push(key)
-      if (groupOf.get(entry) !== status) contextKeys[status].add(key)
-    }
+  const keys = Object.fromEntries(
+    AGENT_STATUS_GROUPS.map((status) => [status, [] as Array<string>])
+  ) as Record<AgentStatusGroup, Array<string>>
+  for (const entry of ordered) {
+    const key = agentListEntryKey(entry)
+    const root = rootOfEntry.get(entry)
+    if (!key || !root) continue
+    keys[AGENT_STATUS_GROUPS[rankOfRoot.get(root) ?? 0] ?? "idle"].push(key)
   }
-  return { keys, contextKeys }
+  return keys
 }
 
 function buildProjectAgentsState(
@@ -1316,8 +1305,7 @@ function buildProjectAgentsState(
   const statusKeys = buildStatusAgentKeys(entriesByKey)
   return {
     agentKeysByProject: buildProjectAgentKeys(agentsByProject),
-    agentKeysByStatus: statusKeys.keys,
-    contextKeysByStatus: statusKeys.contextKeys,
+    agentKeysByStatus: statusKeys,
     entriesByKey,
     depthByKey: buildAgentDepths(agentsByProject),
     agentTree: buildAgentTree(entriesByKey.values()),
@@ -2232,10 +2220,7 @@ function StatusAgentGroups(props: StatusAgentGroupsProps) {
       const pinned = pinnedAgentTreeKeys(state.agentTree, pinnedAgentKeys)
       return {
         hasAgents: AGENT_STATUS_GROUPS.some((status) =>
-          state.agentKeysByStatus[status].some(
-            (key) =>
-              !pinned.has(key) && !state.contextKeysByStatus[status].has(key)
-          )
+          state.agentKeysByStatus[status].some((key) => !pinned.has(key))
         ),
         isLoading: Object.values(state.loadingByProject).some(Boolean),
       }
@@ -2319,14 +2304,6 @@ const StatusAgentGroup = React.memo(function StatusAgentGroup({
   const unpinnedAgentKeys = agentKeys.filter(
     (entryKey) => !pinnedAgentKeySet.has(entryKey)
   )
-  // The parents that only show for context do not count.
-  const memberCount = useSelector(
-    projectAgentsStore,
-    (state) =>
-      unpinnedAgentKeys.filter(
-        (entryKey) => !state.contextKeysByStatus[status].has(entryKey)
-      ).length
-  )
   const visibleCount = limited
     ? Math.min(unpinnedAgentKeys.length, renderCount)
     : unpinnedAgentKeys.length
@@ -2336,7 +2313,7 @@ const StatusAgentGroup = React.memo(function StatusAgentGroup({
   const showLess =
     altKeyHeld && limited && visibleCount > INITIAL_PROJECT_AGENT_RENDER_COUNT
 
-  if (memberCount === 0) return null
+  if (unpinnedAgentKeys.length === 0) return null
 
   return (
     <div data-sidebar-agent-group="" className="flex flex-col">
