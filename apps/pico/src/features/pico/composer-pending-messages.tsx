@@ -759,7 +759,10 @@ export const ComposerPendingMessages = React.memo(
             when editing starts. A click on the header, but not on its
             buttons, shows or hides the queue. */}
         <div
-          className="flex h-7 shrink-0 items-center gap-2 pr-0.5 pl-2 text-xs"
+          className={cn(
+            "flex h-7 shrink-0 items-center gap-2 pr-0.5 pl-2 text-xs",
+            !editing && "cursor-default select-none"
+          )}
           onMouseDown={(event) => {
             if (!editing) keepFocus(event)
           }}
@@ -770,24 +773,28 @@ export const ComposerPendingMessages = React.memo(
             toggleCollapsed()
           }}
         >
-          <button
-            type="button"
-            aria-expanded={!collapsed}
-            disabled={editing}
-            title={`${collapsed ? "Show" : "Hide"} the queue (Shift+Alt+Q)`}
-            className="-ml-1 flex shrink-0 items-center gap-1 rounded-sm pr-1 font-medium hover:bg-foreground/5 disabled:hover:bg-transparent"
-            onMouseDown={keepFocus}
-            onClick={toggleCollapsed}
+          <TitleTooltip
+            title={editing ? null : `${collapsed ? "Show" : "Hide"} the queue`}
+            kbd="Shift+Alt+Q"
           >
-            <ChevronRightIcon
-              className={cn(
-                "size-3.5 text-muted-foreground transition-transform",
-                !collapsed && "rotate-90",
-                editing && "invisible"
-              )}
-            />
-            {editing ? "Editing" : "Queue"}
-          </button>
+            <button
+              type="button"
+              aria-expanded={!collapsed}
+              disabled={editing}
+              className="-ml-1 flex shrink-0 items-center gap-1 rounded-sm pr-1 font-medium"
+              onMouseDown={keepFocus}
+              onClick={toggleCollapsed}
+            >
+              <ChevronRightIcon
+                className={cn(
+                  "size-3.5 text-muted-foreground transition-transform",
+                  !collapsed && "rotate-90",
+                  editing && "invisible"
+                )}
+              />
+              {editing ? "Editing" : "Queue"}
+            </button>
+          </TitleTooltip>
           <span className="-ml-1 min-w-0 truncate text-muted-foreground">
             {selectedRow && selectedLane && selectedLaneRows
               ? `${selectedLane.title} ${selectedLaneRows.indexOf(selectedRow) + 1} of ${selectedLaneRows.length}`
