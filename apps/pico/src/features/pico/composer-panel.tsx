@@ -41,10 +41,6 @@ import {
   matchesShortcutEvent,
 } from "@/features/pico/keyboard-shortcuts"
 import {
-  ComposerContextUsageIndicator,
-  type ComposerContextUsageStore,
-} from "@/features/pico/composer-context-usage-indicator"
-import {
   formatComposerLineCommentReference,
   formatComposerSkillName,
   parseComposerSkillMessage,
@@ -92,7 +88,6 @@ type ComposerPanelProps = {
   composerSyncNonce: number
   canStartPendingQueue: boolean
   centerMessages: boolean
-  contextUsageStore: ComposerContextUsageStore
   displaySettingsStore: ComposerDisplaySettingsStore
   agentStore: ComposerAgentStore
   isSubmitting: boolean
@@ -132,9 +127,6 @@ type ComposerAttachmentsProps = {
 }
 
 type ComposerPromptEditorProps = {
-  activeAgentId?: string
-  contextUsageStore: ComposerContextUsageStore
-  viewerContextId: string
   composerLineComments: Array<ComposerLineComment>
   composerImages: Array<PromptImage>
   composerText: string
@@ -294,36 +286,6 @@ function useComposerSlashCommands({
   )
 }
 
-/** The context ring. It shows the provider usage of the agent's model. */
-const ComposerContextUsage = React.memo(function ComposerContextUsage({
-  activeAgentId,
-  contextUsageStore,
-  disabled,
-  agentStore,
-  viewerContextId,
-}: {
-  activeAgentId?: string
-  contextUsageStore: ComposerContextUsageStore
-  disabled: boolean
-  agentStore: ComposerAgentStore
-  viewerContextId: string
-}) {
-  const modelProvider = useSelector(
-    agentStore,
-    (agentState) => agentState.model?.provider
-  )
-
-  return (
-    <ComposerContextUsageIndicator
-      activeAgentId={activeAgentId}
-      contextUsageStore={contextUsageStore}
-      disabled={disabled}
-      modelProvider={modelProvider}
-      viewerContextId={viewerContextId}
-    />
-  )
-})
-
 export function ComposerPanel({
   activeAgentId,
   currentPendingMessages,
@@ -334,7 +296,6 @@ export function ComposerPanel({
   composerSyncNonce,
   canStartPendingQueue,
   centerMessages,
-  contextUsageStore,
   displaySettingsStore,
   agentStore,
   isSubmitting,
@@ -406,9 +367,6 @@ export function ComposerPanel({
 
         <div className="overflow-visible rounded-[18px] border bg-card">
           <ComposerPromptEditor
-            activeAgentId={activeAgentId}
-            contextUsageStore={contextUsageStore}
-            viewerContextId={viewerContextId}
             composerLineComments={composerLineComments}
             composerImages={composerImages}
             composerText={composerText}
@@ -495,9 +453,6 @@ const ComposerAttachments = React.memo(function ComposerAttachments({
 })
 
 const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
-  activeAgentId,
-  contextUsageStore,
-  viewerContextId,
   composerLineComments,
   composerImages,
   composerText,
@@ -1123,14 +1078,6 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
         className="flex flex-nowrap items-center justify-end gap-2 self-end"
         style={{ gridArea: "trailing" }}
       >
-        <ComposerContextUsage
-          activeAgentId={activeAgentId}
-          contextUsageStore={contextUsageStore}
-          disabled={disabled}
-          agentStore={agentStore}
-          viewerContextId={viewerContextId}
-        />
-
         {!acceptFollowUps ? (
           <TitleTooltip
             title="Send"

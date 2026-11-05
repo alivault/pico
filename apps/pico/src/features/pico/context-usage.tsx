@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 
 import type { AgentState } from "@/lib/pico"
-import { emitPicoEvent } from "@/features/pico/agent/events"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
@@ -10,33 +9,22 @@ import {
   type PicoStore,
 } from "@/features/pico/tanstack-store-utils"
 
-import { Button } from "@/components/ui/button"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import { useIsMobile } from "@/hooks/use-mobile"
 import { useMachineId } from "@/lib/pico/machine-context"
 import { cn } from "@/lib/utils"
 
 const contextUsageNumberFormatter = new Intl.NumberFormat("en-US")
-const CONTEXT_USAGE_CIRCLE_CENTER = 14
-const CONTEXT_USAGE_CIRCLE_RADIUS = 10.5
-const CONTEXT_USAGE_MULTI_RING_STROKE_WIDTH = 2.2
+// The rings fill a 32 px icon button and leave the middle for its icon.
+const CONTEXT_USAGE_CIRCLE_CENTER = 16
 const CONTEXT_USAGE_RING_GEOMETRY = {
-  1: [{ radius: CONTEXT_USAGE_CIRCLE_RADIUS, strokeWidth: 3 }],
+  1: [{ radius: 11.5, strokeWidth: 2.4 }],
   2: [
-    { radius: 11, strokeWidth: 2.6 },
-    { radius: 7.2, strokeWidth: 2.6 },
+    { radius: 12, strokeWidth: 2 },
+    { radius: 9, strokeWidth: 2 },
   ],
   3: [
-    {
-      radius: 11.5,
-      strokeWidth: CONTEXT_USAGE_MULTI_RING_STROKE_WIDTH,
-    },
-    { radius: 8, strokeWidth: CONTEXT_USAGE_MULTI_RING_STROKE_WIDTH },
-    { radius: 4.5, strokeWidth: CONTEXT_USAGE_MULTI_RING_STROKE_WIDTH },
+    { radius: 12.5, strokeWidth: 1.8 },
+    { radius: 9.75, strokeWidth: 1.8 },
+    { radius: 7, strokeWidth: 1.8 },
   ],
 } satisfies Record<number, Array<{ radius: number; strokeWidth: number }>>
 
@@ -123,14 +111,6 @@ type ContextUsageRing = {
   key: string
   label: string
   percent: number | null
-}
-
-type ComposerContextUsageIndicatorProps = {
-  activeAgentId?: string
-  contextUsageStore?: ComposerContextUsageStore
-  disabled?: boolean
-  modelProvider?: string
-  viewerContextId: string
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -424,7 +404,7 @@ function ContextUsageQuotaTooltipLine({
       ? `${used} / ${limit}`
       : (used ?? limit ?? "Available")
   return (
-    <div className="rounded-lg bg-background/70 px-2.5 py-2">
+    <div className="px-1.5 py-1.5">
       <div className="flex items-center justify-between gap-6">
         <span className="font-medium text-muted-foreground">{quota.label}</span>
         <span className="font-semibold text-foreground">
@@ -448,7 +428,7 @@ function ProviderUsageTooltipLine({ window }: { window: ProviderUsageWindow }) {
   const percent = `${formatContextUsagePercent(window.usedPercent)}%`
 
   return (
-    <div className="rounded-lg bg-background/70 px-2.5 py-2">
+    <div className="px-1.5 py-1.5">
       <div className="flex items-center justify-between gap-6">
         <span className="font-medium text-muted-foreground">
           {window.label === "Week" ? "Weekly usage" : `${window.label} usage`}
@@ -543,15 +523,91 @@ function getContextUsageRingGeometry(ringCount: number) {
   return CONTEXT_USAGE_RING_GEOMETRY[1]
 }
 
-export function ComposerContextUsageIndicator({
+export type ContextUsageView = ReturnType<typeof buildContextUsageView>
+
+function buildContextUsageView(
+  contextUsage: ComposerContextUsageSnapshot,
+  providerUsageWindows: Array<ProviderUsageWindow>
+) {
+  const {
+    backgroundAt,
+    compactAt,
+    contextWindow,
+    fiveHourUsage,
+    percent,
+    roundedPercent,
+    tokens,
+    weeklyUsage,
+  } = contextUsage
+  const displayPercent =
+    roundedPercent == null
+      ? "Pending"
+      : `${formatContextUsagePercent(roundedPercent)}%`
+  const compactContextWindow = formatContextUsageCompactNumber(contextWindow)
+  const compactTokens =
+    tokens == null ? null : formatContextUsageCompactNumber(tokens)
+  const rings = getContextUsageRings(
+    percent,
+    fiveHourUsage,
+    weeklyUsage,
+    providerUsageWindows
+  )
+  const compactAtPercent =
+    compactAt == null ? null : (compactAt / contextWindow) * 100
+  const compactionText =
+    compactAt == null
+      ? null
+      : backgroundAt == null
+        ? `Compacts at ${formatContextUsageCompactNumber(compactAt)}`
+        : `Compacts at ${formatContextUsageCompactNumber(compactAt)} · starts in the background at ${formatContextUsageCompactNumber(backgroundAt)}`
+  const ringAriaText = rings
+    .slice(1)
+    .map((ring) =>
+      ring.percent == null
+        ? `${ring.label}. Usage estimate unavailable.`
+        : `${ring.label}. ${formatContextUsagePercent(ring.percent)}% used.`
+    )
+    .join(" ")
+  const contextAriaText =
+    roundedPercent == null
+      ? `Context window. Usage estimate pending. ${compactContextWindow} token window.`
+      : tokens == null
+        ? `Context window. ${displayPercent} used. ${compactContextWindow} tokens available.`
+        : `Context window. ${displayPercent} used. ${compactTokens} / ${compactContextWindow} tokens used.`
+
+  return {
+    ariaLabel: `${contextAriaText}${ringAriaText ? ` ${ringAriaText}` : ""}`,
+    compactAtPercent,
+    compactContextWindow,
+    compactTokens,
+    compactionText,
+    displayPercent,
+    fiveHourUsage,
+    percent,
+    providerUsageWindows,
+    rings,
+    weeklyUsage,
+  }
+}
+
+/**
+ * The context window and the provider usage of the agent, or null when the
+ * agent has no usage yet.
+ */
+export function useContextUsageView({
   activeAgentId,
   contextUsageStore = emptyContextUsageStore,
   disabled = false,
   modelProvider,
   viewerContextId,
-}: ComposerContextUsageIndicatorProps) {
+}: {
+  activeAgentId?: string
+  contextUsageStore?: ComposerContextUsageStore
+  disabled?: boolean
+  modelProvider?: string
+  viewerContextId: string
+}): ContextUsageView | null {
   const machineId = useMachineId()
-  const isMobile = useIsMobile()
   const contextUsage = useComposerContextUsageSnapshot(contextUsageStore)
   const providerUsageQuery = useQuery({
     enabled: Boolean(modelProvider && viewerContextId),
@@ -574,199 +630,134 @@ export function ComposerContextUsageIndicator({
       return data.usage?.windows ?? []
     },
   })
-  const providerUsageWindows = providerUsageQuery.data ?? []
 
-  if (disabled) return null
-  if (!contextUsage) return null
+  if (disabled || !contextUsage) return null
+  return buildContextUsageView(contextUsage, providerUsageQuery.data ?? [])
+}
 
-  const {
-    backgroundAt,
-    compactAt,
-    contextWindow,
-    fiveHourUsage,
-    percent,
-    roundedPercent,
-    tokens,
-    weeklyUsage,
-  } = contextUsage
-  const displayPercent =
-    roundedPercent == null
-      ? "Pending"
-      : `${formatContextUsagePercent(roundedPercent)}%`
-  const compactContextWindow = formatContextUsageCompactNumber(contextWindow)
-  const compactTokens =
-    tokens == null ? null : formatContextUsageCompactNumber(tokens)
-  const usageRings = getContextUsageRings(
-    percent,
-    fiveHourUsage,
-    weeklyUsage,
-    providerUsageWindows
-  )
-  const ringGeometry = getContextUsageRingGeometry(usageRings.length)
-  const compactAtPercent =
-    compactAt == null ? null : (compactAt / contextWindow) * 100
+/**
+ * The usage rings, drawn to fill a 32 px icon button around its icon: the
+ * context window outside, then the 5h and the weekly usage.
+ */
+export function ContextUsageRings({
+  view,
+  className,
+}: {
+  view: ContextUsageView
+  className?: string
+}) {
+  const geometry = getContextUsageRingGeometry(view.rings.length)
   const compactionPoint =
-    compactAtPercent == null || !ringGeometry[0]
+    view.compactAtPercent == null || !geometry[0]
       ? null
-      : compactionRingPoint(compactAtPercent, ringGeometry[0].radius)
-  const compactionText =
-    compactAt == null
-      ? null
-      : backgroundAt == null
-        ? `Compacts at ${formatContextUsageCompactNumber(compactAt)}`
-        : `Compacts at ${formatContextUsageCompactNumber(compactAt)} · starts in the background at ${formatContextUsageCompactNumber(backgroundAt)}`
-  const usageRingAriaText = usageRings
-    .slice(1)
-    .map((ring) =>
-      ring.percent == null
-        ? `${ring.label}. Usage estimate unavailable.`
-        : `${ring.label}. ${formatContextUsagePercent(ring.percent)}% used.`
-    )
-    .join(" ")
-  const contextAriaText =
-    roundedPercent == null
-      ? `Context window. Usage estimate pending. ${compactContextWindow} token window.`
-      : tokens == null
-        ? `Context window. ${displayPercent} used. ${compactContextWindow} tokens available.`
-        : `Context window. ${displayPercent} used. ${compactTokens} / ${compactContextWindow} tokens used.`
-  const tooltipAriaLabel = `${contextAriaText}${usageRingAriaText ? ` ${usageRingAriaText}` : ""}`
-
-  const trigger = (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      className={cn(
-        "relative ml-auto shrink-0",
-        // On desktop the popover opens on hover, so the button shows no
-        // highlight. On mobile a tap opens it and the highlight stays.
-        !isMobile &&
-          "hover:bg-transparent aria-expanded:bg-transparent dark:hover:bg-transparent"
-      )}
-      aria-label={tooltipAriaLabel}
-    >
-      <svg
-        className="pointer-events-none absolute top-1/2 left-1/2 size-7 -translate-x-1/2 -translate-y-1/2"
-        viewBox="0 0 28 28"
-        fill="none"
-        aria-hidden="true"
-      >
-        {usageRings.map((ring, index) => {
-          const geometry = ringGeometry[index]
-          if (!geometry) return null
-
-          return (
-            <circle
-              key={`${ring.key}-track`}
-              cx={CONTEXT_USAGE_CIRCLE_CENTER}
-              cy={CONTEXT_USAGE_CIRCLE_CENTER}
-              r={geometry.radius}
-              stroke="var(--border)"
-              strokeWidth={geometry.strokeWidth}
-              strokeOpacity="0.75"
-              vectorEffect="non-scaling-stroke"
-            />
-          )
-        })}
-        {usageRings.map((ring, index) => {
-          const geometry = ringGeometry[index]
-          if (!geometry || ring.percent == null) return null
-
-          return (
-            <circle
-              key={ring.key}
-              cx={CONTEXT_USAGE_CIRCLE_CENTER}
-              cy={CONTEXT_USAGE_CIRCLE_CENTER}
-              r={geometry.radius}
-              pathLength={100}
-              stroke={contextUsageStroke(ring.percent)}
-              strokeWidth={geometry.strokeWidth}
-              strokeDasharray={`${ring.percent.toFixed(1)} 100`}
-              strokeLinecap="round"
-              vectorEffect="non-scaling-stroke"
-              className="origin-center -rotate-90"
-            />
-          )
-        })}
-        {compactionPoint ? (
-          <circle
-            cx={compactionPoint.x}
-            cy={compactionPoint.y}
-            r={1.3}
-            fill="var(--foreground)"
-            fillOpacity="0.7"
-          />
-        ) : null}
-      </svg>
-    </Button>
-  )
-  const content = (
-    <>
-      <div className="rounded-lg bg-background/70 px-2.5 py-2">
-        <div className="flex items-center justify-between gap-6">
-          <span className="font-medium text-muted-foreground">
-            Context window
-          </span>
-          <span className="font-semibold text-foreground">
-            {displayPercent}
-          </span>
-        </div>
-        {percent == null ? null : (
-          <TooltipUsageProgress
-            percent={percent}
-            marks={compactAtPercent == null ? [] : [compactAtPercent]}
-          />
-        )}
-        <div className="mt-1 text-xs text-muted-foreground">
-          {compactTokens == null
-            ? `Usage estimate pending · ${compactContextWindow} token window`
-            : `${compactTokens} / ${compactContextWindow} tokens used`}
-        </div>
-        {compactionText ? (
-          <div className="mt-1 flex items-baseline justify-between gap-3 text-xs text-muted-foreground">
-            <span>{compactionText}</span>
-            <button
-              type="button"
-              className="shrink-0 text-foreground underline-offset-2 hover:underline"
-              onClick={() =>
-                emitPicoEvent("pico:open-agent-settings", {
-                  page: "agent-context",
-                })
-              }
-            >
-              Change
-            </button>
-          </div>
-        ) : null}
-      </div>
-      {providerUsageWindows.length > 0 ? (
-        providerUsageWindows.map((window) => (
-          <ProviderUsageTooltipLine key={window.label} window={window} />
-        ))
-      ) : (
-        <>
-          {fiveHourUsage ? (
-            <ContextUsageQuotaTooltipLine quota={fiveHourUsage} />
-          ) : null}
-          {weeklyUsage ? (
-            <ContextUsageQuotaTooltipLine quota={weeklyUsage} />
-          ) : null}
-        </>
-      )}
-    </>
-  )
+      : compactionRingPoint(view.compactAtPercent, geometry[0].radius)
 
   return (
-    <Popover>
-      <PopoverTrigger render={trigger} openOnHover={!isMobile} delay={100} />
-      <PopoverContent
-        side="top"
-        align="end"
-        sideOffset={8}
-        className="w-72 max-w-none items-stretch gap-2 rounded-xl bg-secondary p-3 text-sm text-secondary-foreground"
-      >
-        {content}
-      </PopoverContent>
-    </Popover>
+    <svg
+      className={cn("pointer-events-none", className)}
+      viewBox={`0 0 ${CONTEXT_USAGE_CIRCLE_CENTER * 2} ${CONTEXT_USAGE_CIRCLE_CENTER * 2}`}
+      fill="none"
+      aria-hidden="true"
+    >
+      {view.rings.map((ring, index) => {
+        const ringGeometry = geometry[index]
+        if (!ringGeometry) return null
+        return (
+          <circle
+            key={`${ring.key}-track`}
+            cx={CONTEXT_USAGE_CIRCLE_CENTER}
+            cy={CONTEXT_USAGE_CIRCLE_CENTER}
+            r={ringGeometry.radius}
+            stroke="var(--border)"
+            strokeWidth={ringGeometry.strokeWidth}
+            strokeOpacity="0.75"
+            vectorEffect="non-scaling-stroke"
+          />
+        )
+      })}
+      {view.rings.map((ring, index) => {
+        const ringGeometry = geometry[index]
+        if (!ringGeometry || ring.percent == null) return null
+        return (
+          <circle
+            key={ring.key}
+            cx={CONTEXT_USAGE_CIRCLE_CENTER}
+            cy={CONTEXT_USAGE_CIRCLE_CENTER}
+            r={ringGeometry.radius}
+            pathLength={100}
+            stroke={contextUsageStroke(ring.percent)}
+            strokeWidth={ringGeometry.strokeWidth}
+            strokeDasharray={`${ring.percent.toFixed(1)} 100`}
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
+            className="origin-center -rotate-90"
+          />
+        )
+      })}
+      {compactionPoint ? (
+        <circle
+          cx={compactionPoint.x}
+          cy={compactionPoint.y}
+          r={1.3}
+          fill="var(--foreground)"
+          fillOpacity="0.7"
+        />
+      ) : null}
+    </svg>
+  )
+}
+
+/** The context window line of the usage details. */
+export function ContextUsageWindowDetails({
+  view,
+}: {
+  view: ContextUsageView
+}) {
+  return (
+    <div className="w-full">
+      <div className="flex items-center justify-between gap-6">
+        <span className="font-medium text-muted-foreground">
+          Context window
+        </span>
+        <span className="font-semibold text-foreground">
+          {view.displayPercent}
+        </span>
+      </div>
+      {view.percent == null ? null : (
+        <TooltipUsageProgress
+          percent={view.percent}
+          marks={view.compactAtPercent == null ? [] : [view.compactAtPercent]}
+        />
+      )}
+      <div className="mt-1 text-xs text-muted-foreground">
+        {view.compactTokens == null
+          ? `Usage estimate pending · ${view.compactContextWindow} token window`
+          : `${view.compactTokens} / ${view.compactContextWindow} tokens used`}
+      </div>
+      {view.compactionText ? (
+        <div className="mt-1 text-xs text-muted-foreground">
+          {view.compactionText}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+/** The provider usage lines (5h, weekly) of the usage details. */
+export function ContextUsageQuotaDetails({ view }: { view: ContextUsageView }) {
+  if (view.providerUsageWindows.length > 0) {
+    return view.providerUsageWindows.map((window) => (
+      <ProviderUsageTooltipLine key={window.label} window={window} />
+    ))
+  }
+  return (
+    <>
+      {view.fiveHourUsage ? (
+        <ContextUsageQuotaTooltipLine quota={view.fiveHourUsage} />
+      ) : null}
+      {view.weeklyUsage ? (
+        <ContextUsageQuotaTooltipLine quota={view.weeklyUsage} />
+      ) : null}
+    </>
   )
 }

@@ -51,7 +51,6 @@ import {
   ComposerPanel,
   type ComposerPanelHandle,
 } from "@/features/pico/composer-panel"
-import type { ComposerContextUsageStore } from "@/features/pico/composer-context-usage-indicator"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
   useSelector,
@@ -523,7 +522,6 @@ export const AppShellComposerController = React.memo(
   function AppShellComposerController({
     actionsRef,
     composerPanelRef,
-    contextUsageStore,
     displaySettingsStore,
     fileInputRef,
     agentStore,
@@ -532,7 +530,6 @@ export const AppShellComposerController = React.memo(
   }: {
     actionsRef: React.RefObject<AppShellComposerActions>
     composerPanelRef: React.RefObject<ComposerPanelHandle | null>
-    contextUsageStore: ComposerContextUsageStore
     displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
     fileInputRef: React.RefObject<HTMLInputElement | null>
     agentStore: PicoStore<AgentState>
@@ -653,7 +650,6 @@ export const AppShellComposerController = React.memo(
         composerSyncNonce={snapshot.composerSyncNonce}
         canStartPendingQueue={snapshot.canStartPendingQueue}
         centerMessages={centerMessages}
-        contextUsageStore={contextUsageStore}
         displaySettingsStore={displaySettingsStore}
         agentStore={agentStore}
         isSubmitting={snapshot.isSubmitting}

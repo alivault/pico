@@ -139,7 +139,7 @@ import {
   readFileAsPromptImage,
 } from "@/features/pico/app-shell-utils"
 import type { ComposerPanelHandle } from "@/features/pico/composer-panel"
-import type { ComposerContextUsageStore } from "@/features/pico/composer-context-usage-indicator"
+import type { ComposerContextUsageStore } from "@/features/pico/context-usage"
 import {
   parseComposerSkillMessage,
   serializeComposerDraft,
@@ -3881,7 +3881,6 @@ function useAppShellAgentWorkspaceView({
             appUiStore={appUiStore}
             diffLineComments={displayedDiffLineComments}
             composerPanelRef={composerPanelRef}
-            contextUsageStore={contextUsageStore}
             conversationFrameRef={conversationFrameRef}
             conversationItemsStore={conversationItemsStore}
             defaultNewAgentProject={defaultNewAgentProject}
@@ -3897,6 +3896,7 @@ function useAppShellAgentWorkspaceView({
                 terminalPanelOpen={terminalPanelOpen}
                 loadingDisplayAgentTitle={loadingDisplayAgentTitle}
                 currentAgentPinned={currentAgentPinned}
+                contextUsageStore={contextUsageStore}
                 displaySettingsStore={displaySettingsStore}
                 isAgentViewLoading={isAgentViewLoading}
                 newAgentProjectOptions={newAgentProjectOptions}

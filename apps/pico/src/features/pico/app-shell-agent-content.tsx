@@ -19,7 +19,6 @@ import {
 import type { AppShellDisplaySettingsState } from "@/features/pico/app-shell-types"
 import type { AppShellWorkingState } from "@/features/pico/app-shell-working-state"
 import type { ComposerPanelHandle } from "@/features/pico/composer-panel"
-import type { ComposerContextUsageStore } from "@/features/pico/composer-context-usage-indicator"
 import { shallowRecordEqual } from "@/features/pico/app-shell-common"
 import {
   useSelector,
@@ -42,7 +41,6 @@ export type AppShellAgentContentProps = {
   actionsRef: React.RefObject<AppShellComposerActions>
   awaitingFirstTurn: boolean
   composerPanelRef: React.RefObject<ComposerPanelHandle | null>
-  contextUsageStore: ComposerContextUsageStore
   conversationFrameRef: React.RefObject<AppShellConversationFrameHandle | null>
   conversationItemsStore: ConversationItemsStore
   defaultNewAgentProject: string
@@ -66,7 +64,6 @@ export function AppShellAgentContent({
   actionsRef,
   awaitingFirstTurn,
   composerPanelRef,
-  contextUsageStore,
   conversationFrameRef,
   conversationItemsStore,
   defaultNewAgentProject,
@@ -160,7 +157,6 @@ export function AppShellAgentContent({
         <AppShellComposerController
           actionsRef={actionsRef}
           composerPanelRef={composerPanelRef}
-          contextUsageStore={contextUsageStore}
           displaySettingsStore={displaySettingsStore}
           fileInputRef={fileInputRef}
           agentStore={agentStore}
@@ -225,7 +221,6 @@ export function AppShellAgentContent({
       <AppShellComposerController
         actionsRef={actionsRef}
         composerPanelRef={composerPanelRef}
-        contextUsageStore={contextUsageStore}
         displaySettingsStore={displaySettingsStore}
         fileInputRef={fileInputRef}
         agentStore={agentStore}

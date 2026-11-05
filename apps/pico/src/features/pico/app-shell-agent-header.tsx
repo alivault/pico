@@ -50,6 +50,14 @@ import {
   useMachines,
 } from "@/features/pico/machine-store"
 import { shortModelLabel, thinkingLabel } from "@/features/pico/model-label"
+import { emitPicoEvent } from "@/features/pico/agent/events"
+import {
+  ContextUsageQuotaDetails,
+  ContextUsageRings,
+  ContextUsageWindowDetails,
+  useContextUsageView,
+  type ComposerContextUsageStore,
+} from "@/features/pico/context-usage"
 import {
   machineHasUnreadAgents,
   useHasMachineGroups,
@@ -82,6 +90,7 @@ type AppShellAgentHeaderProps = {
   terminalPanelOpen: boolean
   loadingDisplayAgentTitle: string
   currentAgentPinned: boolean
+  contextUsageStore: ComposerContextUsageStore
   displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
   isAgentViewLoading: boolean
   newAgentProjectOptions: string[]
@@ -100,6 +109,7 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
   terminalPanelOpen,
   loadingDisplayAgentTitle,
   currentAgentPinned,
+  contextUsageStore,
   displaySettingsStore,
   isAgentViewLoading,
   newAgentProjectOptions,
@@ -125,10 +135,23 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
       modelLabel: shortModelLabel(agentState.model, agentState.availableModels),
       thinkingLevel: agentState.thinkingLevel,
       availableThinkingLevels: agentState.availableThinkingLevels,
+      modelProvider: agentState.model?.provider,
     }),
     { compare: shallowRecordEqual }
   )
   const machineReadOnly = useMachineReadOnly()
+  // The more button has the context ring around its icon.
+  const usageView = useContextUsageView({
+    activeAgentId: agentHeaderState.agentId,
+    contextUsageStore,
+    disabled: machineReadOnly,
+    modelProvider: agentHeaderState.modelProvider,
+    viewerContextId,
+  })
+  const agentMenuTitle =
+    usageView?.percent == null
+      ? "Agent menu"
+      : `Agent menu · ${usageView.displayPercent} of the context used`
   const hideToolBlocks = useSelector(
     displaySettingsStore,
     (settings) => settings.hideToolBlocks
@@ -225,16 +248,47 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
         </div>
         <div className="ml-auto flex shrink-0 flex-wrap items-center gap-1">
           <DropdownMenu>
-            <TitleTooltip title="Agent menu">
+            <TitleTooltip title={agentMenuTitle}>
               <DropdownMenuTrigger
                 render={
-                  <Button size="icon" variant="ghost" aria-label="Agent menu" />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="relative"
+                    aria-label={
+                      usageView
+                        ? `Agent menu. ${usageView.ariaLabel}`
+                        : "Agent menu"
+                    }
+                  />
                 }
               >
-                <EllipsisIcon />
+                {usageView ? (
+                  <ContextUsageRings
+                    view={usageView}
+                    className="absolute inset-0 size-full"
+                  />
+                ) : null}
+                <EllipsisIcon className={usageView ? "size-3.5" : undefined} />
               </DropdownMenuTrigger>
             </TitleTooltip>
             <DropdownMenuContent align="end" className="w-64">
+              {usageView ? (
+                <>
+                  <DropdownMenuItem
+                    className="block"
+                    onClick={() =>
+                      emitPicoEvent("pico:open-agent-settings", {
+                        page: "agent-context",
+                      })
+                    }
+                  >
+                    <ContextUsageWindowDetails view={usageView} />
+                  </DropdownMenuItem>
+                  <ContextUsageQuotaDetails view={usageView} />
+                  <DropdownMenuSeparator />
+                </>
+              ) : null}
               <DropdownMenuItem
                 disabled={machineReadOnly}
                 onClick={() => {
