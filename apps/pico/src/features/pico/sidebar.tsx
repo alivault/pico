@@ -24,7 +24,6 @@ import {
   ArchiveIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  CircleIcon,
   EllipsisVerticalIcon,
   FolderIcon,
   FolderPlusIcon,
@@ -252,32 +251,8 @@ function useAltKeyHeld() {
 const PINNED_AGENT_GROUP_COLLAPSE_KEY = "__pico_pinned_sessions__"
 // Stored name: do not change.
 const PROJECTS_AGENT_GROUP_COLLAPSE_KEY = "__pico_directories__"
-// Stored names: do not change.
-const STATUS_AGENT_GROUP_COLLAPSE_KEYS: Record<AgentStatusGroup, string> = {
-  waiting: "__pico_status_waiting__",
-  done: "__pico_status_done__",
-  working: "__pico_status_working__",
-  // The idle group is collapsed by default, so its key is set when it is
-  // open.
-  idle: "__pico_status_idle_open__",
-}
-const STATUS_AGENT_GROUP_KEYS = AGENT_STATUS_GROUPS.map(
-  (status) => STATUS_AGENT_GROUP_COLLAPSE_KEYS[status]
-)
-/** Collapse keys that are set when their group is open, not collapsed. */
-const OPEN_STATE_COLLAPSE_KEYS = new Set([
-  STATUS_AGENT_GROUP_COLLAPSE_KEYS.idle,
-])
-
-function isStoredCollapsed(state: CollapsedProjectState, key: string) {
-  const stored = Boolean(state[key])
-  return OPEN_STATE_COLLAPSE_KEYS.has(key) ? !stored : stored
-}
-
-/** The stored value of a key for a collapsed state (see above). */
-function storedCollapseValue(key: string, collapsed: boolean) {
-  return OPEN_STATE_COLLAPSE_KEYS.has(key) ? !collapsed : collapsed
-}
+// The state groups do not collapse.
+const NO_GROUP_COLLAPSE_KEYS: Array<string> = []
 
 function isMacPlatform() {
   if (typeof window === "undefined") return false
@@ -462,14 +437,13 @@ function createCollapsedProjectStore(
       setStoreState(store, readStoredCollapsedProjects(machineId, storageKey))
     },
     toggle(project) {
-      store.setCollapsed(project, !isStoredCollapsed(store.state, project))
+      store.setCollapsed(project, !store.state[project])
     },
     setCollapsed(project, collapsed) {
-      const stored = storedCollapseValue(project, collapsed)
       setStoreState(store, (current) => {
-        if (Boolean(current[project]) === stored) return current
+        if (Boolean(current[project]) === collapsed) return current
         const next = { ...current }
-        if (stored) {
+        if (collapsed) {
           next[project] = true
         } else {
           delete next[project]
@@ -484,7 +458,7 @@ function createCollapsedProjectStore(
         const next = { ...current }
 
         for (const project of projects) {
-          if (storedCollapseValue(project, collapsed)) {
+          if (collapsed) {
             if (next[project]) continue
             next[project] = true
             changed = true
@@ -522,7 +496,7 @@ function useProjectCollapsed(
   searchActive: boolean
 ) {
   return useSelector(store, (collapsedProjects) =>
-    searchActive ? false : isStoredCollapsed(collapsedProjects, project)
+    searchActive ? false : Boolean(collapsedProjects[project])
   )
 }
 
@@ -2226,44 +2200,8 @@ function PinnedAgentGroup({
   )
 }
 
-const STATUS_GROUP_LABELS: Record<AgentStatusGroup, string> = {
-  waiting: "Needs input",
-  done: "Done",
-  working: "Working",
-  idle: "Idle",
-}
-
-/** The icon of a state group, with the same marks as the agent rows. */
-function StatusGroupIcon({ status }: { status: AgentStatusGroup }) {
-  switch (status) {
-    case "waiting":
-      return (
-        <MessageCircleQuestionIcon className="size-4 shrink-0 text-amber-500" />
-      )
-    case "done":
-      return (
-        <span className="flex size-4 shrink-0 items-center justify-center">
-          <span className="size-2 rounded-full bg-primary" />
-        </span>
-      )
-    case "working":
-      return (
-        <span className="flex size-4 shrink-0 items-center justify-center">
-          <Spinner size="xs" />
-        </span>
-      )
-    case "idle":
-      return (
-        <CircleIcon className="size-4 shrink-0 text-sidebar-foreground/50" />
-      )
-  }
-}
-
 type StatusAgentGroupsProps = {
   projectAgentsStore: ProjectAgentsStore
-  collapsedProjectStore: CollapsedProjectStore
-  /** The groups that an Option-click expands or collapses together. */
-  collapseAllKeys: Array<string>
   searchActive: boolean
   moveTargetProjects: Array<string>
   activeAgentStore: ActiveSidebarAgentStore
@@ -2278,12 +2216,13 @@ type StatusAgentGroupsProps = {
   onMoveAgent?: (entry: AgentListEntry, project: string) => void
   onMoveAgentAnyProject?: (entry: AgentListEntry) => void
   onTogglePinnedAgent?: (entry: AgentListEntry) => void
-  onMarkAgentsRead?: (entries: Array<AgentListEntry>) => void
 }
 
 /**
- * The agents of all projects in groups by their state, when the sidebar
- * groups by state. Groups without unpinned agents do not show.
+ * The agents of all projects in the order of their state, when the sidebar
+ * groups by state: needs input, done, working, then idle. The status icon
+ * of each row shows its state, so the groups have no headers. Only the
+ * first idle agents show, with "Show N more".
  */
 function StatusAgentGroups(props: StatusAgentGroupsProps) {
   const { projectAgentsStore, pinnedAgentKeys, searchActive } = props
@@ -2347,8 +2286,6 @@ function StatusAgentGroups(props: StatusAgentGroupsProps) {
 const StatusAgentGroup = React.memo(function StatusAgentGroup({
   status,
   projectAgentsStore,
-  collapsedProjectStore,
-  collapseAllKeys,
   searchActive,
   moveTargetProjects,
   activeAgentStore,
@@ -2363,10 +2300,9 @@ const StatusAgentGroup = React.memo(function StatusAgentGroup({
   onMoveAgent,
   onMoveAgentAnyProject,
   onTogglePinnedAgent,
-  onMarkAgentsRead,
 }: StatusAgentGroupsProps & { status: AgentStatusGroup }) {
-  const collapseKey = STATUS_AGENT_GROUP_COLLAPSE_KEYS[status]
-  const label = STATUS_GROUP_LABELS[status]
+  // Only the idle agents can be many, so only they show a part at a time.
+  const limited = status === "idle" && !searchActive
   const [renderCount, setRenderCount] = React.useState(
     INITIAL_PROJECT_AGENT_RENDER_COUNT
   )
@@ -2374,11 +2310,6 @@ const StatusAgentGroup = React.memo(function StatusAgentGroup({
     projectAgentsStore,
     (state) => state.agentKeysByStatus[status],
     { compare: projectOrderEqual }
-  )
-  const collapsed = useProjectCollapsed(
-    collapsedProjectStore,
-    collapseKey,
-    searchActive
   )
   const altKeyHeld = useAltKeyHeld()
   const pinnedAgentKeySet = usePinnedAgentTreeKeys(
@@ -2396,149 +2327,77 @@ const StatusAgentGroup = React.memo(function StatusAgentGroup({
         (entryKey) => !state.contextKeysByStatus[status].has(entryKey)
       ).length
   )
-  const visibleCount = searchActive
-    ? unpinnedAgentKeys.length
-    : Math.min(unpinnedAgentKeys.length, renderCount)
+  const visibleCount = limited
+    ? Math.min(unpinnedAgentKeys.length, renderCount)
+    : unpinnedAgentKeys.length
   const visibleAgentKeys = unpinnedAgentKeys.slice(0, visibleCount)
   const hasMoreAgents = visibleCount < unpinnedAgentKeys.length
   // Holding Option turns "Show N more" into "Show less".
   const showLess =
-    altKeyHeld &&
-    !searchActive &&
-    visibleCount > INITIAL_PROJECT_AGENT_RENDER_COUNT
+    altKeyHeld && limited && visibleCount > INITIAL_PROJECT_AGENT_RENDER_COUNT
 
   if (memberCount === 0) return null
 
-  const markAgentsRead = () => {
-    const state = projectAgentsStore.state
-    const entries = state.agentKeysByStatus[status].flatMap((entryKey) => {
-      if (state.contextKeysByStatus[status].has(entryKey)) return []
-      const entry = state.entriesByKey.get(entryKey)
-      return entry?.unread && entry.path ? [entry] : []
-    })
-    onMarkAgentsRead?.(entries)
-  }
-
-  // Same header shape as a project, so the icon sits on the sidebar icon
-  // column and the line starts under it.
-  const header = (
-    <div className="flex h-(--sidebar-item-size) items-center gap-2 rounded-lg pr-(--sidebar-item-pad) pl-(--sidebar-item-pad)">
-      <CollapsibleTrigger
-        type="button"
-        className="group/status-label flex min-w-0 flex-1 cursor-default items-center gap-2 text-left text-sm text-sidebar-foreground"
-        disabled={searchActive}
-      >
-        <StatusGroupIcon status={status} />
-        <span className="min-w-0 truncate">{label}</span>
-        {!searchActive ? (
-          collapsed ? (
-            <ChevronRightIcon className="size-4 shrink-0 opacity-0 transition-opacity group-hover/status-label:opacity-100 group-focus-visible/status-label:opacity-100" />
-          ) : (
-            <ChevronDownIcon className="size-4 shrink-0 opacity-0 transition-opacity group-hover/status-label:opacity-100 group-focus-visible/status-label:opacity-100" />
-          )
-        ) : null}
-      </CollapsibleTrigger>
-      <span className="shrink-0 text-[11px] text-sidebar-foreground/50 tabular-nums">
-        {memberCount}
-      </span>
-    </div>
-  )
-
   return (
-    <Collapsible
-      data-sidebar-agent-group=""
-      open={!collapsed}
-      onOpenChange={(open, details) => {
-        if (searchActive) return
-        if (isAltChange(details)) {
-          collapsedProjectStore.setAll(collapseAllKeys, !open)
-          return
-        }
-        collapsedProjectStore.setCollapsed(collapseKey, !open)
-      }}
-      className="rounded-lg py-1"
-    >
-      <SidebarGroup className="px-0 py-0">
-        {status === "done" && onMarkAgentsRead && !isMobile ? (
-          <ContextMenu>
-            <ContextMenuTrigger render={header} />
-            <ContextMenuContent className="w-48">
-              <ContextMenuItem onClick={markAgentsRead}>
-                Mark all as read
-              </ContextMenuItem>
-            </ContextMenuContent>
-          </ContextMenu>
-        ) : (
-          header
-        )}
-        <CollapsibleContent>
-          <SidebarGroupContent>
-            {/* The group's line runs down its agents and "Show more". */}
-            <div className="relative flex flex-col">
-              <SidebarTreeLine level={0} />
-              <SidebarMenu>
-                {visibleAgentKeys.map((entryKey) => (
-                  <SidebarAgentItem
-                    key={entryKey}
-                    entryKey={entryKey}
-                    inProject
-                    showProjectLabel
-                    projectAgentsStore={projectAgentsStore}
-                    activeAgentStore={activeAgentStore}
-                    selectedAgentKeyStore={selectedAgentKeyStore}
-                    isPinned={false}
-                    isMobile={isMobile}
-                    overlay={false}
-                    // No project groups show, so there is no drop target.
-                    agentDraggable={false}
-                    moveTargetProjects={moveTargetProjects}
-                    setOpenMobile={setOpenMobile}
-                    onAgentClick={onAgentClick}
-                    onRenameAgent={onRenameAgent}
-                    onDeleteAgent={onDeleteAgent}
-                    onSetAgentUnread={onSetAgentUnread}
-                    onMoveAgent={onMoveAgent}
-                    onMoveAgentAnyProject={onMoveAgentAnyProject}
-                    onTogglePinnedAgent={onTogglePinnedAgent}
-                  />
-                ))}
-              </SidebarMenu>
+    <div data-sidebar-agent-group="" className="flex flex-col">
+      <SidebarMenu>
+        {visibleAgentKeys.map((entryKey) => (
+          <SidebarAgentItem
+            key={entryKey}
+            entryKey={entryKey}
+            showProjectLabel
+            projectAgentsStore={projectAgentsStore}
+            activeAgentStore={activeAgentStore}
+            selectedAgentKeyStore={selectedAgentKeyStore}
+            isPinned={false}
+            isMobile={isMobile}
+            overlay={false}
+            // No project groups show, so there is no drop target.
+            agentDraggable={false}
+            moveTargetProjects={moveTargetProjects}
+            setOpenMobile={setOpenMobile}
+            onAgentClick={onAgentClick}
+            onRenameAgent={onRenameAgent}
+            onDeleteAgent={onDeleteAgent}
+            onSetAgentUnread={onSetAgentUnread}
+            onMoveAgent={onMoveAgent}
+            onMoveAgentAnyProject={onMoveAgentAnyProject}
+            onTogglePinnedAgent={onTogglePinnedAgent}
+          />
+        ))}
+      </SidebarMenu>
 
-              {hasMoreAgents || showLess ? (
-                <div
-                  className="flex flex-col"
-                  style={agentTreeStyle(1) as React.CSSProperties}
-                >
-                  <Button
-                    variant="ghost"
-                    className="h-8 justify-start pl-(--agent-text-left) text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-                    onClick={() => {
-                      if (showLess) {
-                        setRenderCount(INITIAL_PROJECT_AGENT_RENDER_COUNT)
-                        return
-                      }
-                      setRenderCount((current) =>
-                        Math.min(
-                          unpinnedAgentKeys.length,
-                          current + PROJECT_AGENT_LOAD_MORE_COUNT
-                        )
-                      )
-                    }}
-                  >
-                    {showLess
-                      ? "Show less"
-                      : `Show ${Math.min(
-                          PROJECT_AGENT_LOAD_MORE_COUNT,
-                          unpinnedAgentKeys.length - visibleCount
-                        )} more`}
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-          </SidebarGroupContent>
-        </CollapsibleContent>
-      </SidebarGroup>
-    </Collapsible>
+      {hasMoreAgents || showLess ? (
+        <div
+          className="flex flex-col"
+          style={agentTreeStyle(0) as React.CSSProperties}
+        >
+          <Button
+            variant="ghost"
+            className="h-8 justify-start pl-(--agent-text-left) text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+            onClick={() => {
+              if (showLess) {
+                setRenderCount(INITIAL_PROJECT_AGENT_RENDER_COUNT)
+                return
+              }
+              setRenderCount((current) =>
+                Math.min(
+                  unpinnedAgentKeys.length,
+                  current + PROJECT_AGENT_LOAD_MORE_COUNT
+                )
+              )
+            }}
+          >
+            {showLess
+              ? "Show less"
+              : `Show ${Math.min(
+                  PROJECT_AGENT_LOAD_MORE_COUNT,
+                  unpinnedAgentKeys.length - visibleCount
+                )} more`}
+          </Button>
+        </div>
+      ) : null}
+    </div>
   )
 })
 
@@ -2864,7 +2723,7 @@ export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
   const collapseAllKeys = React.useMemo(
     () => [
       PINNED_AGENT_GROUP_COLLAPSE_KEY,
-      ...(groupByStatus ? STATUS_AGENT_GROUP_KEYS : grouped.projects),
+      ...(groupByStatus ? [] : grouped.projects),
     ],
     [groupByStatus, grouped.projects]
   )
@@ -2979,8 +2838,6 @@ export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
       {groupByStatus ? (
         <StatusAgentGroups
           projectAgentsStore={stores.agents}
-          collapsedProjectStore={stores.collapsed}
-          collapseAllKeys={collapseAllKeys}
           searchActive={Boolean(statusFilter)}
           moveTargetProjects={NO_MOVE_TARGET_PROJECTS}
           activeAgentStore={stores.active}
@@ -3105,10 +2962,10 @@ function useAppSidebarView({
     PROJECTS_AGENT_GROUP_COLLAPSE_KEY,
     searchActive
   )
-  // An Option-click on the pinned group, a project, or a state group
-  // expands or collapses all of them.
+  // An Option-click on the pinned group or a project expands or collapses
+  // all of them.
   const groupCollapseKeys = groupByStatus
-    ? STATUS_AGENT_GROUP_KEYS
+    ? NO_GROUP_COLLAPSE_KEYS
     : visibleProjects
   const collapseAllKeys = React.useMemo(
     () => [PINNED_AGENT_GROUP_COLLAPSE_KEY, ...groupCollapseKeys],
@@ -3422,8 +3279,6 @@ function useAppSidebarView({
                         ) : groupByStatus ? (
                           <StatusAgentGroups
                             projectAgentsStore={projectAgentsStore}
-                            collapsedProjectStore={collapsedProjectStore}
-                            collapseAllKeys={collapseAllKeys}
                             searchActive={listFiltered}
                             moveTargetProjects={visibleProjects}
                             activeAgentStore={activeAgentStore}
@@ -3438,7 +3293,6 @@ function useAppSidebarView({
                             onMoveAgent={onMoveAgent}
                             onMoveAgentAnyProject={onMoveAgentAnyProject}
                             onTogglePinnedAgent={onTogglePinnedAgent}
-                            onMarkAgentsRead={onMarkAgentsRead}
                           />
                         ) : (
                           <SortableContext
