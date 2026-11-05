@@ -910,7 +910,26 @@ export const ComposerPendingMessages = React.memo(
                     </TitleTooltip>
                   </div>
 
-                  {items.length === 0 ? null : (
+                  {items.length === 0 ? (
+                    // An empty lane: a click adds a prompt to it.
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-1.5 rounded-lg px-1 py-0.5 text-left text-sm text-muted-foreground hover:bg-foreground/5"
+                      onMouseDown={keepFocus}
+                      onClick={() => append(lane.lane)}
+                    >
+                      {isMobile ? null : (
+                        <span aria-hidden="true" className="w-3.5 shrink-0" />
+                      )}
+                      <PlusIcon
+                        aria-hidden="true"
+                        className={cn("size-3.5 shrink-0", lane.titleClassName)}
+                      />
+                      <span className="truncate leading-6 italic">
+                        Click to add a {lane.title.toLowerCase()}
+                      </span>
+                    </button>
+                  ) : (
                     <SortableContext
                       items={items.map((row) => row.key)}
                       strategy={verticalListSortingStrategy}
