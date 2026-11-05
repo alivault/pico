@@ -47,7 +47,6 @@ import {
 import { useHasMachineGroups } from "@/features/pico/machines"
 import { openMachine } from "@/lib/pico/machine"
 import { NewAgentWorktreeToggle } from "@/features/pico/agent/worktree-toggle"
-import { ProfilePicker } from "@/features/pico/agent/profiles"
 import {
   ComposerPanel,
   type ComposerPanelHandle,
@@ -473,8 +472,6 @@ export function NewAgentComposerSelectors({
         />
       ) : null}
 
-      <ProfilePicker cwd={selectedProject} viewerContextId={viewerContextId} />
-
       <Dialog
         open={createBranchOpen}
         onOpenChange={(open) => {
@@ -605,14 +602,6 @@ export const AppShellComposerController = React.memo(
         void actionsRef.current.runBuiltinSlashCommand(name, args)
       }
     )
-    const onSelectModel = useStableEvent((value: string) => {
-      if (snapshotRef.current.disabled) return
-      void actionsRef.current.setModel(value)
-    })
-    const onSelectThinkingLevel = useStableEvent((level: string) => {
-      if (snapshotRef.current.disabled) return
-      void actionsRef.current.setThinkingLevel(level)
-    })
     const requestPathCompletions = useStableEvent(async (prefix: string) => {
       const currentSnapshot = snapshotRef.current
       if (currentSnapshot.disabled) return []
@@ -686,8 +675,6 @@ export const AppShellComposerController = React.memo(
         onHoldPendingQueue={onHoldPendingQueue}
         onStartPendingQueue={onStartPendingQueue}
         onRunBuiltinSlashCommand={onRunBuiltinSlashCommand}
-        onSelectModel={onSelectModel}
-        onSelectThinkingLevel={onSelectThinkingLevel}
         requestPathCompletions={requestPathCompletions}
         requestFileCompletions={requestFileCompletions}
       />

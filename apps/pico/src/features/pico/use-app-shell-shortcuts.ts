@@ -66,6 +66,7 @@ type UseAppShellShortcutsOptions = {
   deleteOpenRef: React.RefObject<boolean>
   forkOpenRef: React.RefObject<boolean>
   gitCommitOpenRef: React.RefObject<boolean>
+  modelOpenRef: React.RefObject<boolean>
   moveAgentProjectOpenRef: React.RefObject<boolean>
   pendingUiRequestOpenRef: React.RefObject<boolean>
   renameOpenRef: React.RefObject<boolean>
@@ -182,6 +183,7 @@ export function useAppShellShortcuts({
   deleteOpenRef,
   forkOpenRef,
   gitCommitOpenRef,
+  modelOpenRef,
   moveAgentProjectOpenRef,
   pendingUiRequestOpenRef,
   renameOpenRef,
@@ -203,6 +205,7 @@ export function useAppShellShortcuts({
       deleteOpenRef.current ||
       forkOpenRef.current ||
       gitCommitOpenRef.current ||
+      modelOpenRef.current ||
       moveAgentProjectOpenRef.current ||
       treeOpenRef.current ||
       agentsOpenRef.current ||

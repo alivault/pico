@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "@/lib/pico/toast"
+import { thinkingLabel } from "@/features/pico/model-label"
 
 import type { AgentState } from "@/lib/pico"
 import type {
@@ -529,6 +530,11 @@ export function useAppShellAgentMutations({
       const nextLevel =
         levels[(safeIndex + direction + levels.length) % levels.length] ||
         levels[0]
+      // The level is not on the screen, so say what it is now.
+      toast(`Reasoning: ${thinkingLabel(nextLevel)}`, {
+        id: "reasoning-level",
+        duration: 1500,
+      })
       await setThinkingLevel(nextLevel)
     },
     [agentStateRef, setThinkingLevel]

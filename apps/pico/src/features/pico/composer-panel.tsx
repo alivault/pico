@@ -36,12 +36,14 @@ import {
   type ComposerPendingMessagesHandle,
 } from "@/features/pico/composer-pending-messages"
 import type { PendingQueueSaveRow } from "@/features/pico/pending-queue"
-import { ComposerPickers } from "@/features/pico/composer-pickers"
 import {
   appShortcut,
   matchesShortcutEvent,
 } from "@/features/pico/keyboard-shortcuts"
-import type { ComposerContextUsageStore } from "@/features/pico/composer-context-usage-indicator"
+import {
+  ComposerContextUsageIndicator,
+  type ComposerContextUsageStore,
+} from "@/features/pico/composer-context-usage-indicator"
 import {
   formatComposerLineCommentReference,
   formatComposerSkillName,
@@ -64,8 +66,6 @@ type PendingComposerMessage = {
 
 export type ComposerPanelHandle = {
   focusPrompt: (options?: FocusOptions) => void
-  openModelPicker: () => void
-  openThinkingPicker: () => void
   /** Alt+Q: edit the queue. False when there is nothing to edit. */
   editQueue: () => boolean
   /** Shift+Alt+Q: show or hide the queue. False when it cannot. */
@@ -118,8 +118,6 @@ type ComposerPanelProps = {
   onHoldPendingQueue: () => Promise<(() => void) | null>
   onStartPendingQueue: () => void
   onRunBuiltinSlashCommand: (name: string, args: string) => void
-  onSelectModel: (value: string) => void
-  onSelectThinkingLevel: (level: string) => void
   requestPathCompletions: (prefix: string) => Promise<Array<CompletionItem>>
   requestFileCompletions: (
     query: string,
@@ -134,6 +132,9 @@ type ComposerAttachmentsProps = {
 }
 
 type ComposerPromptEditorProps = {
+  activeAgentId?: string
+  contextUsageStore: ComposerContextUsageStore
+  viewerContextId: string
   composerLineComments: Array<ComposerLineComment>
   composerImages: Array<PromptImage>
   composerText: string
@@ -293,60 +294,35 @@ function useComposerSlashCommands({
   )
 }
 
-type ComposerPickerState = {
-  modelPickerOpen: boolean
-  thinkingPickerOpen: boolean
-  modelQuery: string
-}
+/** The context ring. It shows the provider usage of the agent's model. */
+const ComposerContextUsage = React.memo(function ComposerContextUsage({
+  activeAgentId,
+  contextUsageStore,
+  disabled,
+  agentStore,
+  viewerContextId,
+}: {
+  activeAgentId?: string
+  contextUsageStore: ComposerContextUsageStore
+  disabled: boolean
+  agentStore: ComposerAgentStore
+  viewerContextId: string
+}) {
+  const modelProvider = useSelector(
+    agentStore,
+    (agentState) => agentState.model?.provider
+  )
 
-type ComposerPickerAction =
-  | { type: "openModel" }
-  | { type: "openThinking" }
-  | { type: "setModelOpen"; open: boolean }
-  | { type: "setThinkingOpen"; open: boolean }
-  | { type: "setModelQuery"; query: string }
-  | { type: "syncDisabled"; disabled: boolean }
-
-const INITIAL_COMPOSER_PICKER_STATE: ComposerPickerState = {
-  modelPickerOpen: false,
-  thinkingPickerOpen: false,
-  modelQuery: "",
-}
-
-function composerPickerReducer(
-  state: ComposerPickerState,
-  action: ComposerPickerAction
-): ComposerPickerState {
-  switch (action.type) {
-    case "openModel":
-      return { ...state, modelPickerOpen: true, thinkingPickerOpen: false }
-    case "openThinking":
-      return { ...state, modelPickerOpen: false, thinkingPickerOpen: true }
-    case "setModelOpen":
-      return {
-        ...state,
-        modelPickerOpen: action.open,
-        modelQuery: action.open ? state.modelQuery : "",
-      }
-    case "setThinkingOpen":
-      return { ...state, thinkingPickerOpen: action.open }
-    case "setModelQuery":
-      return { ...state, modelQuery: action.query }
-    case "syncDisabled":
-      if (action.disabled) {
-        return {
-          ...state,
-          modelPickerOpen: false,
-          thinkingPickerOpen: false,
-          modelQuery: "",
-        }
-      }
-      if (!state.modelPickerOpen && state.modelQuery) {
-        return { ...state, modelQuery: "" }
-      }
-      return state
-  }
-}
+  return (
+    <ComposerContextUsageIndicator
+      activeAgentId={activeAgentId}
+      contextUsageStore={contextUsageStore}
+      disabled={disabled}
+      modelProvider={modelProvider}
+      viewerContextId={viewerContextId}
+    />
+  )
+})
 
 export function ComposerPanel({
   activeAgentId,
@@ -380,8 +356,6 @@ export function ComposerPanel({
   onHoldPendingQueue,
   onStartPendingQueue,
   onRunBuiltinSlashCommand,
-  onSelectModel,
-  onSelectThinkingLevel,
   requestPathCompletions,
   requestFileCompletions,
   ref,
@@ -393,33 +367,17 @@ export function ComposerPanel({
   const focusPrompt = React.useCallback(() => {
     promptRef.current?.focus()
   }, [])
-  const [pickerState, dispatchPickerState] = React.useReducer(
-    composerPickerReducer,
-    INITIAL_COMPOSER_PICKER_STATE
-  )
-  const { modelPickerOpen, thinkingPickerOpen, modelQuery } = pickerState
-
   React.useImperativeHandle(
     ref,
     () => ({
       focusPrompt: (options) => {
         promptRef.current?.focus(options)
       },
-      openModelPicker: () => {
-        dispatchPickerState({ type: "openModel" })
-      },
-      openThinkingPicker: () => {
-        dispatchPickerState({ type: "openThinking" })
-      },
       editQueue: () => queueRef.current?.beginEditing() ?? false,
       toggleQueue: () => queueRef.current?.toggleCollapsed() ?? false,
     }),
     []
   )
-
-  React.useEffect(() => {
-    dispatchPickerState({ type: "syncDisabled", disabled })
-  }, [disabled, modelPickerOpen])
 
   const composerColumnClassName =
     centerMessages || flush
@@ -448,6 +406,9 @@ export function ComposerPanel({
 
         <div className="overflow-visible rounded-[18px] border bg-card">
           <ComposerPromptEditor
+            activeAgentId={activeAgentId}
+            contextUsageStore={contextUsageStore}
+            viewerContextId={viewerContextId}
             composerLineComments={composerLineComments}
             composerImages={composerImages}
             composerText={composerText}
@@ -472,28 +433,6 @@ export function ComposerPanel({
             onRunBuiltinSlashCommand={onRunBuiltinSlashCommand}
             requestPathCompletions={requestPathCompletions}
             requestFileCompletions={requestFileCompletions}
-          />
-
-          <ComposerPickers
-            activeAgentId={activeAgentId}
-            modelPickerOpen={modelPickerOpen}
-            onModelPickerOpenChange={(open) =>
-              dispatchPickerState({ type: "setModelOpen", open })
-            }
-            thinkingPickerOpen={thinkingPickerOpen}
-            onThinkingPickerOpenChange={(open) =>
-              dispatchPickerState({ type: "setThinkingOpen", open })
-            }
-            modelQuery={modelQuery}
-            onModelQueryChange={(query) =>
-              dispatchPickerState({ type: "setModelQuery", query })
-            }
-            contextUsageStore={contextUsageStore}
-            agentStore={agentStore}
-            disabled={disabled}
-            viewerContextId={viewerContextId}
-            onSelectModel={onSelectModel}
-            onSelectThinkingLevel={onSelectThinkingLevel}
           />
         </div>
       </div>
@@ -556,6 +495,9 @@ const ComposerAttachments = React.memo(function ComposerAttachments({
 })
 
 const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
+  activeAgentId,
+  contextUsageStore,
+  viewerContextId,
   composerLineComments,
   composerImages,
   composerText,
@@ -1050,7 +992,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
     <div
       role="presentation"
       data-expanded={expanded ? "true" : "false"}
-      className={`relative grid cursor-text grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 overflow-visible rounded-t-[18px] border-b border-border/70 bg-card ${
+      className={`relative grid cursor-text grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 overflow-visible rounded-[18px] bg-card ${
         expanded ? "gap-y-2 px-2 pt-3 pb-2" : "p-2"
       }`}
       style={{ gridTemplateAreas }}
@@ -1181,6 +1123,14 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
         className="flex flex-nowrap items-center justify-end gap-2 self-end"
         style={{ gridArea: "trailing" }}
       >
+        <ComposerContextUsage
+          activeAgentId={activeAgentId}
+          contextUsageStore={contextUsageStore}
+          disabled={disabled}
+          agentStore={agentStore}
+          viewerContextId={viewerContextId}
+        />
+
         {!acceptFollowUps ? (
           <TitleTooltip
             title="Send"

@@ -2,7 +2,6 @@ import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   CheckIcon,
-  ChevronDownIcon,
   EyeIcon,
   HammerIcon,
   ScanSearchIcon,
@@ -13,17 +12,12 @@ import {
 } from "lucide-react"
 import { toast } from "@/lib/pico/toast"
 
-import { Button } from "@/components/ui/button"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { TitleTooltip } from "@/components/ui/tooltip"
 import { agentExtensionsQueryKey } from "@/features/pico/agent/agent-extensions"
 import { errorText } from "@/features/pico/agent/shared"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
@@ -158,43 +152,6 @@ function ProfileMenuItems({
       ) : null}
     </DropdownMenuItem>
   ))
-}
-
-/** A dropdown that sets the tool profile of an agent or of the new-agent draft. */
-function ProfilePickerView({
-  variant = "ghost",
-  ...target
-}: ProfileTarget & { variant?: "ghost" | "outline" }) {
-  const { data, mutation } = useProfileSelection(target)
-  if (!data) return null
-  const current = data.current
-  return (
-    <DropdownMenu>
-      <TitleTooltip title="Tool profile: which tools the agent can use">
-        <DropdownMenuTrigger
-          render={
-            <Button
-              type="button"
-              variant={variant}
-              size={variant === "outline" ? "sm" : "default"}
-              aria-label="Tool profile"
-              disabled={mutation.isPending}
-            />
-          }
-        >
-          <ProfileIcon name={current} />
-          <span className="truncate">{profileLabel(current)}</span>
-          <ChevronDownIcon className="size-4 shrink-0" aria-hidden="true" />
-        </DropdownMenuTrigger>
-      </TitleTooltip>
-      <DropdownMenuContent align="start" className="w-80">
-        <ProfileMenuItems
-          data={data}
-          onSelect={(name) => mutation.mutate(name)}
-        />
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
 }
 
 /** A submenu that sets the tool profile, for a menu such as the agent menu. */
@@ -354,14 +311,6 @@ registerSettingsPage({
   key: "agent-profiles-edit",
   Component: EditProfilesPage,
 })
-
-/** Hidden when the server of the page does not have the feature. */
-export function ProfilePicker(
-  props: React.ComponentProps<typeof ProfilePickerView>
-) {
-  const available = useMachineFeature("tool-profiles")
-  return available ? <ProfilePickerView {...props} /> : null
-}
 
 /** Hidden when the server of the page does not have the feature. */
 export function ProfileMenuSub(

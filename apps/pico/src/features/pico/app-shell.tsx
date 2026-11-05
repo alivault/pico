@@ -24,6 +24,10 @@ import { AppShellSidebarController } from "@/features/pico/app-shell-sidebar-con
 import { AppShellWindowEffectsHost } from "@/features/pico/app-shell-window-effects"
 import type { AppShellAddProjectDialogHandle } from "@/features/pico/app-shell-add-project-dialog"
 import type { AppShellAuthDialogHandle } from "@/features/pico/app-shell-auth-dialog"
+import {
+  AppShellModelDialog,
+  type AppShellModelDialogHandle,
+} from "@/features/pico/app-shell-model-dialog"
 import type {
   AppCommand,
   AppShellCommandPaletteHandle,
@@ -785,6 +789,8 @@ function useAppShellAgentWorkspaceView({
   const settingsOpenRef = React.useRef(false)
   const authDialogRef = React.useRef<AppShellAuthDialogHandle | null>(null)
   const authOpenRef = React.useRef(false)
+  const modelDialogRef = React.useRef<AppShellModelDialogHandle | null>(null)
+  const modelOpenRef = React.useRef(false)
   const uiRequestDialogRef = React.useRef<AppShellUiRequestDialogHandle | null>(
     null
   )
@@ -1895,7 +1901,7 @@ function useAppShellAgentWorkspaceView({
   }
 
   const focusModelSelector = () => {
-    composerPanelRef.current?.openModelPicker()
+    modelDialogRef.current?.open()
   }
   const focusPromptRef = useLatestRef(focusPrompt)
   const promptFocusAfterDialogCloseTimeoutRef = React.useRef<number | null>(
@@ -1911,6 +1917,7 @@ function useAppShellAgentWorkspaceView({
       deleteOpenRef.current ||
       forkOpenRef.current ||
       gitCommitOpenRef.current ||
+      modelOpenRef.current ||
       renameOpenRef.current ||
       agentsOpenRef.current ||
       settingsOpenRef.current ||
@@ -3315,8 +3322,6 @@ function useAppShellAgentWorkspaceView({
     savePendingQueue,
     startPendingQueue,
     runBuiltinSlashCommand,
-    setModel,
-    setThinkingLevel,
     submitPrompt,
     syncComposerDraft,
     moveDraftToMachine: (targetMachine, project) => {
@@ -3745,10 +3750,12 @@ function useAppShellAgentWorkspaceView({
     onMoveCurrentAgent: moveCurrentAgentToProject,
     onMoveCurrentAgentToAnyProject: openMoveAgentProjectDialogForCurrentAgent,
     onOpenCommandPalette: openCommandPalette,
+    onOpenModelDialog: focusModelSelector,
     onOpenRightSidebarTab: openRightSidebarTab,
     onOpenSettings: openSettingsDialog,
     onRenameAgent: openRenameDialog,
     onRunCompact: runCompact,
+    onSelectThinkingLevel: setThinkingLevel,
     onToggleCurrentAgentPinned: toggleCurrentAgentPinned,
     onToggleHideThinking: toggleHideThinking,
     onToggleHideToolBlocks: toggleHideToolBlocks,
@@ -3762,6 +3769,7 @@ function useAppShellAgentWorkspaceView({
     deleteOpenRef,
     forkOpenRef,
     gitCommitOpenRef,
+    modelOpenRef,
     moveAgentProjectOpenRef,
     pendingUiRequestOpenRef: uiRequestOpenRef,
     renameOpenRef,
@@ -3991,6 +3999,15 @@ function useAppShellAgentWorkspaceView({
         uiRequestDialogRef={uiRequestDialogRef}
         uiRequestOpenRef={uiRequestOpenRef}
         viewerContextId={viewerContextId}
+      />
+
+      <AppShellModelDialog
+        ref={modelDialogRef}
+        agentStore={agentStore}
+        openRef={modelOpenRef}
+        onSelectModel={(value) => {
+          void setModel(value)
+        }}
       />
     </FileLineCommentsProvider>
   )
