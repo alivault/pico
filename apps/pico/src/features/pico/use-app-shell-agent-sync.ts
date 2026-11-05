@@ -59,6 +59,8 @@ import {
 } from "@/lib/pico/server-connection"
 
 const RESUME_RECONNECT_AFTER_MS = 30_000
+const EVENTS_RECONNECT_DELAYS_MS = [1000, 2000, 5000, 10_000]
+const SELECT_RETRY_DELAYS_MS = [1000, 2000, 5000, 10_000]
 const COMPACT_WORKING_LABEL = "Compacting context..."
 const EVENT_SOURCE_LAST_ID_STORAGE_PREFIX = "pico-events-last-id:"
 
@@ -604,6 +606,12 @@ export function useAppShellAgentSync({
   const backgroundedAtRef = React.useRef<number | null>(null)
   const wasBackgroundedRef = React.useRef(false)
   const [eventsReconnectNonce, setEventsReconnectNonce] = React.useState(0)
+  const eventsReconnectTimerRef = React.useRef<
+    ReturnType<typeof setTimeout> | undefined
+  >(undefined)
+  const eventsReconnectAttemptRef = React.useRef(0)
+  const [selectRetryNonce, setSelectRetryNonce] = React.useState(0)
+  const selectFailuresRef = React.useRef(0)
 
   React.useEffect(() => {
     currentAgentIdRef.current = agentId
@@ -754,6 +762,7 @@ export function useAppShellAgentSync({
   const handleEventSourceOpen = React.useCallback(
     (source: EventSource) => {
       if (currentSourceRef.current !== source) return
+      eventsReconnectAttemptRef.current = 0
       markServerOnline()
       // Events may be lost while the stream was closed.
       refreshSidebarState(machineId)
@@ -771,6 +780,25 @@ export function useAppShellAgentSync({
     (source: EventSource) => {
       if (currentSourceRef.current !== source) return
       checkServerConnection()
+      // Do not let the browser reconnect by itself: it uses the first URL,
+      // and the agent in that URL is the agent the stream opened with. The
+      // server then selects that old agent again, and a later selection is
+      // lost. Open a new stream with the agent the route shows now.
+      source.close()
+      currentSourceRef.current = null
+      if (eventsReconnectTimerRef.current === undefined) {
+        const attempt = eventsReconnectAttemptRef.current
+        eventsReconnectAttemptRef.current = attempt + 1
+        const delay =
+          EVENTS_RECONNECT_DELAYS_MS[
+            Math.min(attempt, EVENTS_RECONNECT_DELAYS_MS.length - 1)
+          ]
+        eventsReconnectTimerRef.current = setTimeout(() => {
+          eventsReconnectTimerRef.current = undefined
+          initialEventsAgentIdRef.current = currentAgentIdRef.current
+          setEventsReconnectNonce((nonce) => nonce + 1)
+        }, delay)
+      }
       const currentState = agentStateRef.current
       if (!currentState.connected) return
       const nextState = { ...currentState, connected: false }
@@ -1136,6 +1164,10 @@ export function useAppShellAgentSync({
   React.useEffect(() => {
     if (!viewerContextId) return
 
+    if (eventsReconnectTimerRef.current !== undefined) {
+      clearTimeout(eventsReconnectTimerRef.current)
+      eventsReconnectTimerRef.current = undefined
+    }
     hasReceivedStateSyncRef.current = false
     setHasReceivedStateSync(false)
     latestActivationRevisionRef.current = 0
@@ -1231,6 +1263,10 @@ export function useAppShellAgentSync({
       if (currentSourceRef.current === source) {
         currentSourceRef.current = null
       }
+      if (eventsReconnectTimerRef.current !== undefined) {
+        clearTimeout(eventsReconnectTimerRef.current)
+        eventsReconnectTimerRef.current = undefined
+      }
       source.close()
       gitInvalidationBatcher.flush()
       gitInvalidationBatcher.cancel()
@@ -1254,6 +1290,7 @@ export function useAppShellAgentSync({
     if (pendingRouteAgentIdRef.current !== agentId) return
 
     const abortController = new AbortController()
+    let retryTimer: ReturnType<typeof setTimeout> | undefined
     const agentPath = pendingRouteAgentPathRef.current
     const selectionNonce = Math.max(
       agentSelectNonceRef.current + 1,
@@ -1275,19 +1312,37 @@ export function useAppShellAgentSync({
         method: "POST",
         signal: abortController.signal,
       }
-    ).catch((error) => {
-      if (abortController.signal.aborted) return
-      toast.error(
-        error instanceof Error ? error.message : "Failed to select agent"
-      )
-    })
+    )
+      .then(() => {
+        selectFailuresRef.current = 0
+      })
+      .catch((error) => {
+        if (abortController.signal.aborted) return
+        // Without a retry, the view shows "Loading agent…" until a reload.
+        const failures = selectFailuresRef.current
+        selectFailuresRef.current = failures + 1
+        if (failures === 0) {
+          toast.error(
+            error instanceof Error ? error.message : "Failed to select agent"
+          )
+        }
+        const delay =
+          SELECT_RETRY_DELAYS_MS[
+            Math.min(failures, SELECT_RETRY_DELAYS_MS.length - 1)
+          ]
+        retryTimer = setTimeout(() => {
+          setSelectRetryNonce((nonce) => nonce + 1)
+        }, delay)
+      })
 
     return () => {
       abortController.abort()
+      if (retryTimer !== undefined) clearTimeout(retryTimer)
     }
   }, [
     draftAgentLoadingOwnerKey,
     hasReceivedStateSync,
+    selectRetryNonce,
     pendingRouteAgentIdRef,
     pendingRouteAgentPathRef,
     syncedAgentId,
