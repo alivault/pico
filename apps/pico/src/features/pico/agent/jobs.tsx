@@ -1,5 +1,6 @@
 import * as React from "react"
 import {
+  CheckIcon,
   CornerDownLeftIcon,
   FileTextIcon,
   KeyRoundIcon,
@@ -259,12 +260,20 @@ function JobSecretInput({
   onShowTerminalChange: (show: boolean) => void
 }) {
   const [value, setValue] = React.useState("")
+  // The terminal does not echo a secret: show that the input went to it.
+  const [sent, setSent] = React.useState(false)
+  React.useEffect(() => {
+    if (!sent) return
+    const timer = window.setTimeout(() => setSent(false), 4000)
+    return () => window.clearTimeout(timer)
+  }, [sent])
   const submit = () => {
     if (!inputRef.current?.(`${value}\r`)) {
       toast.error("The terminal is not connected. Try again in a moment.")
       return
     }
     setValue("")
+    setSent(true)
   }
   return (
     <div className="space-y-1.5">
@@ -299,8 +308,15 @@ function JobSecretInput({
         </Button>
       </div>
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span className="min-w-0 flex-1">
-          Goes only to the terminal. The agent does not see it.
+        <span className="min-w-0 flex-1" role="status">
+          {sent ? (
+            <span className="inline-flex items-center gap-1 text-foreground">
+              <CheckIcon className="size-3.5" aria-hidden="true" />
+              Sent to the terminal.
+            </span>
+          ) : (
+            "Goes only to the terminal. The agent does not see it."
+          )}
         </span>
         <button
           type="button"
