@@ -22,6 +22,8 @@ type ShortcutActions = {
   focusModelSelector: () => void
   focusPrompt: () => void
   focusAgentSearch: () => void
+  editQueue: () => boolean
+  toggleQueue: () => boolean
   jumpToNextMessage: () => void
   jumpToPreviousMessage: () => void
   openAddProjectDialog: () => void
@@ -352,6 +354,26 @@ export function useAppShellShortcuts({
     shortcutActionsRef.current.focusPrompt()
   }
 
+  // Alt+Q edits the queue, Shift+Alt+Q shows or hides it, also when the
+  // focus is not in the composer. The composer handles them first when it
+  // has the focus. Alt on all platforms, as in the composer.
+  const handleQueueShortcut = (event: KeyboardEvent) => {
+    const context = getShortcutContext(event)
+
+    if (
+      context.modalOpen ||
+      event.defaultPrevented ||
+      isTerminalTarget(event.target)
+    ) {
+      return
+    }
+
+    const actions = shortcutActionsRef.current
+    if (event.shiftKey ? actions.toggleQueue() : actions.editQueue()) {
+      event.preventDefault()
+    }
+  }
+
   const handleConversationJump = (event: KeyboardEvent) => {
     const context = getShortcutContext(event)
 
@@ -619,6 +641,18 @@ export function useAppShellShortcuts({
         },
       },
     },
+    ...([false, true] as const).map((shift) => ({
+      hotkey: { key: "Q", alt: true, shift } as const,
+      callback: handleQueueShortcut,
+      options: {
+        meta: {
+          name: shift ? "Show or hide the queue" : "Edit the queue",
+          description: shift
+            ? "Show or hide the queued prompts."
+            : "Edit the queued prompts.",
+        },
+      },
+    })),
     {
       hotkey: { key: "Enter", ...appModifierFlag },
       callback: handleFocusPrompt,

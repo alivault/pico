@@ -66,6 +66,10 @@ export type ComposerPanelHandle = {
   focusPrompt: (options?: FocusOptions) => void
   openModelPicker: () => void
   openThinkingPicker: () => void
+  /** Alt+Q: edit the queue. False when there is nothing to edit. */
+  editQueue: () => boolean
+  /** Shift+Alt+Q: show or hide the queue. False when it cannot. */
+  toggleQueue: () => boolean
 }
 
 type ImageFileSelection = FileList | Array<File> | null
@@ -407,6 +411,8 @@ export function ComposerPanel({
       openThinkingPicker: () => {
         dispatchPickerState({ type: "openThinking" })
       },
+      editQueue: () => queueRef.current?.beginEditing() ?? false,
+      toggleQueue: () => queueRef.current?.toggleCollapsed() ?? false,
     }),
     []
   )

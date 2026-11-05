@@ -67,7 +67,10 @@ import {
 } from "@/features/pico/pending-queue"
 
 export type ComposerPendingMessagesHandle = {
-  /** Start editing at the row queued last. False when the queue is empty. */
+  /**
+   * Start editing at the row queued last, or focus the editor when editing
+   * already. False when the queue is empty.
+   */
   beginEditing: () => boolean
   /** Show or hide the queue. False when it is empty or open for editing. */
   toggleCollapsed: () => boolean
@@ -425,7 +428,15 @@ export const ComposerPendingMessages = React.memo(
     React.useImperativeHandle(
       ref,
       () => ({
-        beginEditing: () => begin(mostRecentQueueKey(currentPendingMessages)),
+        beginEditing: () => {
+          // When editing already, only take the focus back. To begin again
+          // would drop the changes.
+          if (agentRef.current) {
+            editorRef.current?.focus({ preventScroll: true })
+            return true
+          }
+          return begin(mostRecentQueueKey(currentPendingMessages))
+        },
         toggleCollapsed: () => {
           if (agentRef.current || currentPendingMessages.length === 0) {
             return false

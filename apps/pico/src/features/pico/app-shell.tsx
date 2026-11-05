@@ -3673,6 +3673,8 @@ function useAppShellAgentWorkspaceView({
     focusModelSelector,
     focusPrompt,
     focusAgentSearch,
+    editQueue: () => composerPanelRef.current?.editQueue() ?? false,
+    toggleQueue: () => composerPanelRef.current?.toggleQueue() ?? false,
     jumpToNextMessage: () => {
       conversationFrameRef.current?.jumpToNextMessage()
     },
