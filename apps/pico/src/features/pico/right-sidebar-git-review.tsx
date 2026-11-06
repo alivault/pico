@@ -969,9 +969,7 @@ function useFileReviewContentView({
               ))}
             </Accordion>
           ) : (
-            <GitSectionNote className="px-3 py-2.5">
-              Working tree clean.
-            </GitSectionNote>
+            <GitSectionNote className="px-3 py-2.5">No changes.</GitSectionNote>
           )}
         </div>
         <ScrollGradientOverlays

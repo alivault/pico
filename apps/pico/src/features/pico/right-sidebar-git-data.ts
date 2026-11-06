@@ -230,22 +230,15 @@ export function formatHeaderGitStatusText(
   return typeof gitStatus.branch === "string" ? gitStatus.branch.trim() : ""
 }
 
-export function formatGitWorkingTreeSummary(
-  gitStatus: GitStatusValue | undefined
-) {
-  if (!gitStatus) return ""
+export function getGitChangedFileCount(gitStatus: GitStatusValue | undefined) {
+  if (!gitStatus) return 0
 
-  const changedFileCount =
-    Number.isInteger(gitStatus.changedFileCount) &&
+  return Number.isInteger(gitStatus.changedFileCount) &&
     gitStatus.changedFileCount > 0
-      ? gitStatus.changedFileCount
-      : gitStatus.dirty
-        ? 1
-        : 0
-
-  if (changedFileCount === 0) return "Working tree clean"
-
-  return `${changedFileCount} file${changedFileCount === 1 ? "" : "s"} changed`
+    ? gitStatus.changedFileCount
+    : gitStatus.dirty
+      ? 1
+      : 0
 }
 
 export function gitStatusHasDiverged(gitStatus: GitStatusValue | undefined) {

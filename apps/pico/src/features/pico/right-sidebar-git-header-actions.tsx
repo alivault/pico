@@ -3,8 +3,8 @@ import { useQuery } from "@tanstack/react-query"
 import { Badge } from "@/components/ui/badge"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import {
-  formatGitWorkingTreeSummary,
   formatHeaderGitStatusText,
+  getGitChangedFileCount,
   gitStatusQueryOptions,
   selectGitStatusSummary,
 } from "@/features/pico/right-sidebar-git-data"
@@ -28,14 +28,31 @@ export function GitTabStatusText({
     }),
     enabled: Boolean(viewerContextId && normalizedCwd),
     select: (data) =>
-      data.gitStatus === null
-        ? "Files"
-        : formatGitWorkingTreeSummary(data.gitStatus) || "Changes",
+      data.gitStatus === null ? null : getGitChangedFileCount(data.gitStatus),
     notifyOnChangeProps: ["data"],
   })
-  const text = statusQuery.data || "Changes"
+  const count = statusQuery.data
 
-  return <span className="max-w-48 truncate">{text}</span>
+  // Not a git repository: the panel shows the project files.
+  if (count === null) return <span>Files</span>
+
+  const label = count ? plural(count, "changed file") : "No changes"
+
+  return (
+    <>
+      Changes
+      {count ? (
+        <span
+          role="img"
+          aria-label={label}
+          title={label}
+          className="ml-1.5 text-xs font-normal text-muted-foreground tabular-nums"
+        >
+          {count}
+        </span>
+      ) : null}
+    </>
+  )
 }
 
 const headerGitLinkClassName =
