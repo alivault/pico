@@ -1804,7 +1804,7 @@ const ProjectAgentGroup = React.memo(function ProjectAgentGroup({
             aria-label={`Create an agent in ${project}`}
             // Only the row under the pointer shows its button. It keeps
             // its space, so the counts do not move.
-            className="shrink-0 opacity-0 transition-opacity group-hover/project-row:opacity-100 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground focus-visible:opacity-100 data-popup-open:opacity-100"
+            className="shrink-0 text-sidebar-foreground/70 opacity-0 transition-opacity group-hover/project-row:opacity-100 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground focus-visible:opacity-100 data-popup-open:opacity-100"
             onClick={() => onCreateAgentInProject(project)}
           >
             <SquarePenIcon className="size-4" />
