@@ -11,13 +11,7 @@ import {
 import { normalizeCwd } from "@/features/pico/right-sidebar-shared"
 import { useMachineId } from "@/lib/pico/machine-context"
 
-export function GitTabStatusText({
-  viewerContextId,
-  cwd,
-}: {
-  viewerContextId: string
-  cwd?: string
-}) {
+function useGitChangedFileCount(viewerContextId: string, cwd?: string) {
   const machineId = useMachineId()
   const normalizedCwd = normalizeCwd(cwd)
   const statusQuery = useQuery({
@@ -31,26 +25,58 @@ export function GitTabStatusText({
       data.gitStatus === null ? null : getGitChangedFileCount(data.gitStatus),
     notifyOnChangeProps: ["data"],
   })
-  const count = statusQuery.data
+  // null: not a git repository. undefined: the status is not loaded yet.
+  return statusQuery.data
+}
+
+function GitChangedFileCountBadge({
+  count,
+}: {
+  count: number | null | undefined
+}) {
+  if (!count) return null
+  const label = plural(count, "changed file")
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      className="ml-1.5 text-xs font-normal text-muted-foreground tabular-nums"
+    >
+      {count}
+    </span>
+  )
+}
+
+/** The number of changed files, shown after the label of the Changes tab. */
+export function GitChangesTabCount({
+  viewerContextId,
+  cwd,
+}: {
+  viewerContextId: string
+  cwd?: string
+}) {
+  const count = useGitChangedFileCount(viewerContextId, cwd)
+  return <GitChangedFileCountBadge count={count} />
+}
+
+/** The label of the mobile tab for the git panel, for example "Changes 3". */
+export function GitTabStatusText({
+  viewerContextId,
+  cwd,
+}: {
+  viewerContextId: string
+  cwd?: string
+}) {
+  const count = useGitChangedFileCount(viewerContextId, cwd)
 
   // Not a git repository: the panel shows the project files.
   if (count === null) return <span>Files</span>
 
-  const label = count ? plural(count, "changed file") : "No changes"
-
   return (
     <>
       Changes
-      {count ? (
-        <span
-          role="img"
-          aria-label={label}
-          title={label}
-          className="ml-1.5 text-xs font-normal text-muted-foreground tabular-nums"
-        >
-          {count}
-        </span>
-      ) : null}
+      <GitChangedFileCountBadge count={count} />
     </>
   )
 }

@@ -1334,6 +1334,7 @@ export function RightSidebarTabStrip({
   onReorderFiles,
   agentBusy = false,
   agentTabExtra,
+  reviewTabExtra,
   showAgent = false,
   showFiles = false,
   showHistory = false,
@@ -1365,6 +1366,8 @@ export function RightSidebarTabStrip({
   agentBusy?: boolean
   /** Shown after the Agent tab label, for example the plan progress. */
   agentTabExtra?: React.ReactNode
+  /** Shown after the Changes tab label, for example the changed file count. */
+  reviewTabExtra?: React.ReactNode
   showAgent?: boolean
   showFiles?: boolean
   showHistory?: boolean
@@ -1489,7 +1492,13 @@ export function RightSidebarTabStrip({
   return (
     <div className="flex h-12 shrink-0 items-center gap-2 overflow-x-auto border-b border-border/70 bg-background px-2">
       {hasFileTypeIconTabs ? <ProjectFileIconSprite /> : null}
-      {showReview ? renderTab({ label: "Git", value: "review" }) : null}
+      {showReview
+        ? renderTab({
+            extra: reviewTabExtra,
+            label: "Changes",
+            value: "review",
+          })
+        : null}
       {showHistory ? renderTab({ label: "History", value: "history" }) : null}
       {showAgent
         ? renderTab({

@@ -41,6 +41,7 @@ import { picoQueryKeys } from "@/features/pico/query-keys"
 import { GitPanelErrorToasts } from "@/features/pico/right-sidebar-git-toolbar"
 import { usePicoDiffThemeOptions } from "@/features/pico/pico-diff-theme"
 import { GitCommitsSection } from "@/features/pico/right-sidebar-git-commits"
+import { GitChangesTabCount } from "@/features/pico/right-sidebar-git-header-actions"
 import { FileReviewContent } from "@/features/pico/right-sidebar-git-review"
 import {
   getStuckScrollTriggerValue,
@@ -1207,6 +1208,12 @@ export function RightSidebar({
             <TodoTabProgress
               agentId={agentId}
               viewerContextId={viewerContextId}
+            />
+          }
+          reviewTabExtra={
+            <GitChangesTabCount
+              viewerContextId={viewerContextId}
+              cwd={normalizedCwd}
             />
           }
           showAgent={!isMobile && agentPanelAvailable}

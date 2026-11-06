@@ -29,7 +29,7 @@ export function pendingDraftFollowUpId(
   return message.optimisticId || `pending-draft:${index}`
 }
 
-/** A comment on a line of a diff in the Git tab. */
+/** A comment on a line of a diff in the Changes tab. */
 export type ComposerDiffLineComment = {
   kind?: "diff"
   id: string
