@@ -1,5 +1,23 @@
 import * as React from "react"
 import {
+  closestCenter,
+  DndContext,
+  DragOverlay,
+  MeasuringStrategy,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import {
   ChevronDownIcon,
   ChevronRightIcon,
   MessageCircleQuestionIcon,
@@ -505,6 +523,7 @@ function MachineGroup({
   shownContent,
   renderContent,
   renderActions,
+  reordering,
 }: {
   machine: MachineInfo
   shown: boolean
@@ -512,12 +531,25 @@ function MachineGroup({
   shownContent: React.ReactNode
   renderContent: RenderMachine
   renderActions?: (machine: MachineInfo, shown: boolean) => React.ReactNode
+  /** A machine group is in a drag: all groups show only their heading. */
+  reordering: boolean
 }) {
   const collapsed = useMachineCollapsed(machine.id)
   const onOpenChange = useMachineOpenChange(machine.id)
   const [renaming, setRenaming] = React.useState(false)
   const [removing, setRemoving] = React.useState(false)
   const dimmed = machine.state !== "online"
+  // A drag on the heading moves the group.
+  const { listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: machine.id, disabled: renaming })
+  const sortable = {
+    ref: setNodeRef,
+    style: { transform: CSS.Translate.toString(transform), transition },
+    className: cn(isDragging && "opacity-0"),
+  }
+  // The content stays in the page (the shown machine's content is a slot
+  // that its shell fills), but it does not show during a drag.
+  const contentClass = cn(reordering && "hidden")
   const label = (
     <MachineContextMenu
       machine={machine}
@@ -526,14 +558,16 @@ function MachineGroup({
       onRename={() => setRenaming(true)}
       onRemove={() => setRemoving(true)}
     >
-      <MachineGroupLabel
-        machine={machine}
-        collapsed={collapsed}
-        active={shown}
-        actions={renderActions?.(machine, shown)}
-        renaming={renaming}
-        onRenameDone={() => setRenaming(false)}
-      />
+      <div {...listeners}>
+        <MachineGroupLabel
+          machine={machine}
+          collapsed={collapsed}
+          active={shown}
+          actions={renderActions?.(machine, shown)}
+          renaming={renaming}
+          onRenameDone={() => setRenaming(false)}
+        />
+      </div>
     </MachineContextMenu>
   )
   const removeDialog = (
@@ -545,17 +579,19 @@ function MachineGroup({
   )
   if (shown)
     return (
-      <Collapsible open={!collapsed} onOpenChange={onOpenChange}>
+      <Collapsible open={!collapsed} onOpenChange={onOpenChange} {...sortable}>
         <SidebarGroup className="pt-1 pb-0">{label}</SidebarGroup>
-        <CollapsibleContent>{shownContent}</CollapsibleContent>
+        <CollapsibleContent className={contentClass}>
+          {shownContent}
+        </CollapsibleContent>
         {removeDialog}
       </Collapsible>
     )
   return (
-    <Collapsible open={!collapsed} onOpenChange={onOpenChange}>
+    <Collapsible open={!collapsed} onOpenChange={onOpenChange} {...sortable}>
       <SidebarGroup className="py-1">
         {label}
-        <CollapsibleContent>
+        <CollapsibleContent className={contentClass}>
           <SidebarGroupContent className={cn(dimmed && "opacity-60")}>
             {renderContent(machine)}
           </SidebarGroupContent>
@@ -1024,22 +1060,87 @@ export function SidebarMachineGroups({
 }) {
   const { machines } = useMachines()
   const prefs = useMachineSidebarPrefs()
-  if (!useHasMachineGroupsFor(shownMachineId)) return <>{shownContent}</>
-  return (
-    <>
-      {visibleMachines(machines, prefs, shownMachineId).map((machine) => (
-        <MachineGroup
-          key={machine.id}
-          machine={machine}
-          shown={machine.id === shownMachineId}
-          shownMachineId={shownMachineId}
-          shownContent={shownContent}
-          renderContent={renderContent}
-          renderActions={renderActions}
-        />
-      ))}
-    </>
+  const [dragged, setDragged] = React.useState<string | null>(null)
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   )
+  const hasGroups = useHasMachineGroupsFor(shownMachineId)
+  if (!hasGroups) return <>{shownContent}</>
+  const visible = visibleMachines(machines, prefs, shownMachineId)
+  const ids = visible.map((machine) => machine.id)
+  const draggedMachine = visible.find((machine) => machine.id === dragged)
+  const onDragStart = ({ active }: DragStartEvent) => {
+    setDragged(String(active.id))
+  }
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    setDragged(null)
+    if (!over || active.id === over.id) return
+    moveMachine(
+      machines,
+      shownMachineId,
+      String(active.id),
+      ids.indexOf(String(over.id))
+    )
+  }
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      // The groups lose their content when the drag starts, so measure
+      // them again.
+      measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragCancel={() => setDragged(null)}
+    >
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        {visible.map((machine) => (
+          <MachineGroup
+            key={machine.id}
+            machine={machine}
+            shown={machine.id === shownMachineId}
+            shownMachineId={shownMachineId}
+            shownContent={shownContent}
+            renderContent={renderContent}
+            renderActions={renderActions}
+            reordering={dragged !== null}
+          />
+        ))}
+      </SortableContext>
+      <DragOverlay dropAnimation={null}>
+        {draggedMachine ? (
+          <div className="flex h-(--sidebar-item-size) items-center gap-2 rounded-md bg-sidebar px-(--sidebar-item-pad) text-xs font-medium text-sidebar-foreground shadow-lg ring-1 ring-sidebar-border/70">
+            <MachineStateDot state={draggedMachine.state} />
+            <span className="min-w-0 truncate">{draggedMachine.label}</span>
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
+  )
+}
+
+/**
+ * Move a machine group to `index` in the shown groups. The hidden machines
+ * keep their places in the order.
+ */
+function moveMachine(
+  machines: Array<MachineInfo>,
+  shownMachineId: string,
+  id: string,
+  index: number
+) {
+  const prefs = getMachineSidebarPrefs()
+  const all = orderMachines(machines, prefs.order).map((machine) => machine.id)
+  const visible = visibleMachines(machines, prefs, shownMachineId).map(
+    (machine) => machine.id
+  )
+  const from = visible.indexOf(id)
+  if (from < 0 || index < 0) return
+  const moved = arrayMove(visible, from, index)
+  const slots = new Set(visible)
+  let next = 0
+  const order = all.map((entry) => (slots.has(entry) ? moved[next++] : entry))
+  setMachineSidebarPrefs({ ...prefs, order })
 }
 
 function useNow(active: boolean) {
