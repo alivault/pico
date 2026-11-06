@@ -142,19 +142,16 @@ export function TodoList({
               <StatusIcon status={item.status} />
             </span>
           )}
-          <span
-            className={cn(
-              "min-w-0 flex-1",
-              onChange && ["pt-0.5", FADE_UNDER_ACTIONS]
-            )}
-            style={
-              onChange
-                ? ({ "--actions-width": "1.75rem" } as React.CSSProperties)
-                : undefined
-            }
-          >
+          <span className={cn("min-w-0 flex-1", onChange && "pt-0.5")}>
             <span
+              style={
+                onChange
+                  ? ({ "--actions-width": "1.75rem" } as React.CSSProperties)
+                  : undefined
+              }
               className={cn(
+                "block",
+                onChange && FADE_UNDER_ACTIONS,
                 item.status === "done" && "text-muted-foreground line-through",
                 item.status === "active" && "font-medium"
               )}
