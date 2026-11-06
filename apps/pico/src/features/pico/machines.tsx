@@ -238,10 +238,13 @@ function MachineCountButton({
 function MachineCounts({ machine }: { machine: MachineInfo }) {
   const { working, waiting, done, live } = agentCounts(machine)
   const online = machine.state === "online"
-  // A machine that goes offline shows all its agents again.
+  // Grouped by state, the state groups replace the filters.
+  const groupByStatus = useSidebarGroupBy(machine.id) === "status"
+  // A machine that goes offline, or that groups its agents by state,
+  // shows all its agents again.
   React.useEffect(() => {
-    if (!online) setAgentStatusFilter(machine.id, null)
-  }, [machine.id, online])
+    if (!online || groupByStatus) setAgentStatusFilter(machine.id, null)
+  }, [machine.id, online, groupByStatus])
   if (!online) {
     return (
       <span className="truncate text-[11px] font-normal text-sidebar-foreground/50">
@@ -249,6 +252,7 @@ function MachineCounts({ machine }: { machine: MachineInfo }) {
       </span>
     )
   }
+  if (groupByStatus) return null
   return (
     <span className="flex items-center">
       <MachineCountButton
@@ -828,20 +832,24 @@ function MachineContextMenu({
         </ContextMenuGroup>
         <ContextMenuSeparator />
         <ContextMenuGroup>
-          <ContextMenuCheckboxItem
-            disabled={!online}
-            checked={Boolean(filters?.includes("working"))}
-            onCheckedChange={() => showFilter("working")}
-          >
-            Only working agents ({counts.working})
-          </ContextMenuCheckboxItem>
-          <ContextMenuCheckboxItem
-            disabled={!online}
-            checked={Boolean(filters?.includes("live"))}
-            onCheckedChange={() => showFilter("live")}
-          >
-            Only agents with running jobs ({counts.live})
-          </ContextMenuCheckboxItem>
+          {groupBy === "status" ? null : (
+            <>
+              <ContextMenuCheckboxItem
+                disabled={!online}
+                checked={Boolean(filters?.includes("working"))}
+                onCheckedChange={() => showFilter("working")}
+              >
+                Only working agents ({counts.working})
+              </ContextMenuCheckboxItem>
+              <ContextMenuCheckboxItem
+                disabled={!online}
+                checked={Boolean(filters?.includes("live"))}
+                onCheckedChange={() => showFilter("live")}
+              >
+                Only agents with running jobs ({counts.live})
+              </ContextMenuCheckboxItem>
+            </>
+          )}
           <ContextMenuItem
             disabled={!online}
             onClick={() => run({ type: "open-archived-agents" })}
