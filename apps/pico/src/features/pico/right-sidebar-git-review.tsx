@@ -12,8 +12,6 @@ import {
   ArrowUpRightIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  ChevronsDownUpIcon,
-  ChevronsUpDownIcon,
   Maximize2Icon,
   MinusIcon,
   MoreHorizontalIcon,
@@ -118,6 +116,7 @@ import {
 } from "@/hooks/use-sidebar-resize"
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
+import { isAltChange } from "@/features/pico/machines"
 
 function GitFileStatus({ status }: { status: string | undefined }) {
   const [indexCharacter, worktreeCharacter] = gitFileStatusCharacters(status)
@@ -760,7 +759,6 @@ function useFileReviewContentView({
     }
   }, [historyOpen, isMobile, normalizedCwd])
 
-  const hasOpenFile = openFiles.length > 0
   const bulkActionPending = bulkGitActionMutation.isPending
   const bulkActionDisabled =
     bulkActionPending ||
@@ -781,12 +779,6 @@ function useFileReviewContentView({
   const unstageAllPending =
     bulkGitActionMutation.isPending &&
     bulkGitActionMutation.variables === "unstage-all"
-  const toggleAll = () => {
-    dispatch({
-      type: "openFilesChanged",
-      openFiles: hasOpenFile ? [] : changedFiles.map(reviewFileValue),
-    })
-  }
   const runBulkGitAction = (action: ReviewBulkGitAction) => {
     bulkGitActionMutation.mutate(action)
   }
@@ -877,21 +869,6 @@ function useFileReviewContentView({
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
-          <TitleTooltip title={hasOpenFile ? "Collapse all" : "Expand all"}>
-            <Button
-              variant="outline"
-              size={isMobile ? "icon" : "icon-sm"}
-              aria-label={hasOpenFile ? "Collapse all" : "Expand all"}
-              disabled={changedFiles.length === 0}
-              onClick={toggleAll}
-            >
-              {hasOpenFile ? (
-                <ChevronsDownUpIcon className="size-4" />
-              ) : (
-                <ChevronsUpDownIcon className="size-4" />
-              )}
-            </Button>
-          </TitleTooltip>
           <ToggleGroup
             variant="outline"
             size={isMobile ? "default" : "sm"}
@@ -944,10 +921,16 @@ function useFileReviewContentView({
             <Accordion
               multiple
               value={openFiles}
-              onValueChange={(nextOpenFiles) => {
+              onValueChange={(nextOpenFiles, details) => {
+                // An Option-click opens or closes all files.
+                const opened = nextOpenFiles.length > openFiles.length
                 dispatch({
                   type: "openFilesChanged",
-                  openFiles: nextOpenFiles,
+                  openFiles: !isAltChange(details)
+                    ? nextOpenFiles
+                    : opened
+                      ? changedFiles.map(reviewFileValue)
+                      : [],
                 })
               }}
               className="border-b border-border/80"

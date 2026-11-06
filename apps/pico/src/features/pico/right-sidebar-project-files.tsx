@@ -26,7 +26,6 @@ import { CSS } from "@dnd-kit/utilities"
 import { useQuery } from "@tanstack/react-query"
 import {
   ArrowLeftIcon,
-  ChevronsDownUpIcon,
   FileDiffIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
@@ -255,6 +254,16 @@ function getProjectFileTreeGitStatus(
   }))
 }
 
+// The path of the tree row that an event came from, or null.
+function projectFileTreeItemPath(event: React.SyntheticEvent) {
+  for (const target of event.nativeEvent.composedPath()) {
+    if (!(target instanceof Element)) continue
+    const path = target.getAttribute("data-item-path")
+    if (path) return path
+  }
+  return null
+}
+
 function getProjectFileTreePaths(
   paths: Array<string>,
   files: Array<GitChangeFile>
@@ -351,14 +360,12 @@ function revealProjectFileTreePath(
 }
 
 function ProjectFileTree({
-  collapseAllRevision,
   gitStatus,
   paths,
   revealSelectedPathOnMount = false,
   selectedPath,
   onSelectFile,
 }: {
-  collapseAllRevision: number
   gitStatus: Array<GitStatusEntry>
   paths: Array<string>
   revealSelectedPathOnMount?: boolean
@@ -367,7 +374,6 @@ function ProjectFileTree({
 }) {
   const validPathsRef = React.useRef(new Set(paths))
   const onSelectFileRef = React.useRef(onSelectFile)
-  const lastCollapseAllRevisionRef = React.useRef(0)
   const pathsRef = React.useRef(paths)
   const initialSelectedPathRef = React.useRef(
     revealSelectedPathOnMount ? selectedPath : ""
@@ -438,25 +444,33 @@ function ProjectFileTree({
     item.focus()
   }, [model, selectedPath])
 
-  React.useEffect(() => {
-    if (
-      collapseAllRevision <= 0 ||
-      collapseAllRevision === lastCollapseAllRevisionRef.current ||
-      paths.length === 0
-    ) {
-      return
-    }
-
-    lastCollapseAllRevisionRef.current = collapseAllRevision
-
-    for (const directoryPath of getProjectFileDirectoryPaths(paths)) {
-      const item = model.getItem(directoryPath)
-      if (!isFileTreeDirectoryHandle(item) || !item.isExpanded()) continue
-      item.collapse()
-    }
-
-    model.focusNearestPath(selectedPath || model.getFocusedPath())
-  }, [collapseAllRevision, model, paths, selectedPath])
+  // An Option-click on a folder that it opens also opens all its
+  // subfolders. An Option-click on a folder that it closes closes all
+  // folders.
+  const toggleAllFolders = (path: string) => {
+    window.requestAnimationFrame(() => {
+      const item = model.getItem(path)
+      if (!isFileTreeDirectoryHandle(item)) return
+      const open = item.isExpanded()
+      const directories = getProjectFileDirectoryPaths(paths)
+      if (open) {
+        // Parents first, so that each folder has a row when it opens.
+        for (const directoryPath of directories.toReversed()) {
+          if (!directoryPath.startsWith(path)) continue
+          const directory = model.getItem(directoryPath)
+          if (isFileTreeDirectoryHandle(directory)) directory.expand()
+        }
+        return
+      }
+      for (const directoryPath of directories) {
+        const directory = model.getItem(directoryPath)
+        if (!isFileTreeDirectoryHandle(directory) || !directory.isExpanded())
+          continue
+        directory.collapse()
+      }
+      model.focusNearestPath(path)
+    })
+  }
 
   const openFocusedFile = () => {
     window.requestAnimationFrame(() => {
@@ -472,6 +486,8 @@ function ProjectFileTree({
       className="block h-full min-h-0 w-full overflow-hidden"
       onClick={(event) => {
         if (!isProjectFileTreeItemEvent(event)) return
+        const path = event.altKey ? projectFileTreeItemPath(event) : null
+        if (path) toggleAllFolders(path)
         openFocusedFile()
       }}
       onKeyUp={(event) => {
@@ -504,7 +520,6 @@ export function ProjectFilesWorkspace({
   const machineId = useMachineId()
   const normalizedCwd = normalizeCwd(cwd)
   const [openFileDialogOpen, setOpenFileDialogOpen] = React.useState(false)
-  const [collapseAllRevision, setCollapseAllRevision] = React.useState(0)
   const inlinePreview = previewMode === "inline"
   const showInlinePreview = inlinePreview && Boolean(activeFilePath)
   const fileTreeQuery = useQuery({
@@ -552,20 +567,6 @@ export function ProjectFilesWorkspace({
             {paths.length.toLocaleString()} files
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <TitleTooltip title="Collapse all folders">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                aria-label="Collapse all folders"
-                disabled={paths.length === 0}
-                onClick={() => {
-                  setCollapseAllRevision((revision) => revision + 1)
-                }}
-              >
-                <ChevronsDownUpIcon className="size-4" />
-              </Button>
-            </TitleTooltip>
             <Button
               type="button"
               variant="outline"
@@ -593,7 +594,6 @@ export function ProjectFilesWorkspace({
             </GitSectionNote>
           ) : paths.length > 0 ? (
             <ProjectFileTree
-              collapseAllRevision={collapseAllRevision}
               gitStatus={gitStatus}
               paths={paths}
               revealSelectedPathOnMount={revealActiveFileOnMount}
