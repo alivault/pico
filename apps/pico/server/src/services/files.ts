@@ -234,10 +234,27 @@ export async function projectTree(cwd: string) {
 const fileVersion = (bytes: Uint8Array) =>
   createHash("sha256").update(bytes).digest("hex")
 
+/**
+ * A file of the project, from its path in `cwd`. An absolute path (or a
+ * path from `~`) names a file outside the project, for example the global
+ * AGENTS.md that an agent loads.
+ */
 async function resolveProjectFile(cwd: string, path: string) {
   const normalized = path.trim().replace(/^\.\//, "")
   if (!normalized) throw badRequest("file path is required")
-  if (isAbsolute(normalized) || normalized.split(/[/\\]/).includes("..")) {
+  const expanded = expandHome(normalized)
+  if (isAbsolute(expanded)) {
+    let resolved: string
+    try {
+      resolved = await realpath(expanded)
+    } catch {
+      throw badRequest("File not found")
+    }
+    const info = await stat(resolved)
+    if (!info.isFile()) throw badRequest("Not a file")
+    return { normalized, resolved, info }
+  }
+  if (normalized.split(/[/\\]/).includes("..")) {
     throw badRequest("file path must stay inside the directory")
   }
   const root = await realpath(cwd)

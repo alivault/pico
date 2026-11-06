@@ -49,9 +49,10 @@ function InstructionsSection({
                 aria-label={`Show ${path}`}
                 className="flex h-7 w-full min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-sm outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50"
                 onClick={() => {
-                  // The file viewer reads only files in the agent folder.
+                  // A file outside the agent folder opens from its
+                  // absolute path.
                   const relative = relativePath(path, instructions.cwd)
-                  if (relative && onOpenFile) onOpenFile(relative)
+                  if (onOpenFile) onOpenFile(relative ?? path)
                   else setOpen(path)
                 }}
               >

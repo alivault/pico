@@ -23,6 +23,10 @@ void test("workspace files reject traversal, escaped symlinks, and binary data",
   await assert.rejects(readProjectFile(workspace, "escaped"), /inside/)
   await assert.rejects(readProjectFile(workspace, "binary"), /Binary/)
   assert.ok((await projectTree(workspace)).includes("readme.md"))
+  // An absolute path names a file outside the project on purpose.
+  const outside = await readProjectFile(workspace, join(root, "secret"))
+  assert.equal(outside.content, "outside")
+  assert.equal(outside.path, join(root, "secret"))
 })
 
 void test("workspace file saves keep the mode and stop on a conflict", async () => {
