@@ -116,7 +116,13 @@ export class UiRequests {
   }
 }
 
-type UsageWindow = { label: string; usedPercent: number; resetsIn?: string }
+type UsageWindow = {
+  label: string
+  usedPercent: number
+  resetsIn?: string
+  /** How much of the window passed: the pace marker on its bar. */
+  elapsedPercent?: number
+}
 
 export class Auth {
   readonly #models: ModelRuntime
@@ -421,11 +427,15 @@ export class Auth {
       ] as const) {
         const usage = value[key]
         if (typeof usage?.utilization !== "number") continue
+        const seconds = label === "5h" ? 5 * 3600 : 7 * 24 * 3600
         windows.push({
           label,
           usedPercent: normalizePercent(usage.utilization),
           ...(usage.resets_at
-            ? { resetsIn: formatResetTime(usage.resets_at) }
+            ? {
+                resetsIn: formatResetTime(usage.resets_at),
+                ...elapsedPercent(usage.resets_at, seconds),
+              }
             : {}),
         })
       }
@@ -462,7 +472,14 @@ export class Auth {
           label: usageWindowLabel(window.limit_window_seconds, fallback),
           usedPercent: clampPercent(window.used_percent ?? 0),
           ...(window.reset_at
-            ? { resetsIn: formatResetTime(window.reset_at) }
+            ? {
+                resetsIn: formatResetTime(window.reset_at),
+                ...elapsedPercent(
+                  window.reset_at,
+                  window.limit_window_seconds ??
+                    (fallback === "5h" ? 5 * 3600 : 7 * 24 * 3600)
+                ),
+              }
             : {}),
         })
       }
@@ -502,6 +519,16 @@ function formatResetTime(value: string | number) {
   const days = Math.floor(hours / 24)
   const remainingHours = hours % 24
   return remainingHours ? `${days}d ${remainingHours}h` : `${days}d`
+}
+
+/** The part of a usage window that passed, from its reset time. */
+function elapsedPercent(resetAt: string | number, windowSeconds: number) {
+  const reset = new Date(
+    typeof resetAt === "number" ? resetAt * 1000 : resetAt
+  ).getTime()
+  if (!Number.isFinite(reset) || !(windowSeconds > 0)) return {}
+  const left = (reset - Date.now()) / 1000
+  return { elapsedPercent: clampPercent(100 - (left / windowSeconds) * 100) }
 }
 
 function usageWindowLabel(seconds: number | undefined, fallback: string) {

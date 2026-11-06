@@ -98,6 +98,8 @@ type ProviderUsageWindow = {
   label: string
   usedPercent: number
   resetsIn?: string
+  /** How much of the window passed, for the pace marker. */
+  elapsedPercent?: number
 }
 
 type ProviderUsageResponse = {
@@ -424,6 +426,7 @@ function ContextUsageQuotaTooltipLine({
 
 function ProviderUsageTooltipLine({ window }: { window: ProviderUsageWindow }) {
   const percent = `${formatContextUsagePercent(window.usedPercent)}%`
+  const elapsed = window.elapsedPercent
 
   return (
     <div className="px-1.5 py-1.5">
@@ -433,10 +436,22 @@ function ProviderUsageTooltipLine({ window }: { window: ProviderUsageWindow }) {
         </span>
         <span className="font-semibold text-foreground">{percent}</span>
       </div>
-      <TooltipUsageProgress percent={window.usedPercent} />
-      {window.resetsIn ? (
+      {/* The mark shows how much of the window passed: usage to the
+          left of it is on pace, past it is ahead of pace. */}
+      <TooltipUsageProgress
+        percent={window.usedPercent}
+        marks={elapsed == null ? [] : [elapsed]}
+      />
+      {window.resetsIn || elapsed != null ? (
         <div className="mt-1 text-xs text-muted-foreground">
-          Resets in {window.resetsIn}
+          {[
+            window.resetsIn ? `Resets in ${window.resetsIn}` : null,
+            elapsed == null
+              ? null
+              : `${formatContextUsagePercent(elapsed)}% of the time passed`,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </div>
       ) : null}
     </div>
