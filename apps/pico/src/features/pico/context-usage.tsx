@@ -102,9 +102,7 @@ type ProviderUsageWindow = {
 
 type ProviderUsageResponse = {
   ok: true
-  usage?: {
-    windows?: Array<ProviderUsageWindow>
-  }
+  windows?: Array<ProviderUsageWindow>
 }
 
 type ContextUsageRing = {
@@ -627,7 +625,7 @@ export function useContextUsageView({
           searchParams: { provider: modelProvider },
         })
       )
-      return data.usage?.windows ?? []
+      return data.windows ?? []
     },
   })
 

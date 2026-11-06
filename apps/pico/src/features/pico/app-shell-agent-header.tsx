@@ -1,4 +1,6 @@
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
+import { picoQueryKeys } from "@/features/pico/query-keys"
 import { ProfileMenuSub } from "@/features/pico/agent/profiles"
 import { AgentLineage, useAgentInfo } from "@/features/pico/agent/agent-lineage"
 import {
@@ -133,6 +135,7 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
     { compare: shallowRecordEqual }
   )
   const machineReadOnly = useMachineReadOnly()
+  const queryClient = useQueryClient()
   // The more button has the context ring around its icon.
   const usageView = useContextUsageView({
     activeAgentId: agentHeaderState.agentId,
@@ -236,7 +239,16 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
           </div>
         </div>
         <div className="ml-auto flex shrink-0 flex-wrap items-center gap-1">
-          <DropdownMenu>
+          <DropdownMenu
+            onOpenChange={(open) => {
+              // The session and weekly usage change with each request, so
+              // the menu gets them again when it opens.
+              if (open)
+                void queryClient.invalidateQueries({
+                  queryKey: picoQueryKeys.providerUsageAll(),
+                })
+            }}
+          >
             <TitleTooltip title={agentMenuTitle}>
               <DropdownMenuTrigger
                 render={

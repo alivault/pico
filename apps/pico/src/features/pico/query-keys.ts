@@ -81,6 +81,7 @@ export const picoQueryKeys = {
     ["pico", "agent-tree", viewerContextId, agentScopeKey] as const,
   forkableMessages: (viewerContextId: string, agentScopeKey: string) =>
     ["pico", "forkable-messages", viewerContextId, agentScopeKey] as const,
+  providerUsageAll: () => ["pico", "provider-usage"] as const,
   providerUsage: (viewerContextId: string, agentId: string, provider: string) =>
     ["pico", "provider-usage", viewerContextId, agentId, provider] as const,
 } as const
