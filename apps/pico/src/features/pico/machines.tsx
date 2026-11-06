@@ -20,7 +20,6 @@ import {
 import { Button } from "@/components/ui/button"
 import {
   ContextMenu,
-  ContextMenuCheckboxItem,
   ContextMenuContent,
   ContextMenuGroup,
   ContextMenuItem,
@@ -702,12 +701,8 @@ function MachineContextMenu({
   const prefs = useMachineSidebarPrefs()
   const { isMobile, setOpenMobile } = useSidebar()
   const groupBy = useSidebarGroupBy(machine.id)
-  const filters = useAgentStatusFilter(machine.id)
-  const counts = agentCounts(machine)
   const local = machine.id === LOCAL_MACHINE_ID
   const online = machine.state === "online"
-  const visible = visibleMachines(machines, prefs, shownMachineId)
-  const position = visible.findIndex((entry) => entry.id === machine.id)
   const hidden = orderMachines(machines, prefs.order).filter(
     (entry) => entry.id !== shownMachineId && prefs.hidden.includes(entry.id)
   )
@@ -715,17 +710,6 @@ function MachineContextMenu({
     if (isMobile) setOpenMobile(false)
     if (shown) queueMachineAction(machine.id, action)
     else openMachine(machine.id, { action })
-  }
-  const showFilter = (filter: AgentStatusFilter) => {
-    setMachinesCollapsed([machine.id], false)
-    toggleAgentStatusFilter(machine.id, filter)
-  }
-  const collapseProjects = (collapsed: boolean) => {
-    if (!collapsed) setMachinesCollapsed([machine.id], false)
-    emitPicoEvent("pico:collapse-projects", {
-      machineId: machine.id,
-      collapsed,
-    })
   }
 
   return (
@@ -796,26 +780,6 @@ function MachineContextMenu({
               </ContextMenuRadioGroup>
             </ContextMenuSubContent>
           </ContextMenuSub>
-          <ContextMenuItem onClick={() => collapseProjects(true)}>
-            Collapse all groups
-          </ContextMenuItem>
-          <ContextMenuItem onClick={() => collapseProjects(false)}>
-            Expand all groups
-          </ContextMenuItem>
-          <ContextMenuItem
-            disabled={position <= 0}
-            onClick={() =>
-              moveMachine(machines, shownMachineId, machine.id, -1)
-            }
-          >
-            Move up
-          </ContextMenuItem>
-          <ContextMenuItem
-            disabled={position < 0 || position >= visible.length - 1}
-            onClick={() => moveMachine(machines, shownMachineId, machine.id, 1)}
-          >
-            Move down
-          </ContextMenuItem>
           {shown ? null : (
             <ContextMenuItem onClick={() => setMachineHidden(machine.id, true)}>
               Hide in sidebar
@@ -849,45 +813,6 @@ function MachineContextMenu({
               </ContextMenuSubContent>
             </ContextMenuSub>
           ) : null}
-        </ContextMenuGroup>
-        <ContextMenuSeparator />
-        <ContextMenuGroup>
-          {groupBy === "status" ? null : (
-            <>
-              <ContextMenuCheckboxItem
-                disabled={!online}
-                checked={Boolean(filters?.includes("working"))}
-                onCheckedChange={() => showFilter("working")}
-              >
-                Only working agents ({counts.working})
-              </ContextMenuCheckboxItem>
-              <ContextMenuCheckboxItem
-                disabled={!online}
-                checked={Boolean(filters?.includes("live"))}
-                onCheckedChange={() => showFilter("live")}
-              >
-                Only agents with running jobs ({counts.live})
-              </ContextMenuCheckboxItem>
-            </>
-          )}
-          <ContextMenuItem
-            disabled={!online}
-            onClick={() => run({ type: "open-archived-agents" })}
-          >
-            Archived agents…
-          </ContextMenuItem>
-          <ContextMenuItem
-            disabled={!online}
-            onClick={() => run({ type: "open-resources" })}
-          >
-            Resources…
-          </ContextMenuItem>
-          <ContextMenuItem
-            disabled={!online}
-            onClick={() => run({ type: "open-terminal" })}
-          >
-            Open terminal
-          </ContextMenuItem>
         </ContextMenuGroup>
         {local ? null : (
           <>
@@ -1055,27 +980,6 @@ function visibleMachines(
     (machine) =>
       machine.id === shownMachineId || !prefs.hidden.includes(machine.id)
   )
-}
-
-/** Move a machine group up (-1) or down (1), past the next shown group. */
-function moveMachine(
-  machines: Array<MachineInfo>,
-  shownMachineId: string,
-  id: string,
-  delta: -1 | 1
-) {
-  const prefs = getMachineSidebarPrefs()
-  const all = orderMachines(machines, prefs.order).map((machine) => machine.id)
-  const visible = visibleMachines(machines, prefs, shownMachineId).map(
-    (machine) => machine.id
-  )
-  const neighbor = visible[visible.indexOf(id) + delta]
-  if (!neighbor) return
-  const from = all.indexOf(id)
-  const to = all.indexOf(neighbor)
-  all[from] = neighbor
-  all[to] = id
-  setMachineSidebarPrefs({ ...prefs, order: all })
 }
 
 function setMachineHidden(id: string, hidden: boolean) {
