@@ -196,6 +196,7 @@ function MachineCountButton({
   count,
   title,
   className,
+  activeOnly,
   children,
 }: {
   machine: MachineInfo
@@ -203,11 +204,13 @@ function MachineCountButton({
   count: number
   title: string
   className?: string
+  /** Show the button only when its filter is on. */
+  activeOnly: boolean
   children: React.ReactNode
 }) {
   const active = Boolean(useAgentStatusFilter(machine.id)?.includes(filter))
   // The active filter keeps its button at 0, so you can remove it.
-  if (count === 0 && !active) return null
+  if (!active && (count === 0 || activeOnly)) return null
   return (
     <TitleTooltip
       title={active ? `Show all agents` : `Show only ${title.toLowerCase()}`}
@@ -235,7 +238,13 @@ function MachineCountButton({
   )
 }
 
-function MachineCounts({ machine }: { machine: MachineInfo }) {
+function MachineCounts({
+  machine,
+  collapsed,
+}: {
+  machine: MachineInfo
+  collapsed: boolean
+}) {
   const { working, waiting, done, live } = agentCounts(machine)
   const online = machine.state === "online"
   // Grouped by state, the state groups replace the filters.
@@ -253,10 +262,15 @@ function MachineCounts({ machine }: { machine: MachineInfo }) {
     )
   }
   if (groupByStatus) return null
+  // An open machine shows its agents by project, so only a collapsed
+  // machine shows its counts. An open machine keeps the button of the
+  // filter that is on, so you can remove it.
+  const activeOnly = !collapsed
   return (
     <span className="flex items-center">
       <MachineCountButton
         machine={machine}
+        activeOnly={activeOnly}
         filter="waiting"
         count={waiting}
         title="Waiting for you"
@@ -266,6 +280,7 @@ function MachineCounts({ machine }: { machine: MachineInfo }) {
       </MachineCountButton>
       <MachineCountButton
         machine={machine}
+        activeOnly={activeOnly}
         filter="working"
         count={working}
         title="Working"
@@ -274,6 +289,7 @@ function MachineCounts({ machine }: { machine: MachineInfo }) {
       </MachineCountButton>
       <MachineCountButton
         machine={machine}
+        activeOnly={activeOnly}
         filter="done"
         count={done}
         title="Done"
@@ -282,6 +298,7 @@ function MachineCounts({ machine }: { machine: MachineInfo }) {
       </MachineCountButton>
       <MachineCountButton
         machine={machine}
+        activeOnly={activeOnly}
         filter="live"
         count={live}
         title="Agents with running jobs"
@@ -387,7 +404,7 @@ function MachineGroupLabel({
         <span
           className={cn("contents", actions && "@max-[18rem]/sidebar:hidden")}
         >
-          <MachineCounts machine={machine} />
+          <MachineCounts machine={machine} collapsed={collapsed} />
         </span>
       )}
       {attention ? <MachineProblemBadge machine={machine} /> : null}
