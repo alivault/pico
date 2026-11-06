@@ -2434,7 +2434,7 @@ function AppSidebarProjectsHeader({
   return (
     // pr-0: the item-size icon buttons already hold the item-pad, so their
     // icons end on the right content edge, with the search Kbd.
-    <SidebarGroupLabel className="justify-between gap-3 pr-0">
+    <SidebarGroupLabel className="group/heading justify-between gap-3 pr-0">
       <CollapsibleTrigger
         type="button"
         className="group/projects-label flex min-w-0 flex-1 items-center gap-2 text-left outline-hidden"
@@ -2483,6 +2483,7 @@ export function ProjectActions({
   showGroupBy?: boolean
 }) {
   const groupBy = useSidebarGroupBy(machineId)
+  const { isMobile } = useSidebar()
   const groupByTitle =
     groupBy === "status" ? "Group by project" : "Group by state"
   return (
@@ -2512,7 +2513,13 @@ export function ProjectActions({
         <Button
           variant="ghost"
           size="icon"
-          className="hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+          // It shows only when the pointer is on its heading. A phone has
+          // no hover, so the button always shows there.
+          className={cn(
+            "hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+            !isMobile &&
+              "opacity-0 transition-opacity group-hover/heading:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100"
+          )}
           onClick={onOpenAddProjectDialog}
           aria-label={title}
         >

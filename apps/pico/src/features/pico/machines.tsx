@@ -373,7 +373,10 @@ function MachineGroupLabel({
   return (
     // pr-0 when there is an icon button: it already holds the item-pad.
     <SidebarGroupLabel
-      className={cn("justify-between gap-1", (actions || attention) && "pr-0")}
+      className={cn(
+        "group/heading justify-between gap-1",
+        (actions || attention) && "pr-0"
+      )}
     >
       <CollapsibleTrigger
         type="button"
