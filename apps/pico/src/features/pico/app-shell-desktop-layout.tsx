@@ -20,6 +20,7 @@ import {
 } from "@/features/pico/app-shell-right-sidebar-state"
 import { MachineConnectionBanner } from "@/features/pico/machines"
 import { JobFocusWatcher } from "@/features/pico/agent/job-state"
+import { TodoTabProgress } from "@/features/pico/agent/todo"
 import {
   applyStoreAction,
   setStoreField,
@@ -90,6 +91,9 @@ function AppShellTabsList({
   viewerContextId: string
 }) {
   const cwd = useSelector(agentStore, (agentState) => agentState.cwd)
+  const agentId = useSelector(agentStore, (agentState) =>
+    agentState.draft ? undefined : agentState.agentId
+  )
 
   return (
     <TabsList className="no-scrollbar w-full justify-start gap-2 overflow-x-auto rounded-none border-b border-border/70 bg-background p-2 group-data-horizontal/tabs:h-auto md:hidden">
@@ -101,6 +105,7 @@ function AppShellTabsList({
       </TabsTrigger>
       <TabsTrigger value="agent" className={mobileTabTriggerClassName}>
         Agent
+        <TodoTabProgress agentId={agentId} viewerContextId={viewerContextId} />
       </TabsTrigger>
       <TabsTrigger value="terminal" className={mobileTabTriggerClassName}>
         Terminal

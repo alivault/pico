@@ -35,7 +35,6 @@ import {
 } from "@/features/pico/conversation-view"
 import { ToolRenderContext } from "@/features/pico/tool-renderers/registry"
 import { WaitingCardChip } from "@/features/pico/agent/waiting-cards"
-import { TodoProgressChip } from "@/features/pico/agent/todo"
 
 export type AppShellAgentContentProps = {
   actionsRef: React.RefObject<AppShellComposerActions>
@@ -208,10 +207,6 @@ export function AppShellAgentContent({
           )}
         >
           <WaitingCardChip
-            agentId={toolRenderContext.agentId}
-            viewerContextId={viewerContextId}
-          />
-          <TodoProgressChip
             agentId={toolRenderContext.agentId}
             viewerContextId={viewerContextId}
           />

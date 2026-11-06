@@ -1333,6 +1333,7 @@ export function RightSidebarTabStrip({
   onReorderCommitDiffs,
   onReorderFiles,
   agentBusy = false,
+  agentTabExtra,
   showAgent = false,
   showFiles = false,
   showHistory = false,
@@ -1362,6 +1363,8 @@ export function RightSidebarTabStrip({
   onReorderFiles?: (paths: Array<string>) => void
   /** Show a dot on the Agent tab while the agent has live work there. */
   agentBusy?: boolean
+  /** Shown after the Agent tab label, for example the plan progress. */
+  agentTabExtra?: React.ReactNode
   showAgent?: boolean
   showFiles?: boolean
   showHistory?: boolean
@@ -1369,11 +1372,13 @@ export function RightSidebarTabStrip({
 }) {
   const renderTab = ({
     active: activeOverride,
+    extra,
     indicator,
     label,
     value,
   }: {
     active?: boolean
+    extra?: React.ReactNode
     indicator?: string
     label: string
     value: RightSidebarTabValue
@@ -1393,6 +1398,7 @@ export function RightSidebarTabStrip({
         }}
       >
         {label}
+        {extra}
         {indicator ? (
           <span
             role="img"
@@ -1487,6 +1493,7 @@ export function RightSidebarTabStrip({
       {showHistory ? renderTab({ label: "History", value: "history" }) : null}
       {showAgent
         ? renderTab({
+            extra: agentTabExtra,
             indicator: agentBusy ? "The agent has live work" : undefined,
             label: "Agent",
             value: "agent",

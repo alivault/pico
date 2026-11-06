@@ -24,7 +24,6 @@ import {
   registerAgentSection,
   type AgentSectionProps,
 } from "@/features/pico/agent/agent-panel"
-import { emitPicoEvent } from "@/features/pico/agent/events"
 import {
   postAgentJson,
   useAgentExtensions,
@@ -251,8 +250,8 @@ function TodoActions({ agentId, state, viewerContextId }: AgentSectionProps) {
   )
 }
 
-/** A compact progress line above the composer while the plan has open items. */
-export function TodoProgressChip({
+/** Plan progress for the Agent tab trigger while the plan has open items. */
+export function TodoTabProgress({
   agentId,
   viewerContextId,
 }: {
@@ -260,27 +259,22 @@ export function TodoProgressChip({
   viewerContextId: string
 }) {
   const query = useAgentExtensions(viewerContextId, agentId)
-  const items = query.data ? todoItemsFrom(query.data) : []
+  const items = query.data && agentId ? todoItemsFrom(query.data) : []
   if (items.length === 0) return null
   const done = items.filter((item) => item.status === "done").length
   if (done === items.length) return null
   const active = items.find((item) => item.status === "active")
+  const label = `Plan: ${done} of ${items.length} done${active ? `. ${active.text}` : ""}`
   return (
-    <TitleTooltip title="Show the plan in the Agent panel">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="mb-1.5 h-7 max-w-full rounded-full bg-background/90 px-3 text-xs font-normal text-muted-foreground shadow-sm backdrop-blur"
-        onClick={() => emitPicoEvent("pico:open-sidebar-tab", { tab: "agent" })}
-      >
-        <ListChecksIcon className="shrink-0" />
-        <span className="shrink-0 tabular-nums">
-          {done} of {items.length}
-        </span>
-        {active ? <span className="truncate">· {active.text}</span> : null}
-      </Button>
-    </TitleTooltip>
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      className="ml-1.5 inline-flex items-center gap-0.5 text-xs font-normal text-muted-foreground tabular-nums"
+    >
+      <ListChecksIcon aria-hidden="true" className="size-3.5" />
+      {done}/{items.length}
+    </span>
   )
 }
 

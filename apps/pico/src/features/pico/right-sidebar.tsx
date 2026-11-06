@@ -71,6 +71,7 @@ import {
 import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
 import "@/features/pico/agent/register"
 import { AgentPanel, useAgentBusy } from "@/features/pico/agent/agent-panel"
+import { TodoTabProgress } from "@/features/pico/agent/todo"
 import type { GitCommitDiffMode, GitCommitDiffResponse } from "@/lib/pico/api"
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
@@ -1202,6 +1203,12 @@ export function RightSidebar({
           onReorderCommitDiffs={reorderCommitDiffs}
           onReorderFiles={onReorderFiles}
           agentBusy={agentBusy}
+          agentTabExtra={
+            <TodoTabProgress
+              agentId={agentId}
+              viewerContextId={viewerContextId}
+            />
+          }
           showAgent={!isMobile && agentPanelAvailable}
           showFiles={isMobile && hasOpenFileTabs}
           showHistory={historyAsTab || activeTab === "history"}
