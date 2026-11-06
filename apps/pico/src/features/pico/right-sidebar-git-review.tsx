@@ -816,7 +816,7 @@ function useFileReviewContentView({
             <DropdownMenuTrigger
               render={
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size={isMobile ? "icon" : "icon-sm"}
                   aria-label="Diff actions"
                   disabled={bulkActionDisabled}
