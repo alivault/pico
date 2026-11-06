@@ -1741,7 +1741,7 @@ const ProjectAgentGroup = React.memo(function ProjectAgentGroup({
     // Left item-pad puts the folder icon on the sidebar icon column. The
     // new-agent button stays flush right: its item-size box already holds
     // the item-pad, so its icon ends on the right content edge.
-    <div className="flex items-center gap-2 rounded-lg pl-(--sidebar-item-pad)">
+    <div className="group/project-row flex items-center gap-2 rounded-lg pl-(--sidebar-item-pad)">
       <CollapsibleTrigger
         type="button"
         className={cn(
@@ -1801,7 +1801,10 @@ const ProjectAgentGroup = React.memo(function ProjectAgentGroup({
           <Button
             size="icon"
             variant="ghost"
-            className="shrink-0 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+            aria-label={`Create an agent in ${project}`}
+            // Only the row under the pointer shows its button. It keeps
+            // its space, so the counts do not move.
+            className="shrink-0 opacity-0 transition-opacity group-hover/project-row:opacity-100 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground focus-visible:opacity-100 data-popup-open:opacity-100"
             onClick={() => onCreateAgentInProject(project)}
           >
             <SquarePenIcon className="size-4" />
