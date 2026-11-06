@@ -430,7 +430,8 @@ export class Auth {
         const seconds = label === "5h" ? 5 * 3600 : 7 * 24 * 3600
         windows.push({
           label,
-          usedPercent: normalizePercent(usage.utilization),
+          // Anthropic sends a percent (0 to 100), also when it is 1 or less.
+          usedPercent: clampPercent(usage.utilization),
           ...(usage.resets_at
             ? {
                 resetsIn: formatResetTime(usage.resets_at),
@@ -500,10 +501,6 @@ type CodexWindow = {
 
 function clampPercent(value: number) {
   return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0
-}
-
-function normalizePercent(value: number) {
-  return clampPercent(value >= 0 && value <= 1 ? value * 100 : value)
 }
 
 function formatResetTime(value: string | number) {
