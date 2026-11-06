@@ -88,8 +88,8 @@ export {
 } from "@/lib/pico/sync"
 export { flattenTree } from "@/lib/pico/tree"
 
-export const INITIAL_PROJECT_AGENT_RENDER_COUNT = 5
-export const PROJECT_AGENT_LOAD_MORE_COUNT = 5
+export const INITIAL_PROJECT_AGENT_RENDER_COUNT = 3
+export const PROJECT_AGENT_LOAD_MORE_COUNT = 3
 
 export type StreamingBehavior = "followUp" | "steer"
 
