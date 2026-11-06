@@ -67,8 +67,6 @@ export type AppShellAgentHeaderActions = {
   createAgent: (cwdOverride?: string) => void | Promise<unknown>
   onDeleteCurrentAgent: () => void
   onForkAgent: () => void | Promise<unknown>
-  onMoveCurrentAgent: (project: string) => void | Promise<unknown>
-  onMoveCurrentAgentToAnyProject: () => void
   onOpenCommandPalette: () => void
   onOpenModelDialog: () => void
   onOpenRightSidebarTab: (tab: "review" | "history") => void
@@ -76,7 +74,6 @@ export type AppShellAgentHeaderActions = {
   onRenameAgent: () => void
   onRunCompact: () => void | Promise<unknown>
   onSelectThinkingLevel: (level: string) => void | Promise<unknown>
-  onToggleCurrentAgentPinned: () => void
   onToggleHideThinking: () => void | Promise<unknown>
   onToggleHideToolBlocks: () => void
   onTreeAgent: () => void | Promise<unknown>
@@ -89,11 +86,9 @@ type AppShellAgentHeaderProps = {
   gitPanelOpen: boolean
   terminalPanelOpen: boolean
   loadingDisplayAgentTitle: string
-  currentAgentPinned: boolean
   contextUsageStore: ComposerContextUsageStore
   displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
   isAgentViewLoading: boolean
-  newAgentProjectOptions: string[]
   onToggleGitPanel: () => void
   onToggleTerminalPanel: () => void
   agentStore: PicoStore<AgentState>
@@ -108,11 +103,9 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
   gitPanelOpen,
   terminalPanelOpen,
   loadingDisplayAgentTitle,
-  currentAgentPinned,
   contextUsageStore,
   displaySettingsStore,
   isAgentViewLoading,
-  newAgentProjectOptions,
   onToggleGitPanel,
   onToggleTerminalPanel,
   agentStore,
@@ -184,10 +177,6 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
         .filter(Boolean)
         .join(" ")
     : ""
-  const moveAgentProjectOptions = newAgentProjectOptions.filter(
-    (path) => path !== displayAgentCwd
-  )
-
   return (
     <div className="sticky top-0 z-50 flex h-[var(--header-height)] w-full shrink-0 items-center border-b border-border/70 bg-background p-(--sidebar-gutter) pt-[calc(var(--sidebar-gutter)+env(safe-area-inset-top))]">
       <div className="flex w-full min-w-0 items-center gap-1">
@@ -333,75 +322,6 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
                 viewerContextId={viewerContextId}
               />
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => {
-                  void actionsRef.current.createAgent()
-                }}
-              >
-                <span>Create new agent</span>
-                <DropdownMenuShortcut>
-                  {formatShortcutLabel(appShortcut("N"))}
-                </DropdownMenuShortcut>
-              </DropdownMenuItem>
-              {newAgentProjectOptions.length > 0 ? (
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>New agent in…</DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-72">
-                    {newAgentProjectOptions.map((path) => (
-                      <DropdownMenuItem
-                        key={path}
-                        onClick={() => {
-                          void actionsRef.current.createAgent(path)
-                        }}
-                      >
-                        <span className="min-w-0 flex-1 truncate">
-                          {formatDisplayPath(path)}
-                        </span>
-                        {path === defaultNewAgentProject ? (
-                          <DropdownMenuShortcut>Default</DropdownMenuShortcut>
-                        ) : null}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-              ) : null}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                disabled={!agentHeaderState.agentHasFile}
-                onClick={() => {
-                  actionsRef.current.onToggleCurrentAgentPinned()
-                }}
-              >
-                <span>
-                  {currentAgentPinned ? "Unpin from sidebar" : "Pin to sidebar"}
-                </span>
-              </DropdownMenuItem>
-              {agentHeaderState.agentHasFile ? (
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>Move to…</DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-72">
-                    {moveAgentProjectOptions.map((path) => (
-                      <DropdownMenuItem
-                        key={path}
-                        onClick={() => {
-                          void actionsRef.current.onMoveCurrentAgent(path)
-                        }}
-                      >
-                        <span className="min-w-0 flex-1 truncate">
-                          {formatDisplayPath(path)}
-                        </span>
-                      </DropdownMenuItem>
-                    ))}
-                    <DropdownMenuItem
-                      onClick={() => {
-                        actionsRef.current.onMoveCurrentAgentToAnyProject()
-                      }}
-                    >
-                      Other project…
-                    </DropdownMenuItem>
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-              ) : null}
               <DropdownMenuItem
                 onClick={() => {
                   void actionsRef.current.onRunCompact()

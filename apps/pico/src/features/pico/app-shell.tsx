@@ -189,7 +189,6 @@ import {
   CENTER_MESSAGES_STORAGE_KEY,
   DRAFT_PROJECT_STORAGE_KEY,
   HIDE_TOOL_BLOCKS_STORAGE_KEY,
-  PINNED_AGENTS_STORAGE_KEY,
   RECENT_PROJECTS_LIMIT,
   RECENT_PROJECTS_STORAGE_KEY,
   RIGHT_SIDEBAR_OPEN_STORAGE_KEY,
@@ -201,7 +200,6 @@ import {
   createContextId,
   createInitialAgentState,
   getAgentTitle,
-  normalizeAgentSelectionKeys,
   normalizeStoredProjectList,
   promptDraftKey,
   readStoredAutoScrollEnabled,
@@ -1398,17 +1396,6 @@ function useAppShellAgentWorkspaceView({
   }, [activeAgentFile, activeAgentName, sidebarStore])
   const activeAgentId =
     agentState.agentId || (agentState.agentKey ? undefined : agentId)
-  const currentAgentPinKey = agentListEntryKey({
-    path: agentState.agentFile,
-    id: activeAgentId,
-  })
-  const currentAgentPinned = useAppShellSidebarValue(
-    sidebarStore,
-    (snapshot) =>
-      currentAgentPinKey
-        ? snapshot.state.pinnedSidebarAgentKeys.includes(currentAgentPinKey)
-        : false
-  )
   const currentAgentQueryScope = agentScrollKey(agentState)
   const contextUsageAgentScopeRef = React.useRef("")
   React.useLayoutEffect(() => {
@@ -1862,12 +1849,6 @@ function useAppShellAgentWorkspaceView({
     if (!entry.path) return
     moveAgentProjectTargetRef.current = entry
     moveAgentProjectDialogRef.current?.open()
-  }
-
-  const openMoveAgentProjectDialogForCurrentAgent = () => {
-    const currentEntry = currentAgentListEntry()
-    if (!currentEntry) return
-    openMoveAgentProjectDialogForEntry(currentEntry)
   }
 
   const openForkDialog = async () => {
@@ -3097,23 +3078,6 @@ function useAppShellAgentWorkspaceView({
     return moved
   }
 
-  const moveCurrentAgentToProject = async (project: string) => {
-    const currentState = agentStateRef.current
-    if (!currentState.agentFile) return false
-
-    return await moveAgentToProject(
-      {
-        path: currentState.agentFile,
-        id: currentState.agentId,
-        cwd: currentState.cwd,
-        title: getCurrentAgentTitleFromState(currentState),
-        name: currentState.agentName,
-        modified: currentState.modified,
-      },
-      project
-    )
-  }
-
   const setToolBlocksHidden = (hidden: boolean) => {
     setHideToolBlocks(hidden)
     safeLocalStorageSetItem(HIDE_TOOL_BLOCKS_STORAGE_KEY, hidden ? "1" : "0")
@@ -3720,35 +3684,11 @@ function useAppShellAgentWorkspaceView({
     agentIsStreaming: agentStateRef.current.streaming,
     sidebarAgentEntriesByKey,
   })
-  const toggleCurrentAgentPinned = () => {
-    const currentState = agentStateRef.current
-    const key = agentListEntryKey({
-      path: currentState.agentFile,
-      id: currentState.agentId,
-    })
-    if (!key) return
-
-    sidebarStore.setPinnedSidebarAgentKeys((current) => {
-      const currentKeys = normalizeAgentSelectionKeys(current)
-      const nextKeys = currentKeys.includes(key)
-        ? currentKeys.filter((currentKey) => currentKey !== key)
-        : [key, ...currentKeys]
-
-      machineLocalStorageSetItem(
-        machineId,
-        PINNED_AGENTS_STORAGE_KEY,
-        JSON.stringify(nextKeys)
-      )
-      return nextKeys
-    })
-  }
 
   const agentHeaderActionsRef = useLatestRef<AppShellAgentHeaderActions>({
     createAgent,
     onDeleteCurrentAgent: openDeleteDialogForCurrentAgent,
     onForkAgent: openForkDialog,
-    onMoveCurrentAgent: moveCurrentAgentToProject,
-    onMoveCurrentAgentToAnyProject: openMoveAgentProjectDialogForCurrentAgent,
     onOpenCommandPalette: openCommandPalette,
     onOpenModelDialog: focusModelSelector,
     onOpenRightSidebarTab: openRightSidebarTab,
@@ -3756,7 +3696,6 @@ function useAppShellAgentWorkspaceView({
     onRenameAgent: openRenameDialog,
     onRunCompact: runCompact,
     onSelectThinkingLevel: setThinkingLevel,
-    onToggleCurrentAgentPinned: toggleCurrentAgentPinned,
     onToggleHideThinking: toggleHideThinking,
     onToggleHideToolBlocks: toggleHideToolBlocks,
     onTreeAgent: openTreeDialog,
@@ -3895,11 +3834,9 @@ function useAppShellAgentWorkspaceView({
                 gitPanelOpen={gitPanelOpen}
                 terminalPanelOpen={terminalPanelOpen}
                 loadingDisplayAgentTitle={loadingDisplayAgentTitle}
-                currentAgentPinned={currentAgentPinned}
                 contextUsageStore={contextUsageStore}
                 displaySettingsStore={displaySettingsStore}
                 isAgentViewLoading={isAgentViewLoading}
-                newAgentProjectOptions={newAgentProjectOptions}
                 onToggleGitPanel={toggleGitPanel}
                 onToggleTerminalPanel={toggleTerminalPanel}
                 agentStore={agentStore}
