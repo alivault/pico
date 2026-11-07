@@ -1103,7 +1103,9 @@ export function createAgentsExtension(host: HostBridge) {
           model = { provider: match.provider, modelId: match.id }
         }
         let cwd = args.cwd?.trim() || parentMeta.cwd
-        let group: string | undefined = parentMeta.group ?? parentMeta.cwd
+        // A subagent stays in its parent's sidebar project, also with its
+        // own cwd, so it shows at once, nested under its parent.
+        const group = parentMeta.group ?? parentMeta.cwd
         let worktree:
           | { repoRoot: string; path: string; branch: string }
           | undefined
@@ -1128,8 +1130,6 @@ export function createAgentsExtension(host: HostBridge) {
               `Could not create the worktree: ${error instanceof Error ? error.message : String(error)}`
             )
           }
-        } else if (args.cwd) {
-          group = undefined
         }
         subagent = await services.agents.create(cwd, {
           parent,
