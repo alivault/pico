@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import {
   CircleAlertIcon,
   CircleCheckIcon,
@@ -25,8 +26,10 @@ import {
   type AgentSectionProps,
 } from "@/features/pico/agent/agent-panel"
 import {
+  agentExtensionsQueryKey,
   postAgentJson,
   useAgentExtensions,
+  type AgentExtensionState,
 } from "@/features/pico/agent/agent-extensions"
 import { errorText, IconAction } from "@/features/pico/agent/shared"
 import {
@@ -187,16 +190,68 @@ function todoItemsFrom(state: Record<string, unknown>) {
   return todo?.items ?? []
 }
 
+/** The change applied on the client, as the server does it in `applyTodo`. */
+function applyTodoChange(
+  items: Array<TodoItem>,
+  body: Record<string, unknown>
+): Array<TodoItem> {
+  switch (body.op) {
+    case "add": {
+      const text = typeof body.text === "string" ? body.text.trim() : ""
+      if (!text) return items
+      return [
+        ...items,
+        { id: `pending-${Date.now()}`, text, status: "pending" },
+      ]
+    }
+    case "update": {
+      const status = body.status as TodoStatus | undefined
+      return items.map((item) => {
+        if (item.id === body.id)
+          return { ...item, ...(status ? { status } : {}) }
+        if (status === "active" && item.status === "active")
+          return { ...item, status: "pending" }
+        return item
+      })
+    }
+    case "remove":
+      return items.filter((item) => item.id !== body.id)
+    case "clear":
+      return body.scope === "all"
+        ? []
+        : items.filter((item) => item.status !== "done")
+    default:
+      return items
+  }
+}
+
+function withTodoItems(
+  state: AgentExtensionState | undefined,
+  items: Array<TodoItem>
+): AgentExtensionState {
+  const todo = (state?.todo ?? {}) as Record<string, unknown>
+  return { ...state, todo: { ...todo, items } }
+}
+
+/** Sends a plan change, and shows it at once. A failed change rolls back. */
 function useTodoChange(viewerContextId: string, agentId: string) {
   const machineId = useMachineId()
+  const queryClient = useQueryClient()
+  const queryKey = agentExtensionsQueryKey(viewerContextId, agentId)
   return (body: Record<string, unknown>) => {
-    void postAgentJson(
+    void queryClient.cancelQueries({ queryKey })
+    queryClient.setQueryData<AgentExtensionState>(queryKey, (state) =>
+      withTodoItems(state, applyTodoChange(todoItemsFrom(state ?? {}), body))
+    )
+    void postAgentJson<{ items: Array<TodoItem> }>(
       machineId,
       viewerContextId,
       agentId,
       "/api/agent/todo",
       body
-    ).catch((error: unknown) => toast.error(errorText(error)))
+    )
+      .catch((error: unknown) => toast.error(errorText(error)))
+      .finally(() => queryClient.invalidateQueries({ queryKey }))
   }
 }
 
