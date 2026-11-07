@@ -129,6 +129,8 @@ export class Auth {
   readonly #ui: UiRequests
   readonly #authPath: string
   readonly #activeLogins = new Map<string, AbortController>()
+  /** The last usage answer of each provider, and when it was asked for. */
+  readonly #usageCache = new Map<string, { at: number; value: unknown }>()
 
   constructor(models: ModelRuntime, ui: UiRequests, agentDir: string) {
     this.#models = models
@@ -401,26 +403,44 @@ export class Auth {
     return undefined
   }
 
+  /**
+   * The usage JSON of a provider. The usage endpoints rate limit (HTTP 429)
+   * when they are asked often, for example each time the agent menu opens on
+   * each machine. So ask at most one time a minute, and keep the last good
+   * answer when a request fails.
+   */
+  async #usageJson(
+    provider: string,
+    request: () => Promise<Response | undefined>
+  ) {
+    const cached = this.#usageCache.get(provider)
+    if (cached && Date.now() - cached.at < USAGE_CACHE_MS) return cached.value
+    const response = await request().catch(() => undefined)
+    const value = response?.ok
+      ? await response.json().catch(() => undefined)
+      : undefined
+    this.#usageCache.set(provider, {
+      at: Date.now(),
+      value: value ?? cached?.value,
+    })
+    return value ?? cached?.value
+  }
+
   async providerUsage(provider: string | undefined) {
     const windows: UsageWindow[] = []
     if (provider === "anthropic") {
       const token = await this.#claudeToken()
       if (!token) return { ok: true, windows }
-      const response = await fetch(
-        "https://api.anthropic.com/api/oauth/usage",
-        {
+      const value = (await this.#usageJson(provider, () =>
+        fetch("https://api.anthropic.com/api/oauth/usage", {
           headers: {
             Authorization: `Bearer ${token}`,
             "anthropic-beta": "oauth-2025-04-20",
           },
           signal: AbortSignal.timeout(5000),
-        }
-      ).catch(() => undefined)
-      if (!response?.ok) return { ok: true, windows }
-      const value = (await response.json()) as Record<
-        string,
-        { utilization?: number; resets_at?: string }
-      >
+        })
+      )) as Record<string, { utilization?: number; resets_at?: string }> | null
+      if (!value) return { ok: true, windows }
       for (const [key, label] of [
         ["five_hour", "5h"],
         ["seven_day", "Week"],
@@ -450,20 +470,18 @@ export class Auth {
       }
       if (credential.accountId)
         headers["ChatGPT-Account-Id"] = credential.accountId
-      const response = await fetch(
-        "https://chatgpt.com/backend-api/wham/usage",
-        {
+      const value = (await this.#usageJson(provider, () =>
+        fetch("https://chatgpt.com/backend-api/wham/usage", {
           headers,
           signal: AbortSignal.timeout(5000),
-        }
-      ).catch(() => undefined)
-      if (!response?.ok) return { ok: true, windows }
-      const value = (await response.json()) as {
+        })
+      )) as {
         rate_limit?: {
           primary_window?: CodexWindow
           secondary_window?: CodexWindow
         }
-      }
+      } | null
+      if (!value) return { ok: true, windows }
       for (const [window, fallback] of [
         [value.rate_limit?.primary_window, "5h"],
         [value.rate_limit?.secondary_window, "Week"],
@@ -492,6 +510,9 @@ export class Auth {
     for (const login of this.#activeLogins.values()) login.abort()
   }
 }
+
+/** How long a usage answer is used before the provider is asked again. */
+const USAGE_CACHE_MS = 60_000
 
 type CodexWindow = {
   used_percent?: number
