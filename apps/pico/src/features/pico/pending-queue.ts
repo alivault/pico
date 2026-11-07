@@ -55,6 +55,11 @@ export function isHeldPendingId(pendingId: string) {
   return pendingId.startsWith("held:")
 }
 
+/** A prompt that the client shows before the server confirms it. */
+export function isOptimisticPendingId(pendingId: string) {
+  return pendingId.startsWith("optimistic:")
+}
+
 let newRowCounter = 0
 
 function newRowKey() {
@@ -289,20 +294,38 @@ export function mergeQueueAgent(
       row.pendingId ? [queueIdentity(row.pendingId)] : []
     )
   )
+  let unknown = messages.filter(
+    (message) => !known.has(queueIdentity(message.pendingId))
+  )
   let renamed = false
   const kept = agent.rows.flatMap((row) => {
     if (!row.pendingId) return [row]
     const pendingId = live.get(queueIdentity(row.pendingId))
-    if (!pendingId) return isQueueRowChanged(row) ? [row] : []
+    if (!pendingId) {
+      // A prompt that the client queued gets its server ID later. Keep
+      // the row and its edits, with the server ID.
+      const adopted = isOptimisticPendingId(row.pendingId)
+        ? unknown.find(
+            (message) =>
+              message.text === row.originalText &&
+              message.streamingBehavior === row.originalLane &&
+              message.images.length === row.originalImages.length
+          )
+        : undefined
+      if (adopted) {
+        unknown = unknown.filter((message) => message !== adopted)
+        renamed = true
+        return [{ ...row, pendingId: adopted.pendingId }]
+      }
+      return isQueueRowChanged(row) ? [row] : []
+    }
     if (pendingId === row.pendingId) return [row]
     renamed = true
     return [{ ...row, pendingId }]
   })
-  const added = messages
-    .filter((message) => !known.has(queueIdentity(message.pendingId)))
-    .map((message, index) =>
-      queueRowFromMessage(message, agent.rows.length + index)
-    )
+  const added = unknown.map((message, index) =>
+    queueRowFromMessage(message, agent.rows.length + index)
+  )
 
   if (!renamed && kept.length === agent.rows.length && added.length === 0) {
     return agent

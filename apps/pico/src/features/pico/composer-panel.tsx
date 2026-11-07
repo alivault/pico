@@ -111,7 +111,7 @@ type ComposerPanelProps = {
   onSavePendingQueue: (
     rows: Array<PendingQueueSaveRow>,
     removedPendingIds: Array<string>,
-    resume: boolean
+    resume: boolean | Promise<boolean>
   ) => void
   onHoldPendingQueue: () => Promise<(() => void) | null>
   onStartPendingQueue: () => void

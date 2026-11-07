@@ -88,7 +88,8 @@ type ComposerPendingMessagesProps = {
   onSavePendingQueue: (
     rows: Array<PendingQueueSaveRow>,
     removedPendingIds: Array<string>,
-    resume: boolean
+    /** Resume a held queue after the save. Can wait for the hold. */
+    resume: boolean | Promise<boolean>
   ) => void
   /**
    * Hold the queue while the user edits it. Resolves a function that resumes
@@ -313,9 +314,10 @@ export const ComposerPendingMessages = React.memo(
       const hasServerPrompts = currentPendingMessages.some((message) =>
         /^(pending|held):/.test(message.pendingId)
       )
-      const hold = hasServerPrompts
-        ? onHoldPendingQueue().catch(() => null)
-        : Promise.resolve(null)
+      // A prompt queued just now has no server ID yet. Hold when it gets
+      // one: this effect runs again when the queue changes.
+      if (!hasServerPrompts) return
+      const hold = onHoldPendingQueue().catch(() => null)
       holdRef.current = hold
       void hold.then((resume) => {
         if (holdRef.current === hold) setHeldForEdit(resume !== null)
@@ -413,13 +415,20 @@ export const ComposerPendingMessages = React.memo(
         ? queueAgentSavePlan(current)
         : undefined
       close()
-      releaseHold((resume) => {
-        if (plan) {
-          onSavePendingQueue(plan.rows, plan.removedPendingIds, resume !== null)
-        } else {
-          resume?.()
-        }
-      })
+      if (!plan) {
+        releaseHold((resume) => resume?.())
+        return
+      }
+      // Save at once, so the queue shows the changes. The save waits for
+      // the hold before it goes to the server.
+      const hold = holdRef.current ?? Promise.resolve(null)
+      holdRef.current = null
+      setHeldForEdit(false)
+      onSavePendingQueue(
+        plan.rows,
+        plan.removedPendingIds,
+        hold.then((resume) => resume !== null)
+      )
     }, [close, onSavePendingQueue, releaseHold])
 
     React.useImperativeHandle(

@@ -574,7 +574,7 @@ export const AppShellComposerController = React.memo(
       (
         rows: Array<PendingQueueSaveRow>,
         removedPendingIds: Array<string>,
-        resume: boolean
+        resume: boolean | Promise<boolean>
       ) => {
         if (snapshotRef.current.disabled) return
         const serverRows = actionsRef.current.savePendingDraftFollowUps(rows)

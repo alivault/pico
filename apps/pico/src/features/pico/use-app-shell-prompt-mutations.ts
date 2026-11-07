@@ -161,6 +161,11 @@ type UseAppShellPromptMutationsOptions = {
   setPendingMessages: React.Dispatch<
     React.SetStateAction<Array<PendingComposerMessage>>
   >
+  /**
+   * The count of queue saves that run. While it is not zero, the queue
+   * shows the saved rows, and server states do not replace them.
+   */
+  pendingQueueSaveCountRef: React.RefObject<number>
   setAwaitingFirstTurn: React.Dispatch<React.SetStateAction<boolean>>
   setIsSubmitting: React.Dispatch<React.SetStateAction<boolean>>
   setComposerLineComments: React.Dispatch<
@@ -391,6 +396,7 @@ export function useAppShellPromptMutations({
   setPendingDraftPrompt,
   setPendingDraftFollowUps,
   setPendingMessages,
+  pendingQueueSaveCountRef,
   setAwaitingFirstTurn,
   setIsSubmitting,
   setComposerLineComments,
@@ -1521,7 +1527,7 @@ export function useAppShellPromptMutations({
     async (
       rows: Array<PendingQueueSaveRow>,
       removedPendingIds: Array<string>,
-      resume: boolean
+      resume: boolean | Promise<boolean>
     ) => {
       if (!viewerContextId) return
       if (rows.length === 0 && removedPendingIds.length === 0 && !resume) {
@@ -1538,11 +1544,14 @@ export function useAppShellPromptMutations({
         }))
       )
 
+      pendingQueueSaveCountRef.current += 1
       try {
+        // The hold can still run. The save must come after it.
+        const shouldResume = await resume
         const response = await savePendingQueueMutation.mutateAsync({
           rows,
           removedPendingIds,
-          resume,
+          resume: shouldResume,
         })
         const nextPendingMessages = pendingMessagesFromResponse(response)
         if (nextPendingMessages) {
@@ -1561,9 +1570,12 @@ export function useAppShellPromptMutations({
         toast.error(
           error instanceof Error ? error.message : "Failed to update the queue"
         )
+      } finally {
+        pendingQueueSaveCountRef.current -= 1
       }
     },
     [
+      pendingQueueSaveCountRef,
       pendingMessagesRef,
       savePendingQueueMutation,
       updatePendingMessages,
@@ -1601,7 +1613,8 @@ export function useAppShellPromptMutations({
         { method: "POST" }
       )
       const nextPendingMessages = pendingMessagesFromResponse(response)
-      if (nextPendingMessages) {
+      // A save that waits for this hold shows its own rows.
+      if (nextPendingMessages && pendingQueueSaveCountRef.current === 0) {
         updatePendingMessages(() => nextPendingMessages)
       }
       const wasPaused = "wasPaused" in response && response.wasPaused === true
@@ -1633,6 +1646,7 @@ export function useAppShellPromptMutations({
     activeAgentId,
     machineId,
     agentStateRef,
+    pendingQueueSaveCountRef,
     updatePendingMessages,
     viewerContextId,
   ])

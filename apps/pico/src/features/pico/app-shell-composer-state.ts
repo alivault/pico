@@ -200,7 +200,7 @@ export type AppShellComposerActions = {
   savePendingQueue: (
     rows: Array<PendingQueueSaveRow>,
     removedPendingIds: Array<string>,
-    resume: boolean
+    resume: boolean | Promise<boolean>
   ) => void | Promise<unknown>
   /**
    * Hold the queue for an edit. Resolves a function that resumes the held

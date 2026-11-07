@@ -1095,6 +1095,18 @@ function useAppShellAgentWorkspaceView({
     },
     [pendingMessagesStore, refreshComposerPendingMessages]
   )
+  // A queue save shows its rows at once. Until the save ends, a state from
+  // the server can still have the old queue: do not show it.
+  const pendingQueueSaveCountRef = React.useRef(0)
+  const setServerPendingMessages = React.useCallback<
+    React.Dispatch<React.SetStateAction<Array<PendingComposerMessage>>>
+  >(
+    (action) => {
+      if (pendingQueueSaveCountRef.current > 0) return
+      setPendingMessages(action)
+    },
+    [setPendingMessages]
+  )
   const setConversationItems = React.useCallback(
     (items: Array<ConversationItem>) => {
       conversationItemsStore.setItems(items)
@@ -2176,7 +2188,7 @@ function useAppShellAgentWorkspaceView({
     applySidebarAgentStatusRef,
     bindOptimisticSidebarAgentRef,
     setComposerImages,
-    setPendingMessages,
+    setPendingMessages: setServerPendingMessages,
     pendingUiRequestHandlerRef,
     dismissUiRequestRef,
     lastSyncedEditorTextRef,
@@ -2544,6 +2556,7 @@ function useAppShellAgentWorkspaceView({
     setPendingDraftPrompt,
     setPendingDraftFollowUps,
     setPendingMessages,
+    pendingQueueSaveCountRef,
     setAwaitingFirstTurn,
     setIsSubmitting,
     setComposerLineComments,
