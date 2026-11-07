@@ -46,7 +46,10 @@ import {
   parseComposerSkillMessage,
   serializeComposerDraft,
 } from "@/features/pico/composer-utils"
-import { getClipboardImageFiles } from "@/features/pico/app-shell-utils"
+import {
+  getClipboardImageFiles,
+  hasDraggedImage,
+} from "@/features/pico/app-shell-utils"
 import { promptImageKey } from "@/features/pico/conversation-view"
 import {
   findExactSlashCommand,
@@ -340,6 +343,42 @@ export function ComposerPanel({
     []
   )
 
+  // Counts nested dragenter and dragleave events, so the highlight
+  // does not flicker when the pointer moves over child elements.
+  const dragDepthRef = React.useRef(0)
+  const [isDraggingImage, setIsDraggingImage] = React.useState(false)
+  const resetDrag = () => {
+    dragDepthRef.current = 0
+    setIsDraggingImage(false)
+  }
+  const dropHandlers = {
+    onDragEnter: (event: React.DragEvent<HTMLDivElement>) => {
+      if (disabled || !hasDraggedImage(event.dataTransfer)) return
+      event.preventDefault()
+      dragDepthRef.current += 1
+      setIsDraggingImage(true)
+    },
+    onDragOver: (event: React.DragEvent<HTMLDivElement>) => {
+      if (disabled || !hasDraggedImage(event.dataTransfer)) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = "copy"
+    },
+    onDragLeave: () => {
+      if (dragDepthRef.current === 0) return
+      dragDepthRef.current -= 1
+      if (dragDepthRef.current === 0) setIsDraggingImage(false)
+    },
+    onDrop: (event: React.DragEvent<HTMLDivElement>) => {
+      resetDrag()
+      if (disabled) return
+      const imageFiles = getClipboardImageFiles(event.dataTransfer)
+      if (imageFiles.length === 0) return
+      event.preventDefault()
+      onPickImages(imageFiles)
+      promptRef.current?.focus()
+    },
+  }
+
   const composerColumnClassName =
     centerMessages || flush
       ? `mx-auto flex w-full max-w-[80ch] flex-col ${
@@ -365,7 +404,12 @@ export function ComposerPanel({
           onExitEditing={focusPrompt}
         />
 
-        <div className="overflow-visible rounded-[18px] border bg-card">
+        <div
+          className={`overflow-visible rounded-[18px] border bg-card transition-colors ${
+            isDraggingImage ? "border-primary ring-2 ring-primary/30" : ""
+          }`}
+          {...dropHandlers}
+        >
           <ComposerPromptEditor
             composerLineComments={composerLineComments}
             composerImages={composerImages}

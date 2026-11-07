@@ -255,6 +255,22 @@ export async function fetchJson<T>(
   return data
 }
 
+/**
+ * Whether a drag can carry an image. During a drag, the browser shows only
+ * the kind and the MIME type of each item. Some sources give no type, so
+ * accept any file without a type; the drop keeps only the images.
+ */
+export function hasDraggedImage(data: DataTransfer) {
+  if (!data.types.includes("Files")) return false
+  const items = Array.from(data.items)
+  if (items.length === 0) return true
+  return items.some(
+    (item) =>
+      item.kind === "file" &&
+      (item.type === "" || item.type.startsWith("image/"))
+  )
+}
+
 /** The image files of a paste or a drop. */
 export function getClipboardImageFiles(data: DataTransfer) {
   const itemFiles = Array.from(data.items).flatMap((item) => {
