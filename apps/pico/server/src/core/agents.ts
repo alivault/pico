@@ -864,6 +864,15 @@ export class Agents implements HostAgents {
       )
   }
 
+  /** Close the open questions of an agent that no tool waits for. */
+  async #closeStaleQuestions(id: string) {
+    try {
+      await cancelQuestions(this.#harness, conversationIdOf(id), ctx)
+    } catch (error) {
+      console.warn("[pico] could not close the open questions:", error)
+    }
+  }
+
   #isStateKind(kind: string) {
     this.#stateKinds ??= stateKinds()
     return this.#stateKinds.has(kind)
@@ -1112,6 +1121,9 @@ export class Agents implements HostAgents {
     this.#busy.set(id, busy)
     this.#compacting.set(id, compacting)
 
+    // A turn that ended has no tool that waits for an answer.
+    if (!busy && wasBusy && this.#questionWaits.has(id))
+      await this.#closeStaleQuestions(id)
     if (busy && !wasBusy) {
       const turnStartedAt = Date.now()
       this.#updateMeta(id, { turnStartedAt })
@@ -1802,6 +1814,10 @@ export class Agents implements HostAgents {
         ctx
       )
     }
+    // An idle agent has no tool that waits for an answer: the open
+    // questions are left over, so the new prompt closes them.
+    if (!busy && this.#questionWaits.has(id))
+      await this.#closeStaleQuestions(id)
     // A new queued prompt resumes a paused queue, ahead of the new prompt.
     if (this.isBusy(id) && (await this.#heldItems(id)).length > 0)
       await this.requeue(id)
