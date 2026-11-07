@@ -20,6 +20,7 @@ import {
   type BrowserManager,
   type BrowserTab,
 } from "../services/browser.ts"
+import { askAndWait } from "./ask.ts"
 import type { HostBridge } from "./host.ts"
 import {
   clip,
@@ -135,7 +136,8 @@ export function createBrowserExtension(host: HostBridge) {
     browser: BrowserManager,
     tabs: BrowserTab[],
     args: Args,
-    api: ToolExecutionApi
+    api: ToolExecutionApi,
+    context: Context
   ) => Promise<ToolExecutionResult>
 
   const open: Action = async (browser, tabs, args, api) => {
@@ -260,6 +262,51 @@ export function createBrowserExtension(host: HostBridge) {
     )
   }
 
+  /**
+   * Let the user use the browser, for example to log in, and wait until the
+   * user answers. The Browser tab of the web client shows the page live and
+   * sends the user's clicks and keys to it. The wait is a question, so the
+   * agent shows that it needs the user, and a notification goes out.
+   */
+  const handoff: Action = async (browser, tabs, args, api, context) => {
+    const reason = args.text?.trim()
+    if (!reason) throw new Error("handoff needs text: what the user should do")
+    const conversation = Number(api.conversationId)
+    await browser.session(conversation, tabs)
+    const end = browser.startHandoff(conversation, {
+      questionId: api.callId,
+      reason,
+    })
+    try {
+      const question = await askAndWait(api, context, {
+        prompt: reason,
+        kind: "choice",
+        options: [{ label: "Done" }, { label: "I can't do it" }],
+        allowOther: true,
+        browser: true,
+      })
+      if (question.cancelled || !question.answer)
+        return textResult("The user closed the handoff without an answer.", {
+          isError: true,
+          details: { questionId: question.id, status: "cancelled" },
+        })
+      const answer = question.answer.text
+      const page = await browser.activePage(conversation)
+      const now = page
+        ? `\n${clip(formatSnapshot(await browser.snapshot(page.page)), 30_000)}`
+        : ""
+      return textResult(`The user answered: ${answer}${now}`, {
+        details: {
+          questionId: question.id,
+          status: "answered",
+          answer: { text: answer, via: question.answer.via },
+        },
+      })
+    } finally {
+      end()
+    }
+  }
+
   const close: Action = async (browser, _tabs, _args, api) => {
     await browser.closeSession(Number(api.conversationId))
     return textResult("The browser is closed. Its cookies are saved.")
@@ -285,6 +332,7 @@ export function createBrowserExtension(host: HostBridge) {
     tabs: tabList,
     switch_tab: tabList,
     close_tab: tabList,
+    handoff,
     close,
   }
 
@@ -300,6 +348,7 @@ export function createBrowserExtension(host: HostBridge) {
       "screenshot (full_page);",
       "eval (a JavaScript expression in the page; returns its JSON value);",
       "tabs, switch_tab (id), close_tab (id);",
+      "handoff (text: what the user should do, for example log in to a site or solve a captcha; the user sees your browser live in Pico and uses it, and the call waits until the user answers; use it only when you cannot go on yourself);",
       "close (close the browser; cookies stay saved).",
     ].join(" "),
     parameters: Type.Object({
@@ -328,7 +377,7 @@ export function createBrowserExtension(host: HostBridge) {
             : undefined
       if (denied) return denied
       return withBrowser(api, context, (browser, tabs) =>
-        run(browser, tabs, { ...args, action }, api)
+        run(browser, tabs, { ...args, action }, api, context)
       )
     },
   })

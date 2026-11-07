@@ -9,6 +9,10 @@ import {
   findChrome,
   formatSnapshot,
 } from "../src/services/browser.ts"
+import {
+  BrowserView,
+  type BrowserViewEvent,
+} from "../src/services/browser-view.ts"
 import { Notifier } from "../src/services/notify.ts"
 import { tempDir } from "./support.ts"
 
@@ -212,6 +216,100 @@ void test(
       assert.ok(cookies.some((cookie) => cookie.name === "kept"))
     } finally {
       await browser.shutdown()
+    }
+  }
+)
+
+void test(
+  "the live view sends frames and tabs, does the user's input, and a handoff keeps the context open",
+  { skip: findChrome() ? false : "No Chrome on this machine" },
+  async () => {
+    const dir = await tempDir()
+    const site = createServer((request, response) => {
+      response.writeHead(200, { "content-type": "text/html" })
+      if (request.url === "/popup") {
+        response.end("<title>Popup</title><p>popup</p>")
+        return
+      }
+      response.end(
+        `<title>Live</title><input id="field" style="position:absolute;left:10px;top:10px;width:200px;height:30px"><a id="open" href="/popup" target="_blank" style="position:absolute;left:10px;top:100px">open</a>`
+      )
+    })
+    const port = await listen(site)
+    const browser = new BrowserManager(dir, () => true, { idleMs: 60_000 })
+    const events: BrowserViewEvent[] = []
+    const waitFor = async (check: (event: BrowserViewEvent) => boolean) => {
+      for (let tries = 0; tries < 100; tries++) {
+        const found = events.find(check)
+        if (found) return found
+        await new Promise((done) => setTimeout(done, 50))
+      }
+      throw new Error(
+        `No such event in ${JSON.stringify(events.map((event) => (event.type === "frame" ? "frame" : event)))}`
+      )
+    }
+    const view = new BrowserView({
+      browser,
+      conversationId: 11,
+      savedTabs: async () => [],
+      send: (event, done) => {
+        events.push(event)
+        done?.()
+      },
+    })
+    try {
+      view.start()
+      // No context yet: the view says so, and does not open Chrome.
+      await waitFor((event) => event.type === "state" && !event.open)
+      assert.equal(browser.stats.running, false)
+
+      await view.input({ type: "navigate", url: `http://127.0.0.1:${port}/` })
+      await waitFor(
+        (event) =>
+          event.type === "state" &&
+          event.open &&
+          event.tabs.some((tab) => tab.title === "Live")
+      )
+      const frame = await waitFor((event) => event.type === "frame")
+      assert.ok(frame.type === "frame" && frame.data.length > 100)
+      assert.equal(frame.type === "frame" && frame.width, 1280)
+
+      // A click in the field, then text and a key.
+      await view.input({ type: "mouse", action: "down", x: 50, y: 25 })
+      await view.input({ type: "mouse", action: "up", x: 50, y: 25 })
+      await view.input({ type: "text", text: "hello" })
+      await view.input({ type: "key", key: "Backspace" })
+      const { page } = (await browser.activePage(11))!
+      assert.equal(await page.inputValue("#field"), "hell")
+
+      // A link to a new window opens a tab, and it becomes the active tab.
+      await view.input({ type: "mouse", action: "down", x: 20, y: 105 })
+      await view.input({ type: "mouse", action: "up", x: 20, y: 105 })
+      await waitFor(
+        (event) =>
+          event.type === "state" &&
+          event.tabs.length === 2 &&
+          event.tabs.find((tab) => tab.id === event.active)?.title === "Popup"
+      )
+
+      // A handoff keeps the context open when it is idle.
+      const end = browser.startHandoff(11, {
+        questionId: "q1",
+        reason: "Log in",
+      })
+      await waitFor(
+        (event) => event.type === "state" && event.handoff?.reason === "Log in"
+      )
+      await browser.closeIdle(Date.now() + 61_000)
+      assert.equal(browser.isOpen(11), true)
+      end()
+      await browser.closeIdle(Date.now() + 61_000)
+      assert.equal(browser.isOpen(11), false)
+    } finally {
+      view.stop()
+      await browser.shutdown()
+      site.closeAllConnections()
+      await new Promise((done) => site.close(done))
     }
   }
 )

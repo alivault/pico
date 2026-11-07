@@ -4,6 +4,7 @@
  *   /m/<machineId>/api/...                  → remote /api/...
  *   /m/<machineId>/events                   → remote /events (SSE)
  *   /m/<machineId>/api/terminal/<id>/ws     → remote WebSocket
+ *   /m/<machineId>/api/browser/ws           → remote WebSocket
  *
  * The server runs `security.check()` on the browser request first. The proxy
  * sends the request with `Host: 127.0.0.1` and no `Origin`, so the remote
@@ -270,7 +271,7 @@ export class MachineProxy {
     const connection = this.#machines.get(route.machineId)
     if (
       !connection ||
-      !/^\/api\/terminal\/[^/]+\/ws$/.test(route.path) ||
+      !/^\/api\/(terminal\/[^/]+\/ws|browser\/ws)$/.test(route.path) ||
       !connection.online
     ) {
       socket.destroy()

@@ -51,6 +51,8 @@ export type Question = {
   fields?: QuestionField[]
   allowOther?: boolean
   placeholder?: string
+  /** A browser handoff: the user uses the agent's browser, then answers. */
+  browser?: boolean
   createdAt: number
   answer?: QuestionAnswer
   cancelled?: boolean
@@ -177,6 +179,36 @@ function waitForAnswer(
   })
 }
 
+/**
+ * Ask a question, keyed by the tool call ID, and wait for its answer. A
+ * rerun after a restart finds the same question.
+ */
+export async function askAndWait(
+  api: ToolExecutionApi,
+  context: Context,
+  input: Omit<Question, "id" | "createdAt" | "answer" | "cancelled">
+) {
+  const id = api.callId
+  await api.commit(async (tx) => {
+    const draft = (await tx.doc(
+      QuestionsDoc,
+      api.conversationId
+    )) as unknown as QuestionsState
+    if (draft.items[id]) return
+    draft.items[id] = json({ ...input, id, createdAt: Date.now() }) as Question
+    const closed = Object.values(draft.items)
+      .filter((question) => question.answer || question.cancelled)
+      .sort((left, right) => left.createdAt - right.createdAt)
+    for (const old of closed.slice(
+      0,
+      Math.max(0, Object.keys(draft.items).length - MAX_KEPT)
+    ))
+      delete draft.items[old.id]
+  }, context)
+  await api.details({ questionId: id, status: "waiting" }, context)
+  return waitForAnswer(api, id, context)
+}
+
 const optionSchema = Type.Union([
   Type.String(),
   Type.Object({
@@ -233,34 +265,15 @@ const askTool = defineTool({
     const kind =
       args.kind ??
       (args.fields?.length ? "form" : options.length > 0 ? "choice" : "text")
-    const id = api.callId
-    await api.commit(async (tx) => {
-      const draft = (await tx.doc(
-        QuestionsDoc,
-        api.conversationId
-      )) as unknown as QuestionsState
-      if (draft.items[id]) return
-      draft.items[id] = json({
-        id,
-        prompt: args.question,
-        kind,
-        ...(options.length > 0 ? { options } : {}),
-        ...(args.fields?.length ? { fields: args.fields } : {}),
-        ...(args.allow_other ? { allowOther: true } : {}),
-        ...(args.placeholder ? { placeholder: args.placeholder } : {}),
-        createdAt: Date.now(),
-      }) as Question
-      const closed = Object.values(draft.items)
-        .filter((question) => question.answer || question.cancelled)
-        .sort((left, right) => left.createdAt - right.createdAt)
-      for (const old of closed.slice(
-        0,
-        Math.max(0, Object.keys(draft.items).length - MAX_KEPT)
-      ))
-        delete draft.items[old.id]
-    }, context)
-    await api.details({ questionId: id, status: "waiting" }, context)
-    const question = await waitForAnswer(api, id, context)
+    const question = await askAndWait(api, context, {
+      prompt: args.question,
+      kind,
+      ...(options.length > 0 ? { options } : {}),
+      ...(args.fields?.length ? { fields: args.fields } : {}),
+      ...(args.allow_other ? { allowOther: true } : {}),
+      ...(args.placeholder ? { placeholder: args.placeholder } : {}),
+    })
+    const id = question.id
     if (question.cancelled || !question.answer) {
       return textResult("The user closed the question without an answer.", {
         isError: true,

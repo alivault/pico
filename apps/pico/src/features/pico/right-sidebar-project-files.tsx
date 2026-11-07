@@ -1336,6 +1336,8 @@ export function RightSidebarTabStrip({
   agentTabExtra,
   reviewTabExtra,
   showAgent = false,
+  showBrowser = false,
+  browserIndicator,
   showFiles = false,
   showHistory = false,
   showReview = false,
@@ -1369,6 +1371,10 @@ export function RightSidebarTabStrip({
   /** Shown after the Changes tab label, for example the changed file count. */
   reviewTabExtra?: React.ReactNode
   showAgent?: boolean
+  /** The Browser tab: the live view of the agent's browser. */
+  showBrowser?: boolean
+  /** A dot on the Browser tab, for example while the agent needs the user. */
+  browserIndicator?: string
   showFiles?: boolean
   showHistory?: boolean
   showReview?: boolean
@@ -1506,6 +1512,13 @@ export function RightSidebarTabStrip({
             indicator: agentBusy ? "The agent has live work" : undefined,
             label: "Agent",
             value: "agent",
+          })
+        : null}
+      {showBrowser
+        ? renderTab({
+            indicator: browserIndicator,
+            label: "Browser",
+            value: "browser",
           })
         : null}
       {!hasOpenFiles || showFiles

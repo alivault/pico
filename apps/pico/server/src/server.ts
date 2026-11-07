@@ -12,11 +12,19 @@ import { createApi } from "./api.ts"
 import { VERSION, type ServerPaths } from "./config.ts"
 import { Auth, UiRequests } from "./core/auth.ts"
 import { openRuntime, type Runtime } from "./core/runtime.ts"
-import { parseAgentId, Agents } from "./core/agents.ts"
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
+
+import { conversationIdOf, parseAgentId, Agents } from "./core/agents.ts"
+import { BrowserDoc } from "./extensions/browser.ts"
 import { Viewers } from "./core/viewers.ts"
 import { EventHub } from "./events.ts"
 import { HostBridge } from "./extensions/host.ts"
 import { BrowserManager } from "./services/browser.ts"
+import {
+  BrowserView,
+  type BrowserViewEvent,
+  type BrowserViewInput,
+} from "./services/browser-view.ts"
 import { Notifier } from "./services/notify.ts"
 import { ApiError, sendError, sendJson, serveStatic } from "./http.ts"
 import { GitWatcher } from "./services/git.ts"
@@ -299,6 +307,12 @@ export async function startServer(options: {
       }
       if (proxy.upgrade(request, socket, head)) return
       const url = new URL(request.url ?? "/", "http://localhost")
+      if (url.pathname === "/api/browser/ws") {
+        sockets.handleUpgrade(request, socket, head, (websocket) => {
+          runBrowserSocket(websocket, url.searchParams)
+        })
+        return
+      }
       const match = /^\/api\/terminal\/([^/]+)\/ws$/.exec(url.pathname)
       if (!match) {
         socket.destroy()
@@ -313,6 +327,61 @@ export async function startServer(options: {
       })
     }
   )
+
+  /**
+   * The live view of an agent's browser (services/browser-view.ts). The
+   * agent comes from the `agent` query value, or the viewer's selection.
+   */
+  const runBrowserSocket = (websocket: WebSocket, query: URLSearchParams) => {
+    const send = (event: BrowserViewEvent, done?: () => void) => {
+      if (websocket.readyState !== websocket.OPEN) return
+      websocket.send(JSON.stringify(event), () => done?.())
+    }
+    const contextId = query.get("context")?.trim() || "default"
+    const requested =
+      parseAgentId(query.get("agent") ?? undefined) ??
+      viewers.get(contextId)?.selectedAgent
+    const agentId = agents.current(requested)
+    if (!agentId || !agents.has(agentId)) {
+      send({ type: "error", error: "Unknown agent" })
+      websocket.close()
+      return
+    }
+    const conversationId = conversationIdOf(agentId)
+    const view = new BrowserView({
+      browser,
+      conversationId: Number(conversationId),
+      savedTabs: async () =>
+        (
+          await runtime.harness.snapshot(
+            BrowserDoc,
+            conversationId,
+            BACKGROUND_CONTEXT
+          )
+        )?.tabs ?? [],
+      send,
+    })
+    view.start()
+    // In order: a click is a move, a down, and an up.
+    let queue: Promise<void> = Promise.resolve()
+    websocket.on("message", (data) => {
+      let message: BrowserViewInput
+      try {
+        message = JSON.parse(
+          (Array.isArray(data)
+            ? Buffer.concat(data)
+            : data instanceof ArrayBuffer
+              ? Buffer.from(data)
+              : data
+          ).toString("utf8")
+        ) as BrowserViewInput
+      } catch {
+        return
+      }
+      queue = queue.then(() => view.input(message))
+    })
+    websocket.on("close", () => view.stop())
+  }
 
   /** The terminal scope for a request, as the HTTP terminal routes compute it. */
   const terminalScope = (query: URLSearchParams) => {

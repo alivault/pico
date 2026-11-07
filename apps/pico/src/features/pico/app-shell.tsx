@@ -1267,7 +1267,9 @@ function useAppShellAgentWorkspaceView({
     reorderRightSidebarFiles(rightSidebarStore, paths)
   }
 
-  const openRightSidebarTab = (tab: "agent" | "review" | "history") => {
+  const openRightSidebarTab = (
+    tab: "agent" | "review" | "history" | "browser"
+  ) => {
     if (isMobile && tab === "agent") {
       setCurrentTab("agent")
       return

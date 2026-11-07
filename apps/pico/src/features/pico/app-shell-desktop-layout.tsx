@@ -302,6 +302,9 @@ function AppShellDesktopGitPanel({
 
 const DESKTOP_DEFAULT_FILE_VIEW_WIDTH = 520
 const DESKTOP_DEFAULT_GIT_PANEL_WIDTH = 320
+// The Browser tab shows a web page, so it starts as wide as open files.
+const DESKTOP_DEFAULT_BROWSER_PANEL_WIDTH =
+  DESKTOP_DEFAULT_FILE_VIEW_WIDTH + DESKTOP_DEFAULT_GIT_PANEL_WIDTH
 const DESKTOP_MIN_SIDE_PANEL_WIDTH = 260
 const DESKTOP_MAX_STORED_SIDE_PANEL_WIDTH = 1600
 const DESKTOP_DEFAULT_TERMINAL_PANEL_HEIGHT = 280
@@ -312,12 +315,14 @@ const DESKTOP_MAX_STORED_TERMINAL_PANEL_HEIGHT = 1200
 type DesktopSidePanelWidths = {
   fileViewWidth: number
   gitPanelWidth: number
+  browserPanelWidth: number
 }
 
 function defaultDesktopSidePanelWidths(): DesktopSidePanelWidths {
   return {
     fileViewWidth: DESKTOP_DEFAULT_FILE_VIEW_WIDTH,
     gitPanelWidth: DESKTOP_DEFAULT_GIT_PANEL_WIDTH,
+    browserPanelWidth: DESKTOP_DEFAULT_BROWSER_PANEL_WIDTH,
   }
 }
 
@@ -349,6 +354,10 @@ function normalizeDesktopSidePanelWidths(
       widths.gitPanelWidth,
       DESKTOP_DEFAULT_GIT_PANEL_WIDTH
     ),
+    browserPanelWidth: clampStoredDesktopPanelWidth(
+      widths.browserPanelWidth,
+      DESKTOP_DEFAULT_BROWSER_PANEL_WIDTH
+    ),
   }
 }
 
@@ -376,7 +385,8 @@ function sameDesktopSidePanelWidths(
 ) {
   return (
     left.fileViewWidth === right.fileViewWidth &&
-    left.gitPanelWidth === right.gitPanelWidth
+    left.gitPanelWidth === right.gitPanelWidth &&
+    left.browserPanelWidth === right.browserPanelWidth
   )
 }
 
@@ -764,6 +774,12 @@ function useAppShellTabsControllerView({
   const desktopGitPanelRequested = !isMobile && gitPanelOpen
   const desktopFileViewRequested =
     desktopGitPanelRequested && rightSidebarHasVisibleFiles
+  const rightSidebarTab = useSelector(
+    rightSidebarStore,
+    (state) => state.activeTab
+  )
+  const desktopBrowserRequested =
+    desktopGitPanelRequested && rightSidebarTab === "browser"
   const rightShown = useShellLayout((layout) => layout.rightShown)
   const desktopSideWorkspaceFittedWidth = useShellLayout(
     (layout) => layout.rightWidth
@@ -785,6 +801,7 @@ function useAppShellTabsControllerView({
   desktopSidePanelWidthsRef.current = desktopSidePanelWidths
   const desktopFileViewWidth = desktopSidePanelWidths.fileViewWidth
   const desktopGitPanelWidth = desktopSidePanelWidths.gitPanelWidth
+  const desktopBrowserPanelWidth = desktopSidePanelWidths.browserPanelWidth
   const setDesktopSidePanelWidths = (
     action: React.SetStateAction<DesktopSidePanelWidths>
   ) => {
@@ -815,6 +832,15 @@ function useAppShellTabsControllerView({
       gitPanelWidth: clampStoredDesktopPanelWidth(
         applyStoreAction(current.gitPanelWidth, action),
         DESKTOP_DEFAULT_GIT_PANEL_WIDTH
+      ),
+    }))
+  }
+  const setDesktopBrowserPanelWidth = (width: number) => {
+    setDesktopSidePanelWidths((current) => ({
+      ...current,
+      browserPanelWidth: clampStoredDesktopPanelWidth(
+        width,
+        DESKTOP_DEFAULT_BROWSER_PANEL_WIDTH
       ),
     }))
   }
@@ -995,18 +1021,24 @@ function useAppShellTabsControllerView({
   const desktopGitPanelRendered =
     desktopSideWorkspaceOpen || desktopGitPanelMounted || desktopGitPanelOpen
   // Tell the layout solver what the right sidebar wants. With open files, the
-  // right sidebar shows the file view and the git panel side by side.
+  // right sidebar shows the file view and the git panel side by side. The
+  // Browser tab has its own width.
   React.useLayoutEffect(() => {
     updateShellLayout({
       rightOpen: desktopGitPanelRequested,
-      rightWidth: desktopFileViewRequested
-        ? desktopFileViewWidth + desktopGitPanelWidth
-        : desktopGitPanelWidth,
-      rightMinWidth: desktopFileViewRequested
-        ? SHELL_RIGHT_MIN_WIDTH * 2
-        : SHELL_RIGHT_MIN_WIDTH,
+      rightWidth: desktopBrowserRequested
+        ? desktopBrowserPanelWidth
+        : desktopFileViewRequested
+          ? desktopFileViewWidth + desktopGitPanelWidth
+          : desktopGitPanelWidth,
+      rightMinWidth:
+        desktopBrowserRequested || desktopFileViewRequested
+          ? SHELL_RIGHT_MIN_WIDTH * 2
+          : SHELL_RIGHT_MIN_WIDTH,
     })
   }, [
+    desktopBrowserPanelWidth,
+    desktopBrowserRequested,
     desktopFileViewRequested,
     desktopFileViewWidth,
     desktopGitPanelRequested,
@@ -1053,6 +1085,10 @@ function useAppShellTabsControllerView({
   const setDesktopSideWorkspaceWidth = (nextSize: number) => {
     // A sidebar that the user resizes gets priority over the left sidebar.
     focusShellSide("right")
+    if (desktopBrowserRequested) {
+      setDesktopBrowserPanelWidth(nextSize)
+      return
+    }
     if (!desktopFileViewOpen) {
       setDesktopGitPanelWidth(nextSize)
       return

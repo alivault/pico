@@ -10,7 +10,7 @@ export type PicoEventMap = {
   /** Select an agent, for example a subagent. */
   "pico:open-agent": { agentId: string }
   /** Show a right sidebar tab. */
-  "pico:open-sidebar-tab": { tab: "agent" | "review" }
+  "pico:open-sidebar-tab": { tab: "agent" | "review" | "browser" }
   /** Show a background job in the terminal panel. */
   "pico:open-job-terminal": { jobId: string }
   /** Another device changed the shared sidebar layout in local storage. */

@@ -72,6 +72,8 @@ import {
 import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
 import "@/features/pico/agent/register"
 import { AgentPanel, useAgentBusy } from "@/features/pico/agent/agent-panel"
+import { useAgentExtensions } from "@/features/pico/agent/agent-extensions"
+import { BrowserPanel } from "@/features/pico/agent/browser-panel"
 import { TodoTabProgress } from "@/features/pico/agent/todo"
 import type { GitCommitDiffMode, GitCommitDiffResponse } from "@/lib/pico/api"
 import { cn } from "@/lib/utils"
@@ -1010,6 +1012,27 @@ function CommitDiffContent({
   )
 }
 
+/**
+ * Whether the agent used its browser (it has saved tabs), and whether it
+ * waits for the user there (a handoff question).
+ */
+function useAgentBrowserUse(viewerContextId: string, agentId?: string) {
+  const state = useAgentExtensions(viewerContextId, agentId).data
+  const browser = state?.browser as { tabs?: Array<unknown> } | undefined
+  const questions = state?.questions
+  return {
+    used: (browser?.tabs?.length ?? 0) > 0,
+    handoff:
+      Array.isArray(questions) &&
+      questions.some(
+        (question) =>
+          Boolean(question) &&
+          typeof question === "object" &&
+          (question as { browser?: unknown }).browser === true
+      ),
+  }
+}
+
 export function RightSidebar({
   viewerContextId,
   cwd,
@@ -1037,6 +1060,8 @@ export function RightSidebar({
   const normalizedCwd = normalizeCwd(cwd)
   const isMobile = useIsMobile()
   const agentPanelAvailable = useMachineFeature("agent-panel")
+  const browserAvailable = useMachineFeature("browser")
+  const browserUse = useAgentBrowserUse(viewerContextId, agentId)
   const [localState, dispatchLocal] = React.useReducer(
     rightSidebarLocalReducer,
     initialRightSidebarLocalState
@@ -1217,6 +1242,15 @@ export function RightSidebar({
             />
           }
           showAgent={!isMobile && agentPanelAvailable}
+          showBrowser={
+            browserAvailable &&
+            (browserUse.used || browserUse.handoff || activeTab === "browser")
+          }
+          browserIndicator={
+            browserUse.handoff
+              ? "The agent needs you in its browser"
+              : undefined
+          }
           showFiles={isMobile && hasOpenFileTabs}
           showHistory={historyAsTab || activeTab === "history"}
           showReview
@@ -1236,6 +1270,15 @@ export function RightSidebar({
             viewerContextId={viewerContextId}
           />
         </div>
+        {activeTab === "browser" ? (
+          <div className="min-h-0 flex-1 overflow-hidden bg-background">
+            <BrowserPanel
+              active={active}
+              agentId={agentId}
+              viewerContextId={viewerContextId}
+            />
+          </div>
+        ) : null}
         <div
           className={
             activeTab === "review" ? "min-h-0 flex-1 overflow-hidden" : "hidden"

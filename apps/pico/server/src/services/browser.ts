@@ -72,6 +72,9 @@ const HEADED_IDLE_MS = 60 * 60 * 1000
 
 export type BrowserTab = { id: string; url: string; title: string }
 
+/** A request of the agent for the user to use its browser. */
+export type BrowserHandoff = { questionId: string; reason: string }
+
 type Session = {
   context: BrowserContext
   pages: Map<string, Page>
@@ -138,6 +141,10 @@ export class BrowserManager {
   /** Whether the running Chrome is visible. */
   #headed = false
   readonly #reaper: NodeJS.Timeout
+  /** Listeners for changes of a conversation's tabs (the live view). */
+  readonly #listeners = new Map<number, Set<() => void>>()
+  /** Open handoffs: their contexts do not close when idle. */
+  readonly #handoffs = new Map<number, BrowserHandoff>()
 
   constructor(
     dataDir: string,
@@ -158,6 +165,96 @@ export class BrowserManager {
     this.#lastUsed.set(conversationId, Date.now())
   }
 
+  /** Mark a conversation's browser as used, for example by the user. */
+  touch(conversationId: number) {
+    if (this.#sessions.has(conversationId)) this.#touch(conversationId)
+  }
+
+  /**
+   * Call `listener` when a conversation's context opens or closes, or its
+   * tabs change: a new tab, a closed tab, another active tab, or a new page
+   * in a tab. Returns a function that stops it.
+   */
+  watch(conversationId: number, listener: () => void) {
+    let listeners = this.#listeners.get(conversationId)
+    if (!listeners) {
+      listeners = new Set()
+      this.#listeners.set(conversationId, listeners)
+    }
+    listeners.add(listener)
+    return () => {
+      listeners.delete(listener)
+      if (listeners.size === 0) this.#listeners.delete(conversationId)
+    }
+  }
+
+  #emit(conversationId: number) {
+    for (const listener of this.#listeners.get(conversationId) ?? []) {
+      try {
+        listener()
+      } catch {
+        // A listener must not stop the others.
+      }
+    }
+  }
+
+  /** Whether a conversation has an open context. */
+  isOpen(conversationId: number) {
+    return this.#sessions.has(conversationId)
+  }
+
+  /** The open handoff of a conversation. */
+  handoff(conversationId: number) {
+    return this.#handoffs.get(conversationId)
+  }
+
+  /**
+   * Start a handoff: the user uses the browser. The context stays open
+   * until the returned function ends the handoff.
+   */
+  startHandoff(conversationId: number, handoff: BrowserHandoff) {
+    this.#handoffs.set(conversationId, handoff)
+    this.#emit(conversationId)
+    return () => {
+      if (this.#handoffs.get(conversationId) !== handoff) return
+      this.#handoffs.delete(conversationId)
+      this.#touch(conversationId)
+      this.#emit(conversationId)
+    }
+  }
+
+  /** The active tab of an open context, without opening one. */
+  async activePage(conversationId: number) {
+    const session = await this.#sessions
+      .get(conversationId)
+      ?.catch(() => undefined)
+    const id = session?.active
+    const page = id ? session.pages.get(id) : undefined
+    return id && page && !page.isClosed() ? { id, page } : undefined
+  }
+
+  /** Keep the tabs of a context in step with its pages, and tell watchers. */
+  #track(conversationId: number, session: Session, id: string, page: Page) {
+    page.on("framenavigated", (frame) => {
+      if (frame === page.mainFrame()) this.#emit(conversationId)
+    })
+    page.on("load", () => this.#emit(conversationId))
+    page.on("close", () => {
+      if (session.pages.get(id) !== page) return
+      session.pages.delete(id)
+      if (session.active === id)
+        session.active = [...session.pages.keys()].at(-1)
+      this.#emit(conversationId)
+    })
+  }
+
+  #addPage(conversationId: number, session: Session, page: Page) {
+    const id = `t${session.nextTab++}`
+    session.pages.set(id, page)
+    this.#track(conversationId, session, id, page)
+    return id
+  }
+
   /** The number of open contexts, and whether Chrome runs. */
   get stats() {
     return { contexts: this.#sessions.size, running: Boolean(this.#browser) }
@@ -174,6 +271,7 @@ export class BrowserManager {
         this.#idleMs ??
         (this.#headed ? HEADED_IDLE_MS : IDLE_MS)
       if (now - (this.#lastUsed.get(id) ?? 0) < idleMs) continue
+      if (this.#handoffs.has(id)) continue
       await this.closeSession(id).catch(() => undefined)
     }
     if (this.#sessions.size > 0 || !this.#browser) return
@@ -209,8 +307,10 @@ export class BrowserManager {
       if (this.#current !== browser) return
       this.#current = undefined
       this.#browser = undefined
+      const ids = [...this.#sessions.keys()]
       this.#sessions.clear()
       this.#lastUsed.clear()
+      for (const id of ids) this.#emit(id)
     })
     return browser
   }
@@ -241,22 +341,38 @@ export class BrowserManager {
         const created: Session = { context, pages: new Map(), nextTab: 1 }
         for (const tab of tabs) {
           const page = await context.newPage()
-          await page
-            .goto(tab.url, { waitUntil: "domcontentloaded", timeout: 30_000 })
-            .catch(() => undefined)
           created.pages.set(tab.id, page)
+          this.#track(conversationId, created, tab.id, page)
           created.nextTab = Math.max(
             created.nextTab,
             Number(tab.id.replace(/\D/g, "")) + 1
           )
+          await page
+            .goto(tab.url, { waitUntil: "domcontentloaded", timeout: 30_000 })
+            .catch(() => undefined)
         }
         created.active = tabs.at(-1)?.id
+        // A page that a page opens (a popup, a link to a new window) gets a
+        // tab, and becomes the active tab. A tab that Pico opens is in the
+        // map before this runs.
+        context.on("page", (page) => {
+          setTimeout(() => {
+            if ([...created.pages.values()].includes(page)) return
+            if (page.isClosed()) return
+            created.active = this.#addPage(conversationId, created, page)
+            this.#emit(conversationId)
+          }, 0)
+        })
         return created
       })().catch((error: unknown) => {
         this.#sessions.delete(conversationId)
         throw error
       })
       this.#sessions.set(conversationId, session)
+      void session.then(
+        () => this.#emit(conversationId),
+        () => undefined
+      )
     }
     return session
   }
@@ -282,10 +398,10 @@ export class BrowserManager {
     let page = id ? session.pages.get(id) : undefined
     if (!page || page.isClosed()) {
       page = await session.context.newPage()
-      id = `t${session.nextTab++}`
-      session.pages.set(id, page)
+      id = this.#addPage(conversationId, session, page)
     }
     session.active = id
+    this.#emit(conversationId)
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 })
     await page
       .waitForLoadState("networkidle", { timeout: 5000 })
@@ -329,6 +445,7 @@ export class BrowserManager {
     if (!session || !page || page.isClosed()) throw new Error(`No tab ${id}`)
     session.active = id
     await page.bringToFront()
+    this.#emit(conversationId)
     return page
   }
 
@@ -340,6 +457,7 @@ export class BrowserManager {
     await page.close()
     session.pages.delete(id)
     if (session.active === id) session.active = [...session.pages.keys()].at(-1)
+    this.#emit(conversationId)
   }
 
   /** Save cookies and local storage of a conversation's context. */
@@ -364,6 +482,7 @@ export class BrowserManager {
     if (!session) return
     await this.#save(conversationId, session).catch(() => undefined)
     await session.context.close().catch(() => undefined)
+    this.#emit(conversationId)
   }
 
   async shutdown() {

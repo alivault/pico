@@ -469,10 +469,37 @@ function useAnswer(viewerContextId: string, agentId: string | undefined) {
 }
 
 function QuestionCard({ block }: ToolRendererProps) {
-  const { viewerContextId, agentId } = useToolRenderContext()
   const details = toolDetails<AskDetails>(block)
   const questionId = details.questionId ?? block.callId ?? ""
-  const question = questionFromArgs(toolArgs(block), questionId)
+  return (
+    <QuestionCardView
+      block={block}
+      question={questionFromArgs(toolArgs(block), questionId)}
+    />
+  )
+}
+
+/**
+ * The card of a question that waits for the user's answer, then shows the
+ * answer. `title` and `icon` replace the heading, and `actions` shows below
+ * the question while it waits.
+ */
+export function QuestionCardView({
+  block,
+  question,
+  title,
+  icon,
+  actions,
+}: {
+  block: ToolRendererProps["block"]
+  question: Question
+  title?: string
+  icon?: React.ReactNode
+  actions?: React.ReactNode
+}) {
+  const { viewerContextId, agentId } = useToolRenderContext()
+  const details = toolDetails<AskDetails>(block)
+  const questionId = question.id
   const { sending, answer } = useAnswer(viewerContextId, agentId)
   const waiting = block.running && details.status !== "answered"
   const answered =
@@ -498,11 +525,12 @@ function QuestionCard({ block }: ToolRendererProps) {
           waiting ? "text-primary" : "text-muted-foreground"
         )}
       >
-        <MessageCircleQuestionIcon className="size-4" />
-        {waiting ? "The agent waits for your answer" : "Question"}
+        {icon ?? <MessageCircleQuestionIcon className="size-4" />}
+        {title ?? (waiting ? "The agent waits for your answer" : "Question")}
         {sending ? <Spinner size="xs" /> : null}
       </div>
       {question.prompt ? <MarkdownBlock text={question.prompt} /> : null}
+      {waiting && actions ? actions : null}
       {waiting && questionId ? (
         <QuestionForm
           disabled={sending}
