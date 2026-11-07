@@ -360,7 +360,7 @@ function TooltipUsageProgress({
   const clampedPercent = Math.max(0, Math.min(100, percent))
 
   return (
-    <div className="relative mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+    <div className="relative mt-1 h-1 overflow-hidden rounded-full bg-muted">
       <div
         className="h-full rounded-full"
         style={{
@@ -391,70 +391,90 @@ function compactionRingPoint(
   }
 }
 
+/**
+ * One compact usage line: the label, then short details and the percent on
+ * the same line, and a thin bar under them.
+ */
+function UsageRow({
+  className,
+  detail,
+  label,
+  marks,
+  percent,
+  percentText,
+  title,
+}: {
+  className?: string
+  detail?: string | null
+  label: string
+  marks?: Array<number>
+  percent: number | null
+  percentText: string | null
+  title?: string
+}) {
+  return (
+    <div className={cn("w-full text-xs", className)} title={title}>
+      <div className="flex items-baseline gap-2">
+        <span className="font-medium text-muted-foreground">{label}</span>
+        <span className="ml-auto truncate text-muted-foreground tabular-nums">
+          {detail}
+        </span>
+        {percentText ? (
+          <span className="font-semibold text-foreground tabular-nums">
+            {percentText}
+          </span>
+        ) : null}
+      </div>
+      {percent == null ? null : (
+        <TooltipUsageProgress percent={percent} marks={marks} />
+      )}
+    </div>
+  )
+}
+
 function ContextUsageQuotaTooltipLine({
   quota,
 }: {
   quota: ComposerContextUsageQuotaSnapshot
 }) {
-  const percent = formatContextUsageQuotaPercent(quota.percent)
   const used = formatContextUsageQuotaValue(quota.used)
   const limit = formatContextUsageQuotaValue(quota.limit)
-  const value =
-    used != null && limit != null
-      ? `${used} / ${limit}`
-      : (used ?? limit ?? "Available")
+  const value = used != null && limit != null ? `${used} / ${limit}` : null
   return (
-    <div className="px-1.5 py-1.5">
-      <div className="flex items-center justify-between gap-6">
-        <span className="font-medium text-muted-foreground">{quota.label}</span>
-        <span className="font-semibold text-foreground">
-          {percent ? `${percent} ` : null}
-          {value}
-        </span>
-      </div>
-      {quota.percent != null ? (
-        <TooltipUsageProgress percent={quota.percent} />
-      ) : null}
-      {quota.timeLeft ? (
-        <div className="mt-1 text-xs text-muted-foreground">
-          Resets in {quota.timeLeft}
-        </div>
-      ) : null}
-    </div>
+    <UsageRow
+      className="px-1.5 py-1"
+      label={quota.label.replace(/ usage$/, "")}
+      detail={[value, quota.timeLeft].filter(Boolean).join(" · ") || null}
+      percent={quota.percent}
+      percentText={formatContextUsageQuotaPercent(quota.percent)}
+      title={quota.timeLeft ? `Resets in ${quota.timeLeft}` : undefined}
+    />
   )
 }
 
 function ProviderUsageTooltipLine({ window }: { window: ProviderUsageWindow }) {
-  const percent = `${formatContextUsagePercent(window.usedPercent)}%`
   const elapsed = window.elapsedPercent
+  const title = [
+    window.resetsIn ? `Resets in ${window.resetsIn}` : null,
+    elapsed == null
+      ? null
+      : `${formatContextUsagePercent(elapsed)}% of the time passed (mark)`,
+  ]
+    .filter(Boolean)
+    .join(" · ")
 
+  // The mark shows how much of the window passed: usage to the left of it
+  // is on pace, past it is ahead of pace.
   return (
-    <div className="px-1.5 py-1.5">
-      <div className="flex items-center justify-between gap-6">
-        <span className="font-medium text-muted-foreground">
-          {window.label === "Week" ? "Weekly usage" : `${window.label} usage`}
-        </span>
-        <span className="font-semibold text-foreground">{percent}</span>
-      </div>
-      {/* The mark shows how much of the window passed: usage to the
-          left of it is on pace, past it is ahead of pace. */}
-      <TooltipUsageProgress
-        percent={window.usedPercent}
-        marks={elapsed == null ? [] : [elapsed]}
-      />
-      {window.resetsIn || elapsed != null ? (
-        <div className="mt-1 text-xs text-muted-foreground">
-          {[
-            window.resetsIn ? `Resets in ${window.resetsIn}` : null,
-            elapsed == null
-              ? null
-              : `${formatContextUsagePercent(elapsed)}% of the time passed`,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-        </div>
-      ) : null}
-    </div>
+    <UsageRow
+      className="px-1.5 py-1"
+      label={window.label}
+      detail={window.resetsIn ?? null}
+      percent={window.usedPercent}
+      percentText={`${formatContextUsagePercent(window.usedPercent)}%`}
+      marks={elapsed == null ? [] : [elapsed]}
+      title={title || undefined}
+    />
   )
 }
 
@@ -726,33 +746,16 @@ export function ContextUsageWindowDetails({
 }: {
   view: ContextUsageView
 }) {
+  // The mark on the bar is the compaction point; the title tells the numbers.
   return (
-    <div className="w-full">
-      <div className="flex items-center justify-between gap-6">
-        <span className="font-medium text-muted-foreground">
-          Context window
-        </span>
-        <span className="font-semibold text-foreground">
-          {view.displayPercent}
-        </span>
-      </div>
-      {view.percent == null ? null : (
-        <TooltipUsageProgress
-          percent={view.percent}
-          marks={view.compactAtPercent == null ? [] : [view.compactAtPercent]}
-        />
-      )}
-      <div className="mt-1 text-xs text-muted-foreground">
-        {view.compactTokens == null
-          ? `Usage estimate pending · ${view.compactContextWindow} token window`
-          : `${view.compactTokens} / ${view.compactContextWindow} tokens used`}
-      </div>
-      {view.compactionText ? (
-        <div className="mt-1 text-xs text-muted-foreground">
-          {view.compactionText}
-        </div>
-      ) : null}
-    </div>
+    <UsageRow
+      label="Context"
+      detail={`${view.compactTokens ?? "?"} / ${view.compactContextWindow}`}
+      percent={view.percent}
+      percentText={view.percent == null ? null : view.displayPercent}
+      marks={view.compactAtPercent == null ? [] : [view.compactAtPercent]}
+      title={view.compactionText ?? undefined}
+    />
   )
 }
 
