@@ -12,6 +12,7 @@
  * changes become state syncs, streaming deltas, sidebar updates, and
  * completion events for the clients that watch them.
  */
+import { getHeapStatistics } from "node:v8"
 import type { JsonValue } from "@earendil-works/chord"
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
 import {
@@ -202,6 +203,36 @@ export type PendingMessage = {
 type Transcript = {
   entries: EntryRecord[]
   items?: ConversationItem[]
+  /** About how much memory the entries use (string lengths). */
+  bytes: number
+}
+
+/** Cached transcripts: at most this many, */
+const MAX_TRANSCRIPTS = 24
+/** and at most this many bytes. Images make one transcript 100 MB or more. */
+const MAX_TRANSCRIPT_BYTES = 512 * 1024 * 1024
+/** Drop transcripts when the heap uses more than this share of its limit. */
+const HEAP_HIGH = 0.6
+
+/** About how much memory a parsed JSON value uses: string lengths and a little for each node. */
+export function approximateBytes(value: unknown): number {
+  let bytes = 0
+  const stack: unknown[] = [value]
+  while (stack.length > 0) {
+    const item = stack.pop()
+    if (typeof item === "string") bytes += item.length + 16
+    else if (Array.isArray(item)) {
+      bytes += 16 + item.length * 8
+      for (const child of item) stack.push(child)
+    } else if (item && typeof item === "object") {
+      bytes += 32
+      for (const key in item) {
+        bytes += 8
+        stack.push((item as Record<string, unknown>)[key])
+      }
+    } else bytes += 8
+  }
+  return bytes
 }
 
 type Docs = {
@@ -646,7 +677,12 @@ export class Agents implements HostAgents {
 
   async transcript(id: string): Promise<Transcript> {
     const loaded = this.#transcripts.get(id)
-    if (loaded) return loaded
+    if (loaded) {
+      // Keep the map in least-recently-used order for eviction.
+      this.#transcripts.delete(id)
+      this.#transcripts.set(id, loaded)
+      return loaded
+    }
     let loading = this.#loading.get(id)
     if (!loading) {
       loading = this.#loadTranscript(id)
@@ -660,6 +696,7 @@ export class Agents implements HostAgents {
     try {
       const conversation = await this.conversation(id)
       const entries: EntryRecord[] = []
+      let bytes = 0
       let cursor: Parameters<Conversation["entries"]>[2]
       do {
         const page = await conversation.entries(
@@ -668,15 +705,20 @@ export class Agents implements HostAgents {
           cursor,
           ctx
         )
-        entries.push(...page.items)
+        for (const entry of page.items) {
+          entries.push(entry)
+          bytes += approximateBytes(entry)
+        }
         cursor = page.next
       } while (cursor)
       const last = entries.at(-1)?.id ?? -1
       for (const entry of this.#arrivals.get(id) ?? []) {
-        if ((entry.id as unknown as number) > (last as unknown as number))
+        if ((entry.id as unknown as number) > (last as unknown as number)) {
           entries.push(entry)
+          bytes += approximateBytes(entry)
+        }
       }
-      const transcript: Transcript = { entries }
+      const transcript: Transcript = { entries, bytes }
       this.#transcripts.set(id, transcript)
       this.#evictTranscripts()
       return transcript
@@ -697,12 +739,27 @@ export class Agents implements HostAgents {
     return dropped
   }
 
+  /**
+   * Keep the cache inside its count and byte limits, and drop more when the
+   * heap is near its limit. The least recently used go first; transcripts that
+   * a client watches or an agent turn uses stay.
+   */
   #evictTranscripts() {
-    if (this.#transcripts.size <= 24) return
-    for (const id of this.#transcripts.keys()) {
-      if (this.#transcripts.size <= 24) break
+    let bytes = 0
+    for (const transcript of this.#transcripts.values())
+      bytes += transcript.bytes
+    const heap = getHeapStatistics()
+    const heapHigh = heap.used_heap_size > heap.heap_size_limit * HEAP_HIGH
+    const over = () =>
+      this.#transcripts.size > MAX_TRANSCRIPTS ||
+      bytes > MAX_TRANSCRIPT_BYTES ||
+      heapHigh
+    if (!over()) return
+    for (const [id, transcript] of this.#transcripts) {
+      if (!over()) break
       if (this.#watched(id) || this.isBusy(id)) continue
       this.#transcripts.delete(id)
+      bytes -= transcript.bytes
     }
   }
 
@@ -734,7 +791,9 @@ export class Agents implements HostAgents {
         const transcript = this.#transcripts.get(id)
         if (transcript) {
           transcript.entries.push(entry)
+          transcript.bytes += approximateBytes(entry)
           delete transcript.items
+          this.#evictTranscripts()
         } else {
           this.#arrivals.get(id)?.push(entry)
         }
@@ -1739,7 +1798,7 @@ export class Agents implements HostAgents {
     meta.family = id
     this.#metas.set(id, meta)
     this.#docs.set(id, {})
-    this.#transcripts.set(id, { entries: [] })
+    this.#transcripts.set(id, { entries: [], bytes: 0 })
     this.#updateMeta(id, { family: id })
     if (options.parent || (options.profile && options.profile !== "full")) {
       const profile = findProfile(
