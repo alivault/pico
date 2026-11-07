@@ -5,6 +5,10 @@
  * survive restarts (a file per conversation), and its open tabs are kept in
  * the `pico.browser` document, so they open again after a restart.
  */
+import { existsSync } from "node:fs"
+import { homedir } from "node:os"
+import { isAbsolute, join } from "node:path"
+
 import type { Context } from "@earendil-works/chord"
 import { Type } from "@earendil-works/pi-ai"
 import {
@@ -131,6 +135,7 @@ export function createBrowserExtension(host: HostBridge) {
     full_page?: boolean | undefined
     expression?: string | undefined
     id?: string | undefined
+    paths?: string[] | undefined
   }
   type Action = (
     browser: BrowserManager,
@@ -202,6 +207,35 @@ export function createBrowserExtension(host: HostBridge) {
       .catch(() => undefined)
     return textResult(
       `Done: ${action}.\n${clip(formatSnapshot(await browser.snapshot(page)), 30_000)}`
+    )
+  }
+
+  /** Upload files: on a file input, or on the button that opens a dialog. */
+  const upload: Action = async (browser, tabs, args, api) => {
+    const paths = (args.paths ?? []).map((path) =>
+      path.startsWith("~/") ? join(homedir(), path.slice(2)) : path
+    )
+    if (paths.length === 0) throw new Error("upload needs paths")
+    for (const path of paths) {
+      if (!isAbsolute(path)) throw new Error(`Give an absolute path: ${path}`)
+      if (!existsSync(path)) throw new Error(`No such file: ${path}`)
+    }
+    const conversation = Number(api.conversationId)
+    const { page } = await browser.page(conversation, tabs)
+    const target =
+      args.ref !== undefined
+        ? page.locator(`[data-pico-ref="${args.ref}"]`)
+        : args.selector
+          ? page.locator(args.selector).first()
+          : args.text
+            ? page.getByText(args.text, { exact: false }).first()
+            : page.locator('input[type="file"]').first()
+    await browser.upload(conversation, page, target, paths, 15_000)
+    await page
+      .waitForLoadState("networkidle", { timeout: 3000 })
+      .catch(() => undefined)
+    return textResult(
+      `Uploaded ${paths.length === 1 ? "1 file" : `${paths.length} files`}.\n${clip(formatSnapshot(await browser.snapshot(page)), 30_000)}`
     )
   }
 
@@ -327,6 +361,7 @@ export function createBrowserExtension(host: HostBridge) {
     open,
     snapshot,
     ...Object.fromEntries(ACT.map((name) => [name, act])),
+    upload,
     screenshot,
     eval: evaluate,
     tabs: tabList,
@@ -345,6 +380,7 @@ export function createBrowserExtension(host: HostBridge) {
       "open (url, new_tab: open a page and read it: its title, headings, numbered interactive elements, and text);",
       "snapshot (read the current page again);",
       "click, fill (replace the text of a field with value), type (add the keys of value), press (a key such as Enter), select (an option), check, uncheck, hover, scroll (value down or up): target an element with ref (from the last snapshot), a CSS selector, or its visible text; returns the new snapshot;",
+      "upload (paths: absolute paths of files on this machine; target the file input, or the button that opens the file dialog, with ref, selector, or text; with no target, the first file input);",
       "screenshot (full_page);",
       "eval (a JavaScript expression in the page; returns its JSON value);",
       "tabs, switch_tab (id), close_tab (id);",
@@ -364,6 +400,9 @@ export function createBrowserExtension(host: HostBridge) {
       full_page: Type.Optional(Type.Boolean()),
       expression: Type.Optional(Type.String()),
       id: Type.Optional(Type.String({ description: "A tab ID" })),
+      paths: Type.Optional(
+        Type.Array(Type.String(), { description: "Files to upload" })
+      ),
     }),
     async execute(args, api, context) {
       const action = String(args.action)
@@ -372,7 +411,7 @@ export function createBrowserExtension(host: HostBridge) {
       const denied =
         action === "eval"
           ? deniedAction(host, api.conversationId, "browser.eval")
-          : ACT.includes(action)
+          : ACT.includes(action) || action === "upload"
             ? deniedAction(host, api.conversationId, "browser.act")
             : undefined
       if (denied) return denied

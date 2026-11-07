@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { createServer, type Server } from "node:http"
-import { readFile } from "node:fs/promises"
+import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { test } from "node:test"
 
@@ -305,6 +305,86 @@ void test(
       end()
       await browser.closeIdle(Date.now() + 61_000)
       assert.equal(browser.isOpen(11), false)
+    } finally {
+      view.stop()
+      await browser.shutdown()
+      site.closeAllConnections()
+      await new Promise((done) => site.close(done))
+    }
+  }
+)
+
+void test(
+  "uploads: the view answers a file dialog and drops files, and the agent uploads from paths",
+  { skip: findChrome() ? false : "No Chrome on this machine" },
+  async () => {
+    const dir = await tempDir()
+    const site = createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "text/html" })
+      response.end(`<title>Upload</title>
+<input id="file" type="file" style="display:none">
+<button id="pick" style="position:absolute;left:10px;top:10px;width:120px;height:30px" onclick="file.click()">Select files</button>
+<div id="zone" style="position:absolute;left:10px;top:100px;width:300px;height:100px">Drop here</div>
+<p id="out"></p>
+<script>
+  file.onchange = () => { out.textContent = "picked " + file.files[0].name }
+  zone.ondragover = (event) => event.preventDefault()
+  zone.ondrop = (event) => { event.preventDefault(); out.textContent = "dropped " + event.dataTransfer.files[0].name + " " + event.dataTransfer.files[0].size }
+</script>`)
+    })
+    const port = await listen(site)
+    const browser = new BrowserManager(dir, () => true, { idleMs: 60_000 })
+    const events: BrowserViewEvent[] = []
+    const view = new BrowserView({
+      browser,
+      conversationId: 12,
+      savedTabs: async () => [],
+      send: (event, done) => {
+        events.push(event)
+        done?.()
+      },
+    })
+    const waitFor = async (check: () => boolean | Promise<boolean>) => {
+      for (let tries = 0; tries < 100; tries++) {
+        if (await check()) return
+        await new Promise((done) => setTimeout(done, 50))
+      }
+      throw new Error("Timed out")
+    }
+    const data = Buffer.from("hello").toString("base64")
+    try {
+      view.start()
+      await view.input({ type: "navigate", url: `http://127.0.0.1:${port}/` })
+      const { page } = (await browser.activePage(12))!
+      const out = () => page.textContent("#out")
+
+      // A click that opens a file dialog: the view says so, then sends files.
+      await view.input({ type: "mouse", action: "down", x: 50, y: 25 })
+      await view.input({ type: "mouse", action: "up", x: 50, y: 25 })
+      await waitFor(() =>
+        events.some((event) => event.type === "state" && event.fileChooser)
+      )
+      await view.input({
+        type: "files",
+        files: [{ name: "cv.pdf", mimeType: "application/pdf", data }],
+      })
+      await waitFor(async () => (await out()) === "picked cv.pdf")
+      assert.equal(await browser.fileChooser(12), undefined)
+
+      // A drop on the page at a point.
+      await view.input({
+        type: "files",
+        files: [{ name: "drop.txt", mimeType: "text/plain", data }],
+        x: 50,
+        y: 150,
+      })
+      await waitFor(async () => (await out()) === "dropped drop.txt 5")
+
+      // The agent uploads a file from a path, through the button's dialog.
+      const path = join(dir, "agent.txt")
+      await writeFile(path, "agent")
+      await browser.upload(12, page, page.locator("#pick"), [path], 5000)
+      await waitFor(async () => (await out()) === "picked agent.txt")
     } finally {
       view.stop()
       await browser.shutdown()

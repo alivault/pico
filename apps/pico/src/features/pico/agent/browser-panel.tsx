@@ -44,6 +44,7 @@ type ViewState = {
   tabs: Array<BrowserTab>
   active?: string
   handoff?: BrowserHandoff
+  fileChooser?: { multiple: boolean }
 }
 
 type ViewEvent =
@@ -99,6 +100,30 @@ function playwrightKey(event: React.KeyboardEvent) {
   return [...modifiers, key].join("+")
 }
 
+/** Files as the server takes them: name, type, and base64 data. */
+async function encodeFiles(files: Iterable<File>) {
+  return Promise.all(
+    [...files].map(
+      (file) =>
+        new Promise<{ name: string; mimeType: string; data: string }>(
+          (resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => {
+              const url = typeof reader.result === "string" ? reader.result : ""
+              resolve({
+                name: file.name,
+                mimeType: file.type,
+                data: url.slice(url.indexOf(",") + 1),
+              })
+            }
+            reader.onerror = () => reject(reader.error ?? new Error("Read"))
+            reader.readAsDataURL(file)
+          }
+        )
+    )
+  )
+}
+
 function useBrowserSocket({
   agentId,
   viewerContextId,
@@ -143,6 +168,7 @@ function useBrowserSocket({
             tabs: event.tabs,
             ...(event.active ? { active: event.active } : {}),
             ...(event.handoff ? { handoff: event.handoff } : {}),
+            ...(event.fileChooser ? { fileChooser: event.fileChooser } : {}),
           })
           setError("")
           if (!event.open) setFrame(null)
@@ -229,6 +255,21 @@ export function BrowserPanel({
   const shownAddress = editingAddress ? address : (activeTab?.url ?? "")
   const imageRef = React.useRef<HTMLImageElement | null>(null)
   const keysRef = React.useRef<HTMLTextAreaElement | null>(null)
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null)
+  const [dragging, setDragging] = React.useState(false)
+
+  /** Send files: for the open file dialog, or as a drop at a point. */
+  const sendFiles = (
+    files: FileList | null,
+    point?: { x: number; y: number }
+  ) => {
+    if (!files || files.length === 0) return
+    void encodeFiles(files)
+      .then((encoded) => send({ type: "files", files: encoded, ...point }))
+      .catch((error: unknown) =>
+        toast.error(error instanceof Error ? error.message : String(error))
+      )
+  }
   const pendingMoveRef = React.useRef<{ x: number; y: number } | null>(null)
   const moveFrameRef = React.useRef(0)
   const touchRef = React.useRef<{
@@ -451,6 +492,41 @@ export function BrowserPanel({
           </span>
         </div>
       ) : null}
+      {state?.fileChooser ? (
+        // Chrome runs without a window, so its file dialog does not show.
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 bg-muted/40 px-3 py-2 text-sm">
+          <span className="min-w-0 flex-1">
+            The page asks for {state.fileChooser.multiple ? "files" : "a file"}.
+          </span>
+          <span className="flex shrink-0 gap-1.5">
+            <Button
+              size="sm"
+              disabled={readOnly}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Choose {state.fileChooser.multiple ? "files" : "a file"}…
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={readOnly}
+              onClick={() => send({ type: "cancel_files" })}
+            >
+              Cancel
+            </Button>
+          </span>
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            multiple={state.fileChooser.multiple}
+            onChange={(event) => {
+              sendFiles(event.currentTarget.files)
+              event.currentTarget.value = ""
+            }}
+          />
+        </div>
+      ) : null}
       <div className="flex shrink-0 items-center gap-1 border-b border-border/70 p-1.5">
         <TitleTooltip title="Back">
           <Button
@@ -565,7 +641,31 @@ export function BrowserPanel({
           </DropdownMenu>
         ) : null}
       </div>
-      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-muted/30 p-2">
+      <div
+        className={cn(
+          "relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-muted/30 p-2",
+          dragging && "ring-2 ring-primary/60 ring-inset"
+        )}
+        // Files from this computer drop on the page at the same point.
+        onDragOver={(event) => {
+          if (readOnly || !frame || !event.dataTransfer.types.includes("Files"))
+            return
+          event.preventDefault()
+          event.dataTransfer.dropEffect = "copy"
+          setDragging(true)
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+            setDragging(false)
+        }}
+        onDrop={(event) => {
+          setDragging(false)
+          if (readOnly || !event.dataTransfer.files.length) return
+          event.preventDefault()
+          const point = pagePoint(event.clientX, event.clientY)
+          if (point) sendFiles(event.dataTransfer.files, point)
+        }}
+      >
         <textarea
           ref={keysRef}
           aria-label="Keys for the agent's browser"

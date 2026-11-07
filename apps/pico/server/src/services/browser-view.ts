@@ -17,6 +17,8 @@ export type BrowserViewEvent =
       tabs: BrowserTab[]
       active?: string
       handoff?: BrowserHandoff
+      /** A page opened a file dialog: the view asks the user for files. */
+      fileChooser?: { multiple: boolean }
     }
   | {
       type: "frame"
@@ -50,6 +52,18 @@ export type BrowserViewInput =
   | { type: "close_tab"; id: string }
   /** Open the context again, with the tabs it had. */
   | { type: "start" }
+  /**
+   * Files from the user: for the open file dialog, or, with a point, a
+   * drop on the page there.
+   */
+  | {
+      type: "files"
+      files: Array<{ name: string; mimeType: string; data: string }>
+      x?: number
+      y?: number
+    }
+  /** Close the open file dialog with no files. */
+  | { type: "cancel_files" }
 
 const NAVIGATION_TIMEOUT_MS = 30_000
 const ATTACH_RETRY_MS = 300
@@ -118,12 +132,16 @@ export class BrowserView {
       ? await this.#browser.tabs(conversation)
       : { tabs: await this.#savedTabs().catch(() => []), active: undefined }
     const handoff = this.#browser.handoff(conversation)
+    const fileChooser = open
+      ? await this.#browser.fileChooser(conversation)
+      : undefined
     this.#send({
       type: "state",
       open,
       tabs,
       ...(activeId ? { active: activeId } : {}),
       ...(handoff ? { handoff } : {}),
+      ...(fileChooser ? { fileChooser } : {}),
     })
     if (active?.page !== this.#page) {
       await this.#detach()
@@ -239,6 +257,28 @@ export class BrowserView {
         this.#persistSoon()
         return
       }
+      if (message.type === "cancel_files") {
+        await this.#browser.answerFileChooser(conversation, [])
+        return
+      }
+      if (message.type === "files") {
+        const files = message.files.map((file) => ({
+          name: file.name,
+          mimeType: file.mimeType || "application/octet-stream",
+          buffer: Buffer.from(file.data, "base64"),
+        }))
+        const point =
+          message.x !== undefined && message.y !== undefined
+            ? { x: message.x, y: message.y }
+            : undefined
+        if (!point) {
+          await this.#browser.answerFileChooser(conversation, files)
+        } else if (this.#page && !this.#page.isClosed()) {
+          await dropFiles(this.#page, point, message.files)
+        }
+        this.#persistSoon()
+        return
+      }
       if (message.type === "switch_tab") {
         await this.#browser.switchTab(conversation, message.id)
         return
@@ -290,3 +330,40 @@ export class BrowserView {
     }
   }
 }
+
+/**
+ * Drop files on the element at a point, as a drag from the desktop does:
+ * `dragenter`, `dragover`, and `drop`, with the files in the events'
+ * `dataTransfer`. A file input there gets the files directly.
+ */
+async function dropFiles(
+  page: Page,
+  point: { x: number; y: number },
+  files: Array<{ name: string; mimeType: string; data: string }>
+) {
+  // A script in text: the server's TypeScript has no DOM types.
+  await page.evaluate(
+    `(${DROP_SCRIPT})(${JSON.stringify({ ...point, files })})`
+  )
+}
+
+const DROP_SCRIPT = `({ x, y, files }) => {
+  const target = document.elementFromPoint(x, y)
+  if (!target) return
+  const transfer = new DataTransfer()
+  for (const file of files) {
+    const bytes = Uint8Array.from(atob(file.data), (char) => char.charCodeAt(0))
+    transfer.items.add(new File([bytes], file.name, { type: file.mimeType }))
+  }
+  if (target instanceof HTMLInputElement && target.type === "file") {
+    target.files = transfer.files
+    target.dispatchEvent(new Event("input", { bubbles: true }))
+    target.dispatchEvent(new Event("change", { bubbles: true }))
+    return
+  }
+  for (const type of ["dragenter", "dragover", "drop"]) {
+    target.dispatchEvent(new DragEvent(type, {
+      bubbles: true, cancelable: true, clientX: x, clientY: y, dataTransfer: transfer,
+    }))
+  }
+}`

@@ -294,7 +294,8 @@ export async function startServer(options: {
 
   const sockets = new WebSocketServer({
     noServer: true,
-    maxPayload: 4 * 1024 * 1024,
+    // Files that the user uploads in the Browser tab come as base64.
+    maxPayload: 64 * 1024 * 1024,
   })
   server.on(
     "upgrade",

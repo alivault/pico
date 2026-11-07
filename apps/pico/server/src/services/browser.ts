@@ -19,7 +19,12 @@ import { existsSync, statSync } from "node:fs"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { delimiter, join } from "node:path"
 
-import type { Browser, BrowserContext, Page } from "playwright-core"
+import type {
+  Browser,
+  BrowserContext,
+  FileChooser,
+  Page,
+} from "playwright-core"
 
 const CHROME_PATHS = [
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -80,7 +85,15 @@ type Session = {
   pages: Map<string, Page>
   active?: string
   nextTab: number
+  /**
+   * A file dialog that a page opened. Chrome runs without a window, so
+   * the dialog does not show: the live view asks the user for the files.
+   */
+  fileChooser?: FileChooser
 }
+
+/** A file from the user, for a file dialog or a drop. */
+export type BrowserFile = { name: string; mimeType: string; buffer: Buffer }
 
 /** The script that numbers interactive elements and describes them. */
 const SNAPSHOT_SCRIPT = `(() => {
@@ -233,13 +246,83 @@ export class BrowserManager {
     return id && page && !page.isClosed() ? { id, page } : undefined
   }
 
+  /** Whether a page of a conversation waits for files, and how many. */
+  async fileChooser(conversationId: number) {
+    const session = await this.#sessions
+      .get(conversationId)
+      ?.catch(() => undefined)
+    const chooser = session?.fileChooser
+    return chooser && !chooser.page().isClosed()
+      ? { multiple: chooser.isMultiple() }
+      : undefined
+  }
+
+  /**
+   * Give files to the open file dialog, or close it with no files. Returns
+   * false when no dialog is open.
+   */
+  async answerFileChooser(conversationId: number, files: BrowserFile[]) {
+    const session = await this.#sessions
+      .get(conversationId)
+      ?.catch(() => undefined)
+    const chooser = session?.fileChooser
+    if (!session || !chooser) return false
+    delete session.fileChooser
+    this.#touch(conversationId)
+    try {
+      await chooser.setFiles(chooser.isMultiple() ? files : files.slice(0, 1))
+    } finally {
+      this.#emit(conversationId)
+    }
+    return true
+  }
+
+  /**
+   * Upload files from paths on this machine, for the agent: set them on a
+   * file input, or click the element and answer the dialog that it opens.
+   */
+  async upload(
+    conversationId: number,
+    page: Page,
+    target: ReturnType<Page["locator"]>,
+    paths: string[],
+    timeout: number
+  ) {
+    const isInput = await target
+      .evaluate(
+        (element: { tagName: string; type?: string }) =>
+          element.tagName === "INPUT" && element.type === "file"
+      )
+      .catch(() => false)
+    if (isInput) {
+      await target.setInputFiles(paths, { timeout })
+      return
+    }
+    const [chooser] = await Promise.all([
+      page.waitForEvent("filechooser", { timeout }),
+      target.click({ timeout }),
+    ])
+    const session = await this.#sessions.get(conversationId)
+    if (session?.fileChooser === chooser) delete session.fileChooser
+    await chooser.setFiles(paths)
+    this.#emit(conversationId)
+  }
+
   /** Keep the tabs of a context in step with its pages, and tell watchers. */
   #track(conversationId: number, session: Session, id: string, page: Page) {
     page.on("framenavigated", (frame) => {
       if (frame === page.mainFrame()) this.#emit(conversationId)
     })
     page.on("load", () => this.#emit(conversationId))
+    // A listener stops Chrome's own file dialog. A visible Chrome shows
+    // the dialog in its window, so only a Chrome without a window has one.
+    if (!this.#headed)
+      page.on("filechooser", (chooser) => {
+        session.fileChooser = chooser
+        this.#emit(conversationId)
+      })
     page.on("close", () => {
+      if (session.fileChooser?.page() === page) delete session.fileChooser
       if (session.pages.get(id) !== page) return
       session.pages.delete(id)
       if (session.active === id)
