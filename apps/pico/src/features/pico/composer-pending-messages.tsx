@@ -103,7 +103,6 @@ type ComposerPendingMessagesProps = {
 const LANES: Array<{
   lane: QueueLane
   title: string
-  hint: string
   readyIcon: string
   laterIcon: string
   titleClassName: string
@@ -112,7 +111,6 @@ const LANES: Array<{
   {
     lane: "steer",
     title: "Steer",
-    hint: "at the next turn",
     readyIcon: "◆",
     laterIcon: "◇",
     titleClassName: "text-amber-700 dark:text-amber-300",
@@ -121,7 +119,6 @@ const LANES: Array<{
   {
     lane: "followUp",
     title: "Follow-up",
-    hint: "after the turn",
     readyIcon: "●",
     laterIcon: "○",
     titleClassName: "text-sky-700 dark:text-sky-300",
@@ -487,9 +484,6 @@ export const ComposerPendingMessages = React.memo(
 
     const rows = agent?.rows ?? queueRowsFromMessages(currentPendingMessages)
     const unsaved = agent ? hasQueueChanges(agent) : false
-    const selectedRow = agent
-      ? rows.find((row) => row.key === agent.selectedKey)
-      : undefined
 
     const updateAgent = (
       update: (current: QueueEditAgent) => QueueEditAgent | null
@@ -752,12 +746,6 @@ export const ComposerPendingMessages = React.memo(
 
     // The hold of an open edit is not a pause.
     const paused = canStartQueue && !heldForEdit
-    const selectedLane = selectedRow
-      ? LANES.find((lane) => lane.lane === selectedRow.lane)
-      : undefined
-    const selectedLaneRows = selectedRow
-      ? laneRows(rows, selectedRow.lane)
-      : undefined
     const keepFocus = (event: React.MouseEvent) => event.preventDefault()
     const collapsed = collapsedQueue && !editing
 
@@ -806,13 +794,13 @@ export const ComposerPendingMessages = React.memo(
               {editing ? "Editing" : "Queue"}
             </button>
           </TitleTooltip>
-          <span className="-ml-1 min-w-0 truncate text-muted-foreground">
-            {selectedRow && selectedLane && selectedLaneRows
-              ? `${selectedLane.title} ${selectedLaneRows.indexOf(selectedRow) + 1} of ${selectedLaneRows.length}`
-              : `${rows.length} ${rows.length === 1 ? "prompt" : "prompts"}`}
-            {heldForEdit ? " · held" : ""}
-            {unsaved ? " · unsaved" : ""}
-          </span>
+          {heldForEdit || unsaved ? (
+            <span className="-ml-1 min-w-0 truncate text-muted-foreground">
+              {[heldForEdit && "held", unsaved && "unsaved"]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          ) : null}
           <span className="ml-auto flex shrink-0 items-center gap-1">
             {paused ? (
               <Button
@@ -911,9 +899,6 @@ export const ComposerPendingMessages = React.memo(
                         {items.length}
                       </span>
                     ) : null}
-                    <span className="truncate text-muted-foreground">
-                      · {lane.hint}
-                    </span>
                     <TitleTooltip title={`Add a ${lane.title.toLowerCase()}`}>
                       <Button
                         size="icon-xs"
@@ -928,26 +913,7 @@ export const ComposerPendingMessages = React.memo(
                     </TitleTooltip>
                   </div>
 
-                  {items.length === 0 ? (
-                    // An empty lane: a click adds a prompt to it.
-                    <button
-                      type="button"
-                      className="flex w-full items-center gap-1.5 rounded-lg px-1 py-0.5 text-left text-sm text-muted-foreground hover:bg-foreground/5"
-                      onMouseDown={keepFocus}
-                      onClick={() => append(lane.lane)}
-                    >
-                      {isMobile ? null : (
-                        <span aria-hidden="true" className="w-3.5 shrink-0" />
-                      )}
-                      <PlusIcon
-                        aria-hidden="true"
-                        className={cn("size-3.5 shrink-0", lane.titleClassName)}
-                      />
-                      <span className="truncate leading-6 italic">
-                        Click to add a {lane.title.toLowerCase()}
-                      </span>
-                    </button>
-                  ) : (
+                  {items.length === 0 ? null : (
                     <SortableContext
                       items={items.map((row) => row.key)}
                       strategy={verticalListSortingStrategy}
