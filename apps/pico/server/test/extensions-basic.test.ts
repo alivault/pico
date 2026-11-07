@@ -6,6 +6,7 @@ import type { Harness } from "@earendil-works/pi-durable"
 
 import {
   answerQuestion,
+  cancelQuestions,
   createAskExtension,
   pendingQuestions,
   QuestionsDoc,
@@ -188,6 +189,39 @@ void test("ask_user waits for an answer, also across a restart", async () => {
       (entry) => entry.kind === "pi.tool-result"
     )
     assert.equal(asks.length, 1)
+  } finally {
+    await harness.close(ctx)
+  }
+})
+
+void test("cancelQuestions with ids closes only those questions", async () => {
+  const dir = await tempDir()
+  const harness = await openHarness(
+    join(dir, "db.sqlite"),
+    [createAskExtension()],
+    () => ({ text: "done" })
+  )
+  try {
+    const conversation = await harness.createConversation(
+      { ownership: { kind: "ownerless" }, agent: { model: TEST_MODEL } },
+      ctx
+    )
+    await harness.commit(async (tx) => {
+      const draft = (await tx.doc(
+        QuestionsDoc,
+        conversation.id
+      )) as unknown as QuestionsState
+      for (const id of ["a", "b"])
+        draft.items[id] = { id, prompt: id, kind: "text", createdAt: 1 }
+    }, ctx)
+    await cancelQuestions(harness, conversation.id, ctx, ["a"])
+    const state = await harness.snapshot(QuestionsDoc, conversation.id, ctx)
+    assert.deepEqual(
+      pendingQuestions(state as QuestionsState | undefined).map(
+        (question) => question.id
+      ),
+      ["b"]
+    )
   } finally {
     await harness.close(ctx)
   }

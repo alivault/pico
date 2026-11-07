@@ -518,8 +518,14 @@ export class Agents implements HostAgents {
           ctx
         )
         if (pendingQuestions(questions as QuestionsState | undefined).length) {
-          this.#questionWaits.add(id)
-          this.#needsInput.add(id)
+          if (live?.run === undefined) {
+            // No run waits for these questions: a tool that asked ended
+            // without an answer, for example in a restart.
+            await cancelQuestions(this.#harness, conversationId, ctx)
+          } else {
+            this.#questionWaits.add(id)
+            this.#needsInput.add(id)
+          }
         }
         const jobs = await this.#harness.snapshot(JobsDoc, conversationId, ctx)
         const waiting = waitingLabel(jobs)
@@ -733,6 +739,7 @@ export class Agents implements HostAgents {
           this.#arrivals.get(id)?.push(entry)
         }
         this.#noteEntry(id, entry)
+        this.#closeQuestionOf(id, entry)
         this.#markDirty(id, { entries: true })
       } else if (change.type === "document") {
         if (
@@ -835,6 +842,26 @@ export class Agents implements HostAgents {
     }
     if (text.trim()) change.lastMessagePreview = preview(text)
     this.#updateMeta(id, change, { persistAfterMs: 1500 })
+  }
+
+  /**
+   * A tool call that ended no longer waits for its question: close it. A
+   * browser handoff that a restart interrupts ends without an answer, and
+   * its question must not stay open.
+   */
+  #closeQuestionOf(id: string, entry: EntryRecord) {
+    if (entry.kind !== "pi.tool-result" || !this.#questionWaits.has(id)) return
+    const callId = (entry.model?.[0] as { toolCallId?: unknown } | undefined)
+      ?.toolCallId
+    if (typeof callId !== "string") return
+    // Commit after this publication, not in it.
+    void Promise.resolve()
+      .then(() =>
+        cancelQuestions(this.#harness, entry.conversationId, ctx, [callId])
+      )
+      .catch((error: unknown) =>
+        console.warn("[pico] could not close a question:", error)
+      )
   }
 
   #isStateKind(kind: string) {

@@ -120,18 +120,23 @@ export async function answerQuestion(
   }, context)
 }
 
-/** Close every open question, for an abort. */
+/**
+ * Close the open questions, for an abort. With `ids`, close only those
+ * questions, for example the question of a tool call that ended.
+ */
 export async function cancelQuestions(
   harness: Pick<Harness, "commit">,
   conversationId: ConversationId,
-  context: Context
+  context: Context,
+  ids?: readonly string[]
 ) {
   await harness.commit(async (tx) => {
     const draft = (await tx.doc(
       QuestionsDoc,
       conversationId
     )) as unknown as QuestionsState
-    for (const question of pendingQuestions(draft)) question.cancelled = true
+    for (const question of pendingQuestions(draft))
+      if (!ids || ids.includes(question.id)) question.cancelled = true
   }, context)
 }
 
