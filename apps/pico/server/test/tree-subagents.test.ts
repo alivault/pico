@@ -117,8 +117,8 @@ void test("tree navigation keeps the subagents under the agent", async () => {
 
     const tree = (await (
       await fetch(`${url}/api/agent/tree?agent=${parentId}`)
-    ).json()) as { tree: Array<{ entry: { id: string } }> }
-    const targetId = tree.tree[0]?.entry.id
+    ).json()) as { nodes: Array<{ entry: { id: string } }> }
+    const targetId = tree.nodes[0]?.entry.id
     assert.ok(targetId, JSON.stringify(tree))
     const navigated = await fetch(`${url}/api/agent/tree?agent=${parentId}`, {
       method: "POST",

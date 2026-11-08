@@ -550,7 +550,8 @@ export type AgentTreeResponse =
       ok: true
       leafId: string | null
       streamingEntryId?: string | null
-      tree: Array<TreeNode>
+      /** Parents before children; `entry.parentId` links them. */
+      nodes: Array<Omit<TreeNode, "children">>
     }
   | ApiErrorResponse
 

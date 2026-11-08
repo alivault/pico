@@ -86,7 +86,7 @@ export {
   previewUrlForImage,
   sameContextUsage,
 } from "@/lib/pico/sync"
-export { flattenTree } from "@/lib/pico/tree"
+export { buildTree, flattenTree } from "@/lib/pico/tree"
 
 export const INITIAL_PROJECT_AGENT_RENDER_COUNT = 3
 export const PROJECT_AGENT_LOAD_MORE_COUNT = 3
@@ -331,6 +331,8 @@ export type AgentState = {
     compactAt?: number
     /** Tokens where a compaction starts in the background. */
     backgroundAt?: number
+    /** How many times the agent was compacted. */
+    compactions?: number
     [key: string]: unknown
   }
   uiState: AgentUiState

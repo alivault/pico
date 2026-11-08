@@ -1612,14 +1612,21 @@ export class Agents implements HostAgents {
         break
       }
     }
+    let compactions = 0
+    for (const entry of entries) {
+      if (entry.kind === "pi.compaction") compactions += 1
+    }
     if (!contextWindow)
-      return tokens === null ? undefined : { tokens, percent: null }
+      return tokens === null && compactions === 0
+        ? undefined
+        : { tokens, percent: null, compactions }
     const levels =
       ref &&
       compactionLevels(this.#runtime.compactionPolicy(ref), contextWindow)
     return {
       tokens,
       contextWindow,
+      compactions,
       ...levels,
       percent:
         tokens === null ? null : Math.min(100, (tokens / contextWindow) * 100),
@@ -1650,6 +1657,7 @@ export class Agents implements HostAgents {
     const items = committed.slice(offset)
     if (streaming) items.push(streaming)
     const modelRef = agentState?.model ?? this.defaultModel()
+    const contextUsage = this.#contextUsage(transcript.entries, modelRef)
     return {
       type: "state_sync",
       agentKey: agentKey(id),
@@ -1682,9 +1690,7 @@ export class Agents implements HostAgents {
       availableThinkingLevels: this.thinkingLevels(modelRef),
       availableModels: this.availableModels(),
       availableSkills: await this.#skills(meta.cwd),
-      ...(this.#contextUsage(transcript.entries, modelRef)
-        ? { contextUsage: this.#contextUsage(transcript.entries, modelRef) }
-        : {}),
+      ...(contextUsage ? { contextUsage } : {}),
       uiState: {
         statuses: {},
         ...(options.editorText !== undefined
@@ -2576,14 +2582,15 @@ export class Agents implements HostAgents {
   async tree(id: string) {
     const members = this.#family(id)
     type Node = {
-      entry: Record<string, unknown>
+      entry: Record<string, unknown> & { parentId: string | null }
       label?: string
       labelTimestamp?: string
       streaming?: boolean
-      children: Node[]
     }
+    // A flat list, parents before children: a long agent is one chain
+    // thousands of entries deep, and JSON.stringify of a nested tree that
+    // deep overflows the stack. The client links the nodes by parentId.
     const nodes = new Map<string, Node>()
-    const roots: Node[] = []
     const labels = this.meta(id).labels ?? {}
     let leafId: string | null = null
 
@@ -2622,12 +2629,8 @@ export class Agents implements HostAgents {
                 labelTimestamp: new Date(label.timestamp).toISOString(),
               }
             : {}),
-          children: [],
         }
         nodes.set(entryId, node)
-        const parent = parentId ? nodes.get(parentId) : undefined
-        if (parent) parent.children.push(node)
-        else roots.push(node)
         parentId = entryId
       }
       if (member === id) leafId = parentId
@@ -2641,7 +2644,7 @@ export class Agents implements HostAgents {
       ok: true,
       leafId,
       streamingEntryId: streaming ? leafId : null,
-      tree: roots,
+      nodes: [...nodes.values()],
     }
   }
 

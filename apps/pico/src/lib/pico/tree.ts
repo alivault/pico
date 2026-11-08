@@ -1,5 +1,25 @@
 import type { FlatTreeNode, TreeNode } from "@/lib/pico"
 
+/**
+ * Link the flat nodes of `/api/agent/tree` into a tree. The server sends a
+ * flat list because a long agent is one chain thousands of entries deep, and
+ * JSON of a nested tree that deep overflows the stack.
+ */
+export function buildTree(nodes: ReadonlyArray<Omit<TreeNode, "children">>) {
+  const byId = new Map<string, TreeNode>()
+  const roots: Array<TreeNode> = []
+  for (const wireNode of nodes) {
+    const node: TreeNode = { ...wireNode, children: [] }
+    byId.set(node.entry.id, node)
+    const parent = node.entry.parentId
+      ? byId.get(node.entry.parentId)
+      : undefined
+    if (parent) parent.children.push(node)
+    else roots.push(node)
+  }
+  return roots
+}
+
 export function flattenTree(tree: Array<TreeNode>) {
   const flatNodes: Array<FlatTreeNode> = []
 

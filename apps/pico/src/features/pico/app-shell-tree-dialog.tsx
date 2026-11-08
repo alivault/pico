@@ -39,11 +39,18 @@ import {
 } from "@/features/pico/keyboard-shortcuts"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { flattenTree } from "@/lib/pico"
+import { buildTree, flattenTree } from "@/lib/pico"
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
 
-type AgentTreeData = Extract<AgentTreeResponse, { ok: true }>
+type AgentTreeWireData = Extract<AgentTreeResponse, { ok: true }>
+type AgentTreeData = Omit<AgentTreeWireData, "nodes"> & {
+  tree: Array<TreeNode>
+}
+
+function agentTreeData({ nodes, ...rest }: AgentTreeWireData): AgentTreeData {
+  return { ...rest, tree: buildTree(nodes) }
+}
 type NavigateAgentTreeData = Extract<NavigateAgentTreeResponse, { ok: true }>
 
 type TreeFilterMode =
@@ -2072,9 +2079,13 @@ function useAppShellTreeDialogView({
           : treeStage === "actions"
             ? "Summarize branch?"
             : "Conversation tree"
+  const treeCompactionCount = React.useMemo(
+    () => flatTree.filter((node) => node.type === "compaction").length,
+    [flatTree]
+  )
   const treeDialogDescription =
     treeStage === "browse"
-      ? "Browse branches, search the tree, and continue from an older point."
+      ? `Browse branches, search the tree, and continue from an older point. ${flatTree.length.toLocaleString()} entries, ${treeCompactionCount.toLocaleString()} ${treeCompactionCount === 1 ? "compaction" : "compactions"}.`
       : treeStage === "custom"
         ? "Add summary instructions before continuing from the selected node."
         : treeStage === "label"
@@ -2332,13 +2343,15 @@ export function AppShellTreeDialogController({
 
   const treeQueryResult = useQuery({
     queryKey,
-    queryFn: () =>
-      fetchJson<AgentTreeData>(
-        buildRequestUrl("/api/agent/tree", {
-          machineId,
-          contextId: viewerContextId,
-          agentId,
-        })
+    queryFn: async () =>
+      agentTreeData(
+        await fetchJson<AgentTreeWireData>(
+          buildRequestUrl("/api/agent/tree", {
+            machineId,
+            contextId: viewerContextId,
+            agentId,
+          })
+        )
       ),
     staleTime: 0,
     gcTime: 1000 * 60 * 10,
@@ -2359,17 +2372,19 @@ export function AppShellTreeDialogController({
         throw new Error("Viewer context unavailable")
       }
 
-      return await fetchJson<AgentTreeData>(
-        buildRequestUrl("/api/agent/tree/label", {
-          machineId,
-          contextId: viewerContextId,
-          agentId,
-        }),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ entryId, label }),
-        }
+      return agentTreeData(
+        await fetchJson<AgentTreeWireData>(
+          buildRequestUrl("/api/agent/tree/label", {
+            machineId,
+            contextId: viewerContextId,
+            agentId,
+          }),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ entryId, label }),
+          }
+        )
       )
     },
     onSuccess: (response) => {
@@ -2529,7 +2544,10 @@ export function AppShellTreeDialogController({
   }, [open, treeQueryResult.error, treeQueryResult.errorUpdatedAt])
 
   const treeData = treeQueryResult.data ?? null
-  const flatTree = treeData ? flattenTree(treeData.tree) : []
+  const flatTree = React.useMemo(
+    () => (treeData ? flattenTree(treeData.tree) : []),
+    [treeData]
+  )
   const treeLeafId = treeData?.leafId ?? null
   const treeStreamingEntryId =
     treeData && "streamingEntryId" in treeData
@@ -2541,19 +2559,18 @@ export function AppShellTreeDialogController({
   React.useEffect(() => {
     if (!open || !treeData) return
 
-    const flat = flattenTree(treeData.tree)
     const currentSelected = selectedTreeNodeId
-      ? flat.find((entry) => entry.id === selectedTreeNodeId)
+      ? flatTree.find((entry) => entry.id === selectedTreeNodeId)
       : undefined
     const nextSelected =
-      currentSelected ?? flat.find((entry) => entry.id === treeData.leafId)
+      currentSelected ?? flatTree.find((entry) => entry.id === treeData.leafId)
     const nextSelectedId = nextSelected?.id ?? treeData.leafId
 
     setSelectedTreeNodeId((current) =>
       current === nextSelectedId ? current : nextSelectedId
     )
     setSelectedTreeNodeLabel(nextSelected?.label || "")
-  }, [selectedTreeNodeId, treeData, open])
+  }, [selectedTreeNodeId, treeData, flatTree, open])
 
   React.useImperativeHandle(
     ref,

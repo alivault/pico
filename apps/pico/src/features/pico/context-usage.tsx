@@ -65,6 +65,8 @@ type ComposerContextUsageSnapshot = {
   tokens: number | null
   compactAt: number | null
   backgroundAt: number | null
+  /** How many times the agent was compacted. */
+  compactions: number
   percent: number | null
   roundedPercent: number | null
   fiveHourUsage: ComposerContextUsageQuotaSnapshot | null
@@ -298,6 +300,7 @@ function getComposerContextUsageSnapshot(
     tokens,
     compactAt: getFiniteNumber(contextUsage.compactAt),
     backgroundAt: getFiniteNumber(contextUsage.backgroundAt),
+    compactions: getFiniteNumber(contextUsage.compactions) ?? 0,
     percent: roundedPercent,
     roundedPercent,
     fiveHourUsage,
@@ -327,6 +330,7 @@ function sameComposerContextUsageSnapshot(
     left?.tokens === right?.tokens &&
     left?.compactAt === right?.compactAt &&
     left?.backgroundAt === right?.backgroundAt &&
+    left?.compactions === right?.compactions &&
     left?.roundedPercent === right?.roundedPercent &&
     sameContextUsageQuotaSnapshot(left?.fiveHourUsage, right?.fiveHourUsage) &&
     sameContextUsageQuotaSnapshot(left?.weeklyUsage, right?.weeklyUsage)
@@ -565,6 +569,7 @@ function buildContextUsageView(
   const {
     backgroundAt,
     compactAt,
+    compactions,
     contextWindow,
     fiveHourUsage,
     percent,
@@ -614,6 +619,7 @@ function buildContextUsageView(
     compactContextWindow,
     compactTokens,
     compactionText,
+    compactions,
     displayPercent,
     fiveHourUsage,
     percent,
@@ -748,14 +754,23 @@ export function ContextUsageWindowDetails({
 }) {
   // The mark on the bar is the compaction point; the title tells the numbers.
   return (
-    <UsageRow
-      label="Context"
-      detail={`${view.compactTokens ?? "?"} / ${view.compactContextWindow}`}
-      percent={view.percent}
-      percentText={view.percent == null ? null : view.displayPercent}
-      marks={view.compactAtPercent == null ? [] : [view.compactAtPercent]}
-      title={view.compactionText ?? undefined}
-    />
+    <>
+      <UsageRow
+        label="Context"
+        detail={`${view.compactTokens ?? "?"} / ${view.compactContextWindow}`}
+        percent={view.percent}
+        percentText={view.percent == null ? null : view.displayPercent}
+        marks={view.compactAtPercent == null ? [] : [view.compactAtPercent]}
+        title={view.compactionText ?? undefined}
+      />
+      <UsageRow
+        className="mt-1.5"
+        label="Compactions"
+        detail={view.compactions.toLocaleString()}
+        percent={null}
+        percentText={null}
+      />
+    </>
   )
 }
 
