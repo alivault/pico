@@ -21,6 +21,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { getShellLayout } from "@/hooks/use-shell-layout"
 import { cn } from "@/lib/utils"
+import { settle } from "@/lib/settle"
 
 export type SettingsPageRef = {
   key: string
@@ -430,15 +431,17 @@ export function SettingsEditPage({
       return
     }
     setSaving(true)
-    try {
-      const problem = await onSave(value)
-      if (problem) setError(problem)
-      else nav.pop()
-    } catch (caught) {
+    // A promise, so that a throw in onSave is also an error result.
+    const settled = await settle(Promise.resolve().then(() => onSave(value)))
+    setSaving(false)
+    if (!settled.ok) {
+      const caught = settled.error
       setError(caught instanceof Error ? caught.message : String(caught))
-    } finally {
-      setSaving(false)
+      return
     }
+    const problem = settled.value
+    if (problem) setError(problem)
+    else nav.pop()
   }
 
   const fieldProps = {

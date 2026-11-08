@@ -11,6 +11,7 @@ import {
 } from "@/features/pico/settings-pages"
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
+import { settle } from "@/lib/settle"
 
 type McpServer = {
   name: string
@@ -72,8 +73,8 @@ function useMcpServers(viewerContextId: string) {
     }) => {
       // Open the window first: browsers block windows opened after an await.
       const popup = kind === "auth" ? window.open("", "_blank") : null
-      try {
-        const result = await fetchJson<{
+      const settled = await settle(
+        fetchJson<{
           authorizationUrl?: string
           authorized?: boolean
         }>(
@@ -83,15 +84,18 @@ function useMcpServers(viewerContextId: string) {
           }),
           { method: "POST" }
         )
-        if (result.authorizationUrl) {
-          if (popup) popup.location.href = result.authorizationUrl
-          else window.location.href = result.authorizationUrl
-        } else popup?.close()
-        return result
-      } catch (error) {
+      )
+      if (!settled.ok) {
+        const error = settled.error
         popup?.close()
         throw error
       }
+      const result = settled.value
+      if (result.authorizationUrl) {
+        if (popup) popup.location.href = result.authorizationUrl
+        else window.location.href = result.authorizationUrl
+      } else popup?.close()
+      return result
     },
     onSuccess: (result, variables) => {
       if (variables.kind === "auth")

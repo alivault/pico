@@ -57,6 +57,7 @@ import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useMachineId } from "@/lib/pico/machine-context"
+import { settle } from "@/lib/settle"
 
 type ForkableMessagesData = Extract<ForkableMessagesResponse, { ok: true }>
 type DeleteOldProjectAgentsData = Extract<
@@ -243,7 +244,7 @@ export function RenameAgentDialogController({
   const [renameValue, setRenameValue] = React.useState("")
   const [isGeneratingName, setIsGeneratingName] = React.useState(false)
   const [canGenerateName, setCanGenerateName] = React.useState(false)
-  const targetPathRef = React.useRef("")
+  const [targetPath, setTargetPath] = React.useState("")
   const openRef = React.useRef(open)
 
   const setOpenState = (nextOpen: boolean) => {
@@ -262,7 +263,7 @@ export function RenameAgentDialogController({
     const nextPath = target.path.trim()
     if (!nextPath) return
 
-    targetPathRef.current = nextPath
+    setTargetPath(nextPath)
     setRenameValue(target.title)
     setCanGenerateName(!target.hasGeneratedName)
     setOpenState(true)
@@ -271,7 +272,7 @@ export function RenameAgentDialogController({
   const generateAgentName = async () => {
     if (
       !viewerContextId ||
-      !targetPathRef.current ||
+      !targetPath ||
       isGeneratingName ||
       !canGenerateName
     ) {
@@ -279,8 +280,8 @@ export function RenameAgentDialogController({
     }
 
     setIsGeneratingName(true)
-    try {
-      const response = await fetchJson<GenerateAgentNameData>(
+    const settled = await settle(
+      fetchJson<GenerateAgentNameData>(
         buildRequestUrl("/api/agent/name", {
           machineId,
           contextId: viewerContextId,
@@ -288,27 +289,30 @@ export function RenameAgentDialogController({
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ path: targetPathRef.current }),
+          body: JSON.stringify({ path: targetPath }),
         }
       )
-      setRenameValue(response.name)
-      setCanGenerateName(false)
-      if (response.source === "heuristic" && response.reason) {
-        toast.info("Using heuristic agent name", {
-          description: response.reason,
-        })
-      }
-    } catch (error) {
+    )
+    setIsGeneratingName(false)
+    if (!settled.ok) {
+      const error = settled.error
       toast.error(
         error instanceof Error ? error.message : "Failed to generate agent name"
       )
-    } finally {
-      setIsGeneratingName(false)
+      return
+    }
+    const response = settled.value
+    setRenameValue(response.name)
+    setCanGenerateName(false)
+    if (response.source === "heuristic" && response.reason) {
+      toast.info("Using heuristic agent name", {
+        description: response.reason,
+      })
     }
   }
 
   const submitRename = async () => {
-    const success = await onRenameAgent(targetPathRef.current, renameValue)
+    const success = await onRenameAgent(targetPath, renameValue)
     if (success === false) return
 
     setOpenState(false)
@@ -343,7 +347,7 @@ export function RenameAgentDialogController({
       renameValue={renameValue}
       generatingName={isGeneratingName}
       canGenerateName={
-        canGenerateName && Boolean(viewerContextId && targetPathRef.current)
+        canGenerateName && Boolean(viewerContextId && targetPath)
       }
       onRenameValueChange={setRenameValue}
       onGenerateAgentName={() => {
@@ -740,33 +744,38 @@ export function DeleteOldProjectAgentsDialogController({
   })
 
   const previewCleanup = async () => {
-    try {
-      setPreview(await cleanupMutation.mutateAsync(true))
-    } catch (error) {
+    const settled = await settle(cleanupMutation.mutateAsync(true))
+    if (!settled.ok) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to preview agents"
+        settled.error instanceof Error
+          ? settled.error.message
+          : "Failed to preview agents"
       )
+      return
     }
+    setPreview(settled.value)
   }
 
   const deleteCleanup = async () => {
-    try {
-      const result = await cleanupMutation.mutateAsync(false)
-      setPreview(result)
-      await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.projectAgentsIndex(viewerContextId, project),
-      })
-      toast.success(
-        `Archived ${result.deletedAgentIds.length} old agent${
-          result.deletedAgentIds.length === 1 ? "" : "s"
-        }`
-      )
-      setOpenState(false)
-    } catch (error) {
+    const settled = await settle(cleanupMutation.mutateAsync(false))
+    if (!settled.ok) {
+      const error = settled.error
       toast.error(
         error instanceof Error ? error.message : "Failed to archive agents"
       )
+      return
     }
+    const result = settled.value
+    setPreview(result)
+    await queryClient.invalidateQueries({
+      queryKey: picoQueryKeys.projectAgentsIndex(viewerContextId, project),
+    })
+    toast.success(
+      `Archived ${result.deletedAgentIds.length} old agent${
+        result.deletedAgentIds.length === 1 ? "" : "s"
+      }`
+    )
+    setOpenState(false)
   }
 
   const openProject = (nextProject: string) => {

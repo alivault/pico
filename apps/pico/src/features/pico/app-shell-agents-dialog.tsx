@@ -53,6 +53,7 @@ import { agentListEntryKey } from "@/lib/pico"
 import { openAgent } from "@/lib/pico/machine"
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
+import { settle } from "@/lib/settle"
 
 type AgentsDialogScope = "current" | "all"
 type AgentsDialogStage = "browse" | "rename" | "delete"
@@ -809,8 +810,8 @@ function useAppShellAgentsDialogView({
     }
 
     setIsGeneratingName(true)
-    try {
-      const response = await fetchJson<GenerateAgentNameData>(
+    const settled = await settle(
+      fetchJson<GenerateAgentNameData>(
         buildRequestUrl("/api/agent/name", {
           machineId,
           contextId: viewerContextId,
@@ -821,17 +822,20 @@ function useAppShellAgentsDialogView({
           body: JSON.stringify({ path: targetPath }),
         }
       )
-      dispatch({ type: "renameValueChanged", value: response.name })
-      setGeneratedNamePath(targetPath)
-      if (response.source === "heuristic" && response.reason) {
-        toast.info("Using heuristic agent name", {
-          description: response.reason,
-        })
-      }
-    } catch (error) {
+    )
+    setIsGeneratingName(false)
+    if (!settled.ok) {
+      const error = settled.error
       onError?.(error)
-    } finally {
-      setIsGeneratingName(false)
+      return
+    }
+    const response = settled.value
+    dispatch({ type: "renameValueChanged", value: response.name })
+    setGeneratedNamePath(targetPath)
+    if (response.source === "heuristic" && response.reason) {
+      toast.info("Using heuristic agent name", {
+        description: response.reason,
+      })
     }
   }
 

@@ -22,6 +22,7 @@ import type {
   ProjectFileWriteResponse,
 } from "@/lib/pico/api"
 import { toast } from "@/lib/pico/toast"
+import { settle } from "@/lib/settle"
 
 type ProjectFileReadData = Extract<ProjectFileReadResponse, { ok: true }>
 type ProjectFileWriteData = Extract<ProjectFileWriteResponse, { ok: true }>
@@ -68,19 +69,18 @@ export function useProjectFileEditing({
   const startEdit = async () => {
     if (edit || starting) return
     setStarting(true)
-    try {
-      // Start from the newest content, so a save does not see a conflict.
-      const latest = (await refetch()).data ?? file
-      if (!latest) return
-      startProjectFileEdit(machineId, {
-        cwd,
-        path,
-        content: latest.content,
-        version: latest.version,
-      })
-    } finally {
+    // Start from the newest content, so a save does not see a conflict.
+    const refetched = await refetch().finally(() => {
       setStarting(false)
-    }
+    })
+    const latest = refetched.data ?? file
+    if (!latest) return
+    startProjectFileEdit(machineId, {
+      cwd,
+      path,
+      content: latest.content,
+      version: latest.version,
+    })
   }
 
   /** End edit mode. Ask first when there are unsaved changes. */
@@ -104,8 +104,8 @@ export function useProjectFileEditing({
     const content = current.draft
     savingRef.current = true
     setSaving(true)
-    try {
-      const result = await fetchJson<ProjectFileWriteData>(
+    const settled = await settle(
+      fetchJson<ProjectFileWriteData>(
         buildRequestUrl("/api/files/write", {
           machineId,
           contextId: viewerContextId,
@@ -121,25 +121,28 @@ export function useProjectFileEditing({
           }),
         }
       )
-      // The user can type during the save, so keep the draft as it is now.
-      rebaseProjectFileEdit(
-        machineId,
-        { cwd, path, content, version: result.version },
-        false
-      )
-      queryClient.setQueryData<ProjectFileReadData>(
-        picoQueryKeys.projectFileRead(viewerContextId, cwd, path),
-        (old) => (old ? { ...old, content, version: result.version } : old)
-      )
-    } catch (error) {
+    )
+    savingRef.current = false
+    setSaving(false)
+    if (!settled.ok) {
+      const error = settled.error
       toast.error(getErrorMessage(error, "Failed to save the file"))
       // A conflict shows after the refetch, with a choice to reload or
       // overwrite.
       void refetch()
-    } finally {
-      savingRef.current = false
-      setSaving(false)
+      return
     }
+    const result = settled.value
+    // The user can type during the save, so keep the draft as it is now.
+    rebaseProjectFileEdit(
+      machineId,
+      { cwd, path, content, version: result.version },
+      false
+    )
+    queryClient.setQueryData<ProjectFileReadData>(
+      picoQueryKeys.projectFileRead(viewerContextId, cwd, path),
+      (old) => (old ? { ...old, content, version: result.version } : old)
+    )
   }
 
   /** Replace the draft with the file on disk. */

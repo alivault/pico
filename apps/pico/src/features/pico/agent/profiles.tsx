@@ -31,6 +31,7 @@ import {
 } from "@/features/pico/settings-pages"
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
+import { settle, settleSync } from "@/lib/settle"
 
 type Profile = {
   name: string
@@ -266,14 +267,13 @@ function EditProfilesPage({ viewerContextId }: SettingsPageProps) {
         </>
       }
       onSave={async (value) => {
-        let profiles: unknown
-        try {
-          profiles = JSON.parse(value.trim() || "{}")
-        } catch (error) {
-          return `The JSON is not valid: ${errorText(error)}`
-        }
-        try {
-          await fetchJson(
+        const parsed = settleSync((): unknown =>
+          JSON.parse(value.trim() || "{}")
+        )
+        if (!parsed.ok)
+          return `The JSON is not valid: ${errorText(parsed.error)}`
+        const saved = await settle(
+          fetchJson(
             buildRequestUrl("/api/settings/profiles", {
               machineId,
               contextId: viewerContextId,
@@ -281,12 +281,11 @@ function EditProfilesPage({ viewerContextId }: SettingsPageProps) {
             {
               method: "POST",
               headers: { "content-type": "application/json" },
-              body: JSON.stringify({ profiles }),
+              body: JSON.stringify({ profiles: parsed.value }),
             }
           )
-        } catch (error) {
-          return errorText(error)
-        }
+        )
+        if (!saved.ok) return errorText(saved.error)
         toast.success("Saved the profiles")
         await queryClient.invalidateQueries({ queryKey: ["pico", "profiles"] })
         return undefined

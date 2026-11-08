@@ -25,6 +25,7 @@ import { errorText } from "@/features/pico/agent/shared"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { viewerContextIdForSummaries } from "@/features/pico/machine-store"
 import type { AgentListEntry } from "@/lib/pico/api"
+import { settle } from "@/lib/settle"
 
 /**
  * Rename and archive for the agents of another machine in the sidebar.
@@ -74,17 +75,19 @@ export function OtherMachineRenameDialog({
     const nextName = name.trim()
     if (!entry?.path || !nextName || saving) return
     setSaving(true)
-    try {
-      await postToMachine(machineId, "/api/agent/rename", {
+    const settled = await settle(
+      postToMachine(machineId, "/api/agent/rename", {
         path: entry.path,
         name: nextName,
       })
-      onOpenChange(false)
-    } catch (error) {
+    )
+    setSaving(false)
+    if (!settled.ok) {
+      const error = settled.error
       toast.error(`Failed to rename the agent: ${errorText(error)}`)
-    } finally {
-      setSaving(false)
+      return
     }
+    onOpenChange(false)
   }
 
   return (
@@ -145,16 +148,18 @@ export function OtherMachineArchiveDialog({
   const archive = async () => {
     if (!entry?.path || archiving) return
     setArchiving(true)
-    try {
-      await postToMachine(machineId, "/api/agents/delete", {
+    const settled = await settle(
+      postToMachine(machineId, "/api/agents/delete", {
         paths: [entry.path],
       })
-      onOpenChange(false)
-    } catch (error) {
+    )
+    setArchiving(false)
+    if (!settled.ok) {
+      const error = settled.error
       toast.error(`Failed to archive the agent: ${errorText(error)}`)
-    } finally {
-      setArchiving(false)
+      return
     }
+    onOpenChange(false)
   }
 
   return (

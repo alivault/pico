@@ -45,6 +45,7 @@ import { picoQueryKeys } from "@/features/pico/query-keys"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useMachineId } from "@/lib/pico/machine-context"
 import { cn } from "@/lib/utils"
+import { settle } from "@/lib/settle"
 
 type ArchivedAgentsData = Extract<ArchivedAgentsResponse, { ok: true }>
 type RestoreAgentData = Extract<RestoreAgentResponse, { ok: true }>
@@ -130,25 +131,28 @@ export function ArchivedAgentsDialog({
 
   const stopJob = async (agent: ArchivedAgentEntry, job: AgentJob) => {
     setStopping((current) => new Set(current).add(job.id))
-    try {
-      await postAgentJson(
+    const settled = await settle(
+      postAgentJson(
         machineId,
         viewerContextId,
         agent.id,
         "/api/agent/job/stop",
         { jobId: job.id }
       )
-      await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.archivedAgents(viewerContextId),
-      })
-    } catch (error) {
+    )
+    if (!settled.ok) {
+      const error = settled.error
       toast.error(errorText(error))
       setStopping((current) => {
         const next = new Set(current)
         next.delete(job.id)
         return next
       })
+      return
     }
+    await queryClient.invalidateQueries({
+      queryKey: picoQueryKeys.archivedAgents(viewerContextId),
+    })
   }
 
   const restoreMutation = useMutation({
@@ -182,14 +186,15 @@ export function ArchivedAgentsDialog({
 
   const restore = async (agent: ArchivedAgentEntry) => {
     if (!agent.path) return
-    try {
-      await restoreMutation.mutateAsync(agent.path)
-      toast.success(`Restored "${agent.title || "New agent"}"`)
-    } catch (error) {
+    const settled = await settle(restoreMutation.mutateAsync(agent.path))
+    if (!settled.ok) {
+      const error = settled.error
       toast.error(
         error instanceof Error ? error.message : "Failed to restore agent"
       )
+      return
     }
+    toast.success(`Restored "${agent.title || "New agent"}"`)
   }
 
   const agents = archivedQuery.data?.agents ?? []

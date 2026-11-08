@@ -44,6 +44,22 @@ function sameModelState(
 }
 
 /** A searchable list of the models, grouped by provider. Opens with Mod+M. */
+function compareModelOptions(left: ModelOption, right: ModelOption) {
+  return (
+    (left.provider || "").localeCompare(right.provider || "") ||
+    (left.name || left.id).localeCompare(right.name || right.id)
+  )
+}
+
+function modelOptionMatches(entry: ModelOption, normalizedQuery: string) {
+  return (
+    !normalizedQuery ||
+    `${entry.provider || ""} ${entry.name || ""} ${entry.id}`
+      .toLowerCase()
+      .includes(normalizedQuery)
+  )
+}
+
 export function AppShellModelDialog({
   agentStore,
   openRef,
@@ -88,18 +104,8 @@ export function AppShellModelDialog({
   const modelOptions =
     availableModels.length > 0 ? availableModels : model ? [model] : []
   const filteredModels = modelOptions
-    .toSorted(
-      (left, right) =>
-        (left.provider || "").localeCompare(right.provider || "") ||
-        (left.name || left.id).localeCompare(right.name || right.id)
-    )
-    .filter(
-      (entry) =>
-        !normalizedQuery ||
-        `${entry.provider || ""} ${entry.name || ""} ${entry.id}`
-          .toLowerCase()
-          .includes(normalizedQuery)
-    )
+    .toSorted(compareModelOptions)
+    .filter((entry) => modelOptionMatches(entry, normalizedQuery))
   const groupedModels = new Map<string, Array<ModelOption>>()
   for (const entry of filteredModels) {
     const provider = entry.provider || "Models"

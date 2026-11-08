@@ -235,7 +235,7 @@ function AgentSectionView({
 }
 
 function AgentPanelEmpty({
-  icon = <BotIcon />,
+  icon,
   text,
   title,
 }: {
@@ -246,7 +246,7 @@ function AgentPanelEmpty({
   return (
     <Empty className="h-full">
       <EmptyHeader>
-        <EmptyMedia variant="icon">{icon}</EmptyMedia>
+        <EmptyMedia variant="icon">{icon ?? <BotIcon />}</EmptyMedia>
         <EmptyTitle>{title}</EmptyTitle>
         <EmptyDescription>{text}</EmptyDescription>
       </EmptyHeader>

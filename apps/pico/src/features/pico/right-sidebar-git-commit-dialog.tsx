@@ -57,6 +57,7 @@ import type {
 import type { GitChangeFile, GitCommitResponse } from "@/lib/pico/api"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useMachineId } from "@/lib/pico/machine-context"
+import { settle } from "@/lib/settle"
 
 type GitCommitDialogStage = "browse" | "message"
 type GitCommitPendingRun = "commit" | "push" | "force-push" | null
@@ -696,18 +697,18 @@ export function GitCommitDialog({
 
     let commitMessage = state.message.trim()
     if (!commitMessage) {
-      try {
-        dispatch({ type: "set-generating", generating: true })
-        const generated = await requestGeneratedCommitMessage()
-        commitMessage = generated.message.trim()
-        applyGeneratedMessage(generated)
-      } catch (error) {
-        toast.error(getErrorMessage(error, "Failed to generate commit message"))
+      dispatch({ type: "set-generating", generating: true })
+      const generated = await settle(requestGeneratedCommitMessage())
+      dispatch({ type: "set-generating", generating: false })
+      if (!generated.ok) {
+        toast.error(
+          getErrorMessage(generated.error, "Failed to generate commit message")
+        )
         dispatch({ type: "set-pending-run", pendingRun: null })
         return
-      } finally {
-        dispatch({ type: "set-generating", generating: false })
       }
+      commitMessage = generated.value.message.trim()
+      applyGeneratedMessage(generated.value)
     }
 
     if (!commitMessage) {
@@ -863,13 +864,10 @@ export function GitCommitDialogController({
   })
   const files = Array.isArray(filesQuery.data) ? filesQuery.data : []
 
-  const setDialogOpen = React.useCallback(
-    (nextOpen: boolean) => {
-      openStateRef.current = nextOpen
-      setOpen(nextOpen)
-    },
-    [openStateRef]
-  )
+  const setDialogOpen = (nextOpen: boolean) => {
+    openStateRef.current = nextOpen
+    setOpen(nextOpen)
+  }
 
   React.useEffect(() => {
     openStateRef.current = open

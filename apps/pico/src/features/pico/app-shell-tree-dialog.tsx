@@ -42,6 +42,7 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { buildTree, flattenTree } from "@/lib/pico"
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
+import { settle } from "@/lib/settle"
 
 type AgentTreeWireData = Extract<AgentTreeResponse, { ok: true }>
 type AgentTreeData = Omit<AgentTreeWireData, "nodes"> & {
@@ -2468,12 +2469,14 @@ export function AppShellTreeDialogController({
 
     setSelectedTreeNodeLabel(label)
 
-    try {
-      await saveTreeLabelMutation.mutateAsync({
+    const settled = await settle(
+      saveTreeLabelMutation.mutateAsync({
         entryId: selectedTreeNodeId,
         label,
       })
-    } catch (error) {
+    )
+    if (!settled.ok) {
+      const error = settled.error
       toast.error(
         error instanceof Error ? error.message : "Failed to save label"
       )
@@ -2488,44 +2491,48 @@ export function AppShellTreeDialogController({
 
     setOpenState(false)
 
-    try {
-      const response = await navigateTreeNodeMutation.mutateAsync({
+    const settled = await settle(
+      navigateTreeNodeMutation.mutateAsync({
         targetId,
         summarize: options?.summarize,
         customInstructions: options?.customInstructions,
       })
-      if (response.aborted) {
-        toast.info("Branch summarization cancelled")
-        return
-      }
-      if (response.cancelled) {
-        toast.info("Tree navigation cancelled")
-        return
-      }
-      toast.success(
-        options?.summarize
-          ? "Continued from summarized branch"
-          : "Moved the conversation tree cursor"
-      )
-    } catch (error) {
+    )
+    if (!settled.ok) {
+      const error = settled.error
       toast.error(
         error instanceof Error ? error.message : "Failed to navigate tree"
       )
+      return
     }
+    const response = settled.value
+    if (response.aborted) {
+      toast.info("Branch summarization cancelled")
+      return
+    }
+    if (response.cancelled) {
+      toast.info("Tree navigation cancelled")
+      return
+    }
+    toast.success(
+      options?.summarize
+        ? "Continued from summarized branch"
+        : "Moved the conversation tree cursor"
+    )
   }
 
   const abortStreamingAgent = async () => {
     if (!viewerContextId) return
 
-    try {
-      await abortStreamingAgentMutation.mutateAsync()
-      toast.info("Response aborted")
-    } catch (error) {
+    const settled = await settle(abortStreamingAgentMutation.mutateAsync())
+    if (!settled.ok) {
+      const error = settled.error
       toast.error(
         error instanceof Error ? error.message : "Failed to abort response"
       )
       throw error
     }
+    toast.info("Response aborted")
   }
 
   React.useEffect(() => {
@@ -2539,10 +2546,7 @@ export function AppShellTreeDialogController({
   }, [open, treeQueryResult.error, treeQueryResult.errorUpdatedAt])
 
   const treeData = treeQueryResult.data ?? null
-  const flatTree = React.useMemo(
-    () => (treeData ? flattenTree(treeData.tree) : []),
-    [treeData]
-  )
+  const flatTree = treeData ? flattenTree(treeData.tree) : []
   const treeLeafId = treeData?.leafId ?? null
   const treeStreamingEntryId =
     treeData && "streamingEntryId" in treeData

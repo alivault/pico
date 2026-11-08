@@ -35,6 +35,7 @@ import {
 } from "@/features/pico/conversation-view"
 import { ToolRenderContext } from "@/features/pico/tool-renderers/registry"
 import { WaitingCardChip } from "@/features/pico/agent/waiting-cards"
+import { settle } from "@/lib/settle"
 
 export type AppShellAgentContentProps = {
   actionsRef: React.RefObject<AppShellComposerActions>
@@ -96,57 +97,46 @@ export function AppShellAgentContent({
     displaySettingsStore,
     (settings) => settings.centerMessages
   )
-  const toolRenderContext = React.useMemo(
-    () => ({
-      viewerContextId,
-      agentId: agentState.draft ? undefined : agentState.agentId,
-      cwd: agentState.cwd,
-    }),
-    [agentState.cwd, agentState.draft, agentState.agentId, viewerContextId]
-  )
+  const toolRenderContext = {
+    viewerContextId,
+    agentId: agentState.draft ? undefined : agentState.agentId,
+    cwd: agentState.cwd,
+  }
   const machineId = useMachineId()
   const editAgentId = toolRenderContext.agentId
-  const userMessageActions = React.useMemo<UserMessageActions>(
-    () => ({
-      editDisabled: agentState.streaming,
-      editUserMessage: editAgentId
-        ? (entryId) => {
-            void (async () => {
-              try {
-                // Tree navigation to a user message forks at its parent and
-                // puts its text back in the composer.
-                await fetchJson<{ cancelled?: boolean }>(
-                  buildRequestUrl("/api/agent/tree", {
-                    machineId,
-                    contextId: viewerContextId,
-                    agentId: editAgentId,
-                  }),
-                  {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ targetId: entryId }),
-                  }
-                )
-                composerPanelRef.current?.focusPrompt({ preventScroll: true })
-              } catch (error) {
-                toast.error(
-                  error instanceof Error
-                    ? error.message
-                    : "Failed to edit message"
-                )
-              }
-            })()
-          }
-        : undefined,
-    }),
-    [
-      composerPanelRef,
-      editAgentId,
-      machineId,
-      agentState.streaming,
-      viewerContextId,
-    ]
-  )
+  const userMessageActions: UserMessageActions = {
+    editDisabled: agentState.streaming,
+    editUserMessage: editAgentId
+      ? (entryId) => {
+          void (async () => {
+            const settled = await settle(
+              fetchJson<{ cancelled?: boolean }>(
+                buildRequestUrl("/api/agent/tree", {
+                  machineId,
+                  contextId: viewerContextId,
+                  agentId: editAgentId,
+                }),
+                {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ targetId: entryId }),
+                }
+              )
+            )
+            if (!settled.ok) {
+              const error = settled.error
+              toast.error(
+                error instanceof Error
+                  ? error.message
+                  : "Failed to edit message"
+              )
+              return
+            }
+            composerPanelRef.current?.focusPrompt({ preventScroll: true })
+          })()
+        }
+      : undefined,
+  }
   const showNewAgentComposer =
     agentState.draft && !hasMessages && !isAgentViewLoading
 

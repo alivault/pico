@@ -71,32 +71,24 @@ export function useScrollGradients<TElement extends HTMLElement = HTMLElement>({
     EMPTY_SCROLL_GRADIENT_STATE
   )
 
-  const syncScrollGradients = React.useCallback(
-    (element: TElement | null = elementRef.current) => {
-      setScrollGradientState(
-        setState,
-        disabled
-          ? EMPTY_SCROLL_GRADIENT_STATE
-          : scrollGradientState(element, maxHeight)
-      )
-    },
-    [disabled, maxHeight]
-  )
+  const syncScrollGradients = (elementArg?: TElement | null) => {
+    const element = elementArg === undefined ? elementRef.current : elementArg
+    setScrollGradientState(
+      setState,
+      disabled
+        ? EMPTY_SCROLL_GRADIENT_STATE
+        : scrollGradientState(element, maxHeight)
+    )
+  }
 
-  const setScrollElement = React.useCallback(
-    (element: TElement | null) => {
-      elementRef.current = element
-      syncScrollGradients(element)
-    },
-    [syncScrollGradients]
-  )
+  const setScrollElement = (element: TElement | null) => {
+    elementRef.current = element
+    syncScrollGradients(element)
+  }
 
-  const onScroll = React.useCallback(
-    (event: React.UIEvent<TElement>) => {
-      syncScrollGradients(event.currentTarget)
-    },
-    [syncScrollGradients]
-  )
+  const onScroll = (event: React.UIEvent<TElement>) => {
+    syncScrollGradients(event.currentTarget)
+  }
 
   React.useLayoutEffect(() => {
     const element = elementRef.current

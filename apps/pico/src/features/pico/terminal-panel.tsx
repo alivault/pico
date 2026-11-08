@@ -567,6 +567,429 @@ function TerminalStatusDialog({
   )
 }
 
+type TerminalSessionOptions = {
+  terminalElement: HTMLDivElement
+  machineId: string
+  viewerContextId: string
+  agentId?: string | undefined
+  tabId: string
+  setStatus: (status: TerminalStatus) => void
+  terminalRef: React.RefObject<XtermTerminal | null>
+  terminalIdRef: React.RefObject<string | null>
+  activeRef: React.RefObject<boolean>
+  fitAndResizeRef: React.RefObject<() => void>
+  onStatusChangeRef: React.RefObject<TerminalTabPaneProps["onStatusChange"]>
+  onTerminalIdChangeRef: React.RefObject<
+    TerminalTabPaneProps["onTerminalIdChange"]
+  >
+  sendInputRef: React.RefObject<(data: string) => boolean>
+}
+
+/**
+ * Start the terminal of a tab in `terminalElement` and connect it to the
+ * server. Returns the cleanup. It is outside the component because the
+ * React Compiler cannot compile `import()` and some `try` statements.
+ */
+function startTerminalSession({
+  terminalElement,
+  machineId,
+  viewerContextId,
+  agentId,
+  tabId,
+  setStatus,
+  terminalRef,
+  terminalIdRef,
+  activeRef,
+  fitAndResizeRef,
+  onStatusChangeRef,
+  onTerminalIdChangeRef,
+  sendInputRef,
+}: TerminalSessionOptions) {
+  let disposed = false
+  let websocket: WebSocket | null = null
+  let inputDisposable: IDisposable | null = null
+  let fitAddon: FitAddon | null = null
+  let resizeObserver: ResizeObserver | null = null
+  let inputFlushTimer: number | null = null
+  let pingTimer: number | null = null
+  let reconnectTimer: number | null = null
+  let resizeFrame: number | null = null
+  let inputBuffer = ""
+  let lastResizeKey = ""
+  let lastOutputSeq = 0
+  // Replayed output can hold old terminal queries (colours, device
+  // attributes). xterm.js answers them, but the program does not wait for
+  // the answers, and its tty echoes them as text. Drop these answers.
+  let replayUntilSeq = 0
+  let replayWrites = 0
+  let nextInputSeq = 1
+  let reconnectAttempt = 0
+  let terminalExited = false
+  let terminalTransportReady = false
+  const pendingInputs = new Map<number, string>()
+  // Input sequence numbers are per viewer on the server, so another tab
+  // or client on the same terminal never makes this one's input a duplicate.
+  const viewerId = createTerminalTabId()
+
+  const requestOptions = agentId
+    ? { machineId, contextId: viewerContextId, agentId }
+    : { machineId, contextId: viewerContextId }
+
+  const publishStatus = (nextStatus: TerminalStatus) => {
+    if (disposed) return
+    setStatus(nextStatus)
+    onStatusChangeRef.current(tabId, nextStatus)
+  }
+
+  const postJson = async <T,>(path: string, body: Record<string, unknown>) => {
+    return await fetchJson<T>(buildRequestUrl(path, requestOptions), {
+      body: JSON.stringify(body),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    })
+  }
+
+  const sendTerminalMessage = (message: Record<string, unknown>) => {
+    if (!websocket || websocket.readyState !== WebSocket.OPEN) return false
+
+    try {
+      websocket.send(JSON.stringify(message))
+      return true
+    } catch (error) {
+      publishStatus({ type: "error", message: errorMessage(error) })
+      return false
+    }
+  }
+
+  const sendPendingInputs = () => {
+    if (!terminalTransportReady) return
+
+    for (const [inputSeq, data] of [...pendingInputs.entries()].sort(
+      ([left], [right]) => left - right
+    )) {
+      if (!sendTerminalMessage({ type: "input", data, inputSeq })) return
+    }
+  }
+
+  const flushInput = () => {
+    inputFlushTimer = null
+    if (!terminalIdRef.current || !inputBuffer || !terminalTransportReady) {
+      return
+    }
+
+    const data = inputBuffer
+    const inputSeq = nextInputSeq
+    nextInputSeq += 1
+    inputBuffer = ""
+    pendingInputs.set(inputSeq, data)
+    sendPendingInputs()
+  }
+
+  const scheduleInputFlush = () => {
+    if (inputFlushTimer !== null) return
+    inputFlushTimer = window.setTimeout(flushInput, 12)
+  }
+
+  const fitAndResize = () => {
+    const terminal = terminalRef.current
+    if (!terminal || !fitAddon) return
+
+    try {
+      fitAddon.fit()
+    } catch {
+      return
+    }
+
+    if (!terminalIdRef.current || !terminalTransportReady) return
+
+    const resizeKey = `${terminal.cols}x${terminal.rows}`
+    if (resizeKey === lastResizeKey) return
+    if (
+      !sendTerminalMessage({
+        type: "resize",
+        cols: terminal.cols,
+        rows: terminal.rows,
+      })
+    ) {
+      return
+    }
+    lastResizeKey = resizeKey
+  }
+
+  const scheduleFitAndResize = () => {
+    if (resizeFrame !== null) return
+    resizeFrame = window.requestAnimationFrame(() => {
+      resizeFrame = null
+      fitAndResize()
+    })
+  }
+
+  fitAndResizeRef.current = scheduleFitAndResize
+  sendInputRef.current = (data) => {
+    if (!terminalIdRef.current || !terminalTransportReady) return false
+    if (machineOfflineLabel(machineId) !== undefined) return false
+    inputBuffer += data
+    flushInput()
+    return true
+  }
+
+  const clearPingTimer = () => {
+    if (pingTimer === null) return
+    window.clearInterval(pingTimer)
+    pingTimer = null
+  }
+
+  const startPingTimer = () => {
+    clearPingTimer()
+    pingTimer = window.setInterval(() => {
+      sendTerminalMessage({ type: "ping" })
+    }, 20_000)
+  }
+
+  const scheduleWebSocketReconnect = () => {
+    if (disposed || terminalExited || reconnectTimer !== null) return
+
+    terminalTransportReady = false
+    clearPingTimer()
+    reconnectAttempt += 1
+    const delay = Math.min(10_000, 500 * 2 ** (reconnectAttempt - 1))
+    reconnectTimer = window.setTimeout(() => {
+      reconnectTimer = null
+      const id = terminalIdRef.current
+      if (!id || disposed || terminalExited) return
+      publishStatus({ type: "connecting" })
+      connectTerminalWebSocket(id)
+    }, delay)
+  }
+
+  const handleTerminalEvent = (event: TerminalEvent) => {
+    const terminal = terminalRef.current
+    if (!terminal) return
+
+    if (event.type === "output") {
+      if (typeof event.seq === "number") {
+        if (event.seq <= lastOutputSeq) return
+        lastOutputSeq = event.seq
+        if (event.seq <= replayUntilSeq) {
+          replayWrites += 1
+          terminal.write(event.data, () => {
+            replayWrites -= 1
+          })
+          return
+        }
+      }
+      terminal.write(event.data)
+      return
+    }
+
+    if (event.type === "reset") {
+      lastOutputSeq = Math.max(0, event.firstSeq - 1)
+      terminal.clear()
+      terminal.writeln("Terminal output replay gap; showing retained output.")
+      return
+    }
+
+    if (event.type === "ready") {
+      terminalTransportReady = true
+      reconnectAttempt = 0
+      nextInputSeq = Math.max(nextInputSeq, event.nextInputSeq ?? 1)
+      replayUntilSeq = event.replayUntilSeq ?? 0
+      publishStatus({ type: "connected", shell: event.shell })
+      startPingTimer()
+      sendPendingInputs()
+      flushInput()
+      lastResizeKey = ""
+      scheduleFitAndResize()
+      return
+    }
+
+    if (event.type === "input_ack") {
+      pendingInputs.delete(event.inputSeq)
+      return
+    }
+
+    if (event.type === "pong") {
+      return
+    }
+
+    if (event.type === "exit") {
+      terminalExited = true
+      terminalTransportReady = false
+      clearPingTimer()
+      publishStatus(exitedStatus(event))
+      return
+    }
+
+    if (event.type === "error") {
+      publishStatus({ type: "error", message: event.error })
+    }
+  }
+
+  function connectTerminalWebSocket(id: string) {
+    if (websocket) {
+      websocket.onclose = null
+      websocket.onerror = null
+      websocket.onmessage = null
+      websocket.close()
+    }
+
+    terminalTransportReady = false
+    const nextWebSocket = new WebSocket(
+      buildTerminalWebSocketUrl(`/api/terminal/${encodeURIComponent(id)}/ws`, {
+        ...requestOptions,
+        searchParams: {
+          lastSeq: lastOutputSeq || undefined,
+          viewer: viewerId,
+        },
+      })
+    )
+    websocket = nextWebSocket
+
+    nextWebSocket.onmessage = (message) => {
+      if (disposed || websocket !== nextWebSocket) return
+
+      try {
+        const event = JSON.parse(message.data as string) as TerminalEvent
+        handleTerminalEvent(event)
+      } catch (error) {
+        publishStatus({ type: "error", message: errorMessage(error) })
+      }
+    }
+    nextWebSocket.onclose = () => {
+      if (websocket !== nextWebSocket) return
+      websocket = null
+      terminalTransportReady = false
+      scheduleWebSocketReconnect()
+    }
+    nextWebSocket.onerror = () => {
+      if (websocket !== nextWebSocket) return
+      terminalTransportReady = false
+      nextWebSocket.close()
+    }
+  }
+
+  const startTerminal = async () => {
+    try {
+      publishStatus({ type: "connecting" })
+      terminalElement.textContent = ""
+
+      const [{ Terminal }, { FitAddon }] = await Promise.all([
+        import("@xterm/xterm"),
+        import("@xterm/addon-fit"),
+      ])
+      if (disposed) return
+
+      const terminal = new Terminal({
+        allowTransparency: true,
+        convertEol: false,
+        cursorBlink: true,
+        fontFamily: createTerminalFontFamily(),
+        fontSize: 12,
+        letterSpacing: 0,
+        lineHeight: 1.2,
+        scrollback: 5000,
+        theme: createTerminalTheme(),
+      })
+      fitAddon = new FitAddon()
+      terminal.loadAddon(fitAddon)
+      terminal.open(terminalElement)
+      terminalRef.current = terminal
+      // Let the terminal toggle shortcut through to the app, so it also
+      // closes the panel while the terminal has focus.
+      terminal.attachCustomKeyEventHandler(
+        (event) => !matchesShortcutEvent(event, appShortcut("J"))
+      )
+      // The terminal takes the size of the viewer that the user works in.
+      terminal.textarea?.addEventListener("focus", () => {
+        sendTerminalMessage({ type: "focus" })
+      })
+      inputDisposable = terminal.onData((data) => {
+        if (!activeRef.current) return
+        // An answer to a query in replayed output.
+        if (replayWrites > 0 && data.startsWith("\x1b")) return
+        // An offline machine is read-only: drop typing until it is back.
+        if (machineOfflineLabel(machineId) !== undefined) return
+
+        inputBuffer += data
+        scheduleInputFlush()
+      })
+
+      scheduleFitAndResize()
+
+      // While the server restarts, the request fails for a moment: try
+      // again (the pty-host keeps the terminal).
+      let terminalResponse: TerminalCreateData | undefined
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          terminalResponse = await postJson<TerminalCreateData>(
+            "/api/terminal",
+            {
+              clientKey: tabId,
+              cols: terminal.cols,
+              rows: terminal.rows,
+            }
+          )
+          break
+        } catch (error) {
+          if (disposed) return
+          if (attempt >= 6 || !isTransientError(error)) throw error
+          await new Promise((resolve) =>
+            window.setTimeout(resolve, Math.min(5000, 500 * 2 ** attempt))
+          )
+          if (disposed) return
+        }
+      }
+      if (disposed) return
+
+      terminalIdRef.current = terminalResponse.id
+      onTerminalIdChangeRef.current(tabId, terminalResponse.id, {
+        label: terminalResponse.label,
+      })
+      connectTerminalWebSocket(terminalResponse.id)
+
+      resizeObserver = new ResizeObserver(scheduleFitAndResize)
+      resizeObserver.observe(terminalElement)
+      scheduleFitAndResize()
+    } catch (error) {
+      if (disposed) return
+
+      const message = errorMessage(error)
+      publishStatus({ type: "error", message })
+      terminalRef.current?.writeln(`\r\n${message}`)
+    }
+  }
+
+  void startTerminal()
+
+  return () => {
+    disposed = true
+    if (inputFlushTimer !== null) {
+      window.clearTimeout(inputFlushTimer)
+    }
+    if (resizeFrame !== null) {
+      window.cancelAnimationFrame(resizeFrame)
+    }
+    if (reconnectTimer !== null) {
+      window.clearTimeout(reconnectTimer)
+    }
+    clearPingTimer()
+    flushInput()
+    resizeObserver?.disconnect()
+    if (websocket) {
+      websocket.onclose = null
+      websocket.onerror = null
+      websocket.onmessage = null
+      websocket.close()
+    }
+    inputDisposable?.dispose()
+    terminalRef.current?.dispose()
+    terminalRef.current = null
+    terminalIdRef.current = null
+    fitAndResizeRef.current = () => {}
+    sendInputRef.current = () => false
+  }
+}
+
 export function TerminalTabPane({
   active,
   cwd,
@@ -616,395 +1039,21 @@ export function TerminalTabPane({
     const terminalElement = terminalElementRef.current
     if (!terminalElement) return
 
-    let disposed = false
-    let websocket: WebSocket | null = null
-    let inputDisposable: IDisposable | null = null
-    let fitAddon: FitAddon | null = null
-    let resizeObserver: ResizeObserver | null = null
-    let inputFlushTimer: number | null = null
-    let pingTimer: number | null = null
-    let reconnectTimer: number | null = null
-    let resizeFrame: number | null = null
-    let inputBuffer = ""
-    let lastResizeKey = ""
-    let lastOutputSeq = 0
-    // Replayed output can hold old terminal queries (colours, device
-    // attributes). xterm.js answers them, but the program does not wait for
-    // the answers, and its tty echoes them as text. Drop these answers.
-    let replayUntilSeq = 0
-    let replayWrites = 0
-    let nextInputSeq = 1
-    let reconnectAttempt = 0
-    let terminalExited = false
-    let terminalTransportReady = false
-    const pendingInputs = new Map<number, string>()
-    // Input sequence numbers are per viewer on the server, so another tab
-    // or client on the same terminal never makes this one's input a duplicate.
-    const viewerId = createTerminalTabId()
-
-    const requestOptions = agentId
-      ? { machineId, contextId: viewerContextId, agentId }
-      : { machineId, contextId: viewerContextId }
-
-    const publishStatus = (nextStatus: TerminalStatus) => {
-      if (disposed) return
-      setStatus(nextStatus)
-      onStatusChangeRef.current(tabId, nextStatus)
-    }
-
-    const postJson = async <T,>(
-      path: string,
-      body: Record<string, unknown>
-    ) => {
-      return await fetchJson<T>(buildRequestUrl(path, requestOptions), {
-        body: JSON.stringify(body),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      })
-    }
-
-    const sendTerminalMessage = (message: Record<string, unknown>) => {
-      if (!websocket || websocket.readyState !== WebSocket.OPEN) return false
-
-      try {
-        websocket.send(JSON.stringify(message))
-        return true
-      } catch (error) {
-        publishStatus({ type: "error", message: errorMessage(error) })
-        return false
-      }
-    }
-
-    const sendPendingInputs = () => {
-      if (!terminalTransportReady) return
-
-      for (const [inputSeq, data] of [...pendingInputs.entries()].sort(
-        ([left], [right]) => left - right
-      )) {
-        if (!sendTerminalMessage({ type: "input", data, inputSeq })) return
-      }
-    }
-
-    const flushInput = () => {
-      inputFlushTimer = null
-      if (!terminalIdRef.current || !inputBuffer || !terminalTransportReady) {
-        return
-      }
-
-      const data = inputBuffer
-      const inputSeq = nextInputSeq
-      nextInputSeq += 1
-      inputBuffer = ""
-      pendingInputs.set(inputSeq, data)
-      sendPendingInputs()
-    }
-
-    const scheduleInputFlush = () => {
-      if (inputFlushTimer !== null) return
-      inputFlushTimer = window.setTimeout(flushInput, 12)
-    }
-
-    const fitAndResize = () => {
-      const terminal = terminalRef.current
-      if (!terminal || !fitAddon) return
-
-      try {
-        fitAddon.fit()
-      } catch {
-        return
-      }
-
-      if (!terminalIdRef.current || !terminalTransportReady) return
-
-      const resizeKey = `${terminal.cols}x${terminal.rows}`
-      if (resizeKey === lastResizeKey) return
-      if (
-        !sendTerminalMessage({
-          type: "resize",
-          cols: terminal.cols,
-          rows: terminal.rows,
-        })
-      ) {
-        return
-      }
-      lastResizeKey = resizeKey
-    }
-
-    const scheduleFitAndResize = () => {
-      if (resizeFrame !== null) return
-      resizeFrame = window.requestAnimationFrame(() => {
-        resizeFrame = null
-        fitAndResize()
-      })
-    }
-
-    fitAndResizeRef.current = scheduleFitAndResize
-    sendInputRef.current = (data) => {
-      if (!terminalIdRef.current || !terminalTransportReady) return false
-      if (machineOfflineLabel(machineId) !== undefined) return false
-      inputBuffer += data
-      flushInput()
-      return true
-    }
-
-    const clearPingTimer = () => {
-      if (pingTimer === null) return
-      window.clearInterval(pingTimer)
-      pingTimer = null
-    }
-
-    const startPingTimer = () => {
-      clearPingTimer()
-      pingTimer = window.setInterval(() => {
-        sendTerminalMessage({ type: "ping" })
-      }, 20_000)
-    }
-
-    const scheduleWebSocketReconnect = () => {
-      if (disposed || terminalExited || reconnectTimer !== null) return
-
-      terminalTransportReady = false
-      clearPingTimer()
-      reconnectAttempt += 1
-      const delay = Math.min(10_000, 500 * 2 ** (reconnectAttempt - 1))
-      reconnectTimer = window.setTimeout(() => {
-        reconnectTimer = null
-        const id = terminalIdRef.current
-        if (!id || disposed || terminalExited) return
-        publishStatus({ type: "connecting" })
-        connectTerminalWebSocket(id)
-      }, delay)
-    }
-
-    const handleTerminalEvent = (event: TerminalEvent) => {
-      const terminal = terminalRef.current
-      if (!terminal) return
-
-      if (event.type === "output") {
-        if (typeof event.seq === "number") {
-          if (event.seq <= lastOutputSeq) return
-          lastOutputSeq = event.seq
-          if (event.seq <= replayUntilSeq) {
-            replayWrites += 1
-            terminal.write(event.data, () => {
-              replayWrites -= 1
-            })
-            return
-          }
-        }
-        terminal.write(event.data)
-        return
-      }
-
-      if (event.type === "reset") {
-        lastOutputSeq = Math.max(0, event.firstSeq - 1)
-        terminal.clear()
-        terminal.writeln("Terminal output replay gap; showing retained output.")
-        return
-      }
-
-      if (event.type === "ready") {
-        terminalTransportReady = true
-        reconnectAttempt = 0
-        nextInputSeq = Math.max(nextInputSeq, event.nextInputSeq ?? 1)
-        replayUntilSeq = event.replayUntilSeq ?? 0
-        publishStatus({ type: "connected", shell: event.shell })
-        startPingTimer()
-        sendPendingInputs()
-        flushInput()
-        lastResizeKey = ""
-        scheduleFitAndResize()
-        return
-      }
-
-      if (event.type === "input_ack") {
-        pendingInputs.delete(event.inputSeq)
-        return
-      }
-
-      if (event.type === "pong") {
-        return
-      }
-
-      if (event.type === "exit") {
-        terminalExited = true
-        terminalTransportReady = false
-        clearPingTimer()
-        publishStatus(exitedStatus(event))
-        return
-      }
-
-      if (event.type === "error") {
-        publishStatus({ type: "error", message: event.error })
-      }
-    }
-
-    function connectTerminalWebSocket(id: string) {
-      if (websocket) {
-        websocket.onclose = null
-        websocket.onerror = null
-        websocket.onmessage = null
-        websocket.close()
-      }
-
-      terminalTransportReady = false
-      const nextWebSocket = new WebSocket(
-        buildTerminalWebSocketUrl(
-          `/api/terminal/${encodeURIComponent(id)}/ws`,
-          {
-            ...requestOptions,
-            searchParams: {
-              lastSeq: lastOutputSeq || undefined,
-              viewer: viewerId,
-            },
-          }
-        )
-      )
-      websocket = nextWebSocket
-
-      nextWebSocket.onmessage = (message) => {
-        if (disposed || websocket !== nextWebSocket) return
-
-        try {
-          const event = JSON.parse(message.data as string) as TerminalEvent
-          handleTerminalEvent(event)
-        } catch (error) {
-          publishStatus({ type: "error", message: errorMessage(error) })
-        }
-      }
-      nextWebSocket.onclose = () => {
-        if (websocket !== nextWebSocket) return
-        websocket = null
-        terminalTransportReady = false
-        scheduleWebSocketReconnect()
-      }
-      nextWebSocket.onerror = () => {
-        if (websocket !== nextWebSocket) return
-        terminalTransportReady = false
-        nextWebSocket.close()
-      }
-    }
-
-    const startTerminal = async () => {
-      try {
-        publishStatus({ type: "connecting" })
-        terminalElement.textContent = ""
-
-        const [{ Terminal }, { FitAddon }] = await Promise.all([
-          import("@xterm/xterm"),
-          import("@xterm/addon-fit"),
-        ])
-        if (disposed) return
-
-        const terminal = new Terminal({
-          allowTransparency: true,
-          convertEol: false,
-          cursorBlink: true,
-          fontFamily: createTerminalFontFamily(),
-          fontSize: 12,
-          letterSpacing: 0,
-          lineHeight: 1.2,
-          scrollback: 5000,
-          theme: createTerminalTheme(),
-        })
-        fitAddon = new FitAddon()
-        terminal.loadAddon(fitAddon)
-        terminal.open(terminalElement)
-        terminalRef.current = terminal
-        // Let the terminal toggle shortcut through to the app, so it also
-        // closes the panel while the terminal has focus.
-        terminal.attachCustomKeyEventHandler(
-          (event) => !matchesShortcutEvent(event, appShortcut("J"))
-        )
-        // The terminal takes the size of the viewer that the user works in.
-        terminal.textarea?.addEventListener("focus", () => {
-          sendTerminalMessage({ type: "focus" })
-        })
-        inputDisposable = terminal.onData((data) => {
-          if (!activeRef.current) return
-          // An answer to a query in replayed output.
-          if (replayWrites > 0 && data.startsWith("\x1b")) return
-          // An offline machine is read-only: drop typing until it is back.
-          if (machineOfflineLabel(machineId) !== undefined) return
-
-          inputBuffer += data
-          scheduleInputFlush()
-        })
-
-        scheduleFitAndResize()
-
-        // While the server restarts, the request fails for a moment: try
-        // again (the pty-host keeps the terminal).
-        let terminalResponse: TerminalCreateData | undefined
-        for (let attempt = 0; ; attempt += 1) {
-          try {
-            terminalResponse = await postJson<TerminalCreateData>(
-              "/api/terminal",
-              {
-                clientKey: tabId,
-                cols: terminal.cols,
-                rows: terminal.rows,
-              }
-            )
-            break
-          } catch (error) {
-            if (disposed) return
-            if (attempt >= 6 || !isTransientError(error)) throw error
-            await new Promise((resolve) =>
-              window.setTimeout(resolve, Math.min(5000, 500 * 2 ** attempt))
-            )
-            if (disposed) return
-          }
-        }
-        if (disposed) return
-
-        terminalIdRef.current = terminalResponse.id
-        onTerminalIdChangeRef.current(tabId, terminalResponse.id, {
-          label: terminalResponse.label,
-        })
-        connectTerminalWebSocket(terminalResponse.id)
-
-        resizeObserver = new ResizeObserver(scheduleFitAndResize)
-        resizeObserver.observe(terminalElement)
-        scheduleFitAndResize()
-      } catch (error) {
-        if (disposed) return
-
-        const message = errorMessage(error)
-        publishStatus({ type: "error", message })
-        terminalRef.current?.writeln(`\r\n${message}`)
-      }
-    }
-
-    void startTerminal()
-
-    return () => {
-      disposed = true
-      if (inputFlushTimer !== null) {
-        window.clearTimeout(inputFlushTimer)
-      }
-      if (resizeFrame !== null) {
-        window.cancelAnimationFrame(resizeFrame)
-      }
-      if (reconnectTimer !== null) {
-        window.clearTimeout(reconnectTimer)
-      }
-      clearPingTimer()
-      flushInput()
-      resizeObserver?.disconnect()
-      if (websocket) {
-        websocket.onclose = null
-        websocket.onerror = null
-        websocket.onmessage = null
-        websocket.close()
-      }
-      inputDisposable?.dispose()
-      terminalRef.current?.dispose()
-      terminalRef.current = null
-      terminalIdRef.current = null
-      fitAndResizeRef.current = () => {}
-      sendInputRef.current = () => false
-    }
+    return startTerminalSession({
+      terminalElement,
+      machineId,
+      viewerContextId,
+      agentId,
+      tabId,
+      setStatus,
+      terminalRef,
+      terminalIdRef,
+      activeRef,
+      fitAndResizeRef,
+      onStatusChangeRef,
+      onTerminalIdChangeRef,
+      sendInputRef,
+    })
   }, [cwd, agentId, tabId, viewerContextId])
 
   React.useEffect(() => {

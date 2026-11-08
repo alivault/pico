@@ -24,6 +24,7 @@ import {
 } from "@/lib/pico"
 import { useMachineId } from "@/lib/pico/machine-context"
 import { sortSidebarAgents } from "@/features/pico/agent-order"
+import { settle } from "@/lib/settle"
 
 type CloneAgentResponseData = Extract<CloneAgentResponse, { ok: true }>
 type ThinkingResponseData = Extract<ThinkingResponse, { ok: true }>
@@ -382,202 +383,199 @@ export function useAppShellAgentMutations({
     }
   }, [])
 
-  const setModel = React.useCallback(
-    async (value: string) => {
-      if (!viewerContextId) return
-      const [provider, modelId] = value.split("/")
-      if (!provider || !modelId) return
-      const requestId = ++modelRequestIdRef.current
-      const targetAgent = agentStateRef.current
-      try {
-        const response = await fetchJson<ModelResponseData>(
-          buildRequestUrl("/api/model", {
-            machineId,
-            contextId: viewerContextId,
-            agentId: activeAgentId,
-            searchParams: { agentKey: targetAgent.agentKey },
-          }),
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ provider, modelId }),
-          }
-        )
-        if (modelRequestIdRef.current !== requestId) return
-        const currentState = agentStateRef.current
-        if (!sameAgentMutationTarget(targetAgent, currentState)) return
+  const setModel = async (value: string) => {
+    if (!viewerContextId) return
+    const [provider, modelId] = value.split("/")
+    if (!provider || !modelId) return
+    const requestId = ++modelRequestIdRef.current
+    const targetAgent = agentStateRef.current
+    const settled = await settle(
+      fetchJson<ModelResponseData>(
+        buildRequestUrl("/api/model", {
+          machineId,
+          contextId: viewerContextId,
+          agentId: activeAgentId,
+          searchParams: { agentKey: targetAgent.agentKey },
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ provider, modelId }),
+        }
+      )
+    )
+    if (!settled.ok) {
+      const error = settled.error
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update model"
+      )
+      return
+    }
+    const response = settled.value
+    if (modelRequestIdRef.current !== requestId) return
+    const currentState = agentStateRef.current
+    if (!sameAgentMutationTarget(targetAgent, currentState)) return
 
-        // A fresh draft's SSE connection may predate its Pi runtime/agent ID.
-        // Publish the acknowledged model even if that scoped event is missed.
-        setAgentState({
-          ...currentState,
-          model: response.model ?? currentState.model,
-          thinkingLevel: response.thinkingLevel ?? currentState.thinkingLevel,
-          availableThinkingLevels:
-            response.availableThinkingLevels ??
-            currentState.availableThinkingLevels,
-        })
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to update model"
-        )
-      }
-    },
-    [activeAgentId, viewerContextId, agentStateRef, setAgentState]
-  )
+    // A fresh draft's SSE connection may predate its Pi runtime/agent ID.
+    // Publish the acknowledged model even if that scoped event is missed.
+    setAgentState({
+      ...currentState,
+      model: response.model ?? currentState.model,
+      thinkingLevel: response.thinkingLevel ?? currentState.thinkingLevel,
+      availableThinkingLevels:
+        response.availableThinkingLevels ??
+        currentState.availableThinkingLevels,
+    })
+  }
 
-  const setThinkingLevel = React.useCallback(
-    async (level: string) => {
-      if (!viewerContextId) return
+  const setThinkingLevel = async (level: string) => {
+    if (!viewerContextId) return
 
-      const requestId = thinkingLevelRequestIdRef.current + 1
-      thinkingLevelRequestIdRef.current = requestId
-      const previousState = agentStateRef.current
-      const previousLevel = previousState.thinkingLevel
-      const previousAvailableThinkingLevels =
-        previousState.availableThinkingLevels
-      const targetAgent = {
-        cwd: previousState.cwd,
-        draft: previousState.draft,
-        agentFile: previousState.agentFile,
-        agentId: previousState.agentId,
-        agentKey: previousState.agentKey,
-      } satisfies AgentMutationTarget
+    const requestId = thinkingLevelRequestIdRef.current + 1
+    thinkingLevelRequestIdRef.current = requestId
+    const previousState = agentStateRef.current
+    const previousLevel = previousState.thinkingLevel
+    const previousAvailableThinkingLevels =
+      previousState.availableThinkingLevels
+    const targetAgent = {
+      cwd: previousState.cwd,
+      draft: previousState.draft,
+      agentFile: previousState.agentFile,
+      agentId: previousState.agentId,
+      agentKey: previousState.agentKey,
+    } satisfies AgentMutationTarget
 
-      if (previousLevel !== level) {
-        setAgentState({ ...previousState, thinkingLevel: level })
-      }
+    if (previousLevel !== level) {
+      setAgentState({ ...previousState, thinkingLevel: level })
+    }
 
-      if (thinkingLevelSyncTimerRef.current) {
-        clearTimeout(thinkingLevelSyncTimerRef.current)
-      }
+    if (thinkingLevelSyncTimerRef.current) {
+      clearTimeout(thinkingLevelSyncTimerRef.current)
+    }
 
-      thinkingLevelSyncTimerRef.current = setTimeout(() => {
-        thinkingLevelSyncTimerRef.current = null
-        void (async () => {
-          try {
-            const response = await fetchJson<ThinkingResponseData>(
-              buildRequestUrl("/api/thinking", {
-                machineId,
-                contextId: viewerContextId,
-                agentId: activeAgentId,
-              }),
-              {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ level }),
-              }
-            )
-            if (thinkingLevelRequestIdRef.current !== requestId) return
-
-            const currentState = agentStateRef.current
-            if (!sameAgentMutationTarget(targetAgent, currentState)) {
-              return
+    thinkingLevelSyncTimerRef.current = setTimeout(() => {
+      thinkingLevelSyncTimerRef.current = null
+      void (async () => {
+        const settled = await settle(
+          fetchJson<ThinkingResponseData>(
+            buildRequestUrl("/api/thinking", {
+              machineId,
+              contextId: viewerContextId,
+              agentId: activeAgentId,
+            }),
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ level }),
             }
+          )
+        )
+        if (!settled.ok) {
+          const error = settled.error
+          if (thinkingLevelRequestIdRef.current !== requestId) return
 
-            const nextLevel = response.thinkingLevel || level
-            const nextAvailableThinkingLevels =
-              response.availableThinkingLevels.length > 0
-                ? response.availableThinkingLevels
-                : currentState.availableThinkingLevels
-            if (
-              currentState.thinkingLevel === nextLevel &&
-              currentState.availableThinkingLevels ===
-                nextAvailableThinkingLevels
-            ) {
-              return
-            }
-
+          const currentState = agentStateRef.current
+          if (
+            sameAgentMutationTarget(targetAgent, currentState) &&
+            currentState.thinkingLevel === level
+          ) {
             setAgentState({
               ...currentState,
-              thinkingLevel: nextLevel,
-              availableThinkingLevels: nextAvailableThinkingLevels,
+              thinkingLevel: previousLevel,
+              availableThinkingLevels: previousAvailableThinkingLevels,
             })
-          } catch (error) {
-            if (thinkingLevelRequestIdRef.current !== requestId) return
-
-            const currentState = agentStateRef.current
-            if (
-              sameAgentMutationTarget(targetAgent, currentState) &&
-              currentState.thinkingLevel === level
-            ) {
-              setAgentState({
-                ...currentState,
-                thinkingLevel: previousLevel,
-                availableThinkingLevels: previousAvailableThinkingLevels,
-              })
-            }
-            toast.error(
-              error instanceof Error
-                ? error.message
-                : "Failed to update thinking level"
-            )
           }
-        })()
-      }, 100)
-    },
-    [agentStateRef, activeAgentId, setAgentState, viewerContextId]
-  )
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Failed to update thinking level"
+          )
+          return
+        }
+        const response = settled.value
+        if (thinkingLevelRequestIdRef.current !== requestId) return
 
-  const cycleThinkingLevel = React.useCallback(
-    async (direction: -1 | 1) => {
-      const agentState = agentStateRef.current
-      const levels = agentState.availableThinkingLevels.length
-        ? agentState.availableThinkingLevels
-        : ["off"]
-      const currentIndex = levels.indexOf(agentState.thinkingLevel || "off")
-      const safeIndex = currentIndex >= 0 ? currentIndex : 0
-      const nextLevel =
-        levels[(safeIndex + direction + levels.length) % levels.length] ||
-        levels[0]
-      // The level is not on the screen, so say what it is now.
-      toast(`Reasoning: ${thinkingLabel(nextLevel)}`, {
-        id: "reasoning-level",
-        duration: 1500,
-      })
-      await setThinkingLevel(nextLevel)
-    },
-    [agentStateRef, setThinkingLevel]
-  )
+        const currentState = agentStateRef.current
+        if (!sameAgentMutationTarget(targetAgent, currentState)) {
+          return
+        }
 
-  const setThinkingBlocksHidden = React.useCallback(
-    async (hidden: boolean) => {
-      if (!viewerContextId) return
-      try {
-        await fetchJson(
-          buildRequestUrl("/api/settings/hide-thinking", {
-            machineId,
-            contextId: viewerContextId,
-            agentId: activeAgentId,
-          }),
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ hide: hidden }),
-          }
-        )
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to update thinking visibility"
-        )
-      }
-    },
-    [activeAgentId, viewerContextId]
-  )
+        const nextLevel = response.thinkingLevel || level
+        const nextAvailableThinkingLevels =
+          response.availableThinkingLevels.length > 0
+            ? response.availableThinkingLevels
+            : currentState.availableThinkingLevels
+        if (
+          currentState.thinkingLevel === nextLevel &&
+          currentState.availableThinkingLevels === nextAvailableThinkingLevels
+        ) {
+          return
+        }
 
-  const toggleHideThinking = React.useCallback(async () => {
+        setAgentState({
+          ...currentState,
+          thinkingLevel: nextLevel,
+          availableThinkingLevels: nextAvailableThinkingLevels,
+        })
+      })()
+    }, 100)
+  }
+
+  const cycleThinkingLevel = async (direction: -1 | 1) => {
+    const agentState = agentStateRef.current
+    const levels = agentState.availableThinkingLevels.length
+      ? agentState.availableThinkingLevels
+      : ["off"]
+    const currentIndex = levels.indexOf(agentState.thinkingLevel || "off")
+    const safeIndex = currentIndex >= 0 ? currentIndex : 0
+    const nextLevel =
+      levels[(safeIndex + direction + levels.length) % levels.length] ||
+      levels[0]
+    // The level is not on the screen, so say what it is now.
+    toast(`Reasoning: ${thinkingLabel(nextLevel)}`, {
+      id: "reasoning-level",
+      duration: 1500,
+    })
+    await setThinkingLevel(nextLevel)
+  }
+
+  const setThinkingBlocksHidden = async (hidden: boolean) => {
+    if (!viewerContextId) return
+    const settled = await settle(
+      fetchJson(
+        buildRequestUrl("/api/settings/hide-thinking", {
+          machineId,
+          contextId: viewerContextId,
+          agentId: activeAgentId,
+        }),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ hide: hidden }),
+        }
+      )
+    )
+    if (!settled.ok) {
+      const error = settled.error
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update thinking visibility"
+      )
+    }
+  }
+
+  const toggleHideThinking = async () => {
     await setThinkingBlocksHidden(!agentStateRef.current.hideThinkingBlock)
-  }, [agentStateRef, setThinkingBlocksHidden])
+  }
 
-  const runCompact = React.useCallback(async () => {
+  const runCompact = async () => {
     if (!viewerContextId) return
     setCompactWorkingState(true)
-    try {
-      // The request returns when compaction ends, so the working state shows
-      // for the whole compaction.
-      const response = await fetchJson<{ compacted?: boolean }>(
+    // The request returns when compaction ends, so the working state shows
+    // for the whole compaction.
+    const settled = await settle(
+      fetchJson<{ compacted?: boolean }>(
         buildRequestUrl("/api/slash-command", {
           machineId,
           contextId: viewerContextId,
@@ -589,31 +587,27 @@ export function useAppShellAgentMutations({
           body: JSON.stringify({ name: "compact", args: "" }),
         }
       )
-      if (response.compacted === false) {
-        toast.info("Nothing to compact yet")
-      }
-    } catch (error) {
+    )
+    setCompactWorkingState(false)
+    if (!settled.ok) {
       if (!isCompactAbortRequested()) {
         toast.error(
-          error instanceof Error
-            ? error.message
+          settled.error instanceof Error
+            ? settled.error.message
             : "Failed to compact the conversation"
         )
       }
-    } finally {
-      setCompactWorkingState(false)
+      return
     }
-  }, [
-    activeAgentId,
-    isCompactAbortRequested,
-    setCompactWorkingState,
-    viewerContextId,
-  ])
+    if (settled.value.compacted === false) {
+      toast.info("Nothing to compact yet")
+    }
+  }
 
-  const runClone = React.useCallback(async () => {
+  const runClone = async () => {
     if (!viewerContextId) return
-    try {
-      const response = await fetchJson<CloneAgentResponseData>(
+    const settled = await settle(
+      fetchJson<CloneAgentResponseData>(
         buildRequestUrl("/api/agent/clone", {
           machineId,
           contextId: viewerContextId,
@@ -624,16 +618,20 @@ export function useAppShellAgentMutations({
           headers: { "content-type": "application/json" },
         }
       )
-      if (response.cancelled) return
-      toast.success("Cloned the conversation")
-    } catch (error) {
+    )
+    if (!settled.ok) {
+      const error = settled.error
       toast.error(
         error instanceof Error
           ? error.message
           : "Failed to clone the conversation"
       )
+      return
     }
-  }, [activeAgentId, viewerContextId])
+    const response = settled.value
+    if (response.cancelled) return
+    toast.success("Cloned the conversation")
+  }
 
   const renameAgentMutation = useMutation({
     mutationFn: async ({ path, name }: { path: string; name: string }) => {
@@ -662,118 +660,113 @@ export function useAppShellAgentMutations({
     },
   })
 
-  const renameAgentPath = React.useCallback(
-    async (targetPath: string | undefined, nextName: string) => {
-      if (!viewerContextId || !targetPath) return false
+  const renameAgentPath = async (
+    targetPath: string | undefined,
+    nextName: string
+  ) => {
+    if (!viewerContextId || !targetPath) return false
 
-      const optimisticName = nextName.trim()
-      if (!optimisticName) {
-        toast.error("Name is required")
-        return false
-      }
+    const optimisticName = nextName.trim()
+    if (!optimisticName) {
+      toast.error("Name is required")
+      return false
+    }
 
-      const previousProjectIndexDataByPath = getProjectIndexDataByPath()
-      const previousAgentsEvent = getAgentsEvent()
-      const targetPaths = new Set([targetPath])
-      const affectedProjects = projectsWithAgentPaths(
-        previousProjectIndexDataByPath,
-        targetPaths
+    const previousProjectIndexDataByPath = getProjectIndexDataByPath()
+    const previousAgentsEvent = getAgentsEvent()
+    const targetPaths = new Set([targetPath])
+    const affectedProjects = projectsWithAgentPaths(
+      previousProjectIndexDataByPath,
+      targetPaths
+    )
+    const affectedEventProjects = projectsWithAgentPaths(
+      previousAgentsEvent?.projectIndexes,
+      targetPaths
+    )
+    const previousAgentName = agentStateRef.current.agentName
+    const activeAgentMatches = agentStateRef.current.agentFile === targetPath
+
+    setAgentsEvent((current) =>
+      updateAgentsEventProjectIndexes(current, (indexes) =>
+        applyProjectIndexRename(indexes, targetPath, optimisticName)
       )
-      const affectedEventProjects = projectsWithAgentPaths(
-        previousAgentsEvent?.projectIndexes,
-        targetPaths
-      )
-      const previousAgentName = agentStateRef.current.agentName
-      const activeAgentMatches = agentStateRef.current.agentFile === targetPath
+    )
+    setProjectIndexDataByPath((current) =>
+      applyProjectIndexRename(current, targetPath, optimisticName)
+    )
 
-      setAgentsEvent((current) =>
-        updateAgentsEventProjectIndexes(current, (indexes) =>
-          applyProjectIndexRename(indexes, targetPath, optimisticName)
+    if (
+      activeAgentMatches &&
+      agentStateRef.current.agentName !== optimisticName
+    ) {
+      setAgentState((current) =>
+        current.agentFile === targetPath
+          ? { ...current, agentName: optimisticName }
+          : current
+      )
+    }
+
+    void (async () => {
+      const settled = await settle(
+        renameAgentMutation.mutateAsync({
+          path: targetPath,
+          name: optimisticName,
+        })
+      )
+      if (!settled.ok) {
+        const error = settled.error
+        setAgentsEvent((current) =>
+          updateAgentsEventProjectIndexes(current, (indexes) =>
+            restoreProjectIndexesForProjects(
+              indexes,
+              previousAgentsEvent?.projectIndexes,
+              affectedEventProjects
+            )
+          )
         )
-      )
-      setProjectIndexDataByPath((current) =>
-        applyProjectIndexRename(current, targetPath, optimisticName)
-      )
-
-      if (
-        activeAgentMatches &&
-        agentStateRef.current.agentName !== optimisticName
-      ) {
+        setProjectIndexDataByPath((current) =>
+          restoreProjectIndexesForProjects(
+            current,
+            previousProjectIndexDataByPath,
+            affectedProjects
+          )
+        )
         setAgentState((current) =>
-          current.agentFile === targetPath
-            ? { ...current, agentName: optimisticName }
+          current.agentFile === targetPath &&
+          current.agentName === optimisticName
+            ? { ...current, agentName: previousAgentName }
+            : current
+        )
+        toast.error(
+          error instanceof Error ? error.message : "Failed to rename agent"
+        )
+        return
+      }
+      const response = settled.value
+      const confirmedName = response.name || optimisticName
+
+      if (confirmedName !== optimisticName) {
+        setAgentsEvent((current) =>
+          updateAgentsEventProjectIndexes(current, (indexes) =>
+            applyProjectIndexRename(indexes, targetPath, confirmedName)
+          )
+        )
+        setProjectIndexDataByPath((current) =>
+          applyProjectIndexRename(current, targetPath, confirmedName)
+        )
+        setAgentState((current) =>
+          current.agentFile === targetPath &&
+          current.agentName === optimisticName
+            ? { ...current, agentName: confirmedName }
             : current
         )
       }
 
-      void (async () => {
-        try {
-          const response = await renameAgentMutation.mutateAsync({
-            path: targetPath,
-            name: optimisticName,
-          })
-          const confirmedName = response.name || optimisticName
+      toast.success("Renamed agent")
+    })()
 
-          if (confirmedName !== optimisticName) {
-            setAgentsEvent((current) =>
-              updateAgentsEventProjectIndexes(current, (indexes) =>
-                applyProjectIndexRename(indexes, targetPath, confirmedName)
-              )
-            )
-            setProjectIndexDataByPath((current) =>
-              applyProjectIndexRename(current, targetPath, confirmedName)
-            )
-            setAgentState((current) =>
-              current.agentFile === targetPath &&
-              current.agentName === optimisticName
-                ? { ...current, agentName: confirmedName }
-                : current
-            )
-          }
-
-          toast.success("Renamed agent")
-        } catch (error) {
-          setAgentsEvent((current) =>
-            updateAgentsEventProjectIndexes(current, (indexes) =>
-              restoreProjectIndexesForProjects(
-                indexes,
-                previousAgentsEvent?.projectIndexes,
-                affectedEventProjects
-              )
-            )
-          )
-          setProjectIndexDataByPath((current) =>
-            restoreProjectIndexesForProjects(
-              current,
-              previousProjectIndexDataByPath,
-              affectedProjects
-            )
-          )
-          setAgentState((current) =>
-            current.agentFile === targetPath &&
-            current.agentName === optimisticName
-              ? { ...current, agentName: previousAgentName }
-              : current
-          )
-          toast.error(
-            error instanceof Error ? error.message : "Failed to rename agent"
-          )
-        }
-      })()
-
-      return true
-    },
-    [
-      getProjectIndexDataByPath,
-      getAgentsEvent,
-      renameAgentMutation,
-      agentStateRef,
-      setProjectIndexDataByPath,
-      setAgentState,
-      setAgentsEvent,
-      viewerContextId,
-    ]
-  )
+    return true
+  }
 
   const moveAgentMutation = useMutation({
     mutationFn: async ({ path, cwd }: { path: string; cwd: string }) => {
@@ -802,168 +795,157 @@ export function useAppShellAgentMutations({
     },
   })
 
-  const moveAgentPath = React.useCallback(
-    async (entry: AgentListEntry, project: string) => {
-      if (!viewerContextId || !entry.path) return false
+  const moveAgentPath = async (entry: AgentListEntry, project: string) => {
+    if (!viewerContextId || !entry.path) return false
 
-      const nextProject = project.trim()
-      if (!nextProject) {
-        toast.error("Project is required")
-        return false
-      }
-      if (entry.cwd === nextProject) return false
+    const nextProject = project.trim()
+    if (!nextProject) {
+      toast.error("Project is required")
+      return false
+    }
+    if (entry.cwd === nextProject) return false
 
-      const targetPath = entry.path
-      const previousProjectIndexDataByPath = getProjectIndexDataByPath()
-      const previousAgentsEvent = getAgentsEvent()
-      const targetPaths = new Set([targetPath])
-      const affectedProjects = uniqueProjects([
-        ...projectsWithAgentPaths(previousProjectIndexDataByPath, targetPaths),
-        ...(previousProjectIndexDataByPath[nextProject] ? [nextProject] : []),
-      ])
-      const affectedEventProjects = uniqueProjects([
-        ...projectsWithAgentPaths(
-          previousAgentsEvent?.projectIndexes,
-          targetPaths
-        ),
-        ...(previousAgentsEvent?.projectIndexes?.[nextProject]
-          ? [nextProject]
-          : []),
-      ])
-      const previousAgentCwd = agentStateRef.current.cwd
-      const activeAgentMatches = agentStateRef.current.agentFile === targetPath
+    const targetPath = entry.path
+    const previousProjectIndexDataByPath = getProjectIndexDataByPath()
+    const previousAgentsEvent = getAgentsEvent()
+    const targetPaths = new Set([targetPath])
+    const affectedProjects = uniqueProjects([
+      ...projectsWithAgentPaths(previousProjectIndexDataByPath, targetPaths),
+      ...(previousProjectIndexDataByPath[nextProject] ? [nextProject] : []),
+    ])
+    const affectedEventProjects = uniqueProjects([
+      ...projectsWithAgentPaths(
+        previousAgentsEvent?.projectIndexes,
+        targetPaths
+      ),
+      ...(previousAgentsEvent?.projectIndexes?.[nextProject]
+        ? [nextProject]
+        : []),
+    ])
+    const previousAgentCwd = agentStateRef.current.cwd
+    const activeAgentMatches = agentStateRef.current.agentFile === targetPath
 
-      setAgentsEvent((current) =>
-        updateAgentsEventProjectIndexes(current, (indexes) =>
-          applyProjectIndexMove(indexes, {
-            previousPath: targetPath,
-            nextCwd: nextProject,
-            fallbackEntry: entry,
-          })
-        )
-      )
-      setProjectIndexDataByPath((current) =>
-        applyProjectIndexMove(current, {
+    setAgentsEvent((current) =>
+      updateAgentsEventProjectIndexes(current, (indexes) =>
+        applyProjectIndexMove(indexes, {
           previousPath: targetPath,
           nextCwd: nextProject,
           fallbackEntry: entry,
         })
       )
-      if (activeAgentMatches) {
+    )
+    setProjectIndexDataByPath((current) =>
+      applyProjectIndexMove(current, {
+        previousPath: targetPath,
+        nextCwd: nextProject,
+        fallbackEntry: entry,
+      })
+    )
+    if (activeAgentMatches) {
+      setAgentState((current) =>
+        current.agentFile === targetPath
+          ? { ...current, cwd: nextProject }
+          : current
+      )
+    }
+
+    void (async () => {
+      const settled = await settle(
+        moveAgentMutation.mutateAsync({
+          path: targetPath,
+          cwd: nextProject,
+        })
+      )
+      if (!settled.ok) {
+        const error = settled.error
+        setAgentsEvent((current) =>
+          updateAgentsEventProjectIndexes(current, (indexes) =>
+            restoreProjectIndexesForProjects(
+              indexes,
+              previousAgentsEvent?.projectIndexes,
+              affectedEventProjects
+            )
+          )
+        )
+        setProjectIndexDataByPath((current) =>
+          restoreProjectIndexesForProjects(
+            current,
+            previousProjectIndexDataByPath,
+            affectedProjects
+          )
+        )
         setAgentState((current) =>
-          current.agentFile === targetPath
-            ? { ...current, cwd: nextProject }
+          current.agentFile === targetPath && current.cwd === nextProject
+            ? { ...current, cwd: previousAgentCwd }
             : current
         )
+        toast.error(
+          error instanceof Error ? error.message : "Failed to move agent"
+        )
+        return
       }
+      const response = settled.value
+      const previousKey = agentListEntryKey({
+        path: response.previousPath || targetPath,
+      })
+      const nextKey = agentListEntryKey({
+        path: response.path,
+        id: response.agentId || entry.id,
+      })
 
-      void (async () => {
-        try {
-          const response = await moveAgentMutation.mutateAsync({
-            path: targetPath,
-            cwd: nextProject,
+      setAgentsEvent((current) =>
+        updateAgentsEventProjectIndexes(current, (indexes) =>
+          applyProjectIndexMove(indexes, {
+            previousPath: response.previousPath || targetPath,
+            nextPath: response.path,
+            nextCwd: response.cwd,
+            fallbackEntry: {
+              ...entry,
+              id: response.agentId || entry.id,
+            },
           })
-          const previousKey = agentListEntryKey({
-            path: response.previousPath || targetPath,
-          })
-          const nextKey = agentListEntryKey({
-            path: response.path,
+        )
+      )
+      setProjectIndexDataByPath((current) =>
+        applyProjectIndexMove(current, {
+          previousPath: response.previousPath || targetPath,
+          nextPath: response.path,
+          nextCwd: response.cwd,
+          fallbackEntry: {
+            ...entry,
             id: response.agentId || entry.id,
-          })
-
-          setAgentsEvent((current) =>
-            updateAgentsEventProjectIndexes(current, (indexes) =>
-              applyProjectIndexMove(indexes, {
-                previousPath: response.previousPath || targetPath,
-                nextPath: response.path,
-                nextCwd: response.cwd,
-                fallbackEntry: {
-                  ...entry,
-                  id: response.agentId || entry.id,
-                },
-              })
-            )
-          )
-          setProjectIndexDataByPath((current) =>
-            applyProjectIndexMove(current, {
-              previousPath: response.previousPath || targetPath,
-              nextPath: response.path,
-              nextCwd: response.cwd,
-              fallbackEntry: {
-                ...entry,
-                id: response.agentId || entry.id,
-              },
-            })
-          )
-          setSelectedSidebarAgentKeys((current) =>
-            replaceAgentKey(current, previousKey, nextKey)
-          )
-          setSidebarAgentSelectionAnchor((current) =>
-            current === previousKey ? nextKey : current
-          )
-          setPinnedSidebarAgentKeys((current) => {
-            const next = replaceAgentKey(current, previousKey, nextKey)
-            if (next !== current) {
-              machineLocalStorageSetItem(
-                machineId,
-                PINNED_AGENTS_STORAGE_KEY,
-                JSON.stringify(next)
-              )
-            }
-            return next
-          })
-          setAgentState((current) =>
-            current.agentFile === response.previousPath ||
-            current.agentFile === targetPath
-              ? { ...current, cwd: response.cwd, agentFile: response.path }
-              : current
-          )
-
-          toast.success("Moved agent")
-        } catch (error) {
-          setAgentsEvent((current) =>
-            updateAgentsEventProjectIndexes(current, (indexes) =>
-              restoreProjectIndexesForProjects(
-                indexes,
-                previousAgentsEvent?.projectIndexes,
-                affectedEventProjects
-              )
-            )
-          )
-          setProjectIndexDataByPath((current) =>
-            restoreProjectIndexesForProjects(
-              current,
-              previousProjectIndexDataByPath,
-              affectedProjects
-            )
-          )
-          setAgentState((current) =>
-            current.agentFile === targetPath && current.cwd === nextProject
-              ? { ...current, cwd: previousAgentCwd }
-              : current
-          )
-          toast.error(
-            error instanceof Error ? error.message : "Failed to move agent"
+          },
+        })
+      )
+      setSelectedSidebarAgentKeys((current) =>
+        replaceAgentKey(current, previousKey, nextKey)
+      )
+      setSidebarAgentSelectionAnchor((current) =>
+        current === previousKey ? nextKey : current
+      )
+      setPinnedSidebarAgentKeys((current) => {
+        const next = replaceAgentKey(current, previousKey, nextKey)
+        if (next !== current) {
+          machineLocalStorageSetItem(
+            machineId,
+            PINNED_AGENTS_STORAGE_KEY,
+            JSON.stringify(next)
           )
         }
-      })()
+        return next
+      })
+      setAgentState((current) =>
+        current.agentFile === response.previousPath ||
+        current.agentFile === targetPath
+          ? { ...current, cwd: response.cwd, agentFile: response.path }
+          : current
+      )
 
-      return true
-    },
-    [
-      getProjectIndexDataByPath,
-      getAgentsEvent,
-      moveAgentMutation,
-      agentStateRef,
-      setProjectIndexDataByPath,
-      setPinnedSidebarAgentKeys,
-      setSelectedSidebarAgentKeys,
-      setAgentState,
-      setAgentsEvent,
-      setSidebarAgentSelectionAnchor,
-      viewerContextId,
-    ]
-  )
+      toast.success("Moved agent")
+    })()
+
+    return true
+  }
 
   const deleteAgentMutation = useMutation({
     mutationFn: async ({
@@ -998,145 +980,133 @@ export function useAppShellAgentMutations({
     },
   })
 
-  const deleteAgents = React.useCallback(
-    (
-      targets: Array<AgentListEntry>,
-      options: { removeWorktree?: boolean } = {}
-    ) => {
-      if (!viewerContextId || targets.length === 0) return false
+  const deleteAgents = (
+    targets: Array<AgentListEntry>,
+    options: { removeWorktree?: boolean } = {}
+  ) => {
+    if (!viewerContextId || targets.length === 0) return false
 
-      const orderedTargets = [
-        ...targets.filter(
-          (target) =>
-            target.path && target.path !== agentStateRef.current.agentFile
-        ),
-        ...targets.filter(
-          (target) =>
-            target.path && target.path === agentStateRef.current.agentFile
-        ),
-      ]
-      const orderedPaths: Array<string> = []
-      const deletedPathSet = new Set<string>()
-      for (const target of orderedTargets) {
-        if (!target.path || deletedPathSet.has(target.path)) continue
-        deletedPathSet.add(target.path)
-        orderedPaths.push(target.path)
-      }
+    const orderedTargets = [
+      ...targets.filter(
+        (target) =>
+          target.path && target.path !== agentStateRef.current.agentFile
+      ),
+      ...targets.filter(
+        (target) =>
+          target.path && target.path === agentStateRef.current.agentFile
+      ),
+    ]
+    const orderedPaths: Array<string> = []
+    const deletedPathSet = new Set<string>()
+    for (const target of orderedTargets) {
+      if (!target.path || deletedPathSet.has(target.path)) continue
+      deletedPathSet.add(target.path)
+      orderedPaths.push(target.path)
+    }
 
-      if (orderedPaths.length === 0) return false
+    if (orderedPaths.length === 0) return false
 
-      const deletedKeys = new Set(
-        orderedTargets.flatMap((target) => {
-          const key = agentListEntryKey(target)
-          return key ? [key] : []
+    const deletedKeys = new Set(
+      orderedTargets.flatMap((target) => {
+        const key = agentListEntryKey(target)
+        return key ? [key] : []
+      })
+    )
+    const previousProjectIndexDataByPath = getProjectIndexDataByPath()
+    const previousAgentsEvent = getAgentsEvent()
+    const affectedProjects = projectsWithAgentPaths(
+      previousProjectIndexDataByPath,
+      deletedPathSet
+    )
+    const affectedEventProjects = projectsWithAgentPaths(
+      previousAgentsEvent?.projectIndexes,
+      deletedPathSet
+    )
+    const previousSelection = getSidebarSelection()
+    const optimisticSelection = optimisticSelectionAfterDelete(
+      previousSelection,
+      deletedKeys
+    )
+
+    setAgentsEvent((current) =>
+      updateAgentsEventProjectIndexes(current, (indexes) =>
+        applyProjectIndexDelete(indexes, deletedPathSet)
+      )
+    )
+    setProjectIndexDataByPath((current) =>
+      applyProjectIndexDelete(current, deletedPathSet)
+    )
+    setSelectedSidebarAgentKeys((current) =>
+      current.filter((key) => !deletedKeys.has(key))
+    )
+    setSidebarAgentSelectionAnchor((current) =>
+      current && deletedKeys.has(current) ? "" : current
+    )
+    const activeDeletedPath = agentStateRef.current.agentFile
+    const rollbackActiveDeletedAgent =
+      activeDeletedPath && deletedPathSet.has(activeDeletedPath)
+        ? optimisticallyClearActiveDeletedAgent?.(activeDeletedPath)
+        : undefined
+
+    void (async () => {
+      const settled = await settle(
+        deleteAgentMutation.mutateAsync({
+          paths: orderedPaths,
+          removeWorktree: Boolean(options.removeWorktree),
         })
       )
-      const previousProjectIndexDataByPath = getProjectIndexDataByPath()
-      const previousAgentsEvent = getAgentsEvent()
-      const affectedProjects = projectsWithAgentPaths(
-        previousProjectIndexDataByPath,
-        deletedPathSet
-      )
-      const affectedEventProjects = projectsWithAgentPaths(
-        previousAgentsEvent?.projectIndexes,
-        deletedPathSet
-      )
-      const previousSelection = getSidebarSelection()
-      const optimisticSelection = optimisticSelectionAfterDelete(
-        previousSelection,
-        deletedKeys
-      )
-
-      setAgentsEvent((current) =>
-        updateAgentsEventProjectIndexes(current, (indexes) =>
-          applyProjectIndexDelete(indexes, deletedPathSet)
-        )
-      )
-      setProjectIndexDataByPath((current) =>
-        applyProjectIndexDelete(current, deletedPathSet)
-      )
-      setSelectedSidebarAgentKeys((current) =>
-        current.filter((key) => !deletedKeys.has(key))
-      )
-      setSidebarAgentSelectionAnchor((current) =>
-        current && deletedKeys.has(current) ? "" : current
-      )
-      const activeDeletedPath = agentStateRef.current.agentFile
-      const rollbackActiveDeletedAgent =
-        activeDeletedPath && deletedPathSet.has(activeDeletedPath)
-          ? optimisticallyClearActiveDeletedAgent?.(activeDeletedPath)
-          : undefined
-
-      void (async () => {
-        try {
-          await deleteAgentMutation.mutateAsync({
-            paths: orderedPaths,
-            removeWorktree: Boolean(options.removeWorktree),
-          })
-          toast.success(
-            orderedPaths.length === 1
-              ? "Archived agent"
-              : `Archived ${orderedPaths.length} agents`
-          )
-        } catch (error) {
-          setAgentsEvent((current) =>
-            updateAgentsEventProjectIndexes(current, (indexes) =>
-              restoreProjectIndexesForProjects(
-                indexes,
-                previousAgentsEvent?.projectIndexes,
-                affectedEventProjects
-              )
-            )
-          )
-          setProjectIndexDataByPath((current) =>
+      if (!settled.ok) {
+        const error = settled.error
+        setAgentsEvent((current) =>
+          updateAgentsEventProjectIndexes(current, (indexes) =>
             restoreProjectIndexesForProjects(
-              current,
-              previousProjectIndexDataByPath,
-              affectedProjects
+              indexes,
+              previousAgentsEvent?.projectIndexes,
+              affectedEventProjects
             )
           )
+        )
+        setProjectIndexDataByPath((current) =>
+          restoreProjectIndexesForProjects(
+            current,
+            previousProjectIndexDataByPath,
+            affectedProjects
+          )
+        )
 
-          rollbackActiveDeletedAgent?.()
+        rollbackActiveDeletedAgent?.()
 
-          const currentSelection = getSidebarSelection()
-          if (
-            sameStringArray(
-              currentSelection.selectedSidebarAgentKeys,
-              optimisticSelection.selectedSidebarAgentKeys
-            ) &&
-            currentSelection.sidebarAgentSelectionAnchor ===
-              optimisticSelection.sidebarAgentSelectionAnchor
-          ) {
-            setSelectedSidebarAgentKeys(
-              previousSelection.selectedSidebarAgentKeys
-            )
-            setSidebarAgentSelectionAnchor(
-              previousSelection.sidebarAgentSelectionAnchor
-            )
-          }
-
-          toast.error(
-            error instanceof Error ? error.message : "Failed to archive agent"
+        const currentSelection = getSidebarSelection()
+        if (
+          sameStringArray(
+            currentSelection.selectedSidebarAgentKeys,
+            optimisticSelection.selectedSidebarAgentKeys
+          ) &&
+          currentSelection.sidebarAgentSelectionAnchor ===
+            optimisticSelection.sidebarAgentSelectionAnchor
+        ) {
+          setSelectedSidebarAgentKeys(
+            previousSelection.selectedSidebarAgentKeys
+          )
+          setSidebarAgentSelectionAnchor(
+            previousSelection.sidebarAgentSelectionAnchor
           )
         }
-      })()
 
-      return true
-    },
-    [
-      deleteAgentMutation,
-      getProjectIndexDataByPath,
-      getAgentsEvent,
-      getSidebarSelection,
-      optimisticallyClearActiveDeletedAgent,
-      agentStateRef,
-      setProjectIndexDataByPath,
-      setSelectedSidebarAgentKeys,
-      setAgentsEvent,
-      setSidebarAgentSelectionAnchor,
-      viewerContextId,
-    ]
-  )
+        toast.error(
+          error instanceof Error ? error.message : "Failed to archive agent"
+        )
+        return
+      }
+      toast.success(
+        orderedPaths.length === 1
+          ? "Archived agent"
+          : `Archived ${orderedPaths.length} agents`
+      )
+    })()
+
+    return true
+  }
 
   return {
     cycleThinkingLevel,

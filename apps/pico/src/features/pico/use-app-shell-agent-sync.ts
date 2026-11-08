@@ -759,407 +759,368 @@ export function useAppShellAgentSync({
     })
   }, [queryClient, viewerContextId])
 
-  const handleEventSourceOpen = React.useCallback(
-    (source: EventSource) => {
-      if (currentSourceRef.current !== source) return
-      eventsReconnectAttemptRef.current = 0
-      markServerOnline()
-      // Events may be lost while the stream was closed.
-      refreshSidebarState(machineId)
-      const currentState = agentStateRef.current
-      if (currentState.connected) return
-      const nextState = { ...currentState, connected: true }
-      agentStateRef.current = nextState
-      setConversationItems(nextState.items)
-      setAgentState(nextState)
-    },
-    [agentStateRef, setConversationItems, setAgentState]
-  )
+  const handleEventSourceOpen = (source: EventSource) => {
+    if (currentSourceRef.current !== source) return
+    eventsReconnectAttemptRef.current = 0
+    markServerOnline()
+    // Events may be lost while the stream was closed.
+    refreshSidebarState(machineId)
+    const currentState = agentStateRef.current
+    if (currentState.connected) return
+    const nextState = { ...currentState, connected: true }
+    agentStateRef.current = nextState
+    setConversationItems(nextState.items)
+    setAgentState(nextState)
+  }
 
-  const handleEventSourceError = React.useCallback(
-    (source: EventSource) => {
-      if (currentSourceRef.current !== source) return
-      checkServerConnection()
-      // Do not let the browser reconnect by itself: it uses the first URL,
-      // and the agent in that URL is the agent the stream opened with. The
-      // server then selects that old agent again, and a later selection is
-      // lost. Open a new stream with the agent the route shows now.
-      source.close()
-      currentSourceRef.current = null
-      if (eventsReconnectTimerRef.current === undefined) {
-        const attempt = eventsReconnectAttemptRef.current
-        eventsReconnectAttemptRef.current = attempt + 1
-        const delay =
-          EVENTS_RECONNECT_DELAYS_MS[
-            Math.min(attempt, EVENTS_RECONNECT_DELAYS_MS.length - 1)
-          ]
-        eventsReconnectTimerRef.current = setTimeout(() => {
-          eventsReconnectTimerRef.current = undefined
-          initialEventsAgentIdRef.current = currentAgentIdRef.current
-          setEventsReconnectNonce((nonce) => nonce + 1)
-        }, delay)
-      }
-      const currentState = agentStateRef.current
-      if (!currentState.connected) return
-      const nextState = { ...currentState, connected: false }
-      agentStateRef.current = nextState
-      setConversationItems(nextState.items)
-      setAgentState(nextState)
-    },
-    [agentStateRef, setConversationItems, setAgentState]
-  )
+  const handleEventSourceError = (source: EventSource) => {
+    if (currentSourceRef.current !== source) return
+    checkServerConnection()
+    // Do not let the browser reconnect by itself: it uses the first URL,
+    // and the agent in that URL is the agent the stream opened with. The
+    // server then selects that old agent again, and a later selection is
+    // lost. Open a new stream with the agent the route shows now.
+    source.close()
+    currentSourceRef.current = null
+    if (eventsReconnectTimerRef.current === undefined) {
+      const attempt = eventsReconnectAttemptRef.current
+      eventsReconnectAttemptRef.current = attempt + 1
+      const delay =
+        EVENTS_RECONNECT_DELAYS_MS[
+          Math.min(attempt, EVENTS_RECONNECT_DELAYS_MS.length - 1)
+        ]
+      eventsReconnectTimerRef.current = setTimeout(() => {
+        eventsReconnectTimerRef.current = undefined
+        initialEventsAgentIdRef.current = currentAgentIdRef.current
+        setEventsReconnectNonce((nonce) => nonce + 1)
+      }, delay)
+    }
+    const currentState = agentStateRef.current
+    if (!currentState.connected) return
+    const nextState = { ...currentState, connected: false }
+    agentStateRef.current = nextState
+    setConversationItems(nextState.items)
+    setAgentState(nextState)
+  }
 
-  const handleEventSourceMessage = React.useCallback(
-    (
-      source: EventSource,
-      gitInvalidationBatcher: Batcher<GitInvalidationBatchItem>,
-      event: MessageEvent<string>
-    ) => {
-      if (currentSourceRef.current !== source) return
-      const lastEventId = normalizeEventSourceLastId(event.lastEventId)
-      if (lastEventId) {
-        eventsLastIdRef.current = lastEventId
-        rememberStoredEventsLastId(machineId, viewerContextId, lastEventId)
-      }
-      const payload = JSON.parse(event.data) as PicoServerEvent
+  const handleEventSourceMessage = (
+    source: EventSource,
+    gitInvalidationBatcher: Batcher<GitInvalidationBatchItem>,
+    event: MessageEvent<string>
+  ) => {
+    if (currentSourceRef.current !== source) return
+    const lastEventId = normalizeEventSourceLastId(event.lastEventId)
+    if (lastEventId) {
+      eventsLastIdRef.current = lastEventId
+      rememberStoredEventsLastId(machineId, viewerContextId, lastEventId)
+    }
+    const payload = JSON.parse(event.data) as PicoServerEvent
 
-      if (isConversationDeltaEvent(payload)) {
-        const previousState = agentStateRef.current
-        if (
-          previousState.agentId &&
-          previousState.agentId !== payload.agentId
-        ) {
-          return
-        }
-        const items = applyConversationDelta(previousState.items, payload)
-        if (items === previousState.items) return
-        const nextState = {
-          ...previousState,
-          connected: true,
-          replaying: false,
-          streaming: true,
-          items,
-        } satisfies AgentState
-        batch(() => {
-          agentStateRef.current = nextState
-          setConversationItems(items)
-          if (!previousState.streaming) {
-            setComposerStreaming(true)
-            setWorkingState({ label: "Working…", cancelable: false })
-          }
-          setAgentState(nextState)
-        })
+    if (isConversationDeltaEvent(payload)) {
+      const previousState = agentStateRef.current
+      if (previousState.agentId && previousState.agentId !== payload.agentId) {
         return
       }
-
-      if (isStateSyncEvent(payload)) {
-        const activationRevision = payload.activationRevision
-        if (
-          typeof activationRevision === "number" &&
-          activationRevision < latestActivationRevisionRef.current
-        ) {
-          return
+      const items = applyConversationDelta(previousState.items, payload)
+      if (items === previousState.items) return
+      const nextState = {
+        ...previousState,
+        connected: true,
+        replaying: false,
+        streaming: true,
+        items,
+      } satisfies AgentState
+      batch(() => {
+        agentStateRef.current = nextState
+        setConversationItems(items)
+        if (!previousState.streaming) {
+          setComposerStreaming(true)
+          setWorkingState({ label: "Working…", cancelable: false })
         }
-        if (typeof activationRevision === "number") {
-          latestActivationRevisionRef.current = activationRevision
-        }
+        setAgentState(nextState)
+      })
+      return
+    }
 
-        if (!hasReceivedStateSyncRef.current) {
-          hasReceivedStateSyncRef.current = true
-          setHasReceivedStateSync(true)
-        }
-        const previousState = agentStateRef.current
-        if (
-          shouldIgnoreOptimisticDraftStateSync({
-            ownerKey: draftAgentLoadingOwnerKeyRef.current,
-            payload,
-            previousState,
-          })
-        ) {
-          return
-        }
+    if (isStateSyncEvent(payload)) {
+      const activationRevision = payload.activationRevision
+      if (
+        typeof activationRevision === "number" &&
+        activationRevision < latestActivationRevisionRef.current
+      ) {
+        return
+      }
+      if (typeof activationRevision === "number") {
+        latestActivationRevisionRef.current = activationRevision
+      }
 
-        const localPromptText = composerTextRef.current
-
-        rememberStoredPromptDraft(
-          machineId,
+      if (!hasReceivedStateSyncRef.current) {
+        hasReceivedStateSyncRef.current = true
+        setHasReceivedStateSync(true)
+      }
+      const previousState = agentStateRef.current
+      if (
+        shouldIgnoreOptimisticDraftStateSync({
+          ownerKey: draftAgentLoadingOwnerKeyRef.current,
+          payload,
           previousState,
-          serializeComposerDraft({
-            text: localPromptText,
-            skillName: composerSkillRef.current,
-          })
-        )
+        })
+      ) {
+        return
+      }
 
-        const previousEditorText = previousState.uiState.editorText || ""
-        const nextState = updateStateFromSync(previousState, payload)
-        const agentChanged =
-          promptDraftKey(nextState) !== promptDraftKey(previousState)
-        const currentRouteAgentId = currentAgentIdRef.current
-        const currentDraftOwnerKey = draftAgentLoadingOwnerKeyRef.current
-        const confirmedDraft =
-          nextState.draft && !nextState.agentKey?.startsWith("optimistic:")
-        const previousWasOptimisticDraft =
-          previousState.draft &&
-          previousState.agentKey?.startsWith("optimistic:")
-        const draftMatchesPendingOwner = promptDraftKeyMatchesOwner(
-          promptDraftKey(nextState),
-          currentDraftOwnerKey
-        )
-        const shouldClearDraftRoute = Boolean(
-          currentRouteAgentId &&
-          !pendingRouteAgentIdRef.current &&
-          confirmedDraft &&
-          (draftMatchesPendingOwner || previousWasOptimisticDraft)
-        )
-        const preserveLocalPrompt =
-          !agentChanged && localPromptText !== previousEditorText
-        const nextPromptText = preserveLocalPrompt
-          ? localPromptText
-          : (readStoredPromptDraft(machineId, nextState) ??
-            nextState.uiState.editorText ??
-            "")
-        // Sent one time with the editor text, for example after a fork at a
-        // user message. Not kept in the agent state.
-        const editorImages = payload.uiState?.editorImages
-          ?.map(normalizePromptImage)
-          .filter((image) => image !== null)
+      const localPromptText = composerTextRef.current
 
-        batch(() => {
-          agentStateRef.current = nextState
-          if (previousState.contextUsage !== nextState.contextUsage) {
-            setComposerContextUsage(nextState.contextUsage)
-          }
-          const activeAgentChanged =
-            previousState.agentKey !== nextState.agentKey ||
-            previousState.agentId !== nextState.agentId ||
-            previousState.agentFile !== nextState.agentFile
-          if (previousState.streaming !== nextState.streaming) {
-            setComposerStreaming(nextState.streaming)
-          }
-          if (
-            activeAgentChanged ||
-            previousState.compacting !== nextState.compacting
-          ) {
-            setCompactRunningState(nextState.compacting)
-          }
-          if (
-            activeAgentChanged ||
-            previousState.streaming ||
-            nextState.streaming ||
-            previousState.compacting ||
+      rememberStoredPromptDraft(
+        machineId,
+        previousState,
+        serializeComposerDraft({
+          text: localPromptText,
+          skillName: composerSkillRef.current,
+        })
+      )
+
+      const previousEditorText = previousState.uiState.editorText || ""
+      const nextState = updateStateFromSync(previousState, payload)
+      const agentChanged =
+        promptDraftKey(nextState) !== promptDraftKey(previousState)
+      const currentRouteAgentId = currentAgentIdRef.current
+      const currentDraftOwnerKey = draftAgentLoadingOwnerKeyRef.current
+      const confirmedDraft =
+        nextState.draft && !nextState.agentKey?.startsWith("optimistic:")
+      const previousWasOptimisticDraft =
+        previousState.draft && previousState.agentKey?.startsWith("optimistic:")
+      const draftMatchesPendingOwner = promptDraftKeyMatchesOwner(
+        promptDraftKey(nextState),
+        currentDraftOwnerKey
+      )
+      const shouldClearDraftRoute = Boolean(
+        currentRouteAgentId &&
+        !pendingRouteAgentIdRef.current &&
+        confirmedDraft &&
+        (draftMatchesPendingOwner || previousWasOptimisticDraft)
+      )
+      const preserveLocalPrompt =
+        !agentChanged && localPromptText !== previousEditorText
+      const nextPromptText = preserveLocalPrompt
+        ? localPromptText
+        : (readStoredPromptDraft(machineId, nextState) ??
+          nextState.uiState.editorText ??
+          "")
+      // Sent one time with the editor text, for example after a fork at a
+      // user message. Not kept in the agent state.
+      const editorImages = payload.uiState?.editorImages
+        ?.map(normalizePromptImage)
+        .filter((image) => image !== null)
+
+      batch(() => {
+        agentStateRef.current = nextState
+        if (previousState.contextUsage !== nextState.contextUsage) {
+          setComposerContextUsage(nextState.contextUsage)
+        }
+        const activeAgentChanged =
+          previousState.agentKey !== nextState.agentKey ||
+          previousState.agentId !== nextState.agentId ||
+          previousState.agentFile !== nextState.agentFile
+        if (previousState.streaming !== nextState.streaming) {
+          setComposerStreaming(nextState.streaming)
+        }
+        if (
+          activeAgentChanged ||
+          previousState.compacting !== nextState.compacting
+        ) {
+          setCompactRunningState(nextState.compacting)
+        }
+        if (
+          activeAgentChanged ||
+          previousState.streaming ||
+          nextState.streaming ||
+          previousState.compacting ||
+          nextState.compacting
+        ) {
+          setWorkingState(
             nextState.compacting
-          ) {
-            setWorkingState(
-              nextState.compacting
-                ? { label: COMPACT_WORKING_LABEL, cancelable: true }
-                : nextState.streaming
-                  ? { label: nextState.uiState.workingMessage || "Working…" }
-                  : null
-            )
-          }
-          const forceConversationSync = activeAgentChanged
-          if (
-            forceConversationSync ||
-            !sameVisibleConversation(previousState.items, nextState.items, {
-              hideThinking: nextState.hideThinkingBlock,
-              hideToolBlocks: hideToolBlocksRef.current,
-            })
-          ) {
-            setConversationItems(nextState.items)
-          }
-          if (shouldPublishAgentState(previousState, nextState)) {
-            setAgentState(nextState)
-          }
+              ? { label: COMPACT_WORKING_LABEL, cancelable: true }
+              : nextState.streaming
+                ? { label: nextState.uiState.workingMessage || "Working…" }
+                : null
+          )
+        }
+        const forceConversationSync = activeAgentChanged
+        if (
+          forceConversationSync ||
+          !sameVisibleConversation(previousState.items, nextState.items, {
+            hideThinking: nextState.hideThinkingBlock,
+            hideToolBlocks: hideToolBlocksRef.current,
+          })
+        ) {
+          setConversationItems(nextState.items)
+        }
+        if (shouldPublishAgentState(previousState, nextState)) {
+          setAgentState(nextState)
+        }
 
-          if (
-            previousState.agentKey !== nextState.agentKey ||
-            previousState.agentId !== nextState.agentId ||
-            previousState.agentFile !== nextState.agentFile ||
-            previousState.streaming !== nextState.streaming
-          ) {
-            applySidebarAgentStatusRef.current({
-              type: "agent_status",
-              agentKey: nextState.agentKey,
-              agentId: nextState.agentId,
-              agentPath: nextState.agentFile,
-              streaming: nextState.streaming,
-              unread: false,
-            })
-          }
-
-          // The draft became a real agent. Move the sidebar placeholder
-          // to the new agent, so it does not stay next to the real entry.
-          if (previousState.draft && !nextState.draft && nextState.agentId) {
-            bindOptimisticSidebarAgentRef.current({
-              cwd: nextState.cwd,
-              agentId: nextState.agentId,
-              agentPath: nextState.agentFile,
-            })
-          }
-
-          if (agentChanged) {
-            setAgentsEvent((current) => {
-              if (!current) return current
-              const nextAgentsEvent = {
-                ...current,
-                activeAgentId: nextState.agentId,
-                activeAgentKey: nextState.agentKey,
-                activeAgentPath: nextState.agentFile,
-              }
-              return sameAgentsEvent(current, nextAgentsEvent)
-                ? current
-                : nextAgentsEvent
-            })
-          }
-
-          if (editorImages && !preserveLocalPrompt) {
-            setComposerImages(editorImages)
-          } else if (agentChanged) {
-            setComposerImages((current) =>
-              current.length === 0 ? current : []
-            )
-          }
-
-          if (shouldClearDraftRoute) {
-            handleSelectAgentRef.current(undefined, { replace: true })
-          }
-          if (!preserveLocalPrompt) {
-            replaceComposerDraftRef.current(nextPromptText, nextState)
-          }
-          lastSyncedEditorTextRef.current = nextState.uiState.editorText || ""
-          const nextPendingMessages = normalizePendingMessages(payload)
-          if (nextPendingMessages) {
-            setPendingMessages((current) =>
-              samePendingMessages(current, nextPendingMessages)
-                ? current
-                : nextPendingMessages
-            )
-          }
-        })
-        return
-      }
-
-      if (isAgentsEvent(payload)) {
-        setAgentsEvent((current) =>
-          sameAgentsEvent(current, payload) ? current : payload
-        )
-        return
-      }
-
-      if (isAgentStatusEvent(payload)) {
-        applySidebarAgentStatusRef.current(payload)
-        return
-      }
-
-      if (isAgentDoneEvent(payload)) {
-        // The read state is global. The server sends an agent_status with
-        // unread true before this event, unless an open tab shows the agent.
-        setAgentDoneEvents((current) =>
-          current.some((entry) => entry.id === payload.id)
-            ? current
-            : [...current, payload]
-        )
-        return
-      }
-
-      if (isGitChangedEvent(payload)) {
-        const cwd = payload.cwd.trim()
-        if (cwd) {
-          gitInvalidationBatcher.addItem({
-            cwd,
-            scopes: new Set(payload.scopes ?? ["status", "files", "refs"]),
+        if (
+          previousState.agentKey !== nextState.agentKey ||
+          previousState.agentId !== nextState.agentId ||
+          previousState.agentFile !== nextState.agentFile ||
+          previousState.streaming !== nextState.streaming
+        ) {
+          applySidebarAgentStatusRef.current({
+            type: "agent_status",
+            agentKey: nextState.agentKey,
+            agentId: nextState.agentId,
+            agentPath: nextState.agentFile,
+            streaming: nextState.streaming,
+            unread: false,
           })
         }
-        return
-      }
 
-      if (payload.type === "sidebar_state") {
-        handleSidebarStateEvent(machineId, payload)
-        return
-      }
-
-      if (payload.type === "agent_extensions") {
-        if (typeof payload.agentId === "string") {
-          emitPicoEvent("pico:agent-extensions", {
-            agentId: payload.agentId,
-            ...(typeof payload.kind === "string" ? { kind: payload.kind } : {}),
+        // The draft became a real agent. Move the sidebar placeholder
+        // to the new agent, so it does not stay next to the real entry.
+        if (previousState.draft && !nextState.draft && nextState.agentId) {
+          bindOptimisticSidebarAgentRef.current({
+            cwd: nextState.cwd,
+            agentId: nextState.agentId,
+            agentPath: nextState.agentFile,
           })
         }
-        return
-      }
 
-      if (payload.type === "auto_agent_naming_error") {
-        console.warn("[pico] auto agent naming failed", payload)
-        toast.warning("Could not name agent", {
-          description: autoAgentNamingErrorDescription(payload),
+        if (agentChanged) {
+          setAgentsEvent((current) => {
+            if (!current) return current
+            const nextAgentsEvent = {
+              ...current,
+              activeAgentId: nextState.agentId,
+              activeAgentKey: nextState.agentKey,
+              activeAgentPath: nextState.agentFile,
+            }
+            return sameAgentsEvent(current, nextAgentsEvent)
+              ? current
+              : nextAgentsEvent
+          })
+        }
+
+        if (editorImages && !preserveLocalPrompt) {
+          setComposerImages(editorImages)
+        } else if (agentChanged) {
+          setComposerImages((current) => (current.length === 0 ? current : []))
+        }
+
+        if (shouldClearDraftRoute) {
+          handleSelectAgentRef.current(undefined, { replace: true })
+        }
+        if (!preserveLocalPrompt) {
+          replaceComposerDraftRef.current(nextPromptText, nextState)
+        }
+        lastSyncedEditorTextRef.current = nextState.uiState.editorText || ""
+        const nextPendingMessages = normalizePendingMessages(payload)
+        if (nextPendingMessages) {
+          setPendingMessages((current) =>
+            samePendingMessages(current, nextPendingMessages)
+              ? current
+              : nextPendingMessages
+          )
+        }
+      })
+      return
+    }
+
+    if (isAgentsEvent(payload)) {
+      setAgentsEvent((current) =>
+        sameAgentsEvent(current, payload) ? current : payload
+      )
+      return
+    }
+
+    if (isAgentStatusEvent(payload)) {
+      applySidebarAgentStatusRef.current(payload)
+      return
+    }
+
+    if (isAgentDoneEvent(payload)) {
+      // The read state is global. The server sends an agent_status with
+      // unread true before this event, unless an open tab shows the agent.
+      setAgentDoneEvents((current) =>
+        current.some((entry) => entry.id === payload.id)
+          ? current
+          : [...current, payload]
+      )
+      return
+    }
+
+    if (isGitChangedEvent(payload)) {
+      const cwd = payload.cwd.trim()
+      if (cwd) {
+        gitInvalidationBatcher.addItem({
+          cwd,
+          scopes: new Set(payload.scopes ?? ["status", "files", "refs"]),
         })
-        return
       }
+      return
+    }
 
-      if (payload.type === "request_error") {
-        toast.error(payload.error || "Request failed")
-        return
+    if (payload.type === "sidebar_state") {
+      handleSidebarStateEvent(machineId, payload)
+      return
+    }
+
+    if (payload.type === "agent_extensions") {
+      if (typeof payload.agentId === "string") {
+        emitPicoEvent("pico:agent-extensions", {
+          agentId: payload.agentId,
+          ...(typeof payload.kind === "string" ? { kind: payload.kind } : {}),
+        })
       }
+      return
+    }
 
-      if (payload.type === "extension_error") {
-        toast.error(payload.error || "Extension error")
-        return
-      }
+    if (payload.type === "auto_agent_naming_error") {
+      console.warn("[pico] auto agent naming failed", payload)
+      toast.warning("Could not name agent", {
+        description: autoAgentNamingErrorDescription(payload),
+      })
+      return
+    }
 
-      if (payload.type === "extension_ui_dismiss") {
-        dismissUiRequestRef.current(payload.id)
-        return
-      }
+    if (payload.type === "request_error") {
+      toast.error(payload.error || "Request failed")
+      return
+    }
 
-      if (payload.type === "extension_ui_request") {
-        if (payload.method === "notify") {
-          const notifyMessage = payload.message || "Notification"
-          const options = payload.toastId ? { id: payload.toastId } : undefined
-          if (payload.notifyType === "success") {
-            toast.success(notifyMessage, options)
-          } else if (payload.notifyType === "warning") {
-            toast.warning(notifyMessage, options)
-          } else if (payload.notifyType === "error") {
-            toast.error(notifyMessage, options)
-          } else {
-            toast.info(notifyMessage, options)
-          }
-          return
+    if (payload.type === "extension_error") {
+      toast.error(payload.error || "Extension error")
+      return
+    }
+
+    if (payload.type === "extension_ui_dismiss") {
+      dismissUiRequestRef.current(payload.id)
+      return
+    }
+
+    if (payload.type === "extension_ui_request") {
+      if (payload.method === "notify") {
+        const notifyMessage = payload.message || "Notification"
+        const options = payload.toastId ? { id: payload.toastId } : undefined
+        if (payload.notifyType === "success") {
+          toast.success(notifyMessage, options)
+        } else if (payload.notifyType === "warning") {
+          toast.warning(notifyMessage, options)
+        } else if (payload.notifyType === "error") {
+          toast.error(notifyMessage, options)
+        } else {
+          toast.info(notifyMessage, options)
         }
-
-        // Older servers may forward Pi's fire-and-forget terminal updates.
-        // Only interactive methods have a request ID that can be answered.
-        if (uiRequestExpectsResponse(payload.method)) {
-          pendingUiRequestHandlerRef.current(payload)
-        }
+        return
       }
-    },
-    [
-      applySidebarAgentStatusRef,
-      bindOptimisticSidebarAgentRef,
-      composerSkillRef,
-      composerTextRef,
-      handleSelectAgentRef,
-      hideToolBlocksRef,
-      lastSyncedEditorTextRef,
-      pendingRouteAgentIdRef,
-      pendingUiRequestHandlerRef,
-      dismissUiRequestRef,
-      replaceComposerDraftRef,
-      agentStateRef,
-      setComposerContextUsage,
-      setComposerImages,
-      setComposerStreaming,
-      setCompactRunningState,
-      setConversationItems,
-      setPendingMessages,
-      setAgentDoneEvents,
-      setAgentState,
-      setAgentsEvent,
-      setWorkingState,
-      viewerContextId,
-    ]
-  )
+
+      // Older servers may forward Pi's fire-and-forget terminal updates.
+      // Only interactive methods have a request ID that can be answered.
+      if (uiRequestExpectsResponse(payload.method)) {
+        pendingUiRequestHandlerRef.current(payload)
+      }
+    }
+  }
 
   React.useEffect(() => {
     if (!viewerContextId) return
