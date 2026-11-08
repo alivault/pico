@@ -110,7 +110,7 @@ function StatusMenu({
           }
         >
           {(Object.keys(STATUS_LABEL) as Array<TodoStatus>).map((status) => (
-            <DropdownMenuRadioItem key={status} value={status}>
+            <DropdownMenuRadioItem key={status} value={status} closeOnClick>
               <StatusIcon status={status} />
               {STATUS_LABEL[status]}
             </DropdownMenuRadioItem>
