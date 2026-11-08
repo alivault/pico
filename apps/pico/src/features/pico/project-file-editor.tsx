@@ -39,6 +39,7 @@ import { styleTags, tags } from "@lezer/highlight"
 import { basicSetup } from "codemirror"
 import { createPortal } from "react-dom"
 
+import { useLatestRef } from "@/features/pico/app-shell-common"
 import {
   fileLineCommentSnippet,
   formatComposerFileLineCommentReference,
@@ -507,6 +508,30 @@ function FileCommentNote({
   )
 }
 
+/**
+ * One element for each comment widget; React draws into it. The same key
+ * gives the same element until `keep` drops the key.
+ */
+function createCommentContainers() {
+  const elements = new Map<string, HTMLElement>()
+  return {
+    get(key: string) {
+      let element = elements.get(key)
+      if (!element) {
+        element = document.createElement("div")
+        element.className = "cm-pico-comment-block"
+        elements.set(key, element)
+      }
+      return element
+    },
+    /** Drops the elements of the keys that are not in `keys`. */
+    keep(keys: Set<string>) {
+      for (const key of elements.keys())
+        if (!keys.has(key)) elements.delete(key)
+    },
+  }
+}
+
 function commentTitle(path: string, range: FileCommentRange) {
   return `Comment on ${formatComposerFileLineCommentReference({ path, ...range })}`
 }
@@ -526,38 +551,23 @@ export default function ProjectFileEditor({
 }: ProjectFileEditorProps) {
   const [pendingComment, setPendingComment] =
     React.useState<FileCommentRange | null>(null)
-  const commentHandlers = React.useRef<FileCommentHandlers>({
-    start: () => {},
-  })
-  commentHandlers.current = {
+  const commentHandlers = useLatestRef<FileCommentHandlers>({
     start: (range) => {
       if (onAddComment) setPendingComment(range)
     },
-  }
-  // One element for each comment widget; React draws into it.
-  const commentContainers = React.useRef(new Map<string, HTMLElement>())
-  const commentContainer = (key: string) => {
-    let element = commentContainers.current.get(key)
-    if (!element) {
-      element = document.createElement("div")
-      element.className = "cm-pico-comment-block"
-      commentContainers.current.set(key, element)
-    }
-    return element
-  }
+  })
+  const [commentContainers] = React.useState(createCommentContainers)
   const pendingKey = pendingComment
     ? `pending:${pendingComment.startLine}-${pendingComment.endLine}`
     : ""
   const containerRef = React.useRef<HTMLDivElement | null>(null)
   const viewRef = React.useRef<EditorView | null>(null)
-  const languageCompartment = React.useRef(new Compartment()).current
-  const readOnlyCompartment = React.useRef(new Compartment()).current
+  const [languageCompartment] = React.useState(() => new Compartment())
+  const [readOnlyCompartment] = React.useState(() => new Compartment())
   const readOnlyRef = React.useRef(readOnly)
-  const callbacks = React.useRef({ onChange, onSave })
-  callbacks.current = { onChange, onSave }
+  const callbacks = useLatestRef({ onChange, onSave })
   // The editor reads the document only on mount and on a new revision.
-  const docRef = React.useRef(doc)
-  docRef.current = doc
+  const docRef = useLatestRef(doc)
 
   React.useEffect(() => {
     const container = containerRef.current
@@ -601,9 +611,15 @@ export default function ProjectFileEditor({
       view.destroy()
       viewRef.current = null
     }
-    // The editor is made one time. Later changes go through transactions.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    // The editor is made one time: all dependencies are stable. Later
+    // changes go through transactions.
+  }, [
+    callbacks,
+    commentHandlers,
+    docRef,
+    languageCompartment,
+    readOnlyCompartment,
+  ])
 
   // Load the language of the file, then turn it on.
   React.useEffect(() => {
@@ -676,20 +692,25 @@ export default function ProjectFileEditor({
         notes: comments.map((comment) => ({
           startLine: comment.startLine,
           endLine: comment.endLine,
-          container: commentContainer(comment.id),
+          container: commentContainers.get(comment.id),
         })),
         pending: pendingComment
-          ? { ...pendingComment, container: commentContainer(pendingKey) }
+          ? { ...pendingComment, container: commentContainers.get(pendingKey) }
           : null,
       }),
     })
     // Drop the elements of comments that are gone.
-    const keys = new Set([...comments.map((comment) => comment.id), pendingKey])
-    for (const key of commentContainers.current.keys())
-      if (!keys.has(key)) commentContainers.current.delete(key)
-    // commentContainer only reads a ref.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [comments, commentsOn, commentDisabledReason, pendingComment, pendingKey])
+    commentContainers.keep(
+      new Set([...comments.map((comment) => comment.id), pendingKey])
+    )
+  }, [
+    commentContainers,
+    comments,
+    commentsOn,
+    commentDisabledReason,
+    pendingComment,
+    pendingKey,
+  ])
 
   const submitComment = (text: string) => {
     const view = viewRef.current
@@ -720,7 +741,7 @@ export default function ProjectFileEditor({
               onCancel={() => setPendingComment(null)}
               onSubmit={submitComment}
             />,
-            commentContainer(pendingKey),
+            commentContainers.get(pendingKey),
             pendingKey
           )
         : null}
@@ -732,7 +753,7 @@ export default function ProjectFileEditor({
               onRemoveComment ? () => onRemoveComment(comment.id) : undefined
             }
           />,
-          commentContainer(comment.id),
+          commentContainers.get(comment.id),
           comment.id
         )
       )}

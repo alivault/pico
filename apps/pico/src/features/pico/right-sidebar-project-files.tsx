@@ -68,6 +68,7 @@ import { resizeRailPrimaryInteractiveClass } from "@/components/ui/resize-rail"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { useLatestRef } from "@/features/pico/app-shell-common"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
 import { MarkdownBlock } from "@/features/pico/markdown-renderer"
@@ -372,8 +373,8 @@ function ProjectFileTree({
   selectedPath: string
   onSelectFile: (path: string) => void
 }) {
-  const validPathsRef = React.useRef(new Set(paths))
-  const onSelectFileRef = React.useRef(onSelectFile)
+  const validPathsRef = useLatestRef(new Set(paths))
+  const onSelectFileRef = useLatestRef(onSelectFile)
   const pathsRef = React.useRef(paths)
   const initialSelectedPathRef = React.useRef(
     revealSelectedPathOnMount ? selectedPath : ""
@@ -381,8 +382,6 @@ function ProjectFileTree({
   const [initialExpandedPaths] = React.useState(() =>
     getProjectFileAncestorDirectoryPaths(paths, selectedPath)
   )
-  validPathsRef.current = new Set(paths)
-  onSelectFileRef.current = onSelectFile
 
   const { model } = useFileTree({
     paths,

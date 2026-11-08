@@ -139,7 +139,6 @@ import {
   readFileAsPromptImage,
 } from "@/features/pico/app-shell-utils"
 import type { ComposerPanelHandle } from "@/features/pico/composer-panel"
-import type { ComposerContextUsageStore } from "@/features/pico/context-usage"
 import {
   parseComposerSkillMessage,
   serializeComposerDraft,
@@ -236,36 +235,44 @@ import type {
   AgentStatusEvent,
 } from "@/lib/pico/api"
 import { useMachineId } from "@/lib/pico/machine-context"
+import { settle } from "@/lib/settle"
 
 const INITIAL_SIDEBAR_BOOTSTRAP_PROJECT_COUNT = 6
-type AppShellController = {
-  stores: {
-    appUi: PicoStore<AppShellUiState>
-    composer: PicoStore<AppShellComposerSnapshot>
-    contextUsage: ComposerContextUsageStore
-    conversationItems: ConversationItemsStore
-    displaySettings: PicoStore<AppShellDisplaySettingsState>
-    draftFlow: PicoStore<AppShellDraftFlowState>
-    notification: PicoStore<AppShellNotificationState>
-    rightSidebar: PicoStore<AppShellRightSidebarState>
-    agent: PicoStore<AgentState>
-    sidebar: AppShellSidebarStore
-  }
-  refs: {
-    composerImages: React.RefObject<Array<PromptImage>>
-    composerPanel: React.RefObject<ComposerPanelHandle | null>
-    composerSkill: React.RefObject<string | undefined>
-    composerText: React.RefObject<string>
-    conversationFrame: React.RefObject<AppShellConversationFrameHandle | null>
-    agentState: React.RefObject<AgentState>
-  }
-  actions: AppShellAgentWorkspaceHandle & {
-    focusModelSelector: () => void
-    focusPrompt: () => void
-    focusAgentSearch: () => void
-  }
-}
 
+/**
+ * Show the pending prompts of the stores in the composer. This function is
+ * outside the component, so that the React Compiler does not see the reads of
+ * the store state. If it sees them, it makes a new callback each time that the
+ * state changes, and the hooks that get the callback run their effects again.
+ */
+function refreshComposerPendingMessagesFrom(
+  composerStore: PicoStore<AppShellComposerSnapshot>,
+  pendingDraftFollowUpsStore: PicoStore<
+    Array<{
+      message: string
+      images: Array<PromptImage>
+      streamingBehavior: "steer" | "followUp"
+      optimisticId?: string
+    }>
+  >,
+  pendingMessagesStore: PicoStore<Array<PendingComposerMessage>>
+) {
+  const pendingDraftFollowUpMessages = pendingDraftFollowUpsStore.state.map(
+    (message, index) => ({
+      pendingId: message.optimisticId || `pending-draft:${index}`,
+      text: message.message,
+      images: message.images,
+      streamingBehavior: message.streamingBehavior,
+    })
+  )
+  const currentComposerSnapshot = composerStore.state
+  setStoreState(composerStore, {
+    ...currentComposerSnapshot,
+    currentPendingMessages: currentComposerSnapshot.disabled
+      ? []
+      : [...pendingDraftFollowUpMessages, ...pendingMessagesStore.state],
+  })
+}
 type AppShellAgentWorkspaceProps = {
   viewerContextId: string
   agentId?: string
@@ -299,19 +306,12 @@ function useAppShellAgentWorkspaceView({
 }) {
   const machineId = useMachineId()
   const queryClient = useQueryClient()
-  const initialAgentStateRef = React.useRef<AgentState | null>(null)
-  if (!initialAgentStateRef.current) {
-    initialAgentStateRef.current = createInitialAgentState()
-  }
-  const agentStoreRef = React.useRef<PicoStore<AgentState> | null>(null)
-  if (!agentStoreRef.current) {
-    agentStoreRef.current = createPicoStore(initialAgentStateRef.current)
-  }
-  const agentStore = agentStoreRef.current
+  const [agentStore] = React.useState<PicoStore<AgentState>>(() =>
+    createPicoStore(createInitialAgentState())
+  )
   const agentStateRef = React.useRef(agentStore.state)
-  const appUiStoreRef = React.useRef<PicoStore<AppShellUiState> | null>(null)
-  if (!appUiStoreRef.current) {
-    appUiStoreRef.current = createPicoStore<AppShellUiState>(
+  const [appUiStore] = React.useState<PicoStore<AppShellUiState>>(() =>
+    createPicoStore<AppShellUiState>(
       {
         currentTab: "conversation",
         gitPanelOpen: false,
@@ -321,172 +321,126 @@ function useAppShellAgentWorkspaceView({
       },
       shallowRecordEqual
     )
+  )
+  const [rightSidebarStore] = React.useState<
+    PicoStore<AppShellRightSidebarState>
+  >(() => createPicoStore(createInitialRightSidebarState()))
+  const setCurrentTab: React.Dispatch<React.SetStateAction<string>> = (
+    action
+  ) => {
+    setStoreField(appUiStore, "currentTab", action)
   }
-  const appUiStore = appUiStoreRef.current
-  const rightSidebarStoreRef =
-    React.useRef<PicoStore<AppShellRightSidebarState> | null>(null)
-  if (!rightSidebarStoreRef.current) {
-    rightSidebarStoreRef.current = createPicoStore(
-      createInitialRightSidebarState()
+  const setGitPanelOpen: React.Dispatch<React.SetStateAction<boolean>> = (
+    action
+  ) => {
+    const nextOpen = applyStoreAction(appUiStore.state.gitPanelOpen, action)
+    // A sidebar that the user opens gets priority over the left sidebar.
+    if (nextOpen) focusShellSide("right")
+    setStoreField(appUiStore, "gitPanelOpen", nextOpen)
+    safeLocalStorageSetItem(
+      RIGHT_SIDEBAR_OPEN_STORAGE_KEY,
+      nextOpen ? "1" : "0"
     )
   }
-  const rightSidebarStore = rightSidebarStoreRef.current
-  const setCurrentTab = React.useCallback<
-    React.Dispatch<React.SetStateAction<string>>
-  >(
-    (action) => {
-      setStoreField(appUiStore, "currentTab", action)
-    },
-    [appUiStore]
-  )
-  const setGitPanelOpen = React.useCallback<
-    React.Dispatch<React.SetStateAction<boolean>>
-  >(
-    (action) => {
-      const nextOpen = applyStoreAction(appUiStore.state.gitPanelOpen, action)
-      // A sidebar that the user opens gets priority over the left sidebar.
-      if (nextOpen) focusShellSide("right")
-      setStoreField(appUiStore, "gitPanelOpen", nextOpen)
-      safeLocalStorageSetItem(
-        RIGHT_SIDEBAR_OPEN_STORAGE_KEY,
-        nextOpen ? "1" : "0"
-      )
-    },
-    [appUiStore]
-  )
-  const setTerminalPanelOpen = React.useCallback<
-    React.Dispatch<React.SetStateAction<boolean>>
-  >(
-    (action) => {
-      const nextOpen = applyStoreAction(
-        appUiStore.state.terminalPanelOpen,
-        action
-      )
-      setStoreField(appUiStore, "terminalPanelOpen", nextOpen)
-      safeLocalStorageSetItem(
-        TERMINAL_PANEL_OPEN_STORAGE_KEY,
-        nextOpen ? "1" : "0"
-      )
-    },
-    [appUiStore]
-  )
-  const setLoadingAgentId = React.useCallback<
-    React.Dispatch<React.SetStateAction<string | null>>
-  >(
-    (action) => {
-      setStoreField(appUiStore, "loadingAgentId", action)
-    },
-    [appUiStore]
-  )
+  const setTerminalPanelOpen: React.Dispatch<React.SetStateAction<boolean>> = (
+    action
+  ) => {
+    const nextOpen = applyStoreAction(
+      appUiStore.state.terminalPanelOpen,
+      action
+    )
+    setStoreField(appUiStore, "terminalPanelOpen", nextOpen)
+    safeLocalStorageSetItem(
+      TERMINAL_PANEL_OPEN_STORAGE_KEY,
+      nextOpen ? "1" : "0"
+    )
+  }
+  const setLoadingAgentId: React.Dispatch<
+    React.SetStateAction<string | null>
+  > = (action) => {
+    setStoreField(appUiStore, "loadingAgentId", action)
+  }
   const previousRouteAgentIdRef = React.useRef(agentId)
-  const composerDraftSeedStoreRef = React.useRef<PicoStore<{
-    text: string
-    skillName?: string
-    syncNonce: number
-  }> | null>(null)
-  if (!composerDraftSeedStoreRef.current) {
-    composerDraftSeedStoreRef.current = createPicoStore({
+  const [composerDraftSeedStore] = React.useState<
+    PicoStore<{ text: string; skillName?: string; syncNonce: number }>
+  >(() =>
+    createPicoStore({
       text: "",
       syncNonce: 0,
     })
-  }
-  const composerDraftSeedStore = composerDraftSeedStoreRef.current
-  const composerImagesStoreRef = React.useRef<PicoStore<
-    Array<PromptImage>
-  > | null>(null)
-  if (!composerImagesStoreRef.current) {
-    composerImagesStoreRef.current = createPicoStore<Array<PromptImage>>([])
-  }
-  const composerImagesStore = composerImagesStoreRef.current
+  )
+  const [composerImagesStore] = React.useState<PicoStore<Array<PromptImage>>>(
+    () => createPicoStore<Array<PromptImage>>([])
+  )
   const composerImagesRef = React.useRef<Array<PromptImage>>([])
   const composerLineCommentsRef = React.useRef<Array<ComposerLineComment>>([])
   const [composerLineComments, setComposerLineCommentsState] = React.useState<
     Array<ComposerLineComment>
   >([])
-  const displaySettingsStoreRef =
-    React.useRef<PicoStore<AppShellDisplaySettingsState> | null>(null)
-  if (!displaySettingsStoreRef.current) {
-    displaySettingsStoreRef.current =
-      createPicoStore<AppShellDisplaySettingsState>(
-        {
-          autoScrollEnabled: false,
-          centerMessages: true,
-          hideToolBlocks: false,
-        },
-        shallowRecordEqual
-      )
-  }
-  const displaySettingsStore = displaySettingsStoreRef.current!
+  const [displaySettingsStore] = React.useState<
+    PicoStore<AppShellDisplaySettingsState>
+  >(() =>
+    createPicoStore<AppShellDisplaySettingsState>(
+      {
+        autoScrollEnabled: false,
+        centerMessages: true,
+        hideToolBlocks: false,
+      },
+      shallowRecordEqual
+    )
+  )
   const displaySettingsRef = React.useRef(displaySettingsStore.state)
   const hideToolBlocksRef = React.useRef(
     displaySettingsStore.state.hideToolBlocks
   )
-  const setHideToolBlocks = React.useCallback<
-    React.Dispatch<React.SetStateAction<boolean>>
-  >(
-    (action) => {
-      const current = displaySettingsStore.state
-      const nextHideToolBlocks = applyStoreAction(
-        current.hideToolBlocks,
-        action
-      )
-      if (nextHideToolBlocks === current.hideToolBlocks) return
-      const next = { ...current, hideToolBlocks: nextHideToolBlocks }
-      displaySettingsRef.current = next
-      hideToolBlocksRef.current = next.hideToolBlocks
-      setStoreState(displaySettingsStore, next)
-    },
-    [displaySettingsStore]
-  )
-  const setCenterMessages = React.useCallback<
-    React.Dispatch<React.SetStateAction<boolean>>
-  >(
-    (action) => {
-      const current = displaySettingsStore.state
-      const nextCenterMessages = applyStoreAction(
-        current.centerMessages,
-        action
-      )
-      if (nextCenterMessages === current.centerMessages) return
-      const next = { ...current, centerMessages: nextCenterMessages }
-      displaySettingsRef.current = next
-      setStoreState(displaySettingsStore, next)
-    },
-    [displaySettingsStore]
-  )
-  const setAutoScrollEnabled = React.useCallback<
-    React.Dispatch<React.SetStateAction<boolean>>
-  >(
-    (action) => {
-      const current = displaySettingsStore.state
-      const nextAutoScrollEnabled = applyStoreAction(
-        current.autoScrollEnabled,
-        action
-      )
-      if (nextAutoScrollEnabled === current.autoScrollEnabled) return
-      const next = { ...current, autoScrollEnabled: nextAutoScrollEnabled }
-      displaySettingsRef.current = next
-      setStoreState(displaySettingsStore, next)
-    },
-    [displaySettingsStore]
-  )
-  const awaitingFirstTurnStoreRef = React.useRef<PicoStore<boolean> | null>(
-    null
-  )
-  if (!awaitingFirstTurnStoreRef.current) {
-    awaitingFirstTurnStoreRef.current = createPicoStore(false)
+  const setHideToolBlocks: React.Dispatch<React.SetStateAction<boolean>> = (
+    action
+  ) => {
+    const current = displaySettingsStore.state
+    const nextHideToolBlocks = applyStoreAction(current.hideToolBlocks, action)
+    if (nextHideToolBlocks === current.hideToolBlocks) return
+    const next = { ...current, hideToolBlocks: nextHideToolBlocks }
+    displaySettingsRef.current = next
+    hideToolBlocksRef.current = next.hideToolBlocks
+    setStoreState(displaySettingsStore, next)
   }
-  const awaitingFirstTurnStore = awaitingFirstTurnStoreRef.current
-  const pendingDraftPromptStoreRef = React.useRef<PicoStore<{
-    ownerKey: string
-    message: string
-    images: Array<PromptImage>
-    streamingBehavior?: StreamingBehavior
-    optimisticId?: string
-    optimisticSidebarAgentId?: string
-  } | null> | null>(null)
-  if (!pendingDraftPromptStoreRef.current) {
-    pendingDraftPromptStoreRef.current = createPicoStore<{
+  const setCenterMessages: React.Dispatch<React.SetStateAction<boolean>> = (
+    action
+  ) => {
+    const current = displaySettingsStore.state
+    const nextCenterMessages = applyStoreAction(current.centerMessages, action)
+    if (nextCenterMessages === current.centerMessages) return
+    const next = { ...current, centerMessages: nextCenterMessages }
+    displaySettingsRef.current = next
+    setStoreState(displaySettingsStore, next)
+  }
+  const setAutoScrollEnabled: React.Dispatch<React.SetStateAction<boolean>> = (
+    action
+  ) => {
+    const current = displaySettingsStore.state
+    const nextAutoScrollEnabled = applyStoreAction(
+      current.autoScrollEnabled,
+      action
+    )
+    if (nextAutoScrollEnabled === current.autoScrollEnabled) return
+    const next = { ...current, autoScrollEnabled: nextAutoScrollEnabled }
+    displaySettingsRef.current = next
+    setStoreState(displaySettingsStore, next)
+  }
+  const [awaitingFirstTurnStore] = React.useState<PicoStore<boolean>>(() =>
+    createPicoStore(false)
+  )
+  const [pendingDraftPromptStore] = React.useState<
+    PicoStore<{
+      ownerKey: string
+      message: string
+      images: Array<PromptImage>
+      streamingBehavior?: StreamingBehavior
+      optimisticId?: string
+      optimisticSidebarAgentId?: string
+    } | null>
+  >(() =>
+    createPicoStore<{
       ownerKey: string
       message: string
       images: Array<PromptImage>
@@ -494,18 +448,18 @@ function useAppShellAgentWorkspaceView({
       optimisticId?: string
       optimisticSidebarAgentId?: string
     } | null>(null)
-  }
-  const pendingDraftPromptStore = pendingDraftPromptStoreRef.current
-  const pendingDraftFollowUpsStoreRef = React.useRef<PicoStore<
-    Array<{
-      message: string
-      images: Array<PromptImage>
-      streamingBehavior: "steer" | "followUp"
-      optimisticId?: string
-    }>
-  > | null>(null)
-  if (!pendingDraftFollowUpsStoreRef.current) {
-    pendingDraftFollowUpsStoreRef.current = createPicoStore<
+  )
+  const [pendingDraftFollowUpsStore] = React.useState<
+    PicoStore<
+      Array<{
+        message: string
+        images: Array<PromptImage>
+        streamingBehavior: "steer" | "followUp"
+        optimisticId?: string
+      }>
+    >
+  >(() =>
+    createPicoStore<
       Array<{
         message: string
         images: Array<PromptImage>
@@ -513,26 +467,17 @@ function useAppShellAgentWorkspaceView({
         optimisticId?: string
       }>
     >([])
-  }
-  const pendingDraftFollowUpsStore = pendingDraftFollowUpsStoreRef.current
-  const isSubmittingStoreRef = React.useRef<PicoStore<boolean> | null>(null)
-  if (!isSubmittingStoreRef.current) {
-    isSubmittingStoreRef.current = createPicoStore(false)
-  }
-  const isSubmittingStore = isSubmittingStoreRef.current
-  const pendingMessagesStoreRef = React.useRef<PicoStore<
-    Array<PendingComposerMessage>
-  > | null>(null)
-  if (!pendingMessagesStoreRef.current) {
-    pendingMessagesStoreRef.current = createPicoStore<
-      Array<PendingComposerMessage>
-    >([])
-  }
-  const pendingMessagesStore = pendingMessagesStoreRef.current
-  const notificationStoreRef =
-    React.useRef<PicoStore<AppShellNotificationState> | null>(null)
-  if (!notificationStoreRef.current) {
-    notificationStoreRef.current = createPicoStore<AppShellNotificationState>(
+  )
+  const [isSubmittingStore] = React.useState<PicoStore<boolean>>(() =>
+    createPicoStore(false)
+  )
+  const [pendingMessagesStore] = React.useState<
+    PicoStore<Array<PendingComposerMessage>>
+  >(() => createPicoStore<Array<PendingComposerMessage>>([]))
+  const [notificationStore] = React.useState<
+    PicoStore<AppShellNotificationState>
+  >(() =>
+    createPicoStore<AppShellNotificationState>(
       {
         desktopNotificationPermission: "unsupported",
         agentDoneDesktopNotificationsEnabled: true,
@@ -541,149 +486,105 @@ function useAppShellAgentWorkspaceView({
       },
       shallowRecordEqual
     )
+  )
+  const setAgentDoneEvents: React.Dispatch<
+    React.SetStateAction<Array<AgentDoneEvent>>
+  > = (action) => {
+    setStoreField(notificationStore, "agentDoneEvents", action)
   }
-  const notificationStore = notificationStoreRef.current!
-  const setAgentDoneEvents = React.useCallback<
-    React.Dispatch<React.SetStateAction<Array<AgentDoneEvent>>>
-  >(
-    (action) => {
-      setStoreField(notificationStore, "agentDoneEvents", action)
-    },
-    [notificationStore]
-  )
-  const setAgentDoneSoundEnabled = React.useCallback<
-    React.Dispatch<React.SetStateAction<boolean>>
-  >(
-    (action) => {
-      setStoreField(notificationStore, "agentDoneSoundEnabled", action)
-    },
-    [notificationStore]
-  )
-  const setAgentDoneDesktopNotificationsEnabled = React.useCallback<
-    React.Dispatch<React.SetStateAction<boolean>>
-  >(
-    (action) => {
-      setStoreField(
-        notificationStore,
-        "agentDoneDesktopNotificationsEnabled",
-        action
+  const setAgentDoneSoundEnabled: React.Dispatch<
+    React.SetStateAction<boolean>
+  > = (action) => {
+    setStoreField(notificationStore, "agentDoneSoundEnabled", action)
+  }
+  const setAgentDoneDesktopNotificationsEnabled: React.Dispatch<
+    React.SetStateAction<boolean>
+  > = (action) => {
+    setStoreField(
+      notificationStore,
+      "agentDoneDesktopNotificationsEnabled",
+      action
+    )
+  }
+  const setDesktopNotificationPermission: React.Dispatch<
+    React.SetStateAction<DesktopNotificationPermission>
+  > = (action) => {
+    setStoreField(notificationStore, "desktopNotificationPermission", action)
+  }
+  const [draftFlowStore] = React.useState<PicoStore<AppShellDraftFlowState>>(
+    () =>
+      createPicoStore<AppShellDraftFlowState>(
+        {
+          draftAgentLoadingOwnerKey: null,
+          storedDraftProject: "",
+        },
+        shallowRecordEqual
       )
-    },
-    [notificationStore]
   )
-  const setDesktopNotificationPermission = React.useCallback<
-    React.Dispatch<React.SetStateAction<DesktopNotificationPermission>>
-  >(
-    (action) => {
-      setStoreField(notificationStore, "desktopNotificationPermission", action)
-    },
-    [notificationStore]
-  )
-  const draftFlowStoreRef =
-    React.useRef<PicoStore<AppShellDraftFlowState> | null>(null)
-  if (!draftFlowStoreRef.current) {
-    draftFlowStoreRef.current = createPicoStore<AppShellDraftFlowState>(
-      {
-        draftAgentLoadingOwnerKey: null,
-        storedDraftProject: "",
-      },
-      shallowRecordEqual
-    )
+  const setDraftAgentLoadingOwnerKey: React.Dispatch<
+    React.SetStateAction<string | null>
+  > = (action) => {
+    setStoreField(draftFlowStore, "draftAgentLoadingOwnerKey", action)
   }
-  const draftFlowStore = draftFlowStoreRef.current!
-  const setDraftAgentLoadingOwnerKey = React.useCallback<
-    React.Dispatch<React.SetStateAction<string | null>>
-  >(
-    (action) => {
-      setStoreField(draftFlowStore, "draftAgentLoadingOwnerKey", action)
-    },
-    [draftFlowStore]
-  )
-  const setStoredDraftProject = React.useCallback<
-    React.Dispatch<React.SetStateAction<string>>
-  >(
-    (action) => {
-      setStoreField(draftFlowStore, "storedDraftProject", action)
-    },
-    [draftFlowStore]
-  )
-  const recentProjectsStoreRef = React.useRef<PicoStore<Array<string>> | null>(
-    null
-  )
-  if (!recentProjectsStoreRef.current) {
-    recentProjectsStoreRef.current = createPicoStore<Array<string>>(
-      [],
-      sameStringArray
-    )
+  const setStoredDraftProject: React.Dispatch<React.SetStateAction<string>> = (
+    action
+  ) => {
+    setStoreField(draftFlowStore, "storedDraftProject", action)
   }
-  const recentProjectsStore = recentProjectsStoreRef.current
-  const setRecentProjects = React.useCallback<
-    React.Dispatch<React.SetStateAction<Array<string>>>
-  >(
-    (action) => {
-      const current = recentProjectsStore.state
-      const next = applyStoreAction(current, action)
-      if (next === current) return
-      setStoreState(recentProjectsStore, next)
-    },
-    [recentProjectsStore]
+  const [recentProjectsStore] = React.useState<PicoStore<Array<string>>>(() =>
+    createPicoStore<Array<string>>([], sameStringArray)
   )
+  const setRecentProjects: React.Dispatch<
+    React.SetStateAction<Array<string>>
+  > = (action) => {
+    const current = recentProjectsStore.state
+    const next = applyStoreAction(current, action)
+    if (next === current) return
+    setStoreState(recentProjectsStore, next)
+  }
   const { isMobile, openMobile, openMobileSettled, setOpenMobile } =
     useSidebar()
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const composerPanelRef = React.useRef<ComposerPanelHandle | null>(null)
-  const composerStoreRef =
-    React.useRef<PicoStore<AppShellComposerSnapshot> | null>(null)
-  if (!composerStoreRef.current) {
-    composerStoreRef.current = createPicoStore(
-      createInitialAppShellComposerSnapshot(viewerContextId),
-      sameAppShellComposerSnapshot
-    )
-  }
-  const composerStore = composerStoreRef.current
-  const setComposerLineComments = React.useCallback<
-    React.Dispatch<React.SetStateAction<Array<ComposerLineComment>>>
-  >(
-    (action) => {
-      const current = composerLineCommentsRef.current
-      const next = applyStoreAction(current, action)
-      if (next === current) return
-
-      composerLineCommentsRef.current = next
-      setComposerLineCommentsState(next)
-      const currentComposerSnapshot = composerStore.state
-      setStoreState(composerStore, {
-        ...currentComposerSnapshot,
-        composerLineComments: currentComposerSnapshot.disabled ? [] : next,
-      })
-    },
-    [composerStore]
+  const [composerStore] = React.useState<PicoStore<AppShellComposerSnapshot>>(
+    () =>
+      createPicoStore(
+        createInitialAppShellComposerSnapshot(viewerContextId),
+        sameAppShellComposerSnapshot
+      )
   )
-  const contextUsageStoreRef = React.useRef<PicoStore<
-    AgentState["contextUsage"]
-  > | null>(null)
-  if (!contextUsageStoreRef.current) {
-    contextUsageStoreRef.current =
-      createPicoStore<AgentState["contextUsage"]>(undefined)
+  const setComposerLineComments: React.Dispatch<
+    React.SetStateAction<Array<ComposerLineComment>>
+  > = (action) => {
+    const current = composerLineCommentsRef.current
+    const next = applyStoreAction(current, action)
+    if (next === current) return
+
+    composerLineCommentsRef.current = next
+    setComposerLineCommentsState(next)
+    const currentComposerSnapshot = composerStore.state
+    setStoreState(composerStore, {
+      ...currentComposerSnapshot,
+      composerLineComments: currentComposerSnapshot.disabled ? [] : next,
+    })
   }
-  const contextUsageStore = contextUsageStoreRef.current
-  const contextUsageThrottlerRef = React.useRef<Throttler<
-    (contextUsage: AgentState["contextUsage"]) => void
-  > | null>(null)
-  if (!contextUsageThrottlerRef.current) {
-    contextUsageThrottlerRef.current = new Throttler(
-      (contextUsage: AgentState["contextUsage"]) => {
-        setStoreState(contextUsageStore, contextUsage)
-      },
-      {
-        key: "pico.composer.context-usage",
-        wait: 250,
-        leading: true,
-        trailing: true,
-      }
-    )
-  }
-  const contextUsageThrottler = contextUsageThrottlerRef.current
+  const [contextUsageStore] = React.useState<
+    PicoStore<AgentState["contextUsage"]>
+  >(() => createPicoStore<AgentState["contextUsage"]>(undefined))
+  const [contextUsageThrottler] = React.useState(
+    () =>
+      new Throttler(
+        (contextUsage: AgentState["contextUsage"]) => {
+          setStoreState(contextUsageStore, contextUsage)
+        },
+        {
+          key: "pico.composer.context-usage",
+          wait: 250,
+          leading: true,
+          trailing: true,
+        }
+      )
+  )
   React.useEffect(
     () => () => {
       contextUsageThrottler.flush()
@@ -691,69 +592,57 @@ function useAppShellAgentWorkspaceView({
     },
     [contextUsageThrottler]
   )
-  const setComposerDraftSeed = React.useCallback<
-    React.Dispatch<
-      React.SetStateAction<{
-        text: string
-        skillName?: string
-        syncNonce: number
-      }>
-    >
-  >(
-    (action) => {
-      const current = composerDraftSeedStore.state
-      const next = applyStoreAction(current, action)
-      if (next === current) return
-      batch(() => {
-        setStoreState(composerDraftSeedStore, next)
-        const currentComposerSnapshot = composerStore.state
-        setStoreState(composerStore, {
-          ...currentComposerSnapshot,
-          composerSkill: currentComposerSnapshot.disabled
-            ? undefined
-            : next.skillName,
-          composerSyncNonce: next.syncNonce,
-          composerText: currentComposerSnapshot.disabled ? "" : next.text,
-        })
-      })
-    },
-    [composerDraftSeedStore, composerStore]
-  )
-  const setComposerImages = React.useCallback<
-    React.Dispatch<React.SetStateAction<Array<PromptImage>>>
-  >(
-    (action) => {
-      const current = composerImagesStore.state
-      const next = applyStoreAction(current, action)
-      if (next === current) return
-      composerImagesRef.current = next
-      batch(() => {
-        setStoreState(composerImagesStore, next)
-        const currentComposerSnapshot = composerStore.state
-        setStoreState(composerStore, {
-          ...currentComposerSnapshot,
-          composerImages: currentComposerSnapshot.disabled ? [] : next,
-        })
-      })
-    },
-    [composerImagesStore, composerStore]
-  )
-  const setComposerContextUsage = React.useCallback(
-    (contextUsage: AgentState["contextUsage"]) => {
-      contextUsageThrottler.maybeExecute(contextUsage)
-    },
-    [contextUsageThrottler]
-  )
-  const setComposerStreaming = React.useCallback(
-    (streaming: boolean) => {
+  const setComposerDraftSeed: React.Dispatch<
+    React.SetStateAction<{
+      text: string
+      skillName?: string
+      syncNonce: number
+    }>
+  > = (action) => {
+    const current = composerDraftSeedStore.state
+    const next = applyStoreAction(current, action)
+    if (next === current) return
+    batch(() => {
+      setStoreState(composerDraftSeedStore, next)
       const currentComposerSnapshot = composerStore.state
       setStoreState(composerStore, {
         ...currentComposerSnapshot,
-        isStreaming: currentComposerSnapshot.disabled ? false : streaming,
+        composerSkill: currentComposerSnapshot.disabled
+          ? undefined
+          : next.skillName,
+        composerSyncNonce: next.syncNonce,
+        composerText: currentComposerSnapshot.disabled ? "" : next.text,
       })
-    },
-    [composerStore]
-  )
+    })
+  }
+  const setComposerImages: React.Dispatch<
+    React.SetStateAction<Array<PromptImage>>
+  > = (action) => {
+    const current = composerImagesStore.state
+    const next = applyStoreAction(current, action)
+    if (next === current) return
+    composerImagesRef.current = next
+    batch(() => {
+      setStoreState(composerImagesStore, next)
+      const currentComposerSnapshot = composerStore.state
+      setStoreState(composerStore, {
+        ...currentComposerSnapshot,
+        composerImages: currentComposerSnapshot.disabled ? [] : next,
+      })
+    })
+  }
+  const setComposerContextUsage = (
+    contextUsage: AgentState["contextUsage"]
+  ) => {
+    contextUsageThrottler.maybeExecute(contextUsage)
+  }
+  const setComposerStreaming = (streaming: boolean) => {
+    const currentComposerSnapshot = composerStore.state
+    setStoreState(composerStore, {
+      ...currentComposerSnapshot,
+      isStreaming: currentComposerSnapshot.disabled ? false : streaming,
+    })
+  }
   const commandPaletteRef = React.useRef<AppShellCommandPaletteHandle | null>(
     null
   )
@@ -799,75 +688,69 @@ function useAppShellAgentWorkspaceView({
   const [isLoadingOlderHistory, setIsLoadingOlderHistory] =
     React.useState(false)
   const lastSyncedEditorTextRef = React.useRef("")
-  const publishSidebarActiveAgent = React.useCallback(
-    (
-      activeAgent: {
-        draft?: boolean
-        agentFile?: string
-        agentId?: string
-        agentKey?: string
-        agentPath?: string
-      },
-      routeAgentId = agentId
-    ) => {
-      const activeAgentId =
-        activeAgent.agentId || (activeAgent.agentKey ? undefined : routeAgentId)
-      const activeSidebarAgentId = activeAgent.draft
-        ? ""
-        : activeAgentId?.trim() || ""
-      const activeSidebarAgentPath = activeAgent.draft
-        ? ""
-        : (activeAgent.agentFile || activeAgent.agentPath || "").trim()
-      const activeSidebarAgentKey = activeAgent.draft
-        ? ""
-        : agentNotificationKey({
-            agentFile: activeSidebarAgentPath,
-            agentId: activeSidebarAgentId,
-          }) ||
-          activeAgent.agentKey?.trim() ||
-          ""
-
-      sidebarStore.setSidebarState((current) => {
-        if (
-          current.activeSidebarAgentId === activeSidebarAgentId &&
-          current.activeSidebarAgentKey === activeSidebarAgentKey &&
-          current.activeSidebarAgentPath === activeSidebarAgentPath
-        ) {
-          return current
-        }
-
-        return {
-          activeSidebarAgentId,
-          activeSidebarAgentKey,
-          activeSidebarAgentPath,
-        }
-      })
+  const publishSidebarActiveAgent = (
+    activeAgent: {
+      draft?: boolean
+      agentFile?: string
+      agentId?: string
+      agentKey?: string
+      agentPath?: string
     },
-    [agentId, sidebarStore]
-  )
-  const setAgentState = React.useCallback<
-    React.Dispatch<React.SetStateAction<AgentState>>
-  >(
-    (action) => {
-      const currentRefState = agentStateRef.current
-      const nextState =
-        typeof action === "function"
-          ? (action as (current: AgentState) => AgentState)(currentRefState)
-          : action
-      const currentStoreState = agentStore.state
+    routeAgentId = agentId
+  ) => {
+    const activeAgentId =
+      activeAgent.agentId || (activeAgent.agentKey ? undefined : routeAgentId)
+    const activeSidebarAgentId = activeAgent.draft
+      ? ""
+      : activeAgentId?.trim() || ""
+    const activeSidebarAgentPath = activeAgent.draft
+      ? ""
+      : (activeAgent.agentFile || activeAgent.agentPath || "").trim()
+    const activeSidebarAgentKey = activeAgent.draft
+      ? ""
+      : agentNotificationKey({
+          agentFile: activeSidebarAgentPath,
+          agentId: activeSidebarAgentId,
+        }) ||
+        activeAgent.agentKey?.trim() ||
+        ""
+
+    sidebarStore.setSidebarState((current) => {
       if (
-        Object.is(currentRefState, nextState) &&
-        Object.is(currentStoreState, nextState)
+        current.activeSidebarAgentId === activeSidebarAgentId &&
+        current.activeSidebarAgentKey === activeSidebarAgentKey &&
+        current.activeSidebarAgentPath === activeSidebarAgentPath
       ) {
-        return
+        return current
       }
 
-      agentStateRef.current = nextState
-      setStoreState(agentStore, nextState)
-      publishSidebarActiveAgent(nextState)
-    },
-    [publishSidebarActiveAgent, agentStore]
-  )
+      return {
+        activeSidebarAgentId,
+        activeSidebarAgentKey,
+        activeSidebarAgentPath,
+      }
+    })
+  }
+  const setAgentState: React.Dispatch<React.SetStateAction<AgentState>> = (
+    action
+  ) => {
+    const currentRefState = agentStateRef.current
+    const nextState =
+      typeof action === "function"
+        ? (action as (current: AgentState) => AgentState)(currentRefState)
+        : action
+    const currentStoreState = agentStore.state
+    if (
+      Object.is(currentRefState, nextState) &&
+      Object.is(currentStoreState, nextState)
+    ) {
+      return
+    }
+
+    agentStateRef.current = nextState
+    setStoreState(agentStore, nextState)
+    publishSidebarActiveAgent(nextState)
+  }
   const composerTextRef = React.useRef(composerDraftSeedStore.state.text)
   const composerSkillRef = React.useRef<string | undefined>(
     composerDraftSeedStore.state.skillName
@@ -875,26 +758,19 @@ function useAppShellAgentWorkspaceView({
   const pendingRouteAgentIdRef = React.useRef<string | undefined>(undefined)
   const pendingRouteAgentPathRef = React.useRef<string | undefined>(undefined)
   const pendingUiRequestHandlerRef = React.useRef(
-    (_request: ExtensionUiEvent) => {}
+    (request: ExtensionUiEvent) => {
+      uiRequestDialogRef.current?.open(request)
+    }
   )
-  pendingUiRequestHandlerRef.current = (request) => {
-    uiRequestDialogRef.current?.open(request)
-  }
   const dismissUiRequestRef = React.useRef((id: string) => {
     uiRequestDialogRef.current?.close(id)
   })
   const autoAddedAgentProjectKeysRef = React.useRef<Set<string>>(new Set())
   const pendingMobileSidebarPromptFocusRef = React.useRef(false)
-  const conversationItemsStoreRef = React.useRef<ConversationItemsStore | null>(
-    null
+  const [conversationItemsStore] = React.useState<ConversationItemsStore>(() =>
+    createConversationItemsStore(agentStore.state.items)
   )
-  if (!conversationItemsStoreRef.current) {
-    conversationItemsStoreRef.current = createConversationItemsStore(
-      agentStateRef.current.items
-    )
-  }
-  const conversationItemsStore = conversationItemsStoreRef.current
-  const loadOlderHistory = React.useCallback(async () => {
+  const loadOlderHistory = async () => {
     const currentState = agentStateRef.current
     const before = currentState.historyOffset
     const agentId = currentState.agentId?.trim()
@@ -910,10 +786,8 @@ function useAppShellAgentWorkspaceView({
     const agentKey = currentState.agentKey
     loadingOlderHistoryRef.current = true
     setIsLoadingOlderHistory(true)
-    try {
-      const history = await fetchJson<
-        Extract<AgentHistoryResponse, { ok: true }>
-      >(
+    const result = await settle(
+      fetchJson<Extract<AgentHistoryResponse, { ok: true }>>(
         buildRequestUrl("/api/agent/history", {
           machineId,
           contextId: viewerContextId,
@@ -921,253 +795,203 @@ function useAppShellAgentWorkspaceView({
           searchParams: { before, limit: 50 },
         })
       )
-      const latestState = agentStateRef.current
-      if (
-        latestState.agentKey !== agentKey ||
-        latestState.historyOffset !== before
-      ) {
-        return
-      }
-
-      const nextState = {
-        ...latestState,
-        items: [...history.items, ...latestState.items],
-        historyOffset: history.offset,
-        historyTotalCount: history.totalCount,
-      }
-      conversationItemsStore.setItems(nextState.items)
-      setAgentState(nextState)
-    } catch (error) {
+    )
+    if (!result.ok) {
+      const error = result.error
       toast.error("Could not load earlier messages", {
         description: error instanceof Error ? error.message : String(error),
       })
-    } finally {
-      loadingOlderHistoryRef.current = false
-      setIsLoadingOlderHistory(false)
+    } else {
+      const history = result.value
+      const latestState = agentStateRef.current
+      // Show the older messages only when the agent and its history did not
+      // change while the request ran.
+      if (
+        latestState.agentKey === agentKey &&
+        latestState.historyOffset === before
+      ) {
+        const nextState = {
+          ...latestState,
+          items: [...history.items, ...latestState.items],
+          historyOffset: history.offset,
+          historyTotalCount: history.totalCount,
+        }
+        conversationItemsStore.setItems(nextState.items)
+        setAgentState(nextState)
+      }
     }
-  }, [conversationItemsStore, setAgentState, viewerContextId])
-  const workingStateStoreRef =
-    React.useRef<PicoStore<AppShellWorkingState | null> | null>(null)
-  if (!workingStateStoreRef.current) {
-    workingStateStoreRef.current = createPicoStore<AppShellWorkingState | null>(
-      null,
-      sameWorkingState
-    )
+    loadingOlderHistoryRef.current = false
+    setIsLoadingOlderHistory(false)
   }
-  const workingStateStore = workingStateStoreRef.current
+  const [workingStateStore] = React.useState<
+    PicoStore<AppShellWorkingState | null>
+  >(() => createPicoStore<AppShellWorkingState | null>(null, sameWorkingState))
   const compactRunningRef = React.useRef(false)
   const compactAbortRequestedRef = React.useRef(false)
-  const setCompactRunningState = React.useCallback((running: boolean) => {
+  const setCompactRunningState = (running: boolean) => {
     compactRunningRef.current = running
     if (running) {
       compactAbortRequestedRef.current = false
     }
-  }, [])
-  const setAwaitingFirstTurn = React.useCallback<
-    React.Dispatch<React.SetStateAction<boolean>>
-  >(
-    (action) => {
-      const current = awaitingFirstTurnStore.state
-      const next = applyStoreAction(current, action)
-      if (next === current) return
-      batch(() => {
-        setStoreState(awaitingFirstTurnStore, next)
-        const currentComposerSnapshot = composerStore.state
-        setStoreState(composerStore, {
-          ...currentComposerSnapshot,
-          awaitingFirstTurn: currentComposerSnapshot.disabled ? false : next,
+  }
+  const setAwaitingFirstTurn: React.Dispatch<React.SetStateAction<boolean>> = (
+    action
+  ) => {
+    const current = awaitingFirstTurnStore.state
+    const next = applyStoreAction(current, action)
+    if (next === current) return
+    batch(() => {
+      setStoreState(awaitingFirstTurnStore, next)
+      const currentComposerSnapshot = composerStore.state
+      setStoreState(composerStore, {
+        ...currentComposerSnapshot,
+        awaitingFirstTurn: currentComposerSnapshot.disabled ? false : next,
+      })
+      if (next && !agentStateRef.current.streaming) {
+        setStoreState(workingStateStore, {
+          label: AWAITING_FIRST_RESPONSE_WORKING_LABEL,
         })
-        if (next && !agentStateRef.current.streaming) {
-          setStoreState(workingStateStore, {
-            label: AWAITING_FIRST_RESPONSE_WORKING_LABEL,
-          })
-        } else if (
-          !next &&
-          workingStateStore.state?.label ===
-            AWAITING_FIRST_RESPONSE_WORKING_LABEL
-        ) {
-          setStoreState(workingStateStore, null)
-        }
-      })
-    },
-    [awaitingFirstTurnStore, composerStore, workingStateStore]
-  )
-  const setIsSubmitting = React.useCallback<
-    React.Dispatch<React.SetStateAction<boolean>>
-  >(
-    (action) => {
-      const current = isSubmittingStore.state
-      const next = applyStoreAction(current, action)
-      if (next === current) return
-      batch(() => {
-        setStoreState(isSubmittingStore, next)
-        const currentComposerSnapshot = composerStore.state
-        setStoreState(composerStore, {
-          ...currentComposerSnapshot,
-          isSubmitting: currentComposerSnapshot.disabled ? false : next,
-        })
-      })
-    },
-    [composerStore, isSubmittingStore]
-  )
-  const refreshComposerPendingMessages = React.useCallback(() => {
-    const pendingDraftFollowUpMessages = pendingDraftFollowUpsStore.state.map(
-      (message, index) => ({
-        pendingId: message.optimisticId || `pending-draft:${index}`,
-        text: message.message,
-        images: message.images,
-        streamingBehavior: message.streamingBehavior,
-      })
-    )
-    const currentComposerSnapshot = composerStore.state
-    setStoreState(composerStore, {
-      ...currentComposerSnapshot,
-      currentPendingMessages: currentComposerSnapshot.disabled
-        ? []
-        : [...pendingDraftFollowUpMessages, ...pendingMessagesStore.state],
+      } else if (
+        !next &&
+        workingStateStore.state?.label === AWAITING_FIRST_RESPONSE_WORKING_LABEL
+      ) {
+        setStoreState(workingStateStore, null)
+      }
     })
-  }, [composerStore, pendingDraftFollowUpsStore, pendingMessagesStore])
-  const setPendingDraftPrompt = React.useCallback<
-    React.Dispatch<
-      React.SetStateAction<{
-        ownerKey: string
+  }
+  const setIsSubmitting: React.Dispatch<React.SetStateAction<boolean>> = (
+    action
+  ) => {
+    const current = isSubmittingStore.state
+    const next = applyStoreAction(current, action)
+    if (next === current) return
+    batch(() => {
+      setStoreState(isSubmittingStore, next)
+      const currentComposerSnapshot = composerStore.state
+      setStoreState(composerStore, {
+        ...currentComposerSnapshot,
+        isSubmitting: currentComposerSnapshot.disabled ? false : next,
+      })
+    })
+  }
+  const refreshComposerPendingMessages = () => {
+    refreshComposerPendingMessagesFrom(
+      composerStore,
+      pendingDraftFollowUpsStore,
+      pendingMessagesStore
+    )
+  }
+  const setPendingDraftPrompt: React.Dispatch<
+    React.SetStateAction<{
+      ownerKey: string
+      message: string
+      images: Array<PromptImage>
+      streamingBehavior?: StreamingBehavior
+      optimisticId?: string
+      optimisticSidebarAgentId?: string
+    } | null>
+  > = (action) => {
+    const current = pendingDraftPromptStore.state
+    const next = applyStoreAction(current, action)
+    if (next === current) return
+    batch(() => {
+      setStoreState(pendingDraftPromptStore, next)
+      if (next) {
+        setStoreState(workingStateStore, {
+          label: "Waiting for new agent…",
+        })
+      } else if (workingStateStore.state?.label === "Waiting for new agent…") {
+        setStoreState(workingStateStore, null)
+      }
+    })
+  }
+  const setPendingDraftFollowUps: React.Dispatch<
+    React.SetStateAction<
+      Array<{
         message: string
         images: Array<PromptImage>
-        streamingBehavior?: StreamingBehavior
+        streamingBehavior: "steer" | "followUp"
         optimisticId?: string
-        optimisticSidebarAgentId?: string
-      } | null>
+      }>
     >
-  >(
-    (action) => {
-      const current = pendingDraftPromptStore.state
-      const next = applyStoreAction(current, action)
-      if (next === current) return
-      batch(() => {
-        setStoreState(pendingDraftPromptStore, next)
-        if (next) {
-          setStoreState(workingStateStore, {
-            label: "Waiting for new agent…",
-          })
-        } else if (
-          workingStateStore.state?.label === "Waiting for new agent…"
-        ) {
-          setStoreState(workingStateStore, null)
-        }
-      })
-    },
-    [pendingDraftPromptStore, workingStateStore]
-  )
-  const setPendingDraftFollowUps = React.useCallback<
-    React.Dispatch<
-      React.SetStateAction<
-        Array<{
-          message: string
-          images: Array<PromptImage>
-          streamingBehavior: "steer" | "followUp"
-          optimisticId?: string
-        }>
-      >
-    >
-  >(
-    (action) => {
-      const current = pendingDraftFollowUpsStore.state
-      const next = applyStoreAction(current, action)
-      if (next === current) return
-      batch(() => {
-        setStoreState(pendingDraftFollowUpsStore, next)
-        refreshComposerPendingMessages()
-      })
-    },
-    [pendingDraftFollowUpsStore, refreshComposerPendingMessages]
-  )
-  const setPendingMessages = React.useCallback<
-    React.Dispatch<React.SetStateAction<Array<PendingComposerMessage>>>
-  >(
-    (action) => {
-      const current = pendingMessagesStore.state
-      const next = applyStoreAction(current, action)
-      if (next === current) return
-      batch(() => {
-        setStoreState(pendingMessagesStore, next)
-        refreshComposerPendingMessages()
-      })
-    },
-    [pendingMessagesStore, refreshComposerPendingMessages]
-  )
+  > = (action) => {
+    const current = pendingDraftFollowUpsStore.state
+    const next = applyStoreAction(current, action)
+    if (next === current) return
+    batch(() => {
+      setStoreState(pendingDraftFollowUpsStore, next)
+      refreshComposerPendingMessages()
+    })
+  }
+  const setPendingMessages: React.Dispatch<
+    React.SetStateAction<Array<PendingComposerMessage>>
+  > = (action) => {
+    const current = pendingMessagesStore.state
+    const next = applyStoreAction(current, action)
+    if (next === current) return
+    batch(() => {
+      setStoreState(pendingMessagesStore, next)
+      refreshComposerPendingMessages()
+    })
+  }
   // A queue save shows its rows at once. Until the save ends, a state from
   // the server can still have the old queue: do not show it.
   const pendingQueueSaveCountRef = React.useRef(0)
-  const setServerPendingMessages = React.useCallback<
-    React.Dispatch<React.SetStateAction<Array<PendingComposerMessage>>>
-  >(
-    (action) => {
-      if (pendingQueueSaveCountRef.current > 0) return
-      setPendingMessages(action)
-    },
-    [setPendingMessages]
-  )
-  const setConversationItems = React.useCallback(
-    (items: Array<ConversationItem>) => {
-      conversationItemsStore.setItems(items)
-    },
-    [conversationItemsStore]
-  )
-  const setWorkingState = React.useCallback(
-    (state: AppShellWorkingState | null) => {
-      setStoreState(workingStateStore, state)
-    },
-    [workingStateStore]
-  )
-  const addOptimisticUserMessage = React.useCallback(
-    (options: {
-      message: string
-      images: Array<PromptImage>
-      queued: boolean
-      streamingBehavior?: StreamingBehavior
-    }) => {
-      const pendingId = createOptimisticPendingId()
-      const item = {
-        kind: "user",
-        itemKey: `pending:${pendingId}`,
-        pendingId,
-        text: options.message,
-        images: options.images.map((image) => ({
-          mimeType: image.mimeType,
-          url: image.previewUrl,
-        })),
-        queued: options.queued,
-        streamingBehavior: options.streamingBehavior,
-      } satisfies UserConversationItem
+  const setServerPendingMessages: React.Dispatch<
+    React.SetStateAction<Array<PendingComposerMessage>>
+  > = (action) => {
+    if (pendingQueueSaveCountRef.current > 0) return
+    setPendingMessages(action)
+  }
+  const setConversationItems = (items: Array<ConversationItem>) => {
+    conversationItemsStore.setItems(items)
+  }
+  const setWorkingState = (state: AppShellWorkingState | null) => {
+    setStoreState(workingStateStore, state)
+  }
+  const addOptimisticUserMessage = (options: {
+    message: string
+    images: Array<PromptImage>
+    queued: boolean
+    streamingBehavior?: StreamingBehavior
+  }) => {
+    const pendingId = createOptimisticPendingId()
+    const item = {
+      kind: "user",
+      itemKey: `pending:${pendingId}`,
+      pendingId,
+      text: options.message,
+      images: options.images.map((image) => ({
+        mimeType: image.mimeType,
+        url: image.previewUrl,
+      })),
+      queued: options.queued,
+      streamingBehavior: options.streamingBehavior,
+    } satisfies UserConversationItem
 
-      const currentState = agentStateRef.current
-      const nextItems = insertOptimisticUserItem(currentState.items, item)
-      if (nextItems !== currentState.items) {
-        const nextState = { ...currentState, items: nextItems }
-        agentStateRef.current = nextState
-        conversationItemsStore.setItems(nextItems)
-        setAgentState(nextState)
-      }
-
-      return pendingId
-    },
-    [conversationItemsStore]
-  )
-  const removeOptimisticUserMessage = React.useCallback(
-    (pendingId: string | undefined) => {
-      if (!pendingId) return
-
-      const currentState = agentStateRef.current
-      const nextItems = removeOptimisticUserItem(currentState.items, pendingId)
-      if (nextItems === currentState.items) return
-
+    const currentState = agentStateRef.current
+    const nextItems = insertOptimisticUserItem(currentState.items, item)
+    if (nextItems !== currentState.items) {
       const nextState = { ...currentState, items: nextItems }
       agentStateRef.current = nextState
       conversationItemsStore.setItems(nextItems)
       setAgentState(nextState)
-    },
-    [conversationItemsStore]
-  )
+    }
+
+    return pendingId
+  }
+  const removeOptimisticUserMessage = (pendingId: string | undefined) => {
+    if (!pendingId) return
+
+    const currentState = agentStateRef.current
+    const nextItems = removeOptimisticUserItem(currentState.items, pendingId)
+    if (nextItems === currentState.items) return
+
+    const nextState = { ...currentState, items: nextItems }
+    agentStateRef.current = nextState
+    conversationItemsStore.setItems(nextItems)
+    setAgentState(nextState)
+  }
 
   const {
     colorMode: currentThemeColorMode,
@@ -1368,11 +1192,6 @@ function useAppShellAgentWorkspaceView({
       )
     }
   )
-  applySidebarAgentStatusRef.current = (status) => {
-    sidebarStore.setSidebarAgentStatusByKey((current) =>
-      mergeSidebarAgentStatusMap(current, status)
-    )
-  }
   const bindOptimisticSidebarAgentRef = React.useRef(
     (agent: { cwd?: string; agentId?: string; agentPath?: string }) => {
       sidebarStore.setProjectIndexDataByPath((current) =>
@@ -1483,7 +1302,8 @@ function useAppShellAgentWorkspaceView({
     )
   }, [isMobile, setCurrentTab])
 
-  const syncComposerDraft = (value: string, target = agentStateRef.current) => {
+  const syncComposerDraft = (value: string, targetState?: AgentState) => {
+    const target = targetState ?? agentStateRef.current
     const parsed = parseComposerSkillMessage(value)
     const nextText = parsed.matched ? parsed.text : value
     const nextSkill = parsed.matched ? parsed.skillName : undefined
@@ -1512,11 +1332,12 @@ function useAppShellAgentWorkspaceView({
 
   const replaceComposerDraft = (
     value: string,
-    target = agentStateRef.current,
+    targetState?: AgentState,
     options?: {
       forceSync?: boolean
     }
   ) => {
+    const target = targetState ?? agentStateRef.current
     const parsed = parseComposerSkillMessage(value)
     const nextText = parsed.matched ? parsed.text : value
     const nextSkill = parsed.matched ? parsed.skillName : undefined
@@ -1634,7 +1455,7 @@ function useAppShellAgentWorkspaceView({
   const gitPushMutation = useMutation({
     mutationKey: picoQueryKeys.gitAction(
       viewerContextId,
-      agentStateRef.current.cwd?.trim() || "",
+      agentStore.state.cwd?.trim() || "",
       "push"
     ),
     mutationFn: async (cwd: string) =>
@@ -1666,7 +1487,7 @@ function useAppShellAgentWorkspaceView({
   const gitForcePushMutation = useMutation({
     mutationKey: picoQueryKeys.gitAction(
       viewerContextId,
-      agentStateRef.current.cwd?.trim() || "",
+      agentStore.state.cwd?.trim() || "",
       "force-push"
     ),
     mutationFn: async (cwd: string) =>
@@ -1700,7 +1521,7 @@ function useAppShellAgentWorkspaceView({
   const gitPullMutation = useMutation({
     mutationKey: picoQueryKeys.gitAction(
       viewerContextId,
-      agentStateRef.current.cwd?.trim() || "",
+      agentStore.state.cwd?.trim() || "",
       "pull"
     ),
     mutationFn: async (cwd: string) =>
@@ -2074,68 +1895,63 @@ function useAppShellAgentWorkspaceView({
     }
   }
 
-  const syncSidebarSelectionForAgent = React.useCallback(
-    (nextAgentId?: string, options?: SelectAgentNavigationOptions) => {
-      const nextKey = nextAgentId
-        ? findSidebarAgentSelectionKey(
-            sidebarStore.state.derived.sidebarAgentEntriesByKey,
-            {
-              agentId: nextAgentId,
-              agentPath: options?.agentPath,
-            }
-          )
-        : ""
+  const syncSidebarSelectionForAgent = (
+    nextAgentId?: string,
+    options?: SelectAgentNavigationOptions
+  ) => {
+    const nextKey = nextAgentId
+      ? findSidebarAgentSelectionKey(
+          sidebarStore.state.derived.sidebarAgentEntriesByKey,
+          {
+            agentId: nextAgentId,
+            agentPath: options?.agentPath,
+          }
+        )
+      : ""
 
-      sidebarStore.setSelectedSidebarAgentKeys((current) => {
-        if (!nextKey) return current.length === 0 ? current : []
-        return sameStringArray(current, [nextKey]) ? current : [nextKey]
-      })
-      sidebarStore.setSidebarAgentSelectionAnchor((current) =>
-        current === nextKey ? current : nextKey
-      )
-    },
-    [sidebarStore]
-  )
+    sidebarStore.setSelectedSidebarAgentKeys((current) => {
+      if (!nextKey) return current.length === 0 ? current : []
+      return sameStringArray(current, [nextKey]) ? current : [nextKey]
+    })
+    sidebarStore.setSidebarAgentSelectionAnchor((current) =>
+      current === nextKey ? current : nextKey
+    )
+  }
 
-  const handleSelectAgent = React.useCallback(
-    (nextAgentId?: string, options?: SelectAgentNavigationOptions) => {
-      setCurrentTab((tab) => (tab === "git" ? "conversation" : tab))
-      syncSidebarSelectionForAgent(nextAgentId, options)
-      publishSidebarActiveAgent({
-        draft: !nextAgentId,
+  const handleSelectAgent = (
+    nextAgentId?: string,
+    options?: SelectAgentNavigationOptions
+  ) => {
+    setCurrentTab((tab) => (tab === "git" ? "conversation" : tab))
+    syncSidebarSelectionForAgent(nextAgentId, options)
+    publishSidebarActiveAgent({
+      draft: !nextAgentId,
+      agentId: nextAgentId,
+      agentPath: options?.agentPath,
+    })
+
+    pendingRouteAgentIdRef.current = nextAgentId
+    pendingRouteAgentPathRef.current = options?.agentPath?.trim() || undefined
+    if (nextAgentId) {
+      promptFocusRequestRef.current = {
         agentId: nextAgentId,
-        agentPath: options?.agentPath,
-      })
-
-      pendingRouteAgentIdRef.current = nextAgentId
-      pendingRouteAgentPathRef.current = options?.agentPath?.trim() || undefined
-      if (nextAgentId) {
-        promptFocusRequestRef.current = {
-          agentId: nextAgentId,
-          nonce: promptFocusRequestRef.current.nonce + 1,
-        }
+        nonce: promptFocusRequestRef.current.nonce + 1,
       }
-      setLoadingAgentId((current) => {
-        if (!nextAgentId) {
-          return null
-        }
-        if (
-          !agentStateRef.current.draft &&
-          agentStateRef.current.agentId === nextAgentId
-        ) {
-          return current
-        }
-        return nextAgentId
-      })
-      onSelectAgent?.(nextAgentId, options)
-    },
-    [
-      onSelectAgent,
-      agentStateRef,
-      publishSidebarActiveAgent,
-      syncSidebarSelectionForAgent,
-    ]
-  )
+    }
+    setLoadingAgentId((current) => {
+      if (!nextAgentId) {
+        return null
+      }
+      if (
+        !agentStateRef.current.draft &&
+        agentStateRef.current.agentId === nextAgentId
+      ) {
+        return current
+      }
+      return nextAgentId
+    })
+    onSelectAgent?.(nextAgentId, options)
+  }
   const handleSelectAgentRef = useLatestRef(handleSelectAgent)
   // Another device changed the shared sidebar layout. The first projects
   // that the event stream loads stay the same, so the stream does not restart.
@@ -2245,39 +2061,24 @@ function useAppShellAgentWorkspaceView({
 
   const defaultNewAgentProject =
     agentProject || baseSidebarProjects[0] || storedDraftProject || ""
-  const newAgentProjectOptions = React.useMemo(
-    () =>
-      Array.from(
-        new Set(
-          [agentProject, storedDraftProject, ...baseSidebarProjects]
-            .map((path) => (path ?? "").trim())
-            .filter(Boolean)
-        )
-      ),
-    [baseSidebarProjects, agentProject, storedDraftProject]
+  const newAgentProjectOptions = Array.from(
+    new Set(
+      [agentProject, storedDraftProject, ...baseSidebarProjects]
+        .map((path) => (path ?? "").trim())
+        .filter(Boolean)
+    )
   )
 
-  const knownProjects = React.useMemo(
-    () =>
-      normalizeStoredProjectList([
-        ...baseSidebarProjects,
-        ...agentsEventProjects,
-        agentState.cwd || "",
-        storedDraftProject,
-        ...Array.from(projectStateByPath.keys()),
-        ...Object.values(projectIndexes).flatMap((entries) =>
-          entries.map((entry) => entry.cwd || "")
-        ),
-      ]),
-    [
-      baseSidebarProjects,
-      projectIndexes,
-      projectStateByPath,
-      agentState.cwd,
-      agentsEventProjects,
-      storedDraftProject,
-    ]
-  )
+  const knownProjects = normalizeStoredProjectList([
+    ...baseSidebarProjects,
+    ...agentsEventProjects,
+    agentState.cwd || "",
+    storedDraftProject,
+    ...Array.from(projectStateByPath.keys()),
+    ...Object.values(projectIndexes).flatMap((entries) =>
+      entries.map((entry) => entry.cwd || "")
+    ),
+  ])
 
   const agentsDialogProject =
     agentState.cwd?.trim() ||
@@ -2304,212 +2105,204 @@ function useAppShellAgentWorkspaceView({
     })
   }
 
-  const prefetchProjectAgentsIndex = React.useCallback(
-    (_project: string) => {},
-    []
-  )
+  const prefetchProjectAgentsIndex = (_project: string) => {}
 
-  const addOptimisticSidebarAgent = React.useCallback(
-    (options?: { id?: string; cwd?: string; lastMessagePreview?: string }) => {
-      const currentState = agentStateRef.current
-      const optimisticId = (
-        options?.id ||
-        currentState.agentKey ||
-        `optimistic:${promptDraftKey(currentState)}`
-      ).trim()
-      const cwd = (
-        options?.cwd ||
-        currentState.cwd ||
-        defaultNewAgentProject
-      ).trim()
-      if (!optimisticId || !cwd) return undefined
+  const addOptimisticSidebarAgent = (options?: {
+    id?: string
+    cwd?: string
+    lastMessagePreview?: string
+  }) => {
+    const currentState = agentStateRef.current
+    const optimisticId = (
+      options?.id ||
+      currentState.agentKey ||
+      `optimistic:${promptDraftKey(currentState)}`
+    ).trim()
+    const cwd = (
+      options?.cwd ||
+      currentState.cwd ||
+      defaultNewAgentProject
+    ).trim()
+    if (!optimisticId || !cwd) return undefined
 
-      const modified = new Date().toISOString()
-      const entry = {
-        id: optimisticId,
+    const modified = new Date().toISOString()
+    const entry = {
+      id: optimisticId,
+      cwd,
+      title: "New agent",
+      modified,
+      lastUserMessageAt: modified,
+      lastMessageAt: modified,
+      ...(options?.lastMessagePreview
+        ? { lastMessagePreview: options.lastMessagePreview }
+        : {}),
+      streaming: true,
+      unread: false,
+      optimistic: true,
+    } satisfies AgentListEntry
+    const entryKey = agentListEntryKey(entry)
+
+    sidebarStore.setSidebarProjects((current) => {
+      const normalizedCurrent = normalizeStoredProjectList(current)
+      if (normalizedCurrent.includes(cwd)) return current
+
+      const nextProjects = normalizeStoredProjectList([
         cwd,
-        title: "New agent",
-        modified,
-        lastUserMessageAt: modified,
-        lastMessageAt: modified,
-        ...(options?.lastMessagePreview
-          ? { lastMessagePreview: options.lastMessagePreview }
-          : {}),
-        streaming: true,
-        unread: false,
-        optimistic: true,
-      } satisfies AgentListEntry
-      const entryKey = agentListEntryKey(entry)
-
-      sidebarStore.setSidebarProjects((current) => {
-        const normalizedCurrent = normalizeStoredProjectList(current)
-        if (normalizedCurrent.includes(cwd)) return current
-
-        const nextProjects = normalizeStoredProjectList([
-          cwd,
-          ...normalizedCurrent,
-        ])
-        machineLocalStorageSetItem(
-          machineId,
-          SIDEBAR_PROJECTS_STORAGE_KEY,
-          JSON.stringify(nextProjects)
-        )
-        return nextProjects
-      })
-      const optimisticEntry = {
-        ...entry,
-        id: optimisticId,
-        cwd,
-      }
-      sidebarStore.setProjectIndexDataByPath((current) =>
-        upsertOptimisticSidebarAgentEntry(current, optimisticEntry)
+        ...normalizedCurrent,
+      ])
+      machineLocalStorageSetItem(
+        machineId,
+        SIDEBAR_PROJECTS_STORAGE_KEY,
+        JSON.stringify(nextProjects)
       )
-      // Update the event index only when it has this project. Otherwise
-      // the event gets an index with only the new entry, and the merge of the
-      // event replaces the full project list with it.
-      sidebarStore.setAgentsEvent((current) =>
-        current?.projectIndexes?.[cwd]
-          ? {
-              ...current,
-              projectIndexes: upsertOptimisticSidebarAgentEntry(
-                current.projectIndexes || {},
-                optimisticEntry
-              ),
-            }
-          : current
-      )
-      if (entryKey) {
-        sidebarStore.setSelectedSidebarAgentKeys((current) =>
-          sameStringArray(current, [entryKey]) ? current : [entryKey]
-        )
-        sidebarStore.setSidebarAgentSelectionAnchor((current) =>
-          current === entryKey ? current : entryKey
-        )
-      }
-
-      return optimisticId
-    },
-    [defaultNewAgentProject, agentStateRef, sidebarStore]
-  )
-
-  const removeOptimisticSidebarAgent = React.useCallback(
-    (optimisticId: string | undefined) => {
-      const targetId = optimisticId?.trim() || ""
-      if (!targetId) return
-
-      const entryKey = agentListEntryKey({ id: targetId })
-      sidebarStore.setProjectIndexDataByPath((current) =>
-        removeOptimisticSidebarAgentEntry(current, targetId)
-      )
-      sidebarStore.setAgentsEvent((current) =>
-        current?.projectIndexes
-          ? {
-              ...current,
-              projectIndexes: removeOptimisticSidebarAgentEntry(
-                current.projectIndexes,
-                targetId
-              ),
-            }
-          : current
-      )
-      if (entryKey) {
-        sidebarStore.setSelectedSidebarAgentKeys((current) =>
-          current.filter((key) => key !== entryKey)
-        )
-        sidebarStore.setSidebarAgentSelectionAnchor((current) =>
-          current === entryKey ? "" : current
-        )
-      }
-    },
-    [sidebarStore]
-  )
-
-  const bindOptimisticSidebarAgent = React.useCallback(
-    (
-      optimisticId: string | undefined,
-      agent: { agentId?: string; agentPath?: string }
-    ) => {
-      const targetId = optimisticId?.trim() || ""
-      if (!targetId || !agent.agentId) return
-
-      sidebarStore.setProjectIndexDataByPath((current) =>
-        bindOptimisticSidebarAgentEntryById(current, targetId, agent)
-      )
-      sidebarStore.setAgentsEvent((current) => {
-        if (!current?.projectIndexes) return current
-        const projectIndexes = bindOptimisticSidebarAgentEntryById(
-          current.projectIndexes,
-          targetId,
-          agent
-        )
-        return projectIndexes === current.projectIndexes
-          ? current
-          : { ...current, projectIndexes }
-      })
-
-      const previousKey = agentListEntryKey({ id: targetId })
-      const nextKey = agentListEntryKey({
-        id: agent.agentId,
-        path: agent.agentPath,
-      })
-      if (!previousKey || !nextKey) return
+      return nextProjects
+    })
+    const optimisticEntry = {
+      ...entry,
+      id: optimisticId,
+      cwd,
+    }
+    sidebarStore.setProjectIndexDataByPath((current) =>
+      upsertOptimisticSidebarAgentEntry(current, optimisticEntry)
+    )
+    // Update the event index only when it has this project. Otherwise
+    // the event gets an index with only the new entry, and the merge of the
+    // event replaces the full project list with it.
+    sidebarStore.setAgentsEvent((current) =>
+      current?.projectIndexes?.[cwd]
+        ? {
+            ...current,
+            projectIndexes: upsertOptimisticSidebarAgentEntry(
+              current.projectIndexes || {},
+              optimisticEntry
+            ),
+          }
+        : current
+    )
+    if (entryKey) {
       sidebarStore.setSelectedSidebarAgentKeys((current) =>
-        current.includes(previousKey)
-          ? current.map((key) => (key === previousKey ? nextKey : key))
-          : current
+        sameStringArray(current, [entryKey]) ? current : [entryKey]
       )
       sidebarStore.setSidebarAgentSelectionAnchor((current) =>
-        current === previousKey ? nextKey : current
+        current === entryKey ? current : entryKey
       )
-    },
-    [sidebarStore]
-  )
+    }
 
-  const updateOptimisticSidebarAgentPreview = React.useCallback(
-    (options: { preview: string; optimisticSidebarAgentId?: string }) => {
-      const preview = options.preview.trim()
-      if (!preview) return
+    return optimisticId
+  }
 
-      const currentState = agentStateRef.current
-      const modified = new Date().toISOString()
-      const agentId =
-        options.optimisticSidebarAgentId ||
-        currentState.agentId ||
-        currentState.agentKey
-      const agentPath = currentState.agentFile
+  const removeOptimisticSidebarAgent = (optimisticId: string | undefined) => {
+    const targetId = optimisticId?.trim() || ""
+    if (!targetId) return
 
-      const previewUpdate = {
-        ...(agentId ? { agentId } : {}),
-        ...(agentPath ? { agentPath } : {}),
-        preview,
-        modified,
-      }
-
-      sidebarStore.setProjectIndexDataByPath((current) =>
-        updateOptimisticSidebarAgentPreviewEntry(current, previewUpdate)
+    const entryKey = agentListEntryKey({ id: targetId })
+    sidebarStore.setProjectIndexDataByPath((current) =>
+      removeOptimisticSidebarAgentEntry(current, targetId)
+    )
+    sidebarStore.setAgentsEvent((current) =>
+      current?.projectIndexes
+        ? {
+            ...current,
+            projectIndexes: removeOptimisticSidebarAgentEntry(
+              current.projectIndexes,
+              targetId
+            ),
+          }
+        : current
+    )
+    if (entryKey) {
+      sidebarStore.setSelectedSidebarAgentKeys((current) =>
+        current.filter((key) => key !== entryKey)
       )
-      sidebarStore.setAgentsEvent((current) => {
-        if (!current?.projectIndexes) return current
-        const projectIndexes = updateOptimisticSidebarAgentPreviewEntry(
-          current.projectIndexes,
-          previewUpdate
-        )
-        return projectIndexes === current.projectIndexes
-          ? current
-          : { ...current, projectIndexes }
-      })
-    },
-    [agentStateRef, sidebarStore]
-  )
+      sidebarStore.setSidebarAgentSelectionAnchor((current) =>
+        current === entryKey ? "" : current
+      )
+    }
+  }
 
-  const clearSelectedSidebarSelection = React.useCallback(() => {
+  const bindOptimisticSidebarAgent = (
+    optimisticId: string | undefined,
+    agent: { agentId?: string; agentPath?: string }
+  ) => {
+    const targetId = optimisticId?.trim() || ""
+    if (!targetId || !agent.agentId) return
+
+    sidebarStore.setProjectIndexDataByPath((current) =>
+      bindOptimisticSidebarAgentEntryById(current, targetId, agent)
+    )
+    sidebarStore.setAgentsEvent((current) => {
+      if (!current?.projectIndexes) return current
+      const projectIndexes = bindOptimisticSidebarAgentEntryById(
+        current.projectIndexes,
+        targetId,
+        agent
+      )
+      return projectIndexes === current.projectIndexes
+        ? current
+        : { ...current, projectIndexes }
+    })
+
+    const previousKey = agentListEntryKey({ id: targetId })
+    const nextKey = agentListEntryKey({
+      id: agent.agentId,
+      path: agent.agentPath,
+    })
+    if (!previousKey || !nextKey) return
+    sidebarStore.setSelectedSidebarAgentKeys((current) =>
+      current.includes(previousKey)
+        ? current.map((key) => (key === previousKey ? nextKey : key))
+        : current
+    )
+    sidebarStore.setSidebarAgentSelectionAnchor((current) =>
+      current === previousKey ? nextKey : current
+    )
+  }
+
+  const updateOptimisticSidebarAgentPreview = (options: {
+    preview: string
+    optimisticSidebarAgentId?: string
+  }) => {
+    const preview = options.preview.trim()
+    if (!preview) return
+
+    const currentState = agentStateRef.current
+    const modified = new Date().toISOString()
+    const agentId =
+      options.optimisticSidebarAgentId ||
+      currentState.agentId ||
+      currentState.agentKey
+    const agentPath = currentState.agentFile
+
+    const previewUpdate = {
+      ...(agentId ? { agentId } : {}),
+      ...(agentPath ? { agentPath } : {}),
+      preview,
+      modified,
+    }
+
+    sidebarStore.setProjectIndexDataByPath((current) =>
+      updateOptimisticSidebarAgentPreviewEntry(current, previewUpdate)
+    )
+    sidebarStore.setAgentsEvent((current) => {
+      if (!current?.projectIndexes) return current
+      const projectIndexes = updateOptimisticSidebarAgentPreviewEntry(
+        current.projectIndexes,
+        previewUpdate
+      )
+      return projectIndexes === current.projectIndexes
+        ? current
+        : { ...current, projectIndexes }
+    })
+  }
+
+  const clearSelectedSidebarSelection = () => {
     sidebarStore.setSelectedSidebarAgentKeys((current) =>
       current.length === 0 ? current : []
     )
     sidebarStore.setSidebarAgentSelectionAnchor((current) =>
       current ? "" : current
     )
-  }, [sidebarStore])
+  }
 
   const awaitingFirstTurn = awaitingFirstTurnStore.state
   const isSubmitting = isSubmittingStore.state
@@ -2563,127 +2356,101 @@ function useAppShellAgentWorkspaceView({
     setComposerImages,
   })
 
-  const switchEmptyDraftProject = React.useCallback(
-    (project: string) => {
-      const nextProject = project.trim()
-      if (!nextProject) return
+  const switchEmptyDraftProject = (project: string) => {
+    const nextProject = project.trim()
+    if (!nextProject) return
 
-      const previousState = agentStateRef.current
-      if (!previousState.draft || previousState.items.length > 0) return
+    const previousState = agentStateRef.current
+    if (!previousState.draft || previousState.items.length > 0) return
 
-      machineLocalStorageSetItem(
-        machineId,
-        DRAFT_PROJECT_STORAGE_KEY,
-        nextProject
-      )
-      setStoredDraftProject(nextProject)
-      rememberRecentProject(nextProject)
+    machineLocalStorageSetItem(
+      machineId,
+      DRAFT_PROJECT_STORAGE_KEY,
+      nextProject
+    )
+    setStoredDraftProject(nextProject)
+    rememberRecentProject(nextProject)
 
-      const ownerKey = promptDraftKey({ cwd: nextProject })
-      const nextState = createOptimisticDraftAgentState({
-        previous: previousState,
-        cwd: nextProject,
-        ownerKey,
+    const ownerKey = promptDraftKey({ cwd: nextProject })
+    const nextState = createOptimisticDraftAgentState({
+      previous: previousState,
+      cwd: nextProject,
+      ownerKey,
+    })
+    agentStateRef.current = nextState
+    conversationItemsStore.setItems(nextState.items)
+    setAgentState(nextState)
+
+    rememberStoredPromptDraft(
+      machineId,
+      nextState,
+      serializeComposerDraft({
+        text: composerTextRef.current,
+        skillName: composerSkillRef.current,
       })
-      agentStateRef.current = nextState
-      conversationItemsStore.setItems(nextState.items)
-      setAgentState(nextState)
+    )
+  }
 
-      rememberStoredPromptDraft(
-        machineId,
-        nextState,
-        serializeComposerDraft({
-          text: composerTextRef.current,
-          skillName: composerSkillRef.current,
-        })
-      )
-    },
-    [
-      conversationItemsStore,
-      rememberRecentProject,
-      agentStateRef,
-      setAgentState,
-      setStoredDraftProject,
-    ]
-  )
+  const addProjectPathForDialog = async (path: string) => {
+    const result = await addProjectPath(path)
+    if (typeof result === "string") {
+      switchEmptyDraftProject(result)
+    }
+    return result
+  }
 
-  const addProjectPathForDialog = React.useCallback(
-    async (path: string) => {
-      const result = await addProjectPath(path)
-      if (typeof result === "string") {
-        switchEmptyDraftProject(result)
-      }
-      return result
-    },
-    [addProjectPath, switchEmptyDraftProject]
-  )
+  const createAgent = async (
+    cwdOverride?: string,
+    options?: CreateAgentOptions
+  ) => {
+    const previousState = agentStateRef.current
+    const nextCwd = resolveNewAgentCwd({
+      cwdOverride,
+      defaultProject: defaultNewAgentProject,
+      currentCwd: previousState.cwd,
+    })
+    const ownerKey = promptDraftKey({ cwd: nextCwd })
+    const optimisticAgentKey = `optimistic:${ownerKey}`
+    const shouldCloseMobileSidebar =
+      Boolean(options?.closeMobileSidebar) && isMobile && openMobile
 
-  const createAgent = React.useCallback(
-    async (cwdOverride?: string, options?: CreateAgentOptions) => {
-      const previousState = agentStateRef.current
-      const nextCwd = resolveNewAgentCwd({
-        cwdOverride,
-        defaultProject: defaultNewAgentProject,
-        currentCwd: previousState.cwd,
-      })
-      const ownerKey = promptDraftKey({ cwd: nextCwd })
-      const optimisticAgentKey = `optimistic:${ownerKey}`
-      const shouldCloseMobileSidebar =
-        Boolean(options?.closeMobileSidebar) && isMobile && openMobile
+    // Start the request before focusing the composer so an immediate Enter
+    // queues against the new draft instead of the previous route agent.
+    const createAgentPromise = requestCreateAgent(nextCwd)
 
-      // Start the request before focusing the composer so an immediate Enter
-      // queues against the new draft instead of the previous route agent.
-      const createAgentPromise = requestCreateAgent(nextCwd)
+    handleSelectAgent(undefined)
+    clearSelectedSidebarSelection()
+    setAwaitingFirstTurn(false)
+    setPendingMessages((current) => (current.length === 0 ? current : []))
+    const nextState = createOptimisticDraftAgentState({
+      previous: previousState,
+      cwd: nextCwd,
+      ownerKey,
+    })
+    agentStateRef.current = nextState
+    conversationItemsStore.setItems(nextState.items)
+    setAgentState(nextState)
 
-      handleSelectAgent(undefined)
-      clearSelectedSidebarSelection()
-      setAwaitingFirstTurn(false)
-      setPendingMessages((current) => (current.length === 0 ? current : []))
-      const nextState = createOptimisticDraftAgentState({
-        previous: previousState,
-        cwd: nextCwd,
-        ownerKey,
-      })
-      agentStateRef.current = nextState
-      conversationItemsStore.setItems(nextState.items)
-      setAgentState(nextState)
+    if (shouldCloseMobileSidebar) {
+      pendingMobileSidebarPromptFocusRef.current = true
+      setOpenMobile(false)
+    } else {
+      focusPrompt()
+    }
 
-      if (shouldCloseMobileSidebar) {
-        pendingMobileSidebarPromptFocusRef.current = true
-        setOpenMobile(false)
-      } else {
-        focusPrompt()
-      }
+    const created = await createAgentPromise
+    if (created) {
+      return
+    }
 
-      const created = await createAgentPromise
-      if (created) {
-        return
-      }
+    if (agentStateRef.current.agentKey !== optimisticAgentKey) {
+      return
+    }
 
-      if (agentStateRef.current.agentKey !== optimisticAgentKey) {
-        return
-      }
-
-      agentStateRef.current = previousState
-      conversationItemsStore.setItems(previousState.items)
-      setAgentState(previousState)
-    },
-    [
-      clearSelectedSidebarSelection,
-      conversationItemsStore,
-      defaultNewAgentProject,
-      focusPrompt,
-      handleSelectAgent,
-      isMobile,
-      openMobile,
-      requestCreateAgent,
-      agentStateRef,
-      setAwaitingFirstTurn,
-      setOpenMobile,
-      setPendingMessages,
-      setAgentState,
-    ]
-  )
+    agentStateRef.current = previousState
+    conversationItemsStore.setItems(previousState.items)
+    setAgentState(previousState)
+  }
 
   // Actions from outside this shell: for example the sidebar group of this
   // machine, shown while another machine was open, or the project picker
@@ -2798,34 +2565,29 @@ function useAppShellAgentWorkspaceView({
   const displayedLineComments = composerDisabled
     ? EMPTY_COMPOSER_LINE_COMMENTS
     : composerLineComments
-  const displayedDiffLineComments = React.useMemo(
-    () => displayedLineComments.filter(isComposerDiffLineComment),
-    [displayedLineComments]
+  const displayedDiffLineComments = displayedLineComments.filter(
+    isComposerDiffLineComment
   )
-  const displayedFileLineComments = React.useMemo(
-    () => displayedLineComments.filter(isComposerFileLineComment),
-    [displayedLineComments]
+  const displayedFileLineComments = displayedLineComments.filter(
+    isComposerFileLineComment
   )
-  const fileLineComments = React.useMemo<FileLineCommentsValue>(
-    () => ({
-      comments: displayedFileLineComments,
-      add: (comment) => {
-        const text = comment.text.trim()
-        if (!text || !comment.cwd) return
-        setComposerLineComments((current) => [
-          ...current,
-          { ...comment, kind: "file", id: createLineCommentId(), text },
-        ])
-        composerPanelRef.current?.focusPrompt({ preventScroll: true })
-      },
-      remove: (id) => {
-        setComposerLineComments((current) =>
-          current.filter((comment) => comment.id !== id)
-        )
-      },
-    }),
-    [displayedFileLineComments, setComposerLineComments]
-  )
+  const fileLineComments: FileLineCommentsValue = {
+    comments: displayedFileLineComments,
+    add: (comment) => {
+      const text = comment.text.trim()
+      if (!text || !comment.cwd) return
+      setComposerLineComments((current) => [
+        ...current,
+        { ...comment, kind: "file", id: createLineCommentId(), text },
+      ])
+      composerPanelRef.current?.focusPrompt({ preventScroll: true })
+    },
+    remove: (id) => {
+      setComposerLineComments((current) =>
+        current.filter((comment) => comment.id !== id)
+      )
+    },
+  }
   const displayedPendingMessages = composerDisabled
     ? EMPTY_COMPOSER_PENDING_MESSAGES
     : currentPendingMessages
@@ -2868,37 +2630,31 @@ function useAppShellAgentWorkspaceView({
     return rows.filter((row) => !draftRows.includes(row))
   }
 
-  const setCompactWorkingState = React.useCallback(
-    (running: boolean) => {
-      setCompactRunningState(running)
-      if (running) {
-        setStoreState(workingStateStore, {
-          label: COMPACT_WORKING_LABEL,
-          cancelable: true,
-        })
-        return
-      }
+  const setCompactWorkingState = (running: boolean) => {
+    setCompactRunningState(running)
+    if (running) {
+      setStoreState(workingStateStore, {
+        label: COMPACT_WORKING_LABEL,
+        cancelable: true,
+      })
+      return
+    }
 
-      if (compactAbortRequestedRef.current) {
-        compactAbortRequestedRef.current = false
-        setStoreState(workingStateStore, {
-          label: COMPACT_CANCELLED_LABEL,
-          error: true,
-        })
-        return
-      }
+    if (compactAbortRequestedRef.current) {
+      compactAbortRequestedRef.current = false
+      setStoreState(workingStateStore, {
+        label: COMPACT_CANCELLED_LABEL,
+        error: true,
+      })
+      return
+    }
 
-      if (workingStateStore.state?.label === COMPACT_WORKING_LABEL) {
-        setStoreState(workingStateStore, null)
-      }
-    },
-    [setCompactRunningState, workingStateStore]
-  )
+    if (workingStateStore.state?.label === COMPACT_WORKING_LABEL) {
+      setStoreState(workingStateStore, null)
+    }
+  }
 
-  const isCompactAbortRequested = React.useCallback(
-    () => compactAbortRequestedRef.current,
-    []
-  )
+  const isCompactAbortRequested = () => compactAbortRequestedRef.current
 
   const {
     cycleThinkingLevel,
@@ -2992,8 +2748,8 @@ function useAppShellAgentWorkspaceView({
 
     applyUnread(nextUnread)
 
-    try {
-      await fetchJson<Extract<AgentReadStateResponse, { ok: true }>>(
+    const settled = await settle(
+      fetchJson<Extract<AgentReadStateResponse, { ok: true }>>(
         buildRequestUrl("/api/agent/read-state", {
           machineId,
           contextId: viewerContextId,
@@ -3005,13 +2761,9 @@ function useAppShellAgentWorkspaceView({
           body: JSON.stringify({ path: targetPath, unread: nextUnread }),
         }
       )
-      await queryClient.invalidateQueries({
-        queryKey: ["pico", "project-agents-index", viewerContextId],
-        refetchType: "active",
-      })
-      toast.success(nextUnread ? "Marked agent unread" : "Marked agent read")
-      return true
-    } catch (error) {
+    )
+    if (!settled.ok) {
+      const error = settled.error
       applyUnread(previousUnread)
       toast.error(
         error instanceof Error
@@ -3020,6 +2772,12 @@ function useAppShellAgentWorkspaceView({
       )
       return false
     }
+    await queryClient.invalidateQueries({
+      queryKey: ["pico", "project-agents-index", viewerContextId],
+      refetchType: "active",
+    })
+    toast.success(nextUnread ? "Marked agent unread" : "Marked agent read")
+    return true
   }
 
   const markAgentsRead = async (entries: Array<AgentListEntry>) => {
@@ -3261,11 +3019,10 @@ function useAppShellAgentWorkspaceView({
       pendingMessages.length > 0 &&
       // A paused queue holds its prompts, also while a new turn streams.
       (pendingMessages.some((message) => isHeldPendingId(message.pendingId)) ||
-        (!agentStateRef.current.streaming &&
-          !agentStateRef.current.compacting)) &&
+        (!agentStore.state.streaming && !agentStore.state.compacting)) &&
       !awaitingFirstTurn &&
       !isSubmitting,
-    centerMessages: displaySettingsRef.current.centerMessages,
+    centerMessages: displaySettingsStore.state.centerMessages,
     composerLineComments: displayedLineComments,
     composerImages: displayedComposerImages,
     composerSkill: displayedComposerSkill,
@@ -3273,8 +3030,8 @@ function useAppShellAgentWorkspaceView({
     composerText: displayedComposerText,
     currentPendingMessages: displayedPendingMessages,
     disabled: composerDisabled,
-    isCompacting: composerDisabled ? false : agentStateRef.current.compacting,
-    isStreaming: composerDisabled ? false : agentStateRef.current.streaming,
+    isCompacting: composerDisabled ? false : agentStore.state.compacting,
+    isStreaming: composerDisabled ? false : agentStore.state.streaming,
     isSubmitting: composerDisabled ? false : isSubmitting,
     viewerContextId,
   } satisfies AppShellComposerSnapshot
@@ -3324,7 +3081,7 @@ function useAppShellAgentWorkspaceView({
 
   const commandPaletteStateRef = useLatestRef({
     gitPanelOpen,
-    hasAvailableModels: agentStateRef.current.availableModels.length > 0,
+    hasAvailableModels: agentStore.state.availableModels.length > 0,
     isMobile,
     selectedSidebarAgents,
     agentFile: agentState.agentFile,
@@ -3642,11 +3399,11 @@ function useAppShellAgentWorkspaceView({
   }
   const commandPaletteCommandsRef = useLatestRef(buildCommandPaletteCommands)
 
-  const abortCompact = React.useCallback(async () => {
+  const abortCompact = async () => {
     if (!compactRunningRef.current) return
     compactAbortRequestedRef.current = true
     await abortAgent()
-  }, [abortAgent])
+  }
 
   const shortcutActionsRef = useLatestRef({
     abortCompact,
@@ -3694,9 +3451,9 @@ function useAppShellAgentWorkspaceView({
   const shortcutStateRef = useLatestRef<AppShellShortcutState>({
     currentTab: isMobile ? appUiStore.state.currentTab : "conversation",
     selectedSidebarAgents,
-    agentHasAvailableModels: agentStateRef.current.availableModels.length > 0,
+    agentHasAvailableModels: agentStore.state.availableModels.length > 0,
     agentHasFile: Boolean(agentState.agentFile),
-    agentIsStreaming: agentStateRef.current.streaming,
+    agentIsStreaming: agentStore.state.streaming,
     sidebarAgentEntriesByKey,
   })
 
@@ -3735,38 +3492,15 @@ function useAppShellAgentWorkspaceView({
     treeOpenRef,
   })
 
-  const appShellControllerRef = React.useRef<AppShellController | null>(null)
-  appShellControllerRef.current = {
-    stores: {
-      appUi: appUiStore,
-      composer: composerStore,
-      contextUsage: contextUsageStore,
-      conversationItems: conversationItemsStore,
-      displaySettings: displaySettingsStore,
-      draftFlow: draftFlowStore,
-      notification: notificationStore,
-      rightSidebar: rightSidebarStore,
-      agent: agentStore,
-      sidebar: sidebarStore,
-    },
-    refs: {
-      composerImages: composerImagesRef,
-      composerPanel: composerPanelRef,
-      composerSkill: composerSkillRef,
-      composerText: composerTextRef,
-      conversationFrame: conversationFrameRef,
-      agentState: agentStateRef,
-    },
-    actions: {
+  React.useImperativeHandle(
+    ref,
+    () => ({
       createAgent,
-      focusModelSelector,
-      focusPrompt,
-      focusAgentSearch,
       openAddProjectDialog,
       openCommandPalette,
       openDeleteDialog,
-      moveAgentToProject,
       openDeleteOldProjectAgentsDialog,
+      moveAgentToProject,
       openMoveAgentProjectDialogForEntry,
       openRenameDialogForEntry,
       openAgentsDialog,
@@ -3774,47 +3508,23 @@ function useAppShellAgentWorkspaceView({
       setAgentUnread,
       markAgentsRead,
       selectAgent: handleSelectAgent,
-    },
-  }
-
-  React.useImperativeHandle(ref, () => {
-    const actions = appShellControllerRef.current?.actions
-    return {
-      createAgent: actions?.createAgent ?? createAgent,
-      openAddProjectDialog:
-        actions?.openAddProjectDialog ?? openAddProjectDialog,
-      openCommandPalette: actions?.openCommandPalette ?? openCommandPalette,
-      openDeleteDialog: actions?.openDeleteDialog ?? openDeleteDialog,
-      openDeleteOldProjectAgentsDialog:
-        actions?.openDeleteOldProjectAgentsDialog ??
-        openDeleteOldProjectAgentsDialog,
-      moveAgentToProject: actions?.moveAgentToProject ?? moveAgentToProject,
-      openMoveAgentProjectDialogForEntry:
-        actions?.openMoveAgentProjectDialogForEntry ??
-        openMoveAgentProjectDialogForEntry,
-      openRenameDialogForEntry:
-        actions?.openRenameDialogForEntry ?? openRenameDialogForEntry,
-      openAgentsDialog: actions?.openAgentsDialog ?? openAgentsDialog,
-      openSettingsDialog: actions?.openSettingsDialog ?? openSettingsDialog,
-      setAgentUnread: actions?.setAgentUnread ?? setAgentUnread,
-      markAgentsRead: actions?.markAgentsRead ?? markAgentsRead,
-      selectAgent: actions?.selectAgent ?? handleSelectAgent,
-    }
-  }, [
-    createAgent,
-    handleSelectAgent,
-    openAddProjectDialog,
-    openCommandPalette,
-    moveAgentToProject,
-    openDeleteDialog,
-    openDeleteOldProjectAgentsDialog,
-    openMoveAgentProjectDialogForEntry,
-    openRenameDialogForEntry,
-    openAgentsDialog,
-    openSettingsDialog,
-    setAgentUnread,
-    markAgentsRead,
-  ])
+    }),
+    [
+      createAgent,
+      handleSelectAgent,
+      openAddProjectDialog,
+      openCommandPalette,
+      moveAgentToProject,
+      openDeleteDialog,
+      openDeleteOldProjectAgentsDialog,
+      openMoveAgentProjectDialogForEntry,
+      openRenameDialogForEntry,
+      openAgentsDialog,
+      openSettingsDialog,
+      setAgentUnread,
+      markAgentsRead,
+    ]
+  )
 
   return (
     <FileLineCommentsProvider value={fileLineComments}>
@@ -3977,11 +3687,9 @@ export function PicoAppShell({
 }) {
   const machineId = useMachineId()
   const [viewerContextId, setViewerContextId] = React.useState("")
-  const sidebarStoreRef = React.useRef<AppShellSidebarStore | null>(null)
-  if (!sidebarStoreRef.current) {
-    sidebarStoreRef.current = createAppShellSidebarStore()
-  }
-  const sidebarStore = sidebarStoreRef.current
+  const [sidebarStore] = React.useState<AppShellSidebarStore>(() =>
+    createAppShellSidebarStore()
+  )
   const agentSearchInputRef = React.useRef<HTMLInputElement | null>(null)
   const agentWorkspaceRef = React.useRef<AppShellAgentWorkspaceHandle | null>(
     null

@@ -2,6 +2,8 @@ import * as React from "react"
 import { AsyncDebouncer } from "@tanstack/pacer"
 
 import type { CompletionItem } from "@/lib/pico/api"
+import { settle } from "@/lib/settle"
+import { useLatestRef } from "@/features/pico/app-shell-common"
 
 import type {
   ComposerCompletionQuery,
@@ -30,9 +32,42 @@ type CompletionState = {
   selectedIndex: number
 }
 
+type CompletionRequestFns = Pick<
+  UseComposerAssistOptions,
+  "requestFileCompletions" | "requestPathCompletions"
+>
+
 type CompletionLoader = (
-  query: ComposerCompletionQuery
+  query: ComposerCompletionQuery,
+  requestFns: CompletionRequestFns
 ) => Promise<Array<CompletionItem>>
+
+/**
+ * A debouncer that gets the request functions with each call, so that the
+ * hook does not read a ref when it makes the debouncer. The last call wins.
+ */
+function createCompletionDebouncer() {
+  return new AsyncDebouncer<CompletionLoader>(
+    async (query, { requestFileCompletions, requestPathCompletions }) => {
+      return query.kind === "file-reference"
+        ? await requestFileCompletions(query.rawPrefix, query.isQuotedPrefix)
+        : await requestPathCompletions(query.rawPrefix)
+    },
+    {
+      key: "pico.composer.completions",
+      wait: 80,
+    }
+  )
+}
+
+/** Waits for the debounced load. Pacer types its result as a nested promise. */
+async function loadDebouncedCompletions(
+  debouncer: ReturnType<typeof createCompletionDebouncer>,
+  query: ComposerCompletionQuery,
+  requestFns: CompletionRequestFns
+): Promise<Array<CompletionItem> | undefined> {
+  return await debouncer.maybeExecute(query, requestFns)
+}
 
 type CompletionAction =
   | { type: "clear" }
@@ -274,43 +309,22 @@ export function useComposerAssist({
     null
   )
   const completionRequestIdRef = React.useRef(0)
-  const completionRequestFnsRef = React.useRef({
+  const completionRequestFnsRef = useLatestRef<CompletionRequestFns>({
     requestFileCompletions,
     requestPathCompletions,
   })
-  completionRequestFnsRef.current = {
-    requestFileCompletions,
-    requestPathCompletions,
-  }
-  const completionDebouncerRef =
-    React.useRef<AsyncDebouncer<CompletionLoader> | null>(null)
-  if (!completionDebouncerRef.current) {
-    completionDebouncerRef.current = new AsyncDebouncer<CompletionLoader>(
-      async (query) => {
-        const { requestFileCompletions, requestPathCompletions } =
-          completionRequestFnsRef.current
-        return query.kind === "file-reference"
-          ? await requestFileCompletions(query.rawPrefix, query.isQuotedPrefix)
-          : await requestPathCompletions(query.rawPrefix)
-      },
-      {
-        key: "pico.composer.completions",
-        wait: 80,
-      }
-    )
-  }
-  const completionDebouncer = completionDebouncerRef.current
+  const [completionDebouncer] = React.useState(createCompletionDebouncer)
   const [slashMenuState, setSlashMenuState] =
     React.useState<ComposerSlashMenuState | null>(null)
   const slashMenuStateRef = React.useRef<ComposerSlashMenuState | null>(null)
   const slashSelectionIndexRef = React.useRef(0)
-  const slashSelectionStoreRef = React.useRef(createSelectionStore())
-  const setSlashSelectionIndex = React.useCallback((next: number) => {
+  const [slashSelectionStore] = React.useState(() => createSelectionStore())
+  const setSlashSelectionIndex = (next: number) => {
     slashSelectionIndexRef.current = next
-    slashSelectionStoreRef.current.set(next)
-  }, [])
+    slashSelectionStore.set(next)
+  }
 
-  const refreshAssistState = React.useCallback(() => {
+  const refreshAssistState = () => {
     const draftText = draftTextRef.current
     const draftSkill = draftSkillRef.current
     const selection = selectionRef.current
@@ -338,7 +352,7 @@ export function useComposerAssist({
         dispatchCompletionState({ type: "clear" })
       }
     }
-  }, [draftSkillRef, draftTextRef, selectionRef, slashCommands])
+  }
 
   React.useEffect(() => {
     refreshAssistState()
@@ -364,25 +378,31 @@ export function useComposerAssist({
     const requestId = ++completionRequestIdRef.current
 
     const load = async () => {
-      try {
-        const items = await completionDebouncer.maybeExecute(completionQuery)
-
-        if (requestId !== completionRequestIdRef.current) return
-
-        dispatchCompletionState({
-          type: "loaded",
-          query: completionQuery,
-          items: items ?? [],
-        })
-      } catch {
+      const result = await settle(
+        loadDebouncedCompletions(
+          completionDebouncer,
+          completionQuery,
+          completionRequestFnsRef.current
+        )
+      )
+      if (!result.ok) {
         if (requestId === completionRequestIdRef.current) {
           dispatchCompletionState({ type: "clear" })
         }
+        return
       }
+
+      if (requestId !== completionRequestIdRef.current) return
+
+      dispatchCompletionState({
+        type: "loaded",
+        query: completionQuery,
+        items: result.value ?? [],
+      })
     }
 
     void load()
-  }, [completionDebouncer, completionQuery])
+  }, [completionDebouncer, completionQuery, completionRequestFnsRef])
 
   React.useEffect(
     () => () => {
@@ -392,7 +412,7 @@ export function useComposerAssist({
     [completionDebouncer]
   )
 
-  const dismissMenus = React.useCallback(() => {
+  const dismissMenus = () => {
     completionRequestIdRef.current += 1
     completionDebouncer.cancel()
     completionQueryRef.current = null
@@ -401,7 +421,7 @@ export function useComposerAssist({
     dispatchCompletionState({ type: "clear" })
     setSlashMenuState((current) => (current ? null : current))
     setSlashSelectionIndex(0)
-  }, [completionDebouncer, setSlashSelectionIndex])
+  }
 
   const visibleCompletion = completionState?.items.length
     ? completionState
@@ -410,7 +430,7 @@ export function useComposerAssist({
     ? visibleCompletion.items[visibleCompletion.selectedIndex] ||
       visibleCompletion.items[0]
     : null
-  const getSelectedSlashCommand = React.useCallback(() => {
+  const getSelectedSlashCommand = () => {
     const current = slashMenuStateRef.current
     if (!current) return null
     return (
@@ -418,9 +438,9 @@ export function useComposerAssist({
       current.commands[0] ||
       null
     )
-  }, [])
+  }
 
-  const syncSelection = React.useCallback(() => {
+  const syncSelection = () => {
     const textarea = promptRef.current
     if (!textarea) return
 
@@ -432,113 +452,99 @@ export function useComposerAssist({
 
     selectionRef.current = nextSelection
     refreshAssistState()
-  }, [promptRef, refreshAssistState, selectionRef])
+  }
 
-  const setCaret = React.useCallback(
-    (start: number, end = start) => {
-      requestAnimationFrame(() => {
-        promptRef.current?.focus()
-        promptRef.current?.setSelectionRange(start, end)
-        selectionRef.current = { start, end }
-        refreshAssistState()
-      })
-    },
-    [promptRef, refreshAssistState, selectionRef]
-  )
+  const setCaret = (start: number, end = start) => {
+    requestAnimationFrame(() => {
+      promptRef.current?.focus()
+      promptRef.current?.setSelectionRange(start, end)
+      selectionRef.current = { start, end }
+      refreshAssistState()
+    })
+  }
 
-  const applyCompletion = React.useCallback(
-    (item: CompletionItem, query = visibleCompletion?.query) => {
-      if (!query) return false
-      const next = applyCompletionItem({
-        value: draftTextRef.current,
-        query,
-        item,
-      })
-      const parsed = parseComposerSkillMessage(next.value)
-      applyDraft(
-        parsed.matched ? parsed.text : next.value,
-        parsed.matched ? parsed.skillName : undefined,
-        {
-          selection: {
-            start: next.selectionStart,
-            end: next.selectionEnd,
-          },
-        }
-      )
-      dismissMenus()
-      setCaret(next.selectionStart, next.selectionEnd)
-      return true
-    },
-    [applyDraft, dismissMenus, draftTextRef, setCaret, visibleCompletion?.query]
-  )
-
-  const applySlashSuggestion = React.useCallback(
-    (command: SlashCommandDescriptor | null) => {
-      if (!command) return false
-
-      if (command.kind === "skill") {
-        applyDraft("", command.skillName, {
-          immediate: true,
-          selection: { start: 0, end: 0 },
-        })
-        dismissMenus()
-        requestAnimationFrame(() => promptRef.current?.focus())
-        return true
+  const applyCompletion = (
+    item: CompletionItem,
+    queryArg?: ComposerCompletionQuery
+  ) => {
+    // Not a default parameter: the React Compiler cannot compile `?.` there.
+    const query = queryArg === undefined ? visibleCompletion?.query : queryArg
+    if (!query) return false
+    const next = applyCompletionItem({
+      value: draftTextRef.current,
+      query,
+      item,
+    })
+    const parsed = parseComposerSkillMessage(next.value)
+    applyDraft(
+      parsed.matched ? parsed.text : next.value,
+      parsed.matched ? parsed.skillName : undefined,
+      {
+        selection: {
+          start: next.selectionStart,
+          end: next.selectionEnd,
+        },
       }
+    )
+    dismissMenus()
+    setCaret(next.selectionStart, next.selectionEnd)
+    return true
+  }
 
-      const leadingWhitespace = draftTextRef.current.match(/^\s*/)?.[0] || ""
-      const nextValue = `${leadingWhitespace}/${command.name} `
-      const nextCaret = nextValue.length
-      applyDraft(nextValue, undefined, {
-        selection: { start: nextCaret, end: nextCaret },
+  const applySlashSuggestion = (command: SlashCommandDescriptor | null) => {
+    if (!command) return false
+
+    if (command.kind === "skill") {
+      applyDraft("", command.skillName, {
+        immediate: true,
+        selection: { start: 0, end: 0 },
       })
       dismissMenus()
-      requestAnimationFrame(() => {
-        promptRef.current?.focus()
-        promptRef.current?.setSelectionRange(nextCaret, nextCaret)
-        selectionRef.current = { start: nextCaret, end: nextCaret }
-        refreshAssistState()
-      })
+      requestAnimationFrame(() => promptRef.current?.focus())
       return true
-    },
-    [
-      applyDraft,
-      dismissMenus,
-      draftTextRef,
-      promptRef,
-      refreshAssistState,
-      selectionRef,
-    ]
-  )
+    }
 
-  const selectCompletionIndex = React.useCallback((index: number) => {
+    const leadingWhitespace = draftTextRef.current.match(/^\s*/)?.[0] || ""
+    const nextValue = `${leadingWhitespace}/${command.name} `
+    const nextCaret = nextValue.length
+    applyDraft(nextValue, undefined, {
+      selection: { start: nextCaret, end: nextCaret },
+    })
+    dismissMenus()
+    requestAnimationFrame(() => {
+      promptRef.current?.focus()
+      promptRef.current?.setSelectionRange(nextCaret, nextCaret)
+      selectionRef.current = { start: nextCaret, end: nextCaret }
+      refreshAssistState()
+    })
+    return true
+  }
+
+  const selectCompletionIndex = (index: number) => {
     dispatchCompletionState({ type: "select", index })
-  }, [])
+  }
 
-  const moveCompletionSelection = React.useCallback((direction: -1 | 1) => {
+  const moveCompletionSelection = (direction: -1 | 1) => {
     dispatchCompletionState({ type: "move-selection", direction })
-  }, [])
+  }
 
-  const moveSlashSelection = React.useCallback(
-    (direction: -1 | 1) => {
-      const total = slashMenuStateRef.current?.commands.length || 0
-      if (total === 0) {
-        setSlashSelectionIndex(0)
-        return
-      }
+  const moveSlashSelection = (direction: -1 | 1) => {
+    const total = slashMenuStateRef.current?.commands.length || 0
+    if (total === 0) {
+      setSlashSelectionIndex(0)
+      return
+    }
 
-      setSlashSelectionIndex(
-        (slashSelectionIndexRef.current + direction + total) % total
-      )
-    },
-    [setSlashSelectionIndex]
-  )
+    setSlashSelectionIndex(
+      (slashSelectionIndexRef.current + direction + total) % total
+    )
+  }
 
   return {
     visibleCompletion,
     selectedCompletionItem,
     slashMenuState,
-    slashSelectionStore: slashSelectionStoreRef.current,
+    slashSelectionStore,
     getSelectedSlashCommand,
     syncSelection,
     applyCompletion,

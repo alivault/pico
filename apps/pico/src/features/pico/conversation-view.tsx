@@ -3087,21 +3087,19 @@ export function AssistantMessagesStoreCard({
   hideFooter?: boolean
   store: AssistantMessagesStore
 }) {
-  const initialSnapshot = store.getSnapshot()
-  const initialBlocks = visibleAssistantBlocksFromSnapshot(initialSnapshot)
-  const assistantBlockStoreRef = React.useRef<AssistantBlockStore | null>(null)
-  if (!assistantBlockStoreRef.current) {
-    assistantBlockStoreRef.current = createAssistantBlockStore(initialBlocks)
-  }
-  const assistantBlockStore = assistantBlockStoreRef.current
-
-  const shellStoreRef = React.useRef<AssistantMessagesShellStore | null>(null)
-  if (!shellStoreRef.current) {
-    shellStoreRef.current = createAssistantMessagesShellStore(
-      assistantMessagesShellSnapshotFromBlocks(initialSnapshot, initialBlocks)
-    )
-  }
-  const shellStore = shellStoreRef.current
+  const [{ assistantBlockStore, shellStore }] = React.useState<{
+    assistantBlockStore: AssistantBlockStore
+    shellStore: AssistantMessagesShellStore
+  }>(() => {
+    const initialSnapshot = store.getSnapshot()
+    const initialBlocks = visibleAssistantBlocksFromSnapshot(initialSnapshot)
+    return {
+      assistantBlockStore: createAssistantBlockStore(initialBlocks),
+      shellStore: createAssistantMessagesShellStore(
+        assistantMessagesShellSnapshotFromBlocks(initialSnapshot, initialBlocks)
+      ),
+    }
+  })
 
   React.useLayoutEffect(() => {
     const applySnapshot = () => {

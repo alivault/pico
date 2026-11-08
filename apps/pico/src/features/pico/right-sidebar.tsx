@@ -1068,13 +1068,10 @@ export function RightSidebar({
   )
   const hasControlledActiveTab = controlledActiveTab !== undefined
   const activeTab = controlledActiveTab ?? localState.uncontrolledActiveTab
-  const activeTabRef = React.useRef(activeTab)
-  activeTabRef.current = activeTab
-  const activeTabChangeEffectEvent = React.useEffectEvent(
-    (tab: RightSidebarTabValue) => {
-      onActiveTabChange?.(tab)
-    }
-  )
+  // A closed commit diff cannot stay the active tab.
+  const leaveCommitDiffTabEffectEvent = React.useEffectEvent(() => {
+    if (activeTab === "commit-diff") onActiveTabChange?.("review")
+  })
   const setActiveTab = (tab: RightSidebarTabValue) => {
     dispatchLocal({ type: "set-active-tab", tab })
     onActiveTabChange?.(tab)
@@ -1179,9 +1176,7 @@ export function RightSidebar({
       type: "reset-navigation",
       resetActiveTab: !hasControlledActiveTab,
     })
-    if (activeTabRef.current === "commit-diff") {
-      activeTabChangeEffectEvent("review")
-    }
+    leaveCommitDiffTabEffectEvent()
   }, [hasControlledActiveTab, isMobile, normalizedCwd])
 
   return (

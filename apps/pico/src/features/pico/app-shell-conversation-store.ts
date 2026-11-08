@@ -510,46 +510,48 @@ export function usePendingCompactionRow(
   compacting: boolean,
   streaming: boolean
 ) {
-  const stateRef = React.useRef<PendingCompactionRowState>({
-    phase: "idle",
-    rowKey: "",
-    baselineKey: null,
-    count: 0,
-    rowKeysByGroupKey: new Map(),
-  })
-  const state = stateRef.current
+  const [storedState, setStoredState] =
+    React.useState<PendingCompactionRowState>(() => ({
+      phase: "idle",
+      rowKey: "",
+      baselineKey: null,
+      count: 0,
+      rowKeysByGroupKey: new Map(),
+    }))
   const lastKey = lastCompactionGroupKey(groups)
 
+  // Derive the next state during render. React renders again at once when
+  // the state changes, before it commits, so the row keys stay stable.
+  let state = storedState
   if (state.phase === "idle" && compacting && !streaming) {
-    state.count += 1
-    state.phase = "pending"
-    state.rowKey = `compaction-pending:${state.count}`
-    state.baselineKey = lastKey
+    const count = state.count + 1
+    state = {
+      ...state,
+      count,
+      phase: "pending",
+      rowKey: `compaction-pending:${count}`,
+      baselineKey: lastKey,
+    }
   }
   if (state.phase === "pending" && lastKey && lastKey !== state.baselineKey) {
-    state.rowKeysByGroupKey.set(lastKey, state.rowKey)
-    state.phase = "resolved"
+    const rowKeysByGroupKey = new Map(state.rowKeysByGroupKey)
+    rowKeysByGroupKey.set(lastKey, state.rowKey)
+    state = { ...state, phase: "resolved", rowKeysByGroupKey }
   }
   if (state.phase !== "idle" && !compacting) {
-    state.phase = "idle"
+    state = { ...state, phase: "idle" }
+  }
+  if (state !== storedState) {
+    setStoredState(state)
   }
 
   const pendingRowKey = state.phase === "pending" ? state.rowKey : null
-  const renderedGroups = React.useMemo<
-    Array<RenderConversationGroupDescriptor>
-  >(
-    () =>
-      pendingRowKey
-        ? [...groups, { kind: "compaction", key: pendingRowKey, pending: true }]
-        : groups,
-    [groups, pendingRowKey]
-  )
+  const renderedGroups: Array<RenderConversationGroupDescriptor> = pendingRowKey
+    ? [...groups, { kind: "compaction", key: pendingRowKey, pending: true }]
+    : groups
   const rowKeysByGroupKey = state.rowKeysByGroupKey
-  const rowKey = React.useCallback(
-    (group: RenderConversationGroupDescriptor) =>
-      rowKeysByGroupKey.get(group.key) ?? group.key,
-    [rowKeysByGroupKey]
-  )
+  const rowKey = (group: RenderConversationGroupDescriptor) =>
+    rowKeysByGroupKey.get(group.key) ?? group.key
 
   return { groups: renderedGroups, rowKey }
 }

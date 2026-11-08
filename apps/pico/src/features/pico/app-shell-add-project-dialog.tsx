@@ -21,6 +21,9 @@ import {
 } from "@/components/ui/drawer"
 import { Kbd } from "@/components/ui/kbd"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { settle } from "@/lib/settle"
+
+import { useLatestRef } from "./app-shell-common"
 
 function formatDirectoryDisplayPath(value: string) {
   const path = value.trim()
@@ -125,8 +128,35 @@ function FooterKbd({ children }: { children: React.ReactNode }) {
   return <Kbd>{children}</Kbd>
 }
 
-type PathCompletionLoader = (prefix: string) => Promise<Array<CompletionItem>>
-type DirectorySearchLoader = (query: string) => Promise<Array<CompletionItem>>
+type CompletionLoader = (input: string) => Promise<Array<CompletionItem>>
+
+/**
+ * A debouncer that gets the loader with each call, so that the component does
+ * not read a ref when it makes the debouncer. The last call gives the loader.
+ */
+function createCompletionDebouncer(key: string, wait: number) {
+  return new AsyncDebouncer<
+    (
+      input: string,
+      load: CompletionLoader | undefined
+    ) => Promise<Array<CompletionItem>>
+  >(
+    async (input, load) => {
+      if (!load) return []
+      return await load(input)
+    },
+    { key, wait }
+  )
+}
+
+/** Waits for the debounced load. Pacer types its result as a nested promise. */
+async function loadDebouncedCompletions(
+  debouncer: ReturnType<typeof createCompletionDebouncer>,
+  input: string,
+  load: CompletionLoader | undefined
+): Promise<Array<CompletionItem> | undefined> {
+  return await debouncer.maybeExecute(input, load)
+}
 
 function pathCompletionCommandValue(item: CompletionItem, index: number) {
   return `path-completion:${index}:${item.value}`
@@ -283,11 +313,11 @@ function useAppShellAddProjectDialogView({
   onSearchDirectories,
 }: AppShellAddProjectDialogProps) {
   const isMobile = useIsMobile()
-  const directoryInputRef = React.useRef(directoryInput)
+  const directoryInputRef = useLatestRef(directoryInput)
   const pathCompletionRequestIdRef = React.useRef(0)
   const directorySearchRequestIdRef = React.useRef(0)
-  const requestPathCompletionsRef = React.useRef(onRequestPathCompletions)
-  const searchDirectoriesRef = React.useRef(onSearchDirectories)
+  const requestPathCompletionsRef = useLatestRef(onRequestPathCompletions)
+  const searchDirectoriesRef = useLatestRef(onSearchDirectories)
   const [state, dispatch] = React.useReducer(
     addProjectDialogReducer,
     initialAddProjectDialogState
@@ -299,43 +329,12 @@ function useAppShellAddProjectDialogView({
     directorySearchLoading,
     selectedCommandValue,
   } = state
-  directoryInputRef.current = directoryInput
-  requestPathCompletionsRef.current = onRequestPathCompletions
-  searchDirectoriesRef.current = onSearchDirectories
-  const pathCompletionDebouncerRef =
-    React.useRef<AsyncDebouncer<PathCompletionLoader> | null>(null)
-  if (!pathCompletionDebouncerRef.current) {
-    pathCompletionDebouncerRef.current =
-      new AsyncDebouncer<PathCompletionLoader>(
-        async (prefix) => {
-          const requestPathCompletions = requestPathCompletionsRef.current
-          if (!requestPathCompletions) return []
-          return await requestPathCompletions(prefix)
-        },
-        {
-          key: "pico.add-project.path-completions",
-          wait: 80,
-        }
-      )
-  }
-  const pathCompletionDebouncer = pathCompletionDebouncerRef.current
-  const directorySearchDebouncerRef =
-    React.useRef<AsyncDebouncer<DirectorySearchLoader> | null>(null)
-  if (!directorySearchDebouncerRef.current) {
-    directorySearchDebouncerRef.current =
-      new AsyncDebouncer<DirectorySearchLoader>(
-        async (query) => {
-          const searchDirectories = searchDirectoriesRef.current
-          if (!searchDirectories) return []
-          return await searchDirectories(query)
-        },
-        {
-          key: "pico.add-project.directory-search",
-          wait: 120,
-        }
-      )
-  }
-  const directorySearchDebouncer = directorySearchDebouncerRef.current
+  const [pathCompletionDebouncer] = React.useState(() =>
+    createCompletionDebouncer("pico.add-project.path-completions", 80)
+  )
+  const [directorySearchDebouncer] = React.useState(() =>
+    createCompletionDebouncer("pico.add-project.directory-search", 120)
+  )
   const directoryQuery = directoryInput.trim()
   const normalizedDirectoryQuery = directoryQuery.toLowerCase()
   const openedSet = new Set(openedProjects)
@@ -440,27 +439,32 @@ function useAppShellAddProjectDialogView({
     dispatch({ type: "pathCompletionsStarted" })
 
     const load = async () => {
-      try {
-        const completions =
-          await pathCompletionDebouncer.maybeExecute(requestedPrefix)
-        if (
-          requestId !== pathCompletionRequestIdRef.current ||
-          directoryInputRef.current.trim() !== requestedPrefix
-        ) {
-          return
-        }
-
-        dispatch({
-          type: "pathCompletionsFinished",
-          items: (completions ?? []).filter(
-            (item) => item.isDirectory && item.value.trim() !== requestedPrefix
-          ),
-        })
-      } catch {
+      const result = await settle(
+        loadDebouncedCompletions(
+          pathCompletionDebouncer,
+          requestedPrefix,
+          requestPathCompletionsRef.current
+        )
+      )
+      if (!result.ok) {
         if (requestId === pathCompletionRequestIdRef.current) {
           dispatch({ type: "pathCompletionsReset" })
         }
+        return
       }
+      if (
+        requestId !== pathCompletionRequestIdRef.current ||
+        directoryInputRef.current.trim() !== requestedPrefix
+      ) {
+        return
+      }
+
+      dispatch({
+        type: "pathCompletionsFinished",
+        items: (result.value ?? []).filter(
+          (item) => item.isDirectory && item.value.trim() !== requestedPrefix
+        ),
+      })
     }
 
     void load()
@@ -480,25 +484,30 @@ function useAppShellAddProjectDialogView({
     dispatch({ type: "directorySearchStarted" })
 
     const load = async () => {
-      try {
-        const completions =
-          await directorySearchDebouncer.maybeExecute(requestedQuery)
-        if (
-          requestId !== directorySearchRequestIdRef.current ||
-          directoryInputRef.current.trim() !== requestedQuery
-        ) {
-          return
-        }
-
-        dispatch({
-          type: "directorySearchFinished",
-          items: (completions ?? []).filter((item) => item.isDirectory),
-        })
-      } catch {
+      const result = await settle(
+        loadDebouncedCompletions(
+          directorySearchDebouncer,
+          requestedQuery,
+          searchDirectoriesRef.current
+        )
+      )
+      if (!result.ok) {
         if (requestId === directorySearchRequestIdRef.current) {
           dispatch({ type: "directorySearchReset" })
         }
+        return
       }
+      if (
+        requestId !== directorySearchRequestIdRef.current ||
+        directoryInputRef.current.trim() !== requestedQuery
+      ) {
+        return
+      }
+
+      dispatch({
+        type: "directorySearchFinished",
+        items: (result.value ?? []).filter((item) => item.isDirectory),
+      })
     }
 
     void load()
@@ -605,22 +614,19 @@ function useAppShellAddProjectDialogView({
       const requestId = directorySearchRequestIdRef.current + 1
       directorySearchRequestIdRef.current = requestId
 
-      try {
-        const completions = await onSearchDirectories(currentInput)
-        if (
-          requestId !== directorySearchRequestIdRef.current ||
-          directoryInputRef.current.trim() !== currentInput
-        ) {
-          return true
-        }
-
-        const completion = completions.find((item) => item.isDirectory)
-        if (!completion) return false
-
-        return applyDirectorySearchCompletion(completion)
-      } catch {
-        return false
+      const result = await settle(onSearchDirectories(currentInput))
+      if (!result.ok) return false
+      if (
+        requestId !== directorySearchRequestIdRef.current ||
+        directoryInputRef.current.trim() !== currentInput
+      ) {
+        return true
       }
+
+      const completion = result.value.find((item) => item.isDirectory)
+      if (!completion) return false
+
+      return applyDirectorySearchCompletion(completion)
     }
 
     if (!onRequestPathCompletions) return false
@@ -628,24 +634,21 @@ function useAppShellAddProjectDialogView({
     const requestId = pathCompletionRequestIdRef.current + 1
     pathCompletionRequestIdRef.current = requestId
 
-    try {
-      const completions = await onRequestPathCompletions(currentInput)
-      if (
-        requestId !== pathCompletionRequestIdRef.current ||
-        directoryInputRef.current.trim() !== currentInput
-      ) {
-        return true
-      }
-
-      const completion = completions.find(
-        (item) => item.isDirectory && item.value.trim() !== currentInput
-      )
-      if (!completion) return false
-
-      return applyDirectoryCompletion(completion)
-    } catch {
-      return false
+    const result = await settle(onRequestPathCompletions(currentInput))
+    if (!result.ok) return false
+    if (
+      requestId !== pathCompletionRequestIdRef.current ||
+      directoryInputRef.current.trim() !== currentInput
+    ) {
+      return true
     }
+
+    const completion = result.value.find(
+      (item) => item.isDirectory && item.value.trim() !== currentInput
+    )
+    if (!completion) return false
+
+    return applyDirectoryCompletion(completion)
   }
 
   const handleDirectoryInputKeyDown = (

@@ -797,8 +797,7 @@ function useAppShellTabsControllerView({
       defaultDesktopSidePanelWidths()
     )
   const desktopSidePanelWidthsLoadedRef = React.useRef(false)
-  const desktopSidePanelWidthsRef = React.useRef(desktopSidePanelWidths)
-  desktopSidePanelWidthsRef.current = desktopSidePanelWidths
+  const desktopSidePanelWidthsRef = useLatestRef(desktopSidePanelWidths)
   const desktopFileViewWidth = desktopSidePanelWidths.fileViewWidth
   const desktopGitPanelWidth = desktopSidePanelWidths.gitPanelWidth
   const desktopBrowserPanelWidth = desktopSidePanelWidths.browserPanelWidth
@@ -849,8 +848,7 @@ function useAppShellTabsControllerView({
   const [desktopTerminalPanelHeight, setDesktopTerminalPanelHeightState] =
     React.useState(() => DESKTOP_DEFAULT_TERMINAL_PANEL_HEIGHT)
   const desktopTerminalPanelHeightLoadedRef = React.useRef(false)
-  const desktopTerminalPanelHeightRef = React.useRef(desktopTerminalPanelHeight)
-  desktopTerminalPanelHeightRef.current = desktopTerminalPanelHeight
+  const desktopTerminalPanelHeightRef = useLatestRef(desktopTerminalPanelHeight)
   const [desktopTerminalPanelMounted, setDesktopTerminalPanelMounted] =
     React.useState(!isMobile && terminalPanelOpen)
   const [desktopPanelResizing, setDesktopPanelResizing] = React.useState(false)

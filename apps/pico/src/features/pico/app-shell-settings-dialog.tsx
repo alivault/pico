@@ -187,6 +187,8 @@ type SettingsDialogState = {
   stage: SettingsDialogStage
   selectedCommandId: string
   selectedTheme: ThemeSelection
+  /** The theme to go back to when the theme stage closes without a choice. */
+  themePreviewInitial: ThemeSelection
 }
 
 type SettingsDialogAction =
@@ -205,20 +207,23 @@ type SettingsDialogAction =
     }
   | { type: "close-theme"; selectedTheme: ThemeSelection }
   | { type: "preview-theme"; selectedTheme: ThemeSelection }
+  | { type: "select-theme"; selectedTheme: ThemeSelection }
 
 function createInitialSettingsDialogState(
   currentTheme: ThemeFamily,
   currentThemeColorMode: ThemeColorMode
 ): SettingsDialogState {
+  const selectedTheme = themeSelectionForCurrent(
+    currentTheme,
+    currentThemeColorMode
+  )
   return {
     query: "",
     themeQuery: "",
     stage: "browse",
     selectedCommandId: "theme",
-    selectedTheme: themeSelectionForCurrent(
-      currentTheme,
-      currentThemeColorMode
-    ),
+    selectedTheme,
+    themePreviewInitial: selectedTheme,
   }
 }
 
@@ -238,19 +243,28 @@ function settingsDialogReducer(
       return { ...state, themeQuery: action.themeQuery }
     case "set-selected-command-id":
       return { ...state, selectedCommandId: action.selectedCommandId }
-    case "open-theme":
+    case "open-theme": {
+      const selectedTheme = themeSelectionForCurrent(
+        action.currentTheme,
+        action.currentThemeColorMode
+      )
       return {
         ...state,
         stage: "theme",
-        selectedTheme: themeSelectionForCurrent(
-          action.currentTheme,
-          action.currentThemeColorMode
-        ),
+        selectedTheme,
+        themePreviewInitial: selectedTheme,
       }
+    }
     case "close-theme":
       return { ...state, stage: "browse", selectedTheme: action.selectedTheme }
     case "preview-theme":
       return { ...state, selectedTheme: action.selectedTheme }
+    case "select-theme":
+      return {
+        ...state,
+        selectedTheme: action.selectedTheme,
+        themePreviewInitial: action.selectedTheme,
+      }
   }
 }
 
@@ -1054,14 +1068,14 @@ function AppShellSettingsDialog({
     ({ currentTheme: initialTheme, currentThemeColorMode: initialColorMode }) =>
       createInitialSettingsDialogState(initialTheme, initialColorMode)
   )
-  const themePreviewInitialRef = React.useRef<ThemeSelection>(
-    themeSelectionForCurrent(currentTheme, currentThemeColorMode)
-  )
   const isMobile = useIsMobile()
   const hasFeature = useMachineFeatureCheck()
   // The open settings pages. The last one shows; Escape goes back one.
   const [pages, setPages] = React.useState<Array<SettingsPageRef>>([])
   const topPage = pages.at(-1)
+  // Primitive values, so that the effect below does not run for a new object.
+  const themePreviewInitialTheme = state.themePreviewInitial.theme
+  const themePreviewInitialColorMode = state.themePreviewInitial.colorMode
 
   React.useEffect(() => {
     if (open) return
@@ -1069,8 +1083,8 @@ function AppShellSettingsDialog({
 
     if (state.stage === "theme") {
       onThemePreviewChange(
-        themePreviewInitialRef.current.theme,
-        themePreviewInitialRef.current.colorMode
+        themePreviewInitialTheme,
+        themePreviewInitialColorMode
       )
     }
 
@@ -1081,13 +1095,11 @@ function AppShellSettingsDialog({
     onThemePreviewChange,
     open,
     state.stage,
+    themePreviewInitialColorMode,
+    themePreviewInitialTheme,
   ])
 
   function openThemeStage() {
-    themePreviewInitialRef.current = themeSelectionForCurrent(
-      currentTheme,
-      currentThemeColorMode
-    )
     dispatch({ type: "open-theme", currentTheme, currentThemeColorMode })
   }
 
@@ -1109,15 +1121,14 @@ function AppShellSettingsDialog({
   }
 
   const handleThemeSelect = (selection: ThemeSelection) => {
-    dispatch({ type: "preview-theme", selectedTheme: selection })
-    themePreviewInitialRef.current = selection
+    dispatch({ type: "select-theme", selectedTheme: selection })
     onThemeColorModeChange(selection.colorMode)
     onThemeChange(selection.theme)
     onOpenChange(false)
   }
 
   const cancelThemePreview = () => {
-    const initialTheme = themePreviewInitialRef.current
+    const initialTheme = state.themePreviewInitial
     dispatch({ type: "close-theme", selectedTheme: initialTheme })
     onThemePreviewChange(initialTheme.theme, initialTheme.colorMode)
   }

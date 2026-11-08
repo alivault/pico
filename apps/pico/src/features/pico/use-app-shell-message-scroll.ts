@@ -116,11 +116,10 @@ function isOpeningToolCollapsibleTrigger(
 export function useAppShellMessageScroll() {
   const { scrollToEnd, scrollToStart } = useMessageScroller()
   const [viewport, setViewport] = React.useState<HTMLDivElement | null>(null)
-  const jumpStateStoreRef = React.useRef(createMessageJumpStateStore())
+  const [jumpStateStore] = React.useState(createMessageJumpStateStore)
 
   React.useEffect(() => {
     if (!viewport) return
-    const jumpStateStore = jumpStateStoreRef.current
 
     let frame = 0
     const syncJumpState = () => {
@@ -186,39 +185,30 @@ export function useAppShellMessageScroll() {
       viewport.removeEventListener("keydown", handleKeyDown, { capture: true })
       document.removeEventListener("selectionchange", handleSelectionChange)
     }
-  }, [viewport])
+  }, [jumpStateStore, viewport])
 
-  const jumpTo = React.useCallback(
-    (getTop: (viewport: HTMLElement) => number | null) => {
-      if (!viewport) return
-      const top = getTop(viewport)
-      if (top === null) return
-      releaseFollowOutput(viewport)
-      viewport.scrollTo({
-        top: Math.max(0, top - JUMP_OFFSET_PX),
-        behavior: "auto",
-      })
-    },
-    [viewport]
-  )
+  const jumpTo = (getTop: (viewport: HTMLElement) => number | null) => {
+    if (!viewport) return
+    const top = getTop(viewport)
+    if (top === null) return
+    releaseFollowOutput(viewport)
+    viewport.scrollTo({
+      top: Math.max(0, top - JUMP_OFFSET_PX),
+      behavior: "auto",
+    })
+  }
 
-  const jumpToPreviousMessage = React.useCallback(
-    () => jumpTo(previousMessageJumpTop),
-    [jumpTo]
-  )
-  const jumpToNextMessage = React.useCallback(
-    () => jumpTo(nextMessageJumpTop),
-    [jumpTo]
-  )
-  const scrollConversationToBottom = React.useCallback(() => {
+  const jumpToPreviousMessage = () => jumpTo(previousMessageJumpTop)
+  const jumpToNextMessage = () => jumpTo(nextMessageJumpTop)
+  const scrollConversationToBottom = () => {
     scrollToEnd({ behavior: "auto" })
-  }, [scrollToEnd])
-  const scrollConversationToTop = React.useCallback(() => {
+  }
+  const scrollConversationToTop = () => {
     scrollToStart({ behavior: "auto" })
-  }, [scrollToStart])
+  }
 
   return {
-    jumpStateStore: jumpStateStoreRef.current as MessageJumpStateStore,
+    jumpStateStore: jumpStateStore as MessageJumpStateStore,
     jumpToNextMessage,
     jumpToPreviousMessage,
     scrollConversationToBottom,

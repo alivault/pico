@@ -533,7 +533,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
   const composerSyncNonceRef = React.useRef(composerSyncNonce)
   const [draftSkill, setDraftSkill] = React.useState(composerSkill)
   const [hasDraftText, setHasDraftText] = React.useState(
-    hasDraftTextRef.current
+    () => composerText.trim().length > 0
   )
   const refreshAssistStateRef = React.useRef<() => void>(() => {})
   const isMobile = useIsMobile()
@@ -548,7 +548,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
   // Like ChatGPT: keep the prompt on one row until the text needs a second
   // line, then stack the prompt above the buttons. Collapse again only when
   // the prompt is empty, so the layout does not flip while the user types.
-  const measureMultiline = React.useCallback(() => {
+  const measureMultiline = () => {
     const textarea = promptRef.current
     if (!textarea) return
 
@@ -567,7 +567,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
       multilineRef.current = next
       setMultiline(next)
     }
-  }, [promptRef])
+  }
 
   React.useLayoutEffect(() => {
     const textarea = promptRef.current

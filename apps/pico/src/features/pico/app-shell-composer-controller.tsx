@@ -556,6 +556,10 @@ export const AppShellComposerController = React.memo(
         void actionsRef.current.onPickImages(files)
       }
     )
+    const onRemoveComposerLineComment = useStableEvent(
+      (...args: Parameters<AppShellComposerActions["removeLineComment"]>) =>
+        actionsRef.current.removeLineComment(...args)
+    )
     const onRemoveComposerImage = useStableEvent((index: number) => {
       if (snapshotRef.current.disabled) return
       actionsRef.current.onRemoveComposerImage(index)
@@ -663,7 +667,7 @@ export const AppShellComposerController = React.memo(
         fileInputRef={fileInputRef}
         onComposerTextChange={onComposerTextChange}
         onPickImages={onPickImages}
-        onRemoveComposerLineComment={actionsRef.current.removeLineComment}
+        onRemoveComposerLineComment={onRemoveComposerLineComment}
         onRemoveComposerImage={onRemoveComposerImage}
         onSubmitPrompt={onSubmitPrompt}
         onAbort={onAbort}

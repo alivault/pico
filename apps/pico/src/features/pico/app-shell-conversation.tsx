@@ -702,19 +702,17 @@ function ConversationAssistantGroupView({
   store: ConversationItemsStore
 }) {
   const itemKeys = useConversationAssistantGroupItemKeys(store, groupKey)
-  const assistantMessagesStoreRef =
-    React.useRef<MutableAssistantMessagesStore | null>(null)
-  if (!assistantMessagesStoreRef.current) {
-    assistantMessagesStoreRef.current = createMutableAssistantMessagesStore(
-      assistantMessagesSnapshotFromStore({
-        hideThinking,
-        hideToolBlocks,
-        itemKeys,
-        store,
-      })
+  const [assistantMessagesStore] =
+    React.useState<MutableAssistantMessagesStore>(() =>
+      createMutableAssistantMessagesStore(
+        assistantMessagesSnapshotFromStore({
+          hideThinking,
+          hideToolBlocks,
+          itemKeys,
+          store,
+        })
+      )
     )
-  }
-  const assistantMessagesStore = assistantMessagesStoreRef.current
 
   React.useLayoutEffect(() => {
     const updateSnapshot = () => {

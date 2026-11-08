@@ -238,6 +238,8 @@ function useAppShellAuthDialogControllerView({
   const apiKeyOpen = state.mode === "apiKey"
   const openRef = React.useRef(false)
   const returnOnCloseRef = React.useRef<(() => void) | null>(null)
+  // Mirrors `returnOnCloseRef` for render: Esc goes back when it is set.
+  const [hasReturnOnClose, setHasReturnOnClose] = React.useState(false)
 
   const authDialogOpen = loginOpen || logoutOpen || apiKeyOpen
 
@@ -257,6 +259,7 @@ function useAppShellAuthDialogControllerView({
 
     const returnOnClose = returnOnCloseRef.current
     returnOnCloseRef.current = null
+    setHasReturnOnClose(false)
     if (options?.returnToOrigin && returnOnClose) {
       returnOnClose()
     }
@@ -384,6 +387,7 @@ function useAppShellAuthDialogControllerView({
       open: (mode = "login", options) => {
         if (options?.returnOnClose) {
           returnOnCloseRef.current = options.returnOnClose
+          setHasReturnOnClose(true)
         }
         dispatch({ type: mode === "logout" ? "logoutOpened" : "loginOpened" })
       },
@@ -472,7 +476,7 @@ function useAppShellAuthDialogControllerView({
       ) : (
         <div className="hidden border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:block">
           Use ↑/↓ to select, Enter to start login or enter an API key, and Esc
-          to {returnOnCloseRef.current ? "go back" : "close"}.
+          to {hasReturnOnClose ? "go back" : "close"}.
         </div>
       )}
     </Command>
@@ -526,7 +530,7 @@ function useAppShellAuthDialogControllerView({
       ) : (
         <div className="hidden border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:block">
           Use ↑/↓ to select, Enter to remove credentials, and Esc to{" "}
-          {returnOnCloseRef.current ? "go back" : "close"}.
+          {hasReturnOnClose ? "go back" : "close"}.
         </div>
       )}
     </Command>
