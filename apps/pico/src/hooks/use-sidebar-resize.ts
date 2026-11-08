@@ -150,7 +150,10 @@ function isExpandingDrag(dragState: SidebarDragState, clientX: number) {
 
 function useLatestRef<T>(value: T) {
   const ref = React.useRef(value)
-  ref.current = value
+  // Set after render: the React Compiler does not allow ref writes in render.
+  React.useLayoutEffect(() => {
+    ref.current = value
+  })
   return ref
 }
 
