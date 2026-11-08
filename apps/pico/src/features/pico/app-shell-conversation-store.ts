@@ -559,10 +559,7 @@ export function useConversationItem(
   key: string
 ): ConversationItem | undefined {
   return React.useSyncExternalStore(
-    React.useCallback(
-      (listener) => store.subscribeItems([key], listener),
-      [key, store]
-    ),
+    (listener) => store.subscribeItems([key], listener),
     () => store.getItem(key),
     () => store.getItem(key)
   )

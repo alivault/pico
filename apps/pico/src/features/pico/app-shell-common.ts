@@ -115,10 +115,7 @@ export function useStableEvent<Args extends Array<unknown>, Result>(
   handler: (...args: Args) => Result
 ) {
   const handlerRef = useLatestRef(handler)
-  return React.useCallback(
-    (...args: Args) => handlerRef.current(...args),
-    [handlerRef]
-  )
+  return (...args: Args) => handlerRef.current(...args)
 }
 
 export function shallowRecordEqual<T extends Record<string, unknown>>(

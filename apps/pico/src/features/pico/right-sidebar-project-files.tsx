@@ -545,14 +545,8 @@ export function ProjectFilesWorkspace({
   })
   const projectPaths = fileTreeQuery.data ?? EMPTY_PROJECT_FILE_PATHS
   const gitFiles = gitFilesQuery.data ?? EMPTY_GIT_CHANGE_FILES
-  const paths = React.useMemo(
-    () => getProjectFileTreePaths(projectPaths, gitFiles),
-    [gitFiles, projectPaths]
-  )
-  const gitStatus = React.useMemo(
-    () => getProjectFileTreeGitStatus(gitFiles),
-    [gitFiles]
-  )
+  const paths = getProjectFileTreePaths(projectPaths, gitFiles)
+  const gitStatus = getProjectFileTreeGitStatus(gitFiles)
 
   return (
     <div
@@ -761,13 +755,10 @@ export function ProjectFileContent({
   })
   const { edit } = editing
   const fileComments = useFileLineComments()
-  const commentsForFile = React.useMemo(
-    () =>
-      fileComments?.comments.filter(
-        (comment) => comment.cwd === normalizedCwd && comment.path === path
-      ) ?? [],
-    [fileComments, normalizedCwd, path]
-  )
+  const commentsForFile =
+    fileComments?.comments.filter(
+      (comment) => comment.cwd === normalizedCwd && comment.path === path
+    ) ?? []
   // Line numbers of a draft with unsaved changes may not match the file on
   // disk, so comments wait for a save.
   const commentsBlocked = Boolean(edit && editing.dirty)

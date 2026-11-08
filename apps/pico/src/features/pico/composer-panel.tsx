@@ -278,15 +278,11 @@ function useComposerSlashCommands({
     (displaySettings) => displaySettings.hideToolBlocks
   )
 
-  return React.useMemo(
-    () =>
-      buildComposerSlashCommands({
-        availableSkills,
-        hideThinkingBlock,
-        hideToolBlocks,
-      }),
-    [availableSkills, hideThinkingBlock, hideToolBlocks]
-  )
+  return buildComposerSlashCommands({
+    availableSkills,
+    hideThinkingBlock,
+    hideToolBlocks,
+  })
 }
 
 export function ComposerPanel({
@@ -328,9 +324,9 @@ export function ComposerPanel({
 }) {
   const promptRef = React.useRef<HTMLTextAreaElement | null>(null)
   const queueRef = React.useRef<ComposerPendingMessagesHandle | null>(null)
-  const focusPrompt = React.useCallback(() => {
+  const focusPrompt = () => {
     promptRef.current?.focus()
-  }, [])
+  }
   React.useImperativeHandle(
     ref,
     () => ({

@@ -834,13 +834,10 @@ function CommitDiffContent({
     setScrollElement: setDiffScrollGradientElement,
     topHeight: diffScrollTopGradientHeight,
   } = useScrollGradients<HTMLDivElement>()
-  const setDiffScrollElement = React.useCallback(
-    (element: HTMLDivElement | null) => {
-      diffScrollRef.current = element
-      setDiffScrollGradientElement(element)
-    },
-    [setDiffScrollGradientElement]
-  )
+  const setDiffScrollElement = (element: HTMLDivElement | null) => {
+    diffScrollRef.current = element
+    setDiffScrollGradientElement(element)
+  }
   const updateStickyCommitFileHeader = (
     scrollElement: HTMLDivElement | null
   ) => {

@@ -751,13 +751,10 @@ function SidebarAgentItem({
   })
   const rowRef = React.useRef<HTMLDivElement | null>(null)
   const { setNodeRef: setDraggableNodeRef } = draggable
-  const setRowRef = React.useCallback(
-    (node: HTMLDivElement | null) => {
-      rowRef.current = node
-      setDraggableNodeRef(node)
-    },
-    [setDraggableNodeRef]
-  )
+  const setRowRef = (node: HTMLDivElement | null) => {
+    rowRef.current = node
+    setDraggableNodeRef(node)
+  }
   // While the app modifier is held, the row shows its Mod+1…9 number in
   // place of its timestamp.
   const agentNumber = useSidebarAgentNumber(rowRef)
@@ -1326,10 +1323,7 @@ function usePinnedAgentTreeKeys(
     (state) => pinnedAgentRows(state.agentTree, pinnedAgentKeys),
     { compare: samePinnedAgentRows }
   )
-  return React.useMemo(
-    () => new Set([...pinnedAgentKeys, ...rows.map((row) => row.key)]),
-    [pinnedAgentKeys, rows]
-  )
+  return new Set([...pinnedAgentKeys, ...rows.map((row) => row.key)])
 }
 
 function sameProjectAgentsSnapshot(
@@ -2600,21 +2594,18 @@ function useOtherMachinePinnedAgentKeys(machineId: string, online: boolean) {
     }
   )
 
-  const toggle = React.useCallback(
-    (key: string) => {
-      const current = readStoredPinnedAgentKeys(machineId)
-      const next = current.includes(key)
-        ? current.filter((entry) => entry !== key)
-        : [key, ...current]
-      machineLocalStorageSetItem(
-        machineId,
-        PINNED_AGENTS_STORAGE_KEY,
-        JSON.stringify(next)
-      )
-      setKeys(next)
-    },
-    [machineId]
-  )
+  const toggle = (key: string) => {
+    const current = readStoredPinnedAgentKeys(machineId)
+    const next = current.includes(key)
+      ? current.filter((entry) => entry !== key)
+      : [key, ...current]
+    machineLocalStorageSetItem(
+      machineId,
+      PINNED_AGENTS_STORAGE_KEY,
+      JSON.stringify(next)
+    )
+    setKeys(next)
+  }
 
   return [keys, toggle] as const
 }
@@ -2641,16 +2632,16 @@ export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
       return next.size === current.size ? current : next
     })
   }, [summaryProjects])
-  const allGrouped = React.useMemo(() => {
-    const grouped = groupMachineAgents(machine)
-    if (removedProjects.size === 0) return grouped
-    return {
-      ...grouped,
-      projects: grouped.projects.filter(
-        (project) => !removedProjects.has(project)
-      ),
-    }
-  }, [machine, removedProjects])
+  const machineGrouped = groupMachineAgents(machine)
+  const allGrouped =
+    removedProjects.size === 0
+      ? machineGrouped
+      : {
+          ...machineGrouped,
+          projects: machineGrouped.projects.filter(
+            (project) => !removedProjects.has(project)
+          ),
+        }
   const statusFilter = useAgentStatusFilter(machine.id)
   const [storedPinnedKeys, togglePinnedKey] = useOtherMachinePinnedAgentKeys(
     machine.id,
@@ -2658,8 +2649,8 @@ export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
   )
   // A click on a count in the machine heading shows only the agents with
   // that state.
-  const grouped = React.useMemo(() => {
-    if (!statusFilter) return allGrouped
+  let grouped = allGrouped
+  if (statusFilter) {
     // The subagents of a pinned agent show in the Pinned group too.
     const pinned = pinnedAgentTreeKeys(
       buildAgentTree(Object.values(allGrouped.agentsByProject).flat()),
@@ -2671,11 +2662,11 @@ export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
       statusFilter,
       (entry) => pinned.has(agentListEntryKey(entry))
     )
-    return {
+    grouped = {
       projects: filtered.visibleProjects,
       agentsByProject: filtered.filteredAgents,
     }
-  }, [allGrouped, statusFilter, storedPinnedKeys])
+  }
   const [stores] = React.useState(() => {
     const collapsed = createCollapsedProjectStore(
       machine.id,
@@ -2698,22 +2689,19 @@ export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
   const online = machine.state === "online"
   // Only the pins of agents in the summary: the summary does not have
   // archived agents, and it stops at 200 agents.
-  const pinnedAgentKeys = React.useMemo(() => {
-    const known = new Set(
-      Object.values(grouped.agentsByProject)
-        .flat()
-        .map((entry) => agentListEntryKey(entry))
-    )
-    return storedPinnedKeys.filter((key) => known.has(key))
-  }, [grouped, storedPinnedKeys])
-  const groupByStatus = useSidebarGroupBy(machine.id) === "status"
-  const collapseAllKeys = React.useMemo(
-    () => [
-      PINNED_AGENT_GROUP_COLLAPSE_KEY,
-      ...(groupByStatus ? [] : grouped.projects),
-    ],
-    [groupByStatus, grouped.projects]
+  const knownAgentKeys = new Set(
+    Object.values(grouped.agentsByProject)
+      .flat()
+      .map((entry) => agentListEntryKey(entry))
   )
+  const pinnedAgentKeys = storedPinnedKeys.filter((key) =>
+    knownAgentKeys.has(key)
+  )
+  const groupByStatus = useSidebarGroupBy(machine.id) === "status"
+  const collapseAllKeys = [
+    PINNED_AGENT_GROUP_COLLAPSE_KEY,
+    ...(groupByStatus ? [] : grouped.projects),
+  ]
   usePicoEvent("pico:collapse-projects", (detail) => {
     if (detail.machineId === machine.id)
       stores.collapsed.setAll(collapseAllKeys, detail.collapsed)
@@ -2728,34 +2716,24 @@ export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
           togglePinnedKey(agentListEntryKey(entry)),
       }
     : {}
-  const openAgent = React.useCallback(
-    (entry: AgentListEntry) => {
-      if (entry.id)
-        openMachineAgent({ machineId: machine.id, agentId: entry.id })
-    },
-    [machine.id]
-  )
+  const openAgent = (entry: AgentListEntry) => {
+    if (entry.id) openMachineAgent({ machineId: machine.id, agentId: entry.id })
+  }
   // The terminal panel of another machine is not on this page: a click on
   // a job dot opens the agent there.
-  const jobActions = React.useMemo(
-    () => ({
-      machineId: machine.id,
-      openJob: (entry: AgentListEntry) => {
-        if (isMobile) setOpenMobile(false)
-        openAgent(entry)
-      },
-    }),
-    [isMobile, machine.id, openAgent, setOpenMobile]
-  )
-  const createAgent = React.useCallback(
-    (project: string) => {
+  const jobActions = {
+    machineId: machine.id,
+    openJob: (entry: AgentListEntry) => {
       if (isMobile) setOpenMobile(false)
-      openMachine(machine.id, {
-        action: { type: "new-agent", project },
-      })
+      openAgent(entry)
     },
-    [isMobile, machine.id, setOpenMobile]
-  )
+  }
+  const createAgent = (project: string) => {
+    if (isMobile) setOpenMobile(false)
+    openMachine(machine.id, {
+      action: { type: "new-agent", project },
+    })
+  }
   // The summary has the project list of the machine's server, so the new
   // list starts from it. The sidebar sync sends it to the machine.
   const removeProject = (project: string) => {
@@ -2954,10 +2932,10 @@ function useAppSidebarView({
   const groupCollapseKeys = groupByStatus
     ? NO_GROUP_COLLAPSE_KEYS
     : visibleProjects
-  const collapseAllKeys = React.useMemo(
-    () => [PINNED_AGENT_GROUP_COLLAPSE_KEY, ...groupCollapseKeys],
-    [groupCollapseKeys]
-  )
+  const collapseAllKeys = [
+    PINNED_AGENT_GROUP_COLLAPSE_KEY,
+    ...groupCollapseKeys,
+  ]
 
   React.useLayoutEffect(() => {
     selectedAgentKeyStore.setKeys(selectedAgentKeys)
@@ -3160,17 +3138,14 @@ function useAppSidebarView({
   const topSlot = useSidebarSlot("top", machineId)
   // A click on a job dot selects the agent and shows the job in its
   // terminal panel.
-  const jobActions = React.useMemo(
-    () => ({
-      machineId,
-      openJob: (entry: AgentListEntry, job: AgentJob) => {
-        onAgentClick?.(entry, { multiSelectKey: false, shiftKey: false })
-        if (isMobile) setOpenMobile(false)
-        openJobTerminal(job.id, entry.id)
-      },
-    }),
-    [isMobile, machineId, onAgentClick, setOpenMobile]
-  )
+  const jobActions = {
+    machineId,
+    openJob: (entry: AgentListEntry, job: AgentJob) => {
+      onAgentClick?.(entry, { multiSelectKey: false, shiftKey: false })
+      if (isMobile) setOpenMobile(false)
+      openJobTerminal(job.id, entry.id)
+    },
+  }
   const contentSlot = useSidebarSlot("content", machineId)
   const bottomSlot = useSidebarSlot("bottom", machineId)
   // On mobile, the menus of the rows render in the sidebar sheet.

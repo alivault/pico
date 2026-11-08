@@ -566,13 +566,10 @@ function useFileReviewContentView({
     setScrollElement: setChangesScrollGradientElement,
     topHeight: changesScrollTopGradientHeight,
   } = useScrollGradients<HTMLDivElement>()
-  const setChangesScrollElement = React.useCallback(
-    (element: HTMLDivElement | null) => {
-      changesScrollRef.current = element
-      setChangesScrollGradientElement(element)
-    },
-    [setChangesScrollGradientElement]
-  )
+  const setChangesScrollElement = (element: HTMLDivElement | null) => {
+    changesScrollRef.current = element
+    setChangesScrollGradientElement(element)
+  }
   const reviewContentRef = React.useRef<HTMLDivElement>(null)
   const machineReadOnly = useMachineReadOnly()
   const historyPanelRef = React.useRef<HTMLDivElement>(null)

@@ -278,21 +278,18 @@ export const ComposerPendingMessages = React.memo(
     const editing = agent !== null
     const editorRef = React.useRef<HTMLTextAreaElement | null>(null)
     // A move to the other lane mounts a new editor. Keep the focus and caret.
-    const attachEditor = React.useCallback(
-      (node: HTMLTextAreaElement | null) => {
-        // Keep the last editor on unmount, to read its caret.
-        if (!node) return
-        const previous = editorRef.current
-        editorRef.current = node
-        if (!previous || previous === node) return
-        if (previous.isConnected && previous !== document.activeElement) return
-        const { selectionStart, selectionEnd } = previous
-        node.focus({ preventScroll: true })
-        node.setSelectionRange(selectionStart, selectionEnd)
-        node.scrollIntoView({ block: "nearest" })
-      },
-      []
-    )
+    const attachEditor = (node: HTMLTextAreaElement | null) => {
+      // Keep the last editor on unmount, to read its caret.
+      if (!node) return
+      const previous = editorRef.current
+      editorRef.current = node
+      if (!previous || previous === node) return
+      if (previous.isConnected && previous !== document.activeElement) return
+      const { selectionStart, selectionEnd } = previous
+      node.focus({ preventScroll: true })
+      node.setSelectionRange(selectionStart, selectionEnd)
+      node.scrollIntoView({ block: "nearest" })
+    }
     const agentRef = React.useRef(agent)
     React.useLayoutEffect(() => {
       agentRef.current = agent
@@ -325,15 +322,12 @@ export const ComposerPendingMessages = React.memo(
     }, [currentPendingMessages, editing, onHoldPendingQueue])
 
     /** End the hold of the agent; `finish` gets the resume, if any. */
-    const releaseHold = React.useCallback(
-      (finish: (resume: (() => void) | null) => void) => {
-        const hold = holdRef.current ?? Promise.resolve(null)
-        holdRef.current = null
-        setHeldForEdit(false)
-        void hold.then(finish)
-      },
-      []
-    )
+    const releaseHold = (finish: (resume: (() => void) | null) => void) => {
+      const hold = holdRef.current ?? Promise.resolve(null)
+      holdRef.current = null
+      setHeldForEdit(false)
+      void hold.then(finish)
+    }
 
     // An agent can close by itself, when all its prompts were sent.
     React.useEffect(() => {
@@ -356,7 +350,7 @@ export const ComposerPendingMessages = React.memo(
     const [collapsedQueue, setCollapsedQueue] = React.useState(
       () => safeLocalStorageGetItem(QUEUE_COLLAPSED_STORAGE_KEY) === "1"
     )
-    const toggleCollapsed = React.useCallback(() => {
+    const toggleCollapsed = () => {
       setCollapsedQueue((current) => {
         safeLocalStorageSetItem(
           QUEUE_COLLAPSED_STORAGE_KEY,
@@ -364,7 +358,7 @@ export const ComposerPendingMessages = React.memo(
         )
         return !current
       })
-    }, [])
+    }
 
     const isMobile = useIsMobile()
     const dragSensors = useSensors(
@@ -385,30 +379,27 @@ export const ComposerPendingMessages = React.memo(
       editor.scrollIntoView({ block: "nearest" })
     }, [selectedKey, caret])
 
-    const begin = React.useCallback(
-      (key: string | undefined) => {
-        if (!key) return false
-        setAgent({
-          rows: queueRowsFromMessages(currentPendingMessages),
-          selectedKey: key,
-          caret: "end",
-        })
-        return true
-      },
-      [currentPendingMessages]
-    )
+    const begin = (key: string | undefined) => {
+      if (!key) return false
+      setAgent({
+        rows: queueRowsFromMessages(currentPendingMessages),
+        selectedKey: key,
+        caret: "end",
+      })
+      return true
+    }
 
-    const close = React.useCallback(() => {
+    const close = () => {
       setAgent(null)
       onExitEditing()
-    }, [onExitEditing])
+    }
 
-    const end = React.useCallback(() => {
+    const end = () => {
       close()
       releaseHold((resume) => resume?.())
-    }, [close, releaseHold])
+    }
 
-    const save = React.useCallback(() => {
+    const save = () => {
       const current = agentRef.current
       if (!current) return
       const plan = hasQueueChanges(current)
@@ -429,7 +420,7 @@ export const ComposerPendingMessages = React.memo(
         plan.removedPendingIds,
         hold.then((resume) => resume !== null)
       )
-    }, [close, onSavePendingQueue, releaseHold])
+    }
 
     React.useImperativeHandle(
       ref,

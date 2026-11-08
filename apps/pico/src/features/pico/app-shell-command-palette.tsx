@@ -68,20 +68,16 @@ function AppShellCommandPalette({
 }: AppShellCommandPaletteProps) {
   const [query, setQuery] = React.useState("")
   const isMobile = useIsMobile()
-  const commandGroups = React.useMemo(() => {
-    const groups = new Map<string, Array<AppCommand>>()
-
-    for (const command of commands) {
-      const items = groups.get(command.group)
-      if (items) {
-        items.push(command)
-      } else {
-        groups.set(command.group, [command])
-      }
+  const groups = new Map<string, Array<AppCommand>>()
+  for (const command of commands) {
+    const items = groups.get(command.group)
+    if (items) {
+      items.push(command)
+    } else {
+      groups.set(command.group, [command])
     }
-
-    return Array.from(groups.entries())
-  }, [commands])
+  }
+  const commandGroups = Array.from(groups.entries())
 
   React.useEffect(() => {
     if (!open && query) {

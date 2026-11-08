@@ -302,10 +302,10 @@ function ConversationEarlierMessages({
   viewport: HTMLDivElement | null
 }) {
   const scrollable = useMessageScrollerScrollable()
-  const load = React.useCallback(() => {
+  const load = () => {
     if (isLoading) return
     void onLoad()
-  }, [isLoading, onLoad])
+  }
 
   React.useEffect(() => {
     if (!viewport || isLoading || scrollable.start) return
@@ -680,10 +680,7 @@ function useConversationAssistantGroupItemKeys(
   groupKey: string
 ) {
   return React.useSyncExternalStore(
-    React.useCallback(
-      (listener) => store.subscribeAssistantGroupItems(groupKey, listener),
-      [groupKey, store]
-    ),
+    (listener) => store.subscribeAssistantGroupItems(groupKey, listener),
     () => store.getAssistantGroupItemKeys(groupKey),
     () => store.getAssistantGroupItemKeys(groupKey)
   )

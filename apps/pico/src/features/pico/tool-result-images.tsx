@@ -8,10 +8,7 @@ import { ImageLightbox } from "@/features/pico/image-lightbox"
 /** The `src` of a conversation image on the machine of the conversation. */
 export function useConversationImageSrc() {
   const machineId = useMachineId()
-  return React.useCallback(
-    (image: ConversationImage) => machineApiUrl(machineId, image.url),
-    [machineId]
-  )
+  return (image: ConversationImage) => machineApiUrl(machineId, image.url)
 }
 
 /** Images from tool results, shown below the tool card header. */

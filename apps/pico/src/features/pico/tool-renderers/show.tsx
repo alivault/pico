@@ -37,20 +37,19 @@ type Table = {
 
 function TableView({ table }: { table: Table }) {
   const [sort, setSort] = React.useState<{ column: number; asc: boolean }>()
-  const rows = React.useMemo(() => {
-    if (!sort) return table.rows
-    return [...table.rows].sort((left, right) => {
-      const a = left[sort.column]
-      const b = right[sort.column]
-      const result =
-        typeof a === "number" && typeof b === "number"
-          ? a - b
-          : String(a ?? "").localeCompare(String(b ?? ""), undefined, {
-              numeric: true,
-            })
-      return sort.asc ? result : -result
-    })
-  }, [sort, table.rows])
+  const rows = sort
+    ? [...table.rows].sort((left, right) => {
+        const a = left[sort.column]
+        const b = right[sort.column]
+        const result =
+          typeof a === "number" && typeof b === "number"
+            ? a - b
+            : String(a ?? "").localeCompare(String(b ?? ""), undefined, {
+                numeric: true,
+              })
+        return sort.asc ? result : -result
+      })
+    : table.rows
   return (
     <div className="max-h-[28rem] overflow-auto rounded-md border">
       <table className="w-full text-xs">
@@ -135,17 +134,19 @@ function HtmlView({ html, title }: { html: string; title?: string }) {
   )
 }
 
+function parsePatchFileDiffs(patch: string) {
+  try {
+    return parsePatchFiles(patch).flatMap((parsed) => parsed.files)
+  } catch {
+    return []
+  }
+}
+
 export function DiffView({ patch }: { patch: string }) {
   const themeOptions = usePicoDiffThemeOptions()
   // An agent can send a patch with more than one file, or text that is not a
   // patch. PatchDiff throws on both, so parse here and show each file.
-  const fileDiffs = React.useMemo(() => {
-    try {
-      return parsePatchFiles(patch).flatMap((parsed) => parsed.files)
-    } catch {
-      return []
-    }
-  }, [patch])
+  const fileDiffs = parsePatchFileDiffs(patch)
   if (fileDiffs.length === 0) {
     return (
       <pre className="max-h-96 overflow-auto rounded-md border bg-background p-3 font-mono text-xs whitespace-pre-wrap">

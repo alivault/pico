@@ -1898,17 +1898,13 @@ function useAppShellTreeDialogView({
   const treeQueryResetRef = React.useRef(treeQuery)
   const isMobile = useIsMobile()
 
-  const treeViewModel = React.useMemo(
-    () =>
-      buildTreeDialogViewModel({
-        flatTree,
-        currentLeafId: treeLeafId,
-        query: treeQuery,
-        filterMode: treeFilterMode,
-        foldedEntryIds: foldedTreeNodeIds,
-      }),
-    [flatTree, foldedTreeNodeIds, treeFilterMode, treeLeafId, treeQuery]
-  )
+  const treeViewModel = buildTreeDialogViewModel({
+    flatTree,
+    currentLeafId: treeLeafId,
+    query: treeQuery,
+    filterMode: treeFilterMode,
+    foldedEntryIds: foldedTreeNodeIds,
+  })
 
   const selectedTreeNode =
     selectedTreeNodeId != null
@@ -2079,10 +2075,9 @@ function useAppShellTreeDialogView({
           : treeStage === "actions"
             ? "Summarize branch?"
             : "Conversation tree"
-  const treeCompactionCount = React.useMemo(
-    () => flatTree.filter((node) => node.type === "compaction").length,
-    [flatTree]
-  )
+  const treeCompactionCount = flatTree.filter(
+    (node) => node.type === "compaction"
+  ).length
   const treeDialogDescription =
     treeStage === "browse"
       ? `Browse branches, search the tree, and continue from an older point. ${flatTree.length.toLocaleString()} entries, ${treeCompactionCount.toLocaleString()} ${treeCompactionCount === 1 ? "compaction" : "compactions"}.`

@@ -202,11 +202,11 @@ function useBrowserSocket({
     setError("")
   }, [agentId])
 
-  const send = React.useCallback((message: Record<string, unknown>) => {
+  const send = (message: Record<string, unknown>) => {
     const socket = socketRef.current
     if (socket?.readyState === WebSocket.OPEN)
       socket.send(JSON.stringify(message))
-  }, [])
+  }
 
   return { state, frame, error, send }
 }

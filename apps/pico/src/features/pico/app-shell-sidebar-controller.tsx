@@ -105,10 +105,10 @@ function useAppShellSidebarControllerView({
   const [archivedAgentsView, setArchivedAgentsView] = React.useState<
     ArchivedAgentsView | undefined
   >()
-  const openArchivedAgents = React.useCallback((view?: ArchivedAgentsView) => {
+  const openArchivedAgents = (view?: ArchivedAgentsView) => {
     setArchivedAgentsView(view)
     setArchivedAgentsOpen(true)
-  }, [])
+  }
   usePicoEvent("pico:open-archived-agents", (detail) =>
     openArchivedAgents(detail)
   )
@@ -125,12 +125,10 @@ function useAppShellSidebarControllerView({
     (snapshot) => snapshot.derived.projectStateByPath,
     sameMapEntries
   )
-  const archivedJobAgents = React.useMemo(() => {
-    const counts: Record<string, number> = {}
-    for (const [path, state] of projectStateByPath)
-      if (state.archivedJobAgents) counts[path] = state.archivedJobAgents
-    return counts
-  }, [projectStateByPath])
+  const archivedJobAgents: Record<string, number> = {}
+  for (const [path, state] of projectStateByPath)
+    if (state.archivedJobAgents)
+      archivedJobAgents[path] = state.archivedJobAgents
   const emptySidebarStateText = useAppShellSidebarValue(
     sidebarStore,
     (snapshot) => snapshot.derived.emptySidebarStateText
@@ -152,21 +150,14 @@ function useAppShellSidebarControllerView({
   // A click on a count in the machine heading shows only the agents with
   // that state.
   const statusFilter = useAgentStatusFilter(machineId)
-  const pinnedSidebarAgents = React.useMemo(
-    () =>
-      statusFilter
-        ? allPinnedSidebarAgents.filter((entry) =>
-            agentMatchesStatusFilter(entry, statusFilter)
-          )
-        : allPinnedSidebarAgents,
-    [allPinnedSidebarAgents, statusFilter]
-  )
-  const { visibleProjects, filteredProjectAgents } = React.useMemo(() => {
-    if (!statusFilter)
-      return {
-        visibleProjects: searchedProjects,
-        filteredProjectAgents: searchedProjectAgents,
-      }
+  const pinnedSidebarAgents = statusFilter
+    ? allPinnedSidebarAgents.filter((entry) =>
+        agentMatchesStatusFilter(entry, statusFilter)
+      )
+    : allPinnedSidebarAgents
+  let visibleProjects = searchedProjects
+  let filteredProjectAgents = searchedProjectAgents
+  if (statusFilter) {
     // The subagents of a pinned agent show in the Pinned group too.
     const pinnedKeys = pinnedAgentTreeKeys(
       buildAgentTree(Object.values(searchedProjectAgents).flat()),
@@ -178,16 +169,9 @@ function useAppShellSidebarControllerView({
       statusFilter,
       (entry) => pinnedKeys.has(agentListEntryKey(entry))
     )
-    return {
-      visibleProjects: filtered.visibleProjects,
-      filteredProjectAgents: filtered.filteredAgents,
-    }
-  }, [
-    allPinnedSidebarAgents,
-    searchedProjects,
-    searchedProjectAgents,
-    statusFilter,
-  ])
+    visibleProjects = filtered.visibleProjects
+    filteredProjectAgents = filtered.filteredAgents
+  }
   const pinnedSidebarAgentKeys = pinnedSidebarAgents.flatMap((entry) => {
     const key = agentListEntryKey(entry)
     return key ? [key] : []

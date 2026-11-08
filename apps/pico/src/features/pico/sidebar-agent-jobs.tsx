@@ -41,14 +41,12 @@ export function useShownAgentJobs(
     () => (machineId ? seenJobsSnapshot(machineId) : ""),
     () => ""
   )
-  return React.useMemo(() => {
-    const seen = parseSeenJobs(snapshot)
-    return (jobs ?? []).filter((job) => {
-      if (job.state !== "failed") return true
-      const seenAt = seen[job.id] ?? 0
-      return job.endedAt ? seenAt < job.endedAt : seenAt === 0
-    })
-  }, [jobs, snapshot])
+  const seen = parseSeenJobs(snapshot)
+  return (jobs ?? []).filter((job) => {
+    if (job.state !== "failed") return true
+    const seenAt = seen[job.id] ?? 0
+    return job.endedAt ? seenAt < job.endedAt : seenAt === 0
+  })
 }
 
 const STATE_LABELS: Record<AgentJob["state"], string> = {

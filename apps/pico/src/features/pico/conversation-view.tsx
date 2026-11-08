@@ -1154,10 +1154,7 @@ function useAssistantBlockGroups(store: AssistantBlockStore) {
 
 function useAssistantBlock(store: AssistantBlockStore, key: string) {
   return React.useSyncExternalStore(
-    React.useCallback(
-      (listener) => store.subscribeBlocks([key], listener),
-      [key, store]
-    ),
+    (listener) => store.subscribeBlocks([key], listener),
     () => store.getBlock(key),
     () => store.getBlock(key)
   )
@@ -1269,10 +1266,7 @@ function useAssistantToolBlockHeader(store: AssistantBlockStore, key: string) {
   }
 
   return React.useSyncExternalStore(
-    React.useCallback(
-      (listener) => store.subscribeBlocks([key], listener),
-      [key, store]
-    ),
+    (listener) => store.subscribeBlocks([key], listener),
     getSnapshot,
     getSnapshot
   )
@@ -1291,11 +1285,7 @@ function useAssistantToolBlockBody(
   }
 
   return React.useSyncExternalStore(
-    React.useCallback(
-      (listener) =>
-        enabled ? store.subscribeBlocks([key], listener) : () => {},
-      [enabled, key, store]
-    ),
+    (listener) => (enabled ? store.subscribeBlocks([key], listener) : () => {}),
     getSnapshot,
     getSnapshot
   )
@@ -1360,10 +1350,7 @@ function useAssistantToolGroupHeader(
   }
 
   return React.useSyncExternalStore(
-    React.useCallback(
-      (listener) => store.subscribeBlocks(keys, listener),
-      [keys, store]
-    ),
+    (listener) => store.subscribeBlocks(keys, listener),
     getSnapshot,
     getSnapshot
   )
@@ -1403,11 +1390,7 @@ function useAssistantToolGroupBodyBlocks(
   }
 
   return React.useSyncExternalStore(
-    React.useCallback(
-      (listener) =>
-        enabled ? store.subscribeBlocks(keys, listener) : () => {},
-      [enabled, keys, store]
-    ),
+    (listener) => (enabled ? store.subscribeBlocks(keys, listener) : () => {}),
     getSnapshot,
     getSnapshot
   )
@@ -2816,10 +2799,7 @@ function useThinkingBlockLabel(store: AssistantBlockStore, key: string) {
   }
 
   return React.useSyncExternalStore(
-    React.useCallback(
-      (listener) => store.subscribeBlocks([key], listener),
-      [key, store]
-    ),
+    (listener) => store.subscribeBlocks([key], listener),
     getSnapshot,
     getSnapshot
   )
