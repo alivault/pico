@@ -792,6 +792,9 @@ export const ComposerPendingMessages = React.memo(
                 )}
               />
               {editing ? "Editing" : "Queue"}
+              <span className="font-normal text-muted-foreground tabular-nums">
+                {rows.length}
+              </span>
             </button>
           </TitleTooltip>
           {heldForEdit || unsaved ? (
