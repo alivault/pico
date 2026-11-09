@@ -74,6 +74,11 @@ pnpm start import-pi         # import Pi sessions as agents (stop Pico first)
   queue; waiting shows only in the `agents` list action.
 - **Notifications.** Web Push and ntfy when a turn finishes or the agent asks
   a question.
+- **Search across agents.** The agents dialog also finds messages: the text
+  of every agent, also archived ones, on all machines. Agents search past
+  work with the `agents` tool (`search`, then `read` with `entry`). The index
+  is `~/.pico/search.sqlite`. Pico builds it in the background, and you can
+  delete it at any time.
 
 Pi skills, prompt templates, project instructions, and credentials are used.
 Legacy Pi extensions are not loaded.
@@ -129,6 +134,7 @@ id=$(pico-app agent start . "Find why the tests are slow")
 pico-app agent send "$id" "Now fix it" --wait
 pico-app agent show "$id"
 pico-app agent list
+pico-app agent search "websocket reconnect"   # the messages of all agents
 ```
 
 `.` is the directory; without it, the agent works in the current directory.
@@ -143,7 +149,7 @@ all options.
 
 Pico is also an MCP server, at `/mcp`. Agents outside Pico, such as Claude
 Code and Codex, can then list, start, message, read, wait for, and stop Pico
-agents. `pico-app mcp` prints the address and the commands to add it:
+agents, and search their messages. `pico-app mcp` prints the address and the commands to add it:
 
 ```sh
 claude mcp add --transport http pico http://127.0.0.1:3141/mcp

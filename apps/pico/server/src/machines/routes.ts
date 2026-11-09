@@ -256,6 +256,36 @@ export function addMachineServerRoutes(
     }
   })
 
+  // Search the messages of all agents (see `core/agent-search.ts`).
+  router.get("/api/machine/agent/search", async (request) => {
+    const query = stringField(request.query.get("q")) ?? ""
+    const project = stringField(request.query.get("project"))
+    const exclude = stringField(request.query.get("exclude"))
+    const limit = Number(request.query.get("limit") ?? 0) || undefined
+    return {
+      ok: true,
+      ...(await ops.search({
+        query,
+        ...(project ? { project } : {}),
+        ...(exclude ? { exclude } : {}),
+        ...(limit ? { limit } : {}),
+        prefix: request.query.get("prefix") === "1",
+      })),
+    }
+  })
+
+  // The messages around an entry of a search hit.
+  router.get("/api/machine/agent/around", async (request) => {
+    const entry = Number(request.query.get("entry"))
+    if (!Number.isInteger(entry) || entry <= 0)
+      throw badRequest("entry must be an entry ID")
+    const count = Number(request.query.get("count") ?? 0) || undefined
+    return {
+      ok: true,
+      ...(await ops.around({ entry, ...(count ? { count } : {}) })),
+    }
+  })
+
   // Read state is global, so a hub agent changes it for every client.
   router.post("/api/machine/agent/read-state", async (request) => {
     const body = await request.body<{ id?: unknown; unread?: unknown }>()

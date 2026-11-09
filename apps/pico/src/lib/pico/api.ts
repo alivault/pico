@@ -300,6 +300,30 @@ export type ProjectAgentsIndexesResponse =
     }
   | ApiErrorResponse
 
+/** A match of the search across agents (`/api/machine/agent/search`). */
+export type AgentSearchMatch = {
+  agentId: string
+  title: string
+  cwd: string
+  project: string
+  archived?: boolean
+  lastMessageAt?: string
+  hits: Array<{
+    entryId: number
+    kind: "user" | "assistant" | "tool" | "summary"
+    ts?: number
+    /** The match is between U+E000 and U+E001. */
+    snippet: string
+  }>
+}
+
+export type AgentSearchResponse = {
+  ok: true
+  agents: Array<AgentSearchMatch>
+  /** Present while the server still builds its index. */
+  indexing?: { lastEntry: number; newestEntry: number }
+}
+
 export type DeleteOldProjectAgentsRequest = {
   project: string
   olderThanMs: number

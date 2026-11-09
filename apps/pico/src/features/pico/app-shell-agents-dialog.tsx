@@ -47,6 +47,11 @@ import {
   type MachineInfo,
   type MachineAgentSummary,
 } from "@/features/pico/machine-store"
+import {
+  AgentMessageSearchGroup,
+  useAgentMessageSearch,
+  type MessageSearchItem,
+} from "@/features/pico/agent-message-search"
 import { isMachineAgentUnread, MachineStateDot } from "@/features/pico/machines"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { agentListEntryKey } from "@/lib/pico"
@@ -640,16 +645,34 @@ function useAppShellAgentsDialogView({
       ({ agent }) => agent.lastMessageAt ?? 0
     ),
   }))
-  // The order of the list: the machines in sidebar order, each one ranked.
-  const visibleAgentKeys = (
-    showMachines ? machines : [{ id: activeId }]
-  ).flatMap((machine) =>
-    machine.id === activeId
-      ? sortedAgentItems.map((agent) => agent.key)
-      : (otherMachineGroups
-          .find((group) => group.machine.id === machine.id)
-          ?.items.map((item) => item.key) ?? [])
-  )
+  // Messages that match, from the search index of each machine.
+  const messageSearch = useAgentMessageSearch({
+    open,
+    query,
+    viewerContextId,
+    machineIds: showMachines
+      ? machines
+          .filter(
+            (machine) => machine.id === activeId || machine.state === "online"
+          )
+          .map((machine) => machine.id)
+      : [activeId],
+    ...(scope === "current" && currentProjects[0]
+      ? { project: { machineId: activeId, path: currentProjects[0] } }
+      : {}),
+  })
+  // The order of the list: the machines in sidebar order, each one ranked,
+  // then the messages.
+  const visibleAgentKeys = [
+    ...(showMachines ? machines : [{ id: activeId }]).flatMap((machine) =>
+      machine.id === activeId
+        ? sortedAgentItems.map((agent) => agent.key)
+        : (otherMachineGroups
+            .find((group) => group.machine.id === machine.id)
+            ?.items.map((item) => item.key) ?? [])
+    ),
+    ...messageSearch.items.map((item) => item.key),
+  ]
   const selectedAgent = selectedAgentKey
     ? flatAgents.find((agent) => agent.key === selectedAgentKey)?.entry
     : undefined
@@ -778,6 +801,16 @@ function useAppShellAgentsDialogView({
     if (!entry.id) return
     onOpenChange(false)
     onSelectAgent(entry.id, { agentPath: entry.path })
+  }
+
+  /** Open the agent of a message match, on its machine. */
+  const selectMessageMatch = (item: MessageSearchItem) => {
+    onOpenChange(false)
+    if (item.machineId === activeId)
+      onSelectAgent(item.match.agentId, {
+        agentPath: `pico:${item.match.agentId}`,
+      })
+    else openAgent({ machineId: item.machineId, agentId: item.match.agentId })
   }
 
   /** Open an agent of another machine: the page switches machines. */
@@ -1055,12 +1088,16 @@ function useAppShellAgentsDialogView({
         onValueChange={(nextQuery) => {
           dispatch({ type: "queryChanged", query: nextQuery })
         }}
-        placeholder={scope === "all" ? "Search all agents" : "Search agents"}
+        placeholder={
+          scope === "all"
+            ? "Search all agents and messages"
+            : "Search agents and messages"
+        }
         className="text-base md:text-sm"
       />
       <CommandList className="max-h-none min-h-0 flex-1 md:max-h-[min(70vh,32rem)]">
         <CommandEmpty>
-          {loading ? "Loading agents…" : "No agents found."}
+          {loading ? "Loading agents…" : "No agents or messages found."}
         </CommandEmpty>
         {showMachines
           ? machines.map((machine) =>
@@ -1069,6 +1106,14 @@ function useAppShellAgentsDialogView({
                 : otherMachineGroupElement(machine)
             )
           : activeAgentsGroup}
+        <AgentMessageSearchGroup
+          items={messageSearch.items}
+          loading={messageSearch.loading}
+          indexing={messageSearch.indexing}
+          machines={machines}
+          showMachine={Boolean(showMachines)}
+          onSelect={selectMessageMatch}
+        />
       </CommandList>
       {!isMobile ? (
         <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground md:flex">

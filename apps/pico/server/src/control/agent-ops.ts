@@ -20,6 +20,12 @@ import {
   withAbortSignal,
 } from "@earendil-works/chord/context"
 
+import type {
+  AgentSearch,
+  AgentSearchInput,
+  AgentSearchResult,
+  AroundResult,
+} from "../core/agent-search.ts"
 import { conversationIdOf, type Agents } from "../core/agents.ts"
 import type { Runtime } from "../core/runtime.ts"
 import type { EventHub } from "../events.ts"
@@ -128,6 +134,10 @@ export interface AgentBackend {
     signal?: AbortSignal
   }): Promise<WaitResult>
   stop(id: string): Promise<AgentInfo>
+  /** Search the messages of all agents; the best agents first. */
+  search(input: AgentSearchInput): Promise<AgentSearchResult>
+  /** The messages around an entry of a search hit. */
+  around(input: { entry: number; count?: number }): Promise<AroundResult>
 }
 
 /** The text that `lastAnswerEntry` gives for a turn that failed. */
@@ -277,6 +287,27 @@ export class RouteAgentBackend implements AgentBackend {
       body: { id },
     })) as AgentInfo
   }
+
+  async search(input: AgentSearchInput) {
+    const query = new URLSearchParams({ q: input.query })
+    if (input.project) query.set("project", input.project)
+    if (input.exclude) query.set("exclude", input.exclude)
+    if (input.limit) query.set("limit", String(input.limit))
+    if (input.prefix) query.set("prefix", "1")
+    return (await this.#request(
+      "GET",
+      `/api/machine/agent/search?${query.toString()}`
+    )) as AgentSearchResult
+  }
+
+  async around(input: { entry: number; count?: number }) {
+    const query = new URLSearchParams({ entry: String(input.entry) })
+    if (input.count) query.set("count", String(input.count))
+    return (await this.#request(
+      "GET",
+      `/api/machine/agent/around?${query.toString()}`
+    )) as AroundResult
+  }
 }
 
 /** True when `path` is `root` or inside it. */
@@ -291,17 +322,35 @@ export class LocalAgentOps implements AgentBackend {
   readonly #runtime: Runtime
   readonly #hub: EventHub
   readonly #dataDir: string
+  readonly #search: AgentSearch
 
   constructor(context: {
     agents: Agents
     runtime: Runtime
     hub: EventHub
+    search: AgentSearch
     dataDir: string
   }) {
     this.#agents = context.agents
     this.#runtime = context.runtime
     this.#hub = context.hub
+    this.#search = context.search
     this.#dataDir = context.dataDir
+  }
+
+  async search(input: AgentSearchInput) {
+    if (!input.query.trim()) throw badRequest("query is required")
+    return this.#search.search(input).catch((error: unknown) => {
+      throw badRequest(error instanceof Error ? error.message : String(error))
+    })
+  }
+
+  async around(input: { entry: number; count?: number }) {
+    try {
+      return this.#search.around(input.entry, input.count ?? 6)
+    } catch (error) {
+      throw notFound(error instanceof Error ? error.message : String(error))
+    }
   }
 
   /** The current ID of an agent from `s12`, `12`, or `pico:s12`. */

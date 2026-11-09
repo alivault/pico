@@ -25,6 +25,11 @@ import {
   waitUntilSettled,
   type AgentBackend,
 } from "./agent-ops.ts"
+import {
+  aroundText,
+  formatSearchResult,
+  plainSnippet,
+} from "../core/agent-search.ts"
 import { formatAgentList, formatPlace, formatWaitResult } from "./format.ts"
 
 /** Protocol versions that this server speaks; the first is the newest. */
@@ -47,6 +52,7 @@ const INSTRUCTIONS = [
   "Pico runs coding agents that keep working in the background, also when no client is open.",
   "Start an agent with start_agent and a complete brief: it does not see your conversation. Each agent has an ID such as s12; an agent on another machine of the hub has an ID such as workbox:s12.",
   "send_message never interrupts: a busy agent gets the message after its current turn, unless steer is true.",
+  "search_agents finds past work in the messages of all agents.",
   "With wait, a call returns the agent's answer when it is done, or its state when the wait ends first. Wait again with wait_for_agent.",
 ].join(" ")
 
@@ -179,6 +185,32 @@ const TOOLS = [
     },
   },
   {
+    name: "search_agents",
+    title: "Search agents",
+    description:
+      "Find past work: search the messages of all Pico agents, also archived ones. Returns the best agents, each with matching excerpts and their entry IDs. Read the messages around a hit with read_agent and entry.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: 'Words that must all match; "a phrase" in quotes',
+        },
+        project: {
+          type: "string",
+          description: "Only agents of this project directory",
+        },
+        limit: {
+          type: "number",
+          description: "The most agents (default 10, at most 50)",
+        },
+        machine: MACHINE,
+      },
+      required: ["query"],
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
     name: "read_agent",
     title: "Read an agent",
     description:
@@ -194,6 +226,11 @@ const TOOLS = [
         include_tools: {
           type: "boolean",
           description: "Also show tool results",
+        },
+        entry: {
+          type: "number",
+          description:
+            "The messages around this entry of a search hit, not the last ones",
         },
         machine: MACHINE,
       },
@@ -443,6 +480,28 @@ export function addMcpRoutes(
           { id: name, title: sent.title }
         )
       }
+      case "search_agents": {
+        const { backend, name: nameOf } = target(args)
+        const query = requiredArg(args, "query")
+        const project = stringArg(args, "project")
+        const limit = typeof args.limit === "number" ? args.limit : undefined
+        const result = await backend.search({
+          query,
+          ...(project ? { project } : {}),
+          ...(limit ? { limit } : {}),
+        })
+        return text(formatSearchResult(query, result, nameOf), {
+          agents: result.agents.map((match) => ({
+            ...match,
+            agentId: nameOf(match.agentId),
+            hits: match.hits.map((hit) => ({
+              ...hit,
+              snippet: plainSnippet(hit.snippet),
+            })),
+          })),
+          ...(result.indexing ? { indexing: result.indexing } : {}),
+        })
+      }
       case "read_agent": {
         const {
           backend,
@@ -450,6 +509,19 @@ export function addMcpRoutes(
           name: nameOf,
         } = target(args, requiredArg(args, "id"))
         const last = typeof args.last === "number" ? args.last : undefined
+        if (typeof args.entry === "number") {
+          const result = await backend.around({
+            entry: args.entry,
+            ...(last ? { count: last } : {}),
+          })
+          return text(
+            [
+              `Agent ${nameOf(result.agentId)}: ${result.title}, around entry ${args.entry}`,
+              "",
+              aroundText(result.entries, args.entry) || "(no messages)",
+            ].join("\n")
+          )
+        }
         const result = await backend.read({
           id: id!,
           ...(last ? { last } : {}),

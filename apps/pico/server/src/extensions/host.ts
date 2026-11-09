@@ -8,6 +8,7 @@
  */
 import type { ConversationId, Harness } from "@earendil-works/pi-durable"
 
+import type { AgentSearch } from "../core/agent-search.ts"
 import type { ToolLimits } from "../core/profiles.ts"
 import type { PicoSettingsData } from "../core/settings.ts"
 import type { MachineManager } from "../machines/manager.ts"
@@ -163,6 +164,8 @@ export type HostServices = {
   browser?: BrowserManager
   /** The remote machines of a hub, for the agent tools. */
   machines?: Pick<MachineManager, "find" | "list">
+  /** Search across agents. */
+  search?: Pick<AgentSearch, "search" | "around">
 }
 
 export class HostBridge {

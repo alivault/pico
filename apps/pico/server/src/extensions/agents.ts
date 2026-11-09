@@ -43,6 +43,12 @@ import {
   type Tx,
 } from "@earendil-works/pi-durable"
 
+import {
+  aroundText,
+  formatSearchResult,
+  type AgentSearchResult,
+  type AroundResult,
+} from "../core/agent-search.ts"
 import { bashCalls, commandLine, formatDuration } from "../core/bash-calls.ts"
 import { createWorktree } from "../services/worktree.ts"
 import {
@@ -1241,6 +1247,8 @@ export function createAgentsExtension(host: HostBridge) {
     add?: string[] | undefined
     remove?: string[] | undefined
     machine?: string | undefined
+    query?: string | undefined
+    entry?: number | undefined
   }
 
   /** The send action: a message to another agent. */
@@ -1444,10 +1452,13 @@ export function createAgentsExtension(host: HostBridge) {
   ) => {
     const services = await host.ready(context.abortSignal)
     const value = args.id ?? args.ids?.[0]
-    if (!value) return errorResult("read needs id.")
+    if (!value && args.entry === undefined) return errorResult("read needs id.")
     const last = Math.min(50, Math.max(1, args.last ?? 6))
     const remote = resolveRemote(services, args.machine, value)
     if (remote.error) return remote.error
+    if (args.entry !== undefined)
+      return readAround(services, remote.target?.connection, args.entry, last)
+    if (!value) return errorResult("read needs id.")
     if (remote.target?.id) {
       const { connection, id } = remote.target
       try {
@@ -1510,6 +1521,76 @@ export function createAgentsExtension(host: HostBridge) {
         clip(text || "(no messages)", 40_000),
       ].join("\n")
     )
+  }
+
+  /** The read action with entry: the messages around a search hit. */
+  const readAround = async (
+    services: HostServices,
+    connection: RemoteConnection | undefined,
+    entry: number,
+    count: number
+  ) => {
+    try {
+      const result = connection
+        ? ((await connection.request(
+            "GET",
+            `/api/machine/agent/around?entry=${entry}&count=${count}`
+          )) as AroundResult)
+        : services.search?.around(entry, count)
+      if (!result) return errorResult("Search is not available.")
+      const name = connection
+        ? remoteName(connection, result.agentId)
+        : result.agentId
+      return textResult(
+        [
+          `Agent ${name}: ${result.title}, around entry ${entry}`,
+          "",
+          clip(aroundText(result.entries, entry) || "(no messages)", 40_000),
+        ].join("\n")
+      )
+    } catch (error) {
+      return errorResult(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  /** The search action: messages of all agents that match a query. */
+  const searchAgents = async (
+    args: AgentsArgs,
+    api: ToolExecutionApi,
+    context: Context
+  ) => {
+    const services = await host.ready(context.abortSignal)
+    const query = args.query?.trim()
+    if (!query) return errorResult("search needs query.")
+    const remote = resolveRemote(services, args.machine)
+    if (remote.error) return remote.error
+    try {
+      if (remote.target) {
+        const { connection } = remote.target
+        const result = (await connection.request(
+          "GET",
+          `/api/machine/agent/search?q=${encodeURIComponent(query)}`
+        )) as AgentSearchResult
+        return textResult(
+          formatSearchResult(query, result, (id) => remoteName(connection, id))
+        )
+      }
+      if (!services.search) return errorResult("Search is not available.")
+      const self = agentIdOf(api.conversationId)
+      const meta = services.agents.has(self)
+        ? services.agents.meta(self)
+        : undefined
+      const result = await services.search.search({
+        query,
+        exclude: self,
+        ...(args.scope === "project" && meta
+          ? { project: meta.group ?? meta.cwd }
+          : {}),
+      })
+      return textResult(formatSearchResult(query, result))
+    } catch (error) {
+      return errorResult(error instanceof Error ? error.message : String(error))
+    }
   }
 
   const listAgents = async (
@@ -1944,6 +2025,7 @@ export function createAgentsExtension(host: HostBridge) {
 
   const AGENT_ACTIONS = [
     "list",
+    "search",
     "read",
     "wait",
     "send",
@@ -1959,7 +2041,8 @@ export function createAgentsExtension(host: HostBridge) {
     description: [
       "Look at, message, and manage other agents. Actions:",
       "list (scope: subagents (default), project, all, or archived);",
-      "read (the last messages of agent id; last, default 6; include_tools);",
+      "search (find past work: the messages of all agents, also archived ones, that match query; scope: project for this project only; use it before a task that may have been done or discussed before);",
+      "read (the last messages of agent id; last, default 6; include_tools; with entry, the messages around that entry of a search hit);",
       "wait (until no agent of ids works, or with any: true until one of them has an answer you have not seen; timeout in seconds; returns their answers);",
       "send (send message to agent id, for example your subagent, your parent, or an agent that builds what you review; mode: followUp (default; after its current work) or steer (into its current work); with wait: true the result is its answer, otherwise its answer comes to you as a message; add and remove change the tools of your subagent, for example add: ['ask_user'] answers a subagent that asked for a tool; a message to your parent always goes into its follow-up queue);",
       "stop (stop the current work of ids, like Esc);",
@@ -1987,6 +2070,15 @@ export function createAgentsExtension(host: HostBridge) {
       ),
       last: Type.Optional(Type.Number()),
       include_tools: Type.Optional(Type.Boolean()),
+      query: Type.Optional(
+        Type.String({
+          description:
+            'search: words that must all match; "a phrase" in quotes',
+        })
+      ),
+      entry: Type.Optional(
+        Type.Number({ description: "read: an entry of a search hit" })
+      ),
       timeout: Type.Optional(
         Type.Number({ description: "wait, and send with wait: seconds" })
       ),
@@ -2014,6 +2106,7 @@ export function createAgentsExtension(host: HostBridge) {
     async execute(args, api, context) {
       const action = String(args.action)
       if (action === "list") return listAgents(args, api, context)
+      if (action === "search") return searchAgents(args, api, context)
       if (action === "read") return readAgent(args, api, context)
       if (action === "wait") return waitAgents(args, api, context)
       if (action === "send")

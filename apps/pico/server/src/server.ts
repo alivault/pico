@@ -45,6 +45,8 @@ import {
 import { MachineProxy } from "./machines/proxy.ts"
 import { addHubRoutes, addMachineServerRoutes } from "./machines/routes.ts"
 import { LocalAgentOps } from "./control/agent-ops.ts"
+import { AgentSearch } from "./core/agent-search.ts"
+import { SearchIndex } from "./services/search-index.ts"
 import { addMcpRoutes } from "./control/mcp.ts"
 
 export type PicoServer = {
@@ -209,7 +211,14 @@ export async function startServer(options: {
       })
     }
   }
+  // Search across agents; the index fills in the background.
+  const searchIndex = new SearchIndex(
+    options.paths.searchIndex,
+    options.paths.database
+  )
+  const search = new AgentSearch(searchIndex, agents)
   host.bind({
+    search,
     agents,
     events: hub,
     terminals,
@@ -251,6 +260,7 @@ export async function startServer(options: {
     agents,
     runtime,
     hub,
+    search,
     dataDir: options.paths.dataDir,
   })
   addMachineServerRoutes(router, { agents, runtime, hub, viewers, ops })
@@ -531,6 +541,7 @@ export async function startServer(options: {
     throw error
   }
   machines.start()
+  searchIndex.start()
   // Free idle memory when the machine is short of it (Linux).
   const pressure = new MemoryPressure({
     terminals,
@@ -572,6 +583,7 @@ export async function startServer(options: {
         await new Promise<void>((resolve) => server.close(() => resolve()))
         await agents.flushMeta()
         viewers.flush()
+        searchIndex.close()
         await runtime.close()
       })()
       return closing

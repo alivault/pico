@@ -7,7 +7,8 @@
  *               [--worktree] [--branch B] [--base B] [--machine M]
  *               [--wait] [--timeout S] [--json]
  *   agent send ID MESSAGE [--steer] [--wait] [--timeout S] [--json]
- *   agent show ID [--last N] [--tools] [--json]
+ *   agent search QUERY [--project DIR] [--limit N] [--machine M] [--json]
+ *   agent show ID [--last N] [--tools] [--entry E] [--json]
  *   agent wait ID [--timeout S] [--json]
  *   agent stop ID
  *   mcp      print the MCP URL and how to add it to Claude Code and Codex
@@ -32,6 +33,11 @@ import {
   waitUntilSettled,
   type RunState,
 } from "./agent-ops.ts"
+import {
+  aroundText,
+  formatSearchResult,
+  plainSnippet,
+} from "../core/agent-search.ts"
 import { formatAgentList, formatPlace, formatWaitResult } from "./format.ts"
 
 const BOOLEAN_FLAGS = new Set([
@@ -52,7 +58,10 @@ const USAGE = `Usage: pico-app agent <command> [options]
       --machine M                          Start it on another machine of the hub
   send ID MESSAGE [--steer]                Send a message (after the current turn,
                                            or at once with --steer)
+  search QUERY [--project DIR]             Search the messages of all agents
   show ID [--last N] [--tools]             Show the last messages
+      --entry E                            Show the messages around entry E of a
+                                           search hit
   wait ID                                  Wait until the run is done
   stop ID                                  Stop the current turn
 
@@ -392,6 +401,23 @@ export async function agentCommand(
           need(rest[0], "an agent ID")
         )
         const last = stringOption(options, "last")
+        const entry = stringOption(options, "entry")
+        if (entry) {
+          const around = await target.backend.around({
+            entry: Number(entry),
+            ...(last ? { count: Number(last) || 6 } : {}),
+          })
+          print(
+            json,
+            { ...around, agentId: target.name(around.agentId) },
+            [
+              `Agent ${target.name(around.agentId)}: ${around.title}, around entry ${entry}`,
+              "",
+              aroundText(around.entries, Number(entry)) || "(no messages)",
+            ].join("\n")
+          )
+          return 0
+        }
         const result = await target.backend.read({
           id: target.id!,
           ...(last ? { last: Number(last) || 6 } : {}),
@@ -412,6 +438,35 @@ export async function agentCommand(
             "",
             result.text || "(no messages)",
           ].join("\n")
+        )
+        return 0
+      }
+      case "search": {
+        const query = rest.join(" ").trim()
+        if (!query) throw new UsageError(`search needs a query.\n\n${USAGE}`)
+        const target = await resolveTarget(request, machine)
+        const project = stringOption(options, "project")
+        const local = !target.remote && !explicitUrl
+        const limit = Number(stringOption(options, "limit") ?? 0) || undefined
+        const result = await target.backend.search({
+          query,
+          ...(project ? { project: local ? resolve(project) : project } : {}),
+          ...(limit ? { limit } : {}),
+        })
+        print(
+          json,
+          {
+            ...result,
+            agents: result.agents.map((match) => ({
+              ...match,
+              agentId: target.name(match.agentId),
+              hits: match.hits.map((hit) => ({
+                ...hit,
+                snippet: plainSnippet(hit.snippet),
+              })),
+            })),
+          },
+          formatSearchResult(query, result, target.name)
         )
         return 0
       }

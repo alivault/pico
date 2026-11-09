@@ -256,6 +256,7 @@ void test("the MCP server and the agent command start, message, and wait for age
       "list_agents",
       "start_agent",
       "send_message",
+      "search_agents",
       "read_agent",
       "wait_for_agent",
       "stop_agent",
@@ -324,6 +325,22 @@ void test("the MCP server and the agent command start, message, and wait for age
     assert.equal(waited.structuredContent?.state, "done")
     assert.equal(waited.structuredContent?.answer, "echo: SLOW one")
 
+    // Search finds the agent by its messages, and reads around a hit.
+    const found = await call("search_agents", { query: "hello mcp" })
+    const matches = found.structuredContent?.agents as Array<{
+      agentId: string
+      hits: Array<{ entryId: number; snippet: string }>
+    }>
+    assert.equal(matches[0]?.agentId, id, found.content[0]!.text)
+    assert.match(matches[0]!.hits[0]!.snippet, /\*\*hello\*\*/)
+    const around = await call("read_agent", {
+      id,
+      entry: matches[0]!.hits[0]!.entryId,
+    })
+    assert.match(around.content[0]!.text, /hello from mcp/)
+    const none = await call("search_agents", { query: "zebrafish" })
+    assert.match(none.content[0]!.text, /No agent has messages/)
+
     // The command.
     const env = pico.env
     const start = await cli(data, env, [
@@ -373,6 +390,28 @@ void test("the MCP server and the agent command start, message, and wait for age
     const show = await cli(data, env, ["agent", "show", cliId, "--last", "2"])
     assert.equal(show.code, 0, show.stderr)
     assert.match(show.stdout, /## Assistant\necho: SLOW two/)
+    const search = await cli(data, env, [
+      "agent",
+      "search",
+      "from",
+      "stdin",
+      "--json",
+    ])
+    assert.equal(search.code, 0, search.stderr)
+    const searched = JSON.parse(search.stdout) as {
+      agents: Array<{ agentId: string; hits: Array<{ entryId: number }> }>
+    }
+    assert.equal(searched.agents[0]?.agentId, cliId)
+    const entry = searched.agents[0]!.hits[0]!.entryId
+    const aroundCli = await cli(data, env, [
+      "agent",
+      "show",
+      cliId,
+      "--entry",
+      String(entry),
+    ])
+    assert.equal(aroundCli.code, 0, aroundCli.stderr)
+    assert.match(aroundCli.stdout, /from stdin/)
     const unknown = await cli(data, env, ["agent", "show", "s999999"])
     assert.equal(unknown.code, 1)
     assert.match(unknown.stderr, /Unknown agent/)

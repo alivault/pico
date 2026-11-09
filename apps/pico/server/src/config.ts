@@ -19,6 +19,8 @@ export type ServerPaths = {
   /** Pico's own data: the durable database, settings, and server state. */
   dataDir: string
   database: string
+  /** The full-text index of the conversations; it can be built again. */
+  searchIndex: string
   settingsFile: string
   /** The sidebar layout that all devices share. */
   sidebarFile: string
@@ -44,6 +46,7 @@ export function serverPaths(dataDir: string, webDir?: string): ServerPaths {
   return {
     dataDir,
     database: join(dataDir, "pico.sqlite"),
+    searchIndex: join(dataDir, "search.sqlite"),
     settingsFile: join(dataDir, "settings.json"),
     sidebarFile: join(dataDir, "sidebar.json"),
     viewersFile: join(dataDir, "viewers.json"),
