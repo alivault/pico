@@ -371,6 +371,12 @@ export function createApi(api: ApiContext) {
       : baseCwd(request)
     const key = `draft:${cwd}`
     viewers.selectDraft(contextId, { agentKey: key, cwd })
+    // The tab shows an optimistic draft until this state comes. Without
+    // it, the tab ignores the state of the agent that its first prompt
+    // makes, and stays on the draft.
+    hub.push(await agents.draftStateSync({ agentKey: key, cwd }), {
+      contextId,
+    })
     return { ok: true, draft: true, agentKey: key, cwd }
   })
 

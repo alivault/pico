@@ -126,6 +126,9 @@ void test("an open event stream follows agent selection and moves its live watch
             type: string
             agentId?: string
             agentName?: string
+            agentKey?: string
+            draft?: boolean
+            cwd?: string
             items?: Array<{ images?: Array<{ url: string }> }>
           }
           if (event.type === "state_sync") return event
@@ -164,6 +167,18 @@ void test("an open event stream follows agent selection and moves its live watch
     })
     assert.equal(renamed.status, 200)
     assert.equal((await nextState()).agentName, "Renamed second")
+    // A new draft sends its state at once. The tab waits for it before it
+    // follows the agent that the first prompt makes.
+    const created = await fetch(`${url}/api/agent/new?context=browser`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cwd: data }),
+    })
+    assert.equal(created.status, 200)
+    const { agentKey } = (await created.json()) as { agentKey: string }
+    const draft = await nextState()
+    assert.equal(draft.draft, true)
+    assert.equal(draft.agentKey, agentKey)
   } finally {
     clearTimeout(timeout)
     abort.abort()
