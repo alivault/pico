@@ -10,6 +10,7 @@
     "test": "pnpm --filter @alivault/pico test",
     "check": "pnpm --filter @alivault/pico check",
     "release": "pnpm --filter @alivault/pico release",
+    "media": "pnpm --filter @alivault/pico media",
     "website:dev": "pnpm --filter @pico/website run dev",
     "website:deploy": "pnpm --filter @pico/website run deploy"
   },
