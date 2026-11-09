@@ -113,6 +113,28 @@
             </p>
           </article>
           <article>
+            <h3>Search past work</h3>
+            <p>
+              Find any message of any agent, also on other machines. Agents
+              can search past work too.
+            </p>
+          </article>
+          <article>
+            <h3>Scripts and the command line</h3>
+            <p>
+              Start, message, and wait for agents with
+              <code>pico-app agent</code>. Exit codes tell a script if the agent
+              is done, failed, or needs you.
+            </p>
+          </article>
+          <article>
+            <h3>An MCP server</h3>
+            <p>
+              Claude Code, Codex, and other MCP clients can start, message,
+              search, and wait for Pico agents.
+            </p>
+          </article>
+          <article>
             <h3>Works with Pi</h3>
             <p>
               Pico uses your Pi skills, prompt templates, project instructions,
@@ -194,6 +216,9 @@ pico-app</code></pre>
 pico-app stop --wait  # stop after active turns finish
 pico-app import-pi    # import Pi sessions as agents (stop Pico first)
 pico-app machine add ali@workbox  # show the agents of another computer
+pico-app agent start . "Fix the flaky test" --wait  # run an agent from a script
+pico-app agent search "websocket"  # search the messages of all agents
+pico-app mcp          # add Pico to Claude Code or Codex
 pico-app --help</code></pre>
         </div>
         <p>
