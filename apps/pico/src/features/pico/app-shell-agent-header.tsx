@@ -136,7 +136,7 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
   )
   const machineReadOnly = useMachineReadOnly()
   const queryClient = useQueryClient()
-  // The more button has the context ring around its icon.
+  // The more button shows the context rings in place of its icon.
   const usageView = useContextUsageView({
     activeAgentId: agentHeaderState.agentId,
     contextUsageStore,
@@ -269,8 +269,9 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
                     view={usageView}
                     className="absolute inset-0 size-full"
                   />
-                ) : null}
-                <EllipsisIcon className={usageView ? "size-3.5" : undefined} />
+                ) : (
+                  <EllipsisIcon />
+                )}
               </DropdownMenuTrigger>
             </TitleTooltip>
             <DropdownMenuContent align="end" className="w-64">
