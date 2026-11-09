@@ -9,35 +9,21 @@
  * their states for the client, and changes to the profiles.
  */
 import { hostname } from "node:os"
-import { homedir } from "node:os"
-
-import {
-  BACKGROUND_CONTEXT,
-  withAbortSignal,
-} from "@earendil-works/chord/context"
 
 import { VERSION } from "../config.ts"
+import type { LocalAgentOps } from "../control/agent-ops.ts"
 import type { Runtime } from "../core/runtime.ts"
 import type { Viewers } from "../core/viewers.ts"
-import { conversationIdOf, type Agents } from "../core/agents.ts"
+import type { Agents } from "../core/agents.ts"
 import type { EventHub } from "../events.ts"
-import {
-  lastAnswerEntry,
-  normalizeAgentId,
-  runningToolLines,
-  transcriptText,
-  waitingOn,
-} from "../extensions/agents.ts"
 import {
   ApiError,
   badRequest,
   HANDLED,
-  notFound,
   SseStream,
   stringField,
   type Router,
 } from "../http.ts"
-import * as files from "../services/files.ts"
 import { LOCAL_MACHINE_ID } from "./profiles.ts"
 import {
   MachineError,
@@ -126,25 +112,6 @@ function onSummaryChange(
   }
 }
 
-function parseModel(
-  agents: Agents,
-  value: string | undefined
-): { provider: string; modelId: string } | undefined {
-  const trimmed = value?.trim()
-  if (!trimmed) return undefined
-  const slash = trimmed.indexOf("/")
-  if (slash > 0)
-    return {
-      provider: trimmed.slice(0, slash),
-      modelId: trimmed.slice(slash + 1),
-    }
-  const match = agents
-    .availableModels()
-    .find((candidate) => candidate.id === trimmed)
-  if (!match?.provider) throw badRequest(`Unknown model: ${trimmed}`)
-  return { provider: match.provider, modelId: match.id }
-}
-
 /** The routes that a hub calls on this server. */
 export function addMachineServerRoutes(
   router: Router,
@@ -153,30 +120,10 @@ export function addMachineServerRoutes(
     runtime: Runtime
     hub: EventHub
     viewers: Viewers
+    ops: LocalAgentOps
   }
 ) {
-  const { agents, runtime, hub, viewers } = context
-
-  const requireAgent = (value: unknown) => {
-    const text = typeof value === "string" ? value : ""
-    const id = agents.current(normalizeAgentId(text))
-    if (!id || !agents.has(id)) throw notFound(`Unknown agent: ${text}`)
-    return id
-  }
-
-  const agentInfo = (id: string) => {
-    const summary = agents.list({}).find((entry) => entry.id === id)
-    const meta = agents.meta(id)
-    return {
-      agentId: id,
-      title: summary?.title ?? meta.name ?? id,
-      cwd: meta.cwd,
-      busy: agents.isBusy(id),
-      needsInput: agents.needsInput(id),
-      running: runningToolLines(agents, id),
-      ...(meta.worktree ? { worktree: meta.worktree } : {}),
-    }
-  }
+  const { agents, runtime, hub, viewers, ops } = context
 
   router.get("/api/machine/summary", () => ({
     ok: true,
@@ -202,70 +149,46 @@ export function addMachineServerRoutes(
     return HANDLED
   })
 
-  /** What an idle agent waits on: a timer, a watch, or a job. */
-  const waitingOf = (id: string) =>
-    waitingOn(runtime.harness, conversationIdOf(id), BACKGROUND_CONTEXT)
-
   router.get("/api/machine/agents", async (request) => {
     const project = stringField(request.query.get("project"))
-    const list = agents.list(project ? { project } : {}).slice(0, 50)
-    return {
-      ok: true,
-      agents: await Promise.all(
-        list.map(async (item) => {
-          if (item.busy) {
-            const running = runningToolLines(agents, item.id)
-            return running.length > 0 ? { ...item, running } : item
-          }
-          if (item.needsInput) return item
-          const waiting = await waitingOf(item.id)
-          return waiting ? { ...item, waiting } : item
-        })
-      ),
-    }
+    return { ok: true, agents: await ops.list(project ? { project } : {}) }
   })
 
   router.post("/api/machine/agent/spawn", async (request) => {
-    const body = await request.body<{
-      goal?: unknown
-      name?: unknown
-      cwd?: unknown
-      model?: unknown
-      thinking?: unknown
-      profile?: unknown
-      requestId?: unknown
-    }>()
+    const body = await request.body<Record<string, unknown>>()
     const goal = stringField(body.goal)
     const requestId = stringField(body.requestId)
     if (!goal) throw badRequest("goal is required")
     if (!requestId) throw badRequest("requestId is required")
-    const marker = `hub:${requestId}`
-    let id = agents
-      .list({})
-      .find((entry) => agents.meta(entry.id).spawnedByCall === marker)?.id
-    if (!id) {
-      const requestedCwd = stringField(body.cwd)
-      const cwd = await files.canonicalDirectory(
-        requestedCwd ?? runtime.sidebar.snapshot().projects[0] ?? homedir()
-      )
-      const model = parseModel(agents, stringField(body.model))
-      const name = stringField(body.name)
-      const thinking = stringField(body.thinking)
-      const profile = stringField(body.profile)
-      id = await agents.create(cwd, {
-        spawnedByCall: marker,
-        ...(model ? { model } : {}),
-        ...(thinking ? { thinkingLevel: thinking } : {}),
-        ...(profile ? { profile } : {}),
-        ...(name ? { name } : {}),
-      })
+    const worktreeBody =
+      body.worktree && typeof body.worktree === "object"
+        ? (body.worktree as Record<string, unknown>)
+        : undefined
+    const branch = stringField(worktreeBody?.branch)
+    const base = stringField(worktreeBody?.base)
+    const worktree =
+      body.worktree === true
+        ? true
+        : worktreeBody
+          ? { ...(branch ? { branch } : {}), ...(base ? { base } : {}) }
+          : undefined
+    const optional = (key: string) => {
+      const value = stringField(body[key])
+      return value ? { [key]: value } : {}
     }
-    await agents.prompt(id, {
-      message: goal,
-      images: [],
-      requestId: `spawn:${marker}`,
-    })
-    return { ok: true, ...agentInfo(id) }
+    return {
+      ok: true,
+      ...(await ops.spawn({
+        goal,
+        requestId,
+        ...optional("name"),
+        ...optional("cwd"),
+        ...optional("model"),
+        ...optional("thinking"),
+        ...optional("profile"),
+        ...(worktree ? { worktree } : {}),
+      })),
+    }
   })
 
   router.post("/api/machine/agent/prompt", async (request) => {
@@ -275,92 +198,75 @@ export function addMachineServerRoutes(
       mode?: unknown
       requestId?: unknown
     }>()
-    const id = requireAgent(body.id)
     const message = stringField(body.message)
     const requestId = stringField(body.requestId)
     if (!message) throw badRequest("message is required")
     if (!requestId) throw badRequest("requestId is required")
-    await agents.prompt(id, {
-      message,
-      images: [],
-      streamingBehavior: body.mode === "steer" ? "steer" : "followUp",
-      requestId: `hub:${requestId}`,
-    })
-    return { ok: true, ...agentInfo(id) }
+    return {
+      ok: true,
+      ...(await ops.prompt({
+        id: typeof body.id === "string" ? body.id : "",
+        message,
+        requestId,
+        mode: body.mode === "steer" ? "steer" : "followUp",
+      })),
+    }
   })
 
-  router.get("/api/machine/agent/read", async (request) => {
-    const id = requireAgent(request.query.get("id"))
-    const last = Number(request.query.get("last") ?? 6) || 6
-    const text = await transcriptText(
-      runtime.harness,
-      conversationIdOf(id),
-      {
-        last: Math.min(50, Math.max(1, last)),
-        includeTools: request.query.get("includeTools") === "1",
-      },
-      BACKGROUND_CONTEXT
-    )
-    return { ok: true, ...agentInfo(id), text: text ?? "" }
-  })
+  router.get("/api/machine/agent/read", async (request) => ({
+    ok: true,
+    ...(await ops.read({
+      id: request.query.get("id") ?? "",
+      last: Number(request.query.get("last") ?? 6) || 6,
+      includeTools: request.query.get("includeTools") === "1",
+    })),
+  }))
 
-  // Wait (up to `timeoutMs`) until the agent is idle; then its answer.
-  router.get("/api/machine/agent/wait", async (request) => {
-    const id = requireAgent(request.query.get("id"))
+  // Wait (up to `timeoutMs`) until the agent is idle; then its answer. With
+  // `settle=1`, until the run settles (see `control/agent-ops.ts`), for the
+  // run of the message with request ID `request` when it is given.
+  router.get("/api/machine/agent/wait", async (request, response) => {
+    const id = request.query.get("id") ?? ""
     const timeoutMs = Math.min(
       55_000,
       Math.max(0, Number(request.query.get("timeoutMs") ?? 25_000) || 0)
     )
-    const conversation = await runtime.harness.conversation(
-      conversationIdOf(id),
-      BACKGROUND_CONTEXT
-    )
-    let idle = true
-    if (conversation && timeoutMs > 0) {
-      try {
-        await conversation.waitForIdle(
-          withAbortSignal(AbortSignal.timeout(timeoutMs), BACKGROUND_CONTEXT)
-        )
-      } catch {
-        idle = false
-      }
-    }
-    if (idle && agents.isBusy(id)) idle = false
-    const answer = idle
-      ? await lastAnswerEntry(
-          runtime.harness,
-          conversationIdOf(id),
-          BACKGROUND_CONTEXT
-        )
-      : undefined
+    if (request.query.get("settle") !== "1")
+      return { ok: true, ...(await ops.waitIdle({ id, timeoutMs })) }
+    // Stop waiting when the client goes away.
+    const closed = new AbortController()
+    response.once("close", () => closed.abort())
+    const wanted = stringField(request.query.get("request"))
     return {
       ok: true,
-      ...agentInfo(id),
-      idle,
-      ...(answer !== undefined ? { answer: answer.text } : {}),
-      ...(answer?.id !== undefined ? { answerId: Number(answer.id) } : {}),
-      ...(idle ? { waiting: await waitingOf(id) } : {}),
+      ...(await ops.wait({
+        id,
+        timeoutMs,
+        signal: closed.signal,
+        ...(wanted ? { request: wanted } : {}),
+      })),
     }
   })
 
   router.post("/api/machine/agent/stop", async (request) => {
     const body = await request.body<{ id?: unknown }>()
-    const id = requireAgent(body.id)
-    await agents.abort(id)
-    return { ok: true, ...agentInfo(id) }
+    return {
+      ok: true,
+      ...(await ops.stop(typeof body.id === "string" ? body.id : "")),
+    }
   })
 
   // Read state is global, so a hub agent changes it for every client.
   router.post("/api/machine/agent/read-state", async (request) => {
     const body = await request.body<{ id?: unknown; unread?: unknown }>()
-    const id = requireAgent(body.id)
+    const id = ops.requireAgent(body.id)
     viewers.setRead(id, body.unread !== true)
     return { ok: true, agentId: id, unread: body.unread === true }
   })
 
   router.post("/api/machine/agent/archive", async (request) => {
     const body = await request.body<{ id?: unknown; restore?: unknown }>()
-    const id = requireAgent(body.id)
+    const id = ops.requireAgent(body.id)
     if (body.restore === true) agents.restore(id)
     else agents.archive(id)
     return { ok: true, agentId: id, archived: body.restore !== true }

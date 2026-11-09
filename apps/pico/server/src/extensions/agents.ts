@@ -412,8 +412,8 @@ type ReportInput = {
  * Undefined when the message has no answer yet, for example when it was
  * withdrawn from the queue.
  */
-async function answerTo(
-  harness: Harness,
+export async function answerTo(
+  harness: Pick<Harness, "commit" | "conversation">,
   agent: ConversationId,
   request: string,
   context: Context

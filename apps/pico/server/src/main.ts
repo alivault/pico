@@ -8,6 +8,8 @@
  *   pico-server stop [--wait] [--pty-host]
  *     `--pty-host` also stops the pty-host, so terminals and jobs end too.
  *   pico-server machine add|list|status|reconnect|rename|enable|disable|remove …
+ *   pico-server agent list|start|send|show|wait|stop …   (see control/cli.ts)
+ *   pico-server mcp      the MCP URL (see control/mcp.ts)
  *
  * Only one server may own a data directory: the durable database has no
  * locking across processes. A second `serve` finds the running server and
@@ -42,6 +44,7 @@ import {
   VERSION,
   type ServerPaths,
 } from "./config.ts"
+import { agentCommand, mcpCommand } from "./control/cli.ts"
 import { machineCommand } from "./machines/cli.ts"
 import { startServer, type PicoServer } from "./server.ts"
 import { stopPtyHost } from "./pty-host/client.ts"
@@ -454,6 +457,14 @@ async function main() {
     return
   }
   const { command, options } = parseArgs(argv)
+  if (command === "agent") {
+    process.exitCode = await agentCommand(argv.slice(1), dataDirOption(options))
+    return
+  }
+  if (command === "mcp") {
+    process.exitCode = mcpCommand(argv.slice(1), dataDirOption(options))
+    return
+  }
   if (options.get("version") || command === "--version") {
     console.log(VERSION)
     return
@@ -474,7 +485,7 @@ async function main() {
     default:
       console.error(`Unknown command: ${command}`)
       console.error(
-        "Usage: pico-server serve|status|stop|import-pi|machine [--port N] [--host H] [--data-dir D] [--web-dir D] [--source-dir D] [--detach] [--json]"
+        "Usage: pico-server serve|status|stop|import-pi|machine|agent|mcp [--port N] [--host H] [--data-dir D] [--web-dir D] [--source-dir D] [--detach] [--json]"
       )
       process.exitCode = 2
   }

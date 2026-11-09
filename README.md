@@ -120,6 +120,39 @@ hub on localhost or your tailnet. Agents on the hub can use the agent tools
 (`spawn_subagent`, `agents`) with a `machine` argument, for example to start
 a subagent on `workbox`.
 
+## Control Pico from scripts and other agents
+
+`pico-app agent` starts, messages, and waits for agents of a running Pico:
+
+```sh
+id=$(pico-app agent start . "Find why the tests are slow")
+pico-app agent send "$id" "Now fix it" --wait
+pico-app agent show "$id"
+pico-app agent list
+```
+
+`.` is the directory; without it, the agent works in the current directory.
+`start` takes `--model`, `--profile`, `--worktree`, and `--machine` (a machine
+of the hub; an ID such as `workbox:s12` names one too). `send` never
+interrupts: a busy agent gets the message after its current turn, unless you
+add `--steer`. A goal or message of `-` comes from stdin. With `--wait`,
+`send` and `start` print the answer; the exit code is 0 when the agent is
+done, 1 when it failed or stopped, 2 when it waits for you, and 3 when
+`--timeout` passes first. `--json` prints JSON. Run `pico-app agent help` for
+all options.
+
+Pico is also an MCP server, at `/mcp`. Agents outside Pico, such as Claude
+Code and Codex, can then list, start, message, read, wait for, and stop Pico
+agents. `pico-app mcp` prints the address and the commands to add it:
+
+```sh
+claude mcp add --transport http pico http://127.0.0.1:3141/mcp
+codex mcp add pico --url http://127.0.0.1:3141/mcp
+```
+
+The MCP server has no sign-in, like the rest of Pico: anyone who can reach
+Pico can use it.
+
 ## Development
 
 ```sh

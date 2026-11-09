@@ -44,6 +44,8 @@ import {
 } from "./machines/manager.ts"
 import { MachineProxy } from "./machines/proxy.ts"
 import { addHubRoutes, addMachineServerRoutes } from "./machines/routes.ts"
+import { LocalAgentOps } from "./control/agent-ops.ts"
+import { addMcpRoutes } from "./control/mcp.ts"
 
 export type PicoServer = {
   readonly server: Server
@@ -245,7 +247,14 @@ export async function startServer(options: {
     listenHosts: () => [options.host],
     draining: () => draining,
   })
-  addMachineServerRoutes(router, { agents, runtime, hub, viewers })
+  const ops = new LocalAgentOps({
+    agents,
+    runtime,
+    hub,
+    dataDir: options.paths.dataDir,
+  })
+  addMachineServerRoutes(router, { agents, runtime, hub, viewers, ops })
+  addMcpRoutes(router, { ops, machines })
   addHubRoutes(router, {
     agents,
     runtime,

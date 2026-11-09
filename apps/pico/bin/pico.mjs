@@ -8,12 +8,16 @@ import { fileURLToPath } from "node:url"
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const args = process.argv.slice(2)
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
-if (args.includes("--help")) {
+// `agent` and `mcp` have their own help, and take any text as a message.
+const ownArgs = ["agent", "mcp"].includes(args[0])
+if (!ownArgs && args.includes("--help")) {
   console.log(`Pico — durable Pi sessions in your browser
 Usage: pico-app [serve|status|stop|import-pi] [--port N] [--host H] [--data-dir D]
                  [--web-dir D] [--open|--no-open] [--wait] [--source-dir D]
                  [--detach] [--json] [--no-pty-host] [--pty-host]
        pico-app machine add|list|status|reconnect|rename|enable|disable|remove
+       pico-app agent list|start|send|show|wait|stop
+       pico-app mcp
 The default address is 127.0.0.1:3141. Data is stored in ~/.pico.
 Use a separate --data-dir for development.
 serve --detach starts Pico in the background (output in <data>/server.log).
@@ -23,10 +27,13 @@ Terminals and jobs run in a pty-host process and survive a restart;
 serve --no-pty-host keeps them in the server, and stop --pty-host ends them.
 Import old Pi sessions with import-pi while Pico is stopped.
 Show sessions of other machines over SSH with pico-app machine add <target>.
-Run pico-app machine help for details.`)
+Run pico-app machine help for details.
+Control agents from a shell or a script with pico-app agent; run
+pico-app agent help for details. pico-app mcp prints the address of Pico's
+MCP server, for Claude Code, Codex, and other MCP clients.`)
   process.exit(0)
 }
-if (args.includes("--version")) {
+if (!ownArgs && args.includes("--version")) {
   console.log(pkg.version)
   process.exit(0)
 }
@@ -55,7 +62,12 @@ const dataDir = resolve(
       join(homedir(), ".pico")
   )
 )
-if (dataIndex < 0 && !inlineData) forwarded.push(dataFlag, dataDir)
+// `agent` takes text after `--`, so its data option goes first.
+if (dataIndex < 0 && !inlineData) {
+  if (command === "agent" || command === "mcp")
+    forwarded.unshift(dataFlag, dataDir)
+  else forwarded.push(dataFlag, dataDir)
+}
 if (
   command === "serve" &&
   !forwarded.some((arg) => arg.startsWith("--web-dir"))
