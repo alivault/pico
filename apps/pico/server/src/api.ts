@@ -48,6 +48,7 @@ import { looseNumber, type Terminals } from "./services/terminal.ts"
 import { jobLogParts, readLogTailRaw } from "./services/job-log.ts"
 import { validSize } from "./services/containment.ts"
 import { collectResources } from "./services/resources.ts"
+import { saveUpload } from "./services/uploads.ts"
 
 export type ApiContext = {
   runtime: Runtime
@@ -379,6 +380,13 @@ export function createApi(api: ApiContext) {
     viewers.selectAgent(contextId, id)
     await agents.publishState(id)
     return { ok: true }
+  })
+
+  // A file for a prompt: the raw body is the file, `name` is its name.
+  router.post("/api/upload", async (request) => {
+    const name = stringField(request.query.get("name")) ?? "file"
+    const path = await saveUpload(api.dataDir, name, request.raw)
+    return { ok: true, path }
   })
 
   router.post("/api/prompt", (request) =>

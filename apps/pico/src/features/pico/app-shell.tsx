@@ -136,6 +136,7 @@ import {
 import {
   buildRequestUrl,
   fetchJson,
+  isInlineImageFile,
   readFileAsPromptImage,
 } from "@/features/pico/app-shell-utils"
 import type { ComposerPanelHandle } from "@/features/pico/composer-panel"
@@ -2534,17 +2535,67 @@ function useAppShellAgentWorkspaceView({
     composerPanelRef.current?.focusPrompt({ preventScroll: true })
   }
 
+  // Files that the model cannot read inline go to the machine; the prompt
+  // gets their paths, so the agent reads them with its tools.
+  const uploadComposerFiles = async (files: Array<File>) => {
+    const results = await Promise.allSettled(
+      files.map(async (file) => {
+        const response = await fetchJson<{ ok: true; path: string }>(
+          buildRequestUrl("/api/upload", {
+            machineId,
+            contextId: viewerContextId,
+            searchParams: { name: file.name },
+          }),
+          {
+            method: "POST",
+            headers: { "content-type": "application/octet-stream" },
+            body: file,
+          }
+        )
+        return response.path
+      })
+    )
+    const paths = results.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : []
+    )
+    results.forEach((result, index) => {
+      if (result.status === "rejected")
+        toast.error(`Could not attach ${files[index]?.name ?? "the file"}`, {
+          description:
+            result.reason instanceof Error
+              ? result.reason.message
+              : String(result.reason),
+        })
+    })
+    if (paths.length === 0) return
+    const current = composerTextRef.current
+    const separator = !current || /\s$/.test(current) ? "" : "\n"
+    replaceComposerDraft(
+      serializeComposerDraft({
+        text: `${current}${separator}${paths.join("\n")}\n`,
+        skillName: composerSkillRef.current,
+      }),
+      undefined,
+      { forceSync: true }
+    )
+    composerPanelRef.current?.focusPrompt({ preventScroll: true })
+  }
+
   const onPickImages = async (files: FileList | Array<File> | null) => {
     if (!files || files.length === 0) return
-    const imageFiles = Array.from(files).filter((file) =>
-      file.type.startsWith("image/")
-    )
-    if (imageFiles.length === 0) return
+    const all = Array.from(files)
+    const imageFiles = all.filter(isInlineImageFile)
+    const otherFiles = all.filter((file) => !isInlineImageFile(file))
 
-    const nextImages = await Promise.all(
-      imageFiles.slice(0, 8).map((file) => readFileAsPromptImage(file))
-    )
-    setComposerImages((current) => [...current, ...nextImages].slice(0, 8))
+    const upload =
+      otherFiles.length > 0 ? uploadComposerFiles(otherFiles) : undefined
+    if (imageFiles.length > 0) {
+      const nextImages = await Promise.all(
+        imageFiles.slice(0, 8).map((file) => readFileAsPromptImage(file))
+      )
+      setComposerImages((current) => [...current, ...nextImages].slice(0, 8))
+    }
+    await upload
   }
 
   const composerDraftSeed = composerDraftSeedStore.state

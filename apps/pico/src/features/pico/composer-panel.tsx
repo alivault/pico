@@ -4,9 +4,9 @@ import {
   ArrowUpIcon,
   FileTextIcon,
   GitPullRequestArrowIcon,
-  ImagePlusIcon,
   ListEndIcon,
   ListStartIcon,
+  PaperclipIcon,
   SquareIcon,
   XIcon,
 } from "lucide-react"
@@ -47,8 +47,8 @@ import {
   serializeComposerDraft,
 } from "@/features/pico/composer-utils"
 import {
-  getClipboardImageFiles,
-  hasDraggedImage,
+  getDataTransferFiles,
+  hasDraggedFiles,
 } from "@/features/pico/app-shell-utils"
 import { promptImageKey } from "@/features/pico/conversation-view"
 import {
@@ -349,13 +349,13 @@ export function ComposerPanel({
   }
   const dropHandlers = {
     onDragEnter: (event: React.DragEvent<HTMLDivElement>) => {
-      if (disabled || !hasDraggedImage(event.dataTransfer)) return
+      if (disabled || !hasDraggedFiles(event.dataTransfer)) return
       event.preventDefault()
       dragDepthRef.current += 1
       setIsDraggingImage(true)
     },
     onDragOver: (event: React.DragEvent<HTMLDivElement>) => {
-      if (disabled || !hasDraggedImage(event.dataTransfer)) return
+      if (disabled || !hasDraggedFiles(event.dataTransfer)) return
       event.preventDefault()
       event.dataTransfer.dropEffect = "copy"
     },
@@ -367,10 +367,10 @@ export function ComposerPanel({
     onDrop: (event: React.DragEvent<HTMLDivElement>) => {
       resetDrag()
       if (disabled) return
-      const imageFiles = getClipboardImageFiles(event.dataTransfer)
-      if (imageFiles.length === 0) return
+      const droppedFiles = getDataTransferFiles(event.dataTransfer)
+      if (droppedFiles.length === 0) return
       event.preventDefault()
-      onPickImages(imageFiles)
+      onPickImages(droppedFiles)
       promptRef.current?.focus()
     },
   }
@@ -437,15 +437,16 @@ export function ComposerPanel({
 
       <input
         ref={fileInputRef}
-        name="images"
+        name="attachments"
         type="file"
-        accept="image/*"
         multiple
         className="hidden"
         disabled={disabled}
         onChange={(event) => {
           if (disabled) return
-          onPickImages(event.target.files)
+          onPickImages(Array.from(event.target.files ?? []))
+          // Let the user pick the same file again.
+          event.target.value = ""
         }}
       />
     </>
@@ -773,10 +774,10 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
   const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
     if (disabled) return
 
-    const imageFiles = getClipboardImageFiles(event.clipboardData)
-    if (imageFiles.length === 0) return
+    const pastedFiles = getDataTransferFiles(event.clipboardData)
+    if (pastedFiles.length === 0) return
 
-    onPickImages(imageFiles)
+    onPickImages(pastedFiles)
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1100,16 +1101,16 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
         className="flex items-center gap-2 self-end"
         style={{ gridArea: "leading" }}
       >
-        <TitleTooltip title="Add images">
+        <TitleTooltip title="Attach files">
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Add images"
+            aria-label="Attach files"
             className="cursor-pointer"
             disabled={disabled}
             onClick={() => fileInputRef.current?.click()}
           >
-            <ImagePlusIcon />
+            <PaperclipIcon />
           </Button>
         </TitleTooltip>
       </div>

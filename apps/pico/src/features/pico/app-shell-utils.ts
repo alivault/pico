@@ -255,20 +255,31 @@ export async function fetchJson<T>(
   return data
 }
 
-/**
- * Whether a drag can carry an image. During a drag, the browser shows only
- * the kind and the MIME type of each item. Some sources give no type, so
- * accept any file without a type; the drop keeps only the images.
- */
-export function hasDraggedImage(data: DataTransfer) {
-  if (!data.types.includes("Files")) return false
-  const items = Array.from(data.items)
-  if (items.length === 0) return true
-  return items.some(
-    (item) =>
-      item.kind === "file" &&
-      (item.type === "" || item.type.startsWith("image/"))
-  )
+/** Whether a drag can carry files of any type. */
+export function hasDraggedFiles(data: DataTransfer) {
+  return data.types.includes("Files")
+}
+
+/** All files of a paste or a drop. */
+export function getDataTransferFiles(data: DataTransfer) {
+  const itemFiles = Array.from(data.items).flatMap((item) => {
+    if (item.kind !== "file") return []
+    const file = item.getAsFile()
+    return file ? [file] : []
+  })
+  return itemFiles.length > 0 ? itemFiles : Array.from(data.files)
+}
+
+/** The image types that the model reads inline. Other files are uploaded. */
+const INLINE_IMAGE_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+])
+
+export function isInlineImageFile(file: File) {
+  return INLINE_IMAGE_TYPES.has(file.type)
 }
 
 /** The image files of a paste or a drop. */
