@@ -57,6 +57,10 @@ export type PicoServer = {
   port(): number
   /** Stop taking new work, wait for turns to finish (up to `timeoutMs`), and close. */
   shutdown(options?: { drain?: boolean; timeoutMs?: number }): Promise<void>
+  /** Stop the wait of a draining shutdown: close now. */
+  hurry(): void
+  /** A restart was asked for; the server shows it until it closes. */
+  markRestarting(): void
 }
 
 export async function startServer(options: {
@@ -65,6 +69,11 @@ export async function startServer(options: {
   port: number
   /** `pico-server stop` asked this server to drain and stop. */
   onShutdownRequest?: () => void
+  /**
+   * A client asked for a restart: drain (or not, with `now`), stop, and
+   * start again. Without it, the server cannot restart itself.
+   */
+  onRestartRequest?: (now: boolean) => void
   /** The transport to remote machines; tests use a fake. */
   machineTransport?: TransportFactory
   /**
@@ -236,6 +245,8 @@ export async function startServer(options: {
   const gitWatcher = new GitWatcher(hub)
   const highlight = new HighlightService()
   let draining = false
+  let restarting = false
+  let hurried = false
   let listeningPort = options.port
 
   const router = createApi({
@@ -255,6 +266,9 @@ export async function startServer(options: {
     port: () => listeningPort,
     listenHosts: () => [options.host],
     draining: () => draining,
+    restart: () =>
+      options.onRestartRequest ? { pending: restarting } : undefined,
+    webDir: options.paths.webDir,
   })
   const ops = new LocalAgentOps({
     agents,
@@ -281,6 +295,16 @@ export async function startServer(options: {
     }
     setImmediate(() => options.onShutdownRequest?.())
     return { ok: true }
+  })
+  router.post("/api/system/restart", async (request) => {
+    const onRestart = options.onRestartRequest
+    if (!onRestart)
+      throw new ApiError(501, "This Pico server cannot restart itself")
+    const body = await request.body<{ now?: unknown }>()
+    const now = body.now === true
+    // Answer first: the restart closes the connections.
+    setImmediate(() => onRestart(now))
+    return { ok: true, now, activeTurnCount: agents.activeTurnCount() }
   })
 
   const server = createServer((request, response) => {
@@ -566,7 +590,11 @@ export async function startServer(options: {
         if (shutdownOptions.drain) {
           const deadline =
             Date.now() + (shutdownOptions.timeoutMs ?? 10 * 60_000)
-          while (agents.activeTurnCount() > 0 && Date.now() < deadline) {
+          while (
+            !hurried &&
+            agents.activeTurnCount() > 0 &&
+            Date.now() < deadline
+          ) {
             await new Promise((resolve) => setTimeout(resolve, 500))
           }
         }
@@ -587,6 +615,12 @@ export async function startServer(options: {
         await runtime.close()
       })()
       return closing
+    },
+    hurry() {
+      hurried = true
+    },
+    markRestarting() {
+      restarting = true
     },
   }
 }

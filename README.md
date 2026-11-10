@@ -43,6 +43,7 @@ pnpm start --no-open --port 3141
 pnpm start --data-dir PATH   # default: ~/.pico
 pnpm start status
 pnpm start stop --wait       # let active turns finish first
+pnpm start restart           # load a new build; restart --now does not wait
 pnpm start import-pi         # import Pi sessions as agents (stop Pico first)
 ```
 

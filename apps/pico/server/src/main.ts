@@ -7,6 +7,9 @@
  *   pico-server status [--json]
  *   pico-server stop [--wait] [--pty-host]
  *     `--pty-host` also stops the pty-host, so terminals and jobs end too.
+ *   pico-server restart [--now]
+ *     Stop after active turns finish (or at once, with `--now`), and start
+ *     again with the same options. Turns that a restart cuts off continue.
  *   pico-server machine add|list|status|reconnect|rename|enable|disable|remove …
  *   pico-server agent list|start|send|show|wait|stop …   (see control/cli.ts)
  *   pico-server mcp      the MCP URL (see control/mcp.ts)
@@ -198,12 +201,40 @@ function ptyHostOption(options: Map<string, string | boolean>) {
   return { script }
 }
 
+/**
+ * The exit code that asks a launcher (`bin/pico.mjs`, `build.mjs --watch`)
+ * to start the server again. The launchers have their own copy of it.
+ */
+const RESTART_EXIT_CODE = 75
+
+/**
+ * Start this server again, after it closed and released its lock. A
+ * launcher (PICO_SUPERVISED=1) starts the new process, so that it stays in
+ * the launcher's terminal. Without one, start it in the background like
+ * `serve --detach`, with its output in `<data>/server.log`.
+ */
+function relaunch(paths: ServerPaths) {
+  if (process.env.PICO_SUPERVISED === "1") process.exit(RESTART_EXIT_CODE)
+  const log = openSync(paths.logFile, "a")
+  const child = spawn(
+    process.execPath,
+    [...process.execArgv, process.argv[1]!, ...process.argv.slice(2)],
+    { detached: true, stdio: ["ignore", log, log], env: process.env }
+  )
+  closeSync(log)
+  child.unref()
+  console.log(
+    `Pico continues in the background (pid ${child.pid}). Output: ${paths.logFile}`
+  )
+}
+
 async function listen(
   paths: ServerPaths,
   host: string,
   port: number,
   searchPorts: boolean,
   onShutdownRequest: () => void,
+  onRestartRequest: (now: boolean) => void,
   ptyHost?: { script: string }
 ) {
   let lastError: unknown
@@ -214,6 +245,7 @@ async function listen(
         host,
         port: port + offset,
         onShutdownRequest,
+        onRestartRequest,
         ...(ptyHost ? { ptyHost } : {}),
       })
     } catch (error) {
@@ -245,7 +277,12 @@ async function serveDetached(options: Map<string, string | boolean>) {
   const child = spawn(
     process.execPath,
     [...process.execArgv, process.argv[1]!, ...args],
-    { detached: true, stdio: ["ignore", log, log], env: process.env }
+    {
+      detached: true,
+      stdio: ["ignore", log, log],
+      // No launcher waits for this server: it starts itself again.
+      env: { ...process.env, PICO_SUPERVISED: undefined },
+    }
   )
   closeSync(log)
   child.unref()
@@ -286,6 +323,7 @@ async function serve(options: Map<string, string | boolean>) {
   const release = await acquireLock(paths)
   let server: PicoServer
   let requestStop: (drain: boolean) => void = () => undefined
+  let requestRestart: (now: boolean) => void = () => undefined
   try {
     server = await listen(
       paths,
@@ -293,6 +331,7 @@ async function serve(options: Map<string, string | boolean>) {
       port,
       !requestedPort,
       () => requestStop(true),
+      (now) => requestRestart(now),
       ptyHostOption(options)
     )
   } catch (error) {
@@ -313,13 +352,20 @@ async function serve(options: Map<string, string | boolean>) {
   console.log(`Data: ${dataDir}${webDir ? `\nWeb: ${webDir}` : ""}`)
 
   let stopping = false
-  const stop = async (drain: boolean) => {
-    if (stopping) return
+  // What happens after the stop. A stop request during a restart wins.
+  let restartAfter = false
+  const stop = async (drain: boolean, restart = false) => {
+    if (stopping) {
+      if (!restart) restartAfter = false
+      if (!drain) server.hurry()
+      return
+    }
     stopping = true
+    restartAfter = restart
+    if (restart) server.markRestarting()
+    const waits = drain && server.agents.activeTurnCount() > 0
     console.log(
-      drain
-        ? "Pico is stopping after active turns finish…"
-        : "Pico is stopping…"
+      `Pico is ${restart ? "restarting" : "stopping"}${waits ? " after active turns finish" : ""}…`
     )
     const force = setTimeout(
       () => process.exit(1),
@@ -332,9 +378,11 @@ async function serve(options: Map<string, string | boolean>) {
       console.error("[pico] shutdown failed:", error)
     }
     release()
+    if (restartAfter) relaunch(paths)
     process.exit(0)
   }
   requestStop = (drain) => void stop(drain)
+  requestRestart = (now) => void stop(!now, true)
   process.on("SIGINT", () => void stop(false))
   process.on("SIGTERM", () => void stop(false))
   process.on("SIGHUP", () => void stop(true))
@@ -399,6 +447,56 @@ async function stopCommand(options: Map<string, string | boolean>) {
     await new Promise((resolveWait) => setTimeout(resolveWait, 250))
   console.log("Pico stopped.")
   await stopHost()
+}
+
+/**
+ * `pico-server restart [--now]`: ask the server to restart, and wait until
+ * the new process answers.
+ */
+async function restartCommand(options: Map<string, string | boolean>) {
+  const paths = serverPaths(dataDirOption(options))
+  const state = readState(paths)
+  if (!state || !alive(state.pid)) {
+    console.log("Pico is not running. Start it with `pico-app serve`.")
+    process.exitCode = 1
+    return
+  }
+  const host =
+    state.host === "0.0.0.0" || state.host === "::" ? "127.0.0.1" : state.host
+  const now = Boolean(options.get("now"))
+  const response = await fetch(
+    `http://${host}:${state.port}/api/system/restart`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ now }),
+    }
+  )
+  const result = (await response.json().catch(() => ({}))) as {
+    error?: string
+    activeTurnCount?: number
+  }
+  if (!response.ok)
+    throw new Error(result.error ?? `Restart failed: ${response.status}`)
+  const turns = result.activeTurnCount ?? 0
+  console.log(
+    !now && turns > 0
+      ? `Pico restarts when ${turns} active turn(s) finish (at most 10 minutes). Use --now to restart at once.`
+      : "Pico is restarting…"
+  )
+  const deadline = Date.now() + (now ? 60_000 : 12 * 60_000)
+  while (Date.now() < deadline) {
+    await new Promise((resolveWait) => setTimeout(resolveWait, 500))
+    const next = readState(paths)
+    if (!next || next.pid === state.pid || !alive(next.pid)) continue
+    if (await health(next)) {
+      console.log(
+        `Pico ${next.version} is running at http://${next.host}:${next.port}`
+      )
+      return
+    }
+  }
+  throw new Error(`Pico did not start again in time. See ${paths.logFile}`)
 }
 
 async function importCommand(options: Map<string, string | boolean>) {
@@ -482,10 +580,13 @@ async function main() {
     case "stop":
       await stopCommand(options)
       break
+    case "restart":
+      await restartCommand(options)
+      break
     default:
       console.error(`Unknown command: ${command}`)
       console.error(
-        "Usage: pico-server serve|status|stop|import-pi|machine|agent|mcp [--port N] [--host H] [--data-dir D] [--web-dir D] [--source-dir D] [--detach] [--json]"
+        "Usage: pico-server serve|status|stop|restart|import-pi|machine|agent|mcp [--port N] [--host H] [--data-dir D] [--web-dir D] [--source-dir D] [--detach] [--json]"
       )
       process.exitCode = 2
   }

@@ -67,8 +67,13 @@ if (!watch) {
         {
           cwd: root,
           stdio: "inherit",
+          env: { ...process.env, PICO_SUPERVISED: "1" },
         }
       )
+      // The server asked for a restart (RESTART_EXIT_CODE in src/main.ts).
+      child.once("exit", (code) => {
+        if (code === 75) void restart()
+      })
     })
     return restarting
   }

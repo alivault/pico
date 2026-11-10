@@ -12,15 +12,19 @@ const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
 const ownArgs = ["agent", "mcp"].includes(args[0])
 if (!ownArgs && args.includes("--help")) {
   console.log(`Pico — durable Pi sessions in your browser
-Usage: pico-app [serve|status|stop|import-pi] [--port N] [--host H] [--data-dir D]
-                 [--web-dir D] [--open|--no-open] [--wait] [--source-dir D]
-                 [--detach] [--json] [--no-pty-host] [--pty-host]
+Usage: pico-app [serve|status|stop|restart|import-pi] [--port N] [--host H]
+                 [--data-dir D] [--web-dir D] [--open|--no-open] [--wait]
+                 [--source-dir D] [--detach] [--json] [--no-pty-host]
+                 [--pty-host] [--now]
        pico-app machine add|list|status|reconnect|rename|enable|disable|remove
        pico-app agent list|start|send|show|wait|stop
        pico-app mcp
 The default address is 127.0.0.1:3141. Data is stored in ~/.pico.
 Use a separate --data-dir for development.
 serve --detach starts Pico in the background (output in <data>/server.log).
+restart stops Pico after active turns finish and starts it again with the
+same options, for example after an update; restart --now does not wait.
+Turns that a restart cuts off continue.
 status --json prints the server state as JSON; the exit code is 1 when Pico is
 not running.
 Terminals and jobs run in a pty-host process and survive a restart;
@@ -77,23 +81,38 @@ if (
     process.env.PICO_WEB_DIR ?? join(root, ".output/public")
   )
 }
-const child = spawn(
-  process.execPath,
-  [
-    "--enable-source-maps",
-    join(root, "server/dist/pico-server.mjs"),
-    command,
-    ...forwarded,
-  ],
-  { stdio: "inherit" }
-)
-child.on("error", (error) => {
-  console.error(error.message)
-  process.exitCode = 1
-})
-child.on("exit", (code) => {
-  process.exitCode = code ?? 1
-})
+// A server that asks for a restart exits with this code, and this launcher
+// starts it again (the same code is in server/src/main.ts).
+const RESTART_EXIT_CODE = 75
+const supervise = command === "serve" && !forwarded.includes("--detach")
+let child
+function startChild() {
+  child = spawn(
+    process.execPath,
+    [
+      "--enable-source-maps",
+      join(root, "server/dist/pico-server.mjs"),
+      command,
+      ...forwarded,
+    ],
+    {
+      stdio: "inherit",
+      env: supervise ? { ...process.env, PICO_SUPERVISED: "1" } : process.env,
+    }
+  )
+  child.on("error", (error) => {
+    console.error(error.message)
+    process.exitCode = 1
+  })
+  child.on("exit", (code) => {
+    if (supervise && code === RESTART_EXIT_CODE) {
+      startChild()
+      return
+    }
+    process.exitCode = code ?? 1
+  })
+}
+startChild()
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, () => child.kill(signal))
 if (open) {

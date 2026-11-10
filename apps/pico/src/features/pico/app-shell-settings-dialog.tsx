@@ -2,6 +2,11 @@ import * as React from "react"
 import { emitPicoEvent } from "@/features/pico/agent/events"
 import { useMachineFeatureCheck } from "@/features/pico/machine-store"
 import {
+  SERVER_RESTART_FEATURE,
+  serverStatusLabel,
+  useServerHealth,
+} from "@/features/pico/server-restart"
+import {
   SettingsItemTrailing,
   SettingsPageHost,
   settingsPageEntries,
@@ -440,6 +445,8 @@ type SettingsCommandGroupsOptions = Pick<
   onPiCacheRetentionChange: (
     retention: PiCacheRetention
   ) => void | Promise<void>
+  /** The version of the machine's server, or a newer build to restart into. */
+  serverStatus: string
 }
 
 function piTransportLabel(transport: PiTransport) {
@@ -484,6 +491,7 @@ function getSettingsCommandGroups({
   piCacheRetention,
   onPiTransportChange,
   onPiCacheRetentionChange,
+  serverStatus,
 }: SettingsCommandGroupsOptions): Array<SettingsCommandGroup> {
   const desktopNotificationDescription = desktopNotificationPermissionLabel(
     desktopNotificationPermission
@@ -658,6 +666,27 @@ function getSettingsCommandGroups({
           ],
           onSelect: () => emitPicoEvent("pico:open-machines", {}),
         },
+        ...(hasFeature(SERVER_RESTART_FEATURE)
+          ? [
+              {
+                id: "server",
+                title: "Server",
+                description:
+                  "The version of Pico on this machine, and a restart that loads an update.",
+                valueLabel: serverStatus,
+                page: "server",
+                keywords: [
+                  "server",
+                  "restart",
+                  "reload",
+                  "update",
+                  "upgrade",
+                  "version",
+                ],
+                onSelect: () => onOpenPage("server"),
+              } satisfies SettingsCommand,
+            ]
+          : []),
         {
           id: "resources",
           title: "Resources",
@@ -1070,6 +1099,7 @@ function AppShellSettingsDialog({
   )
   const isMobile = useIsMobile()
   const hasFeature = useMachineFeatureCheck()
+  const serverHealth = useServerHealth(machineId)
   // The open settings pages. The last one shows; Escape goes back one.
   const [pages, setPages] = React.useState<Array<SettingsPageRef>>([])
   const topPage = pages.at(-1)
@@ -1173,6 +1203,7 @@ function AppShellSettingsDialog({
     onThemeCommand: openThemeStage,
     onOpenPage: openPage,
     hasFeature,
+    serverStatus: serverStatusLabel(serverHealth),
   })
 
   React.useImperativeHandle(commandsRef, () => ({

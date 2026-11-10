@@ -24,6 +24,7 @@
   - Full check: `pnpm check` from the repo root (runs `vp check`, the server type check, and the server tests).
 - Format only the files you changed, then look at `git diff` to make sure `vp fmt` did not change unrelated lines.
 - Server: `pnpm --filter @pico/server typecheck` and `pnpm test`. The tests build `apps/pico/server/dist` first.
+- To load a new server build into a running Pico (`pnpm start`, or an installed `pico-app`), run `pico-app restart` (or `pnpm start restart`), or use Settings, Server. It waits for active turns; `--now` does not. A launcher (`bin/pico.mjs`, `build.mjs --watch`) starts the server again when it exits with code 75; a server without one starts itself in the background.
 - When Pico runs from `pnpm dev`, the server restarts after each successful rebuild. This includes changes to `apps/pico/server/src/**`, `apps/pico/server/package.json`, and dependency installs. A restart stops the current agent turn. Group these edits so the server rebuilds less often, and expect the turn to stop after them.
 
 ## Releases

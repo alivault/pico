@@ -49,6 +49,7 @@ import { jobLogParts, readLogTailRaw } from "./services/job-log.ts"
 import { validSize } from "./services/containment.ts"
 import { collectResources } from "./services/resources.ts"
 import { saveUpload } from "./services/uploads.ts"
+import { serverUpdate, webBuildId } from "./services/build-info.ts"
 
 export type ApiContext = {
   runtime: Runtime
@@ -67,6 +68,9 @@ export type ApiContext = {
   port: () => number
   listenHosts: () => string[]
   draining: () => boolean
+  /** Undefined when the server cannot restart itself. */
+  restart: () => { pending: boolean } | undefined
+  webDir: string | undefined
 }
 
 type Target = {
@@ -198,6 +202,7 @@ export function createApi(api: ApiContext) {
       endpoints: [],
       features: [
         "durable-agents",
+        "server-restart",
         "agent-index",
         "conversation",
         "paginated-conversation-history",
@@ -251,6 +256,11 @@ export function createApi(api: ApiContext) {
     serverProtocolVersion: SERVER_PROTOCOL_VERSION,
     apiContractVersion: API_CONTRACT_VERSION,
     phase: api.draining() ? "draining" : "serving",
+    pid: process.pid,
+    startedAt: new Date(api.startedAt).toISOString(),
+    restart: api.restart(),
+    update: serverUpdate(),
+    webBuild: webBuildId(api.webDir),
     listenHosts: api.listenHosts(),
     port: api.port(),
     activeTurnCount: agents.activeTurnCount(),
