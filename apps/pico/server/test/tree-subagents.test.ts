@@ -118,7 +118,10 @@ void test("tree navigation keeps the subagents under the agent", async () => {
     const tree = (await (
       await fetch(`${url}/api/agent/tree?agent=${parentId}`)
     ).json()) as { nodes: Array<{ entry: { id: string } }> }
-    const targetId = tree.nodes[0]?.entry.id
+    // The last user message, as after an abort before the reply: the edit
+    // still goes back to before it.
+    const targetId = tree.nodes.at(-1)?.entry.id
+    assert.equal(tree.nodes.length, 2, JSON.stringify(tree))
     assert.ok(targetId, JSON.stringify(tree))
     const navigated = await fetch(`${url}/api/agent/tree?agent=${parentId}`, {
       method: "POST",
@@ -126,6 +129,10 @@ void test("tree navigation keeps the subagents under the agent", async () => {
       body: JSON.stringify({ targetId }),
     })
     assert.equal(navigated.status, 200, await navigated.clone().text())
+    assert.equal(
+      ((await navigated.json()) as { editorText?: string }).editorText,
+      "Second"
+    )
 
     const agents = await listed()
     const replacement = agents.find(
@@ -136,6 +143,11 @@ void test("tree navigation keeps the subagents under the agent", async () => {
       agents.find((agent) => agent.id === subagentId)?.parent,
       replacement.id
     )
+    // The replacement shares the history before the message.
+    const replacementTree = (await (
+      await fetch(`${url}/api/agent/tree?agent=${replacement.id}`)
+    ).json()) as { leafId: string | null }
+    assert.equal(replacementTree.leafId, tree.nodes[0]?.entry.id)
   } finally {
     server.kill("SIGTERM")
     await exited

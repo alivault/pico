@@ -2702,6 +2702,7 @@ export class Agents implements HostAgents {
       ...meta,
     }
     let conversationId: ConversationId
+    let seed: Transcript | undefined
     if (at === undefined) {
       const agentState = await this.#doc(source, "agent")
       const conversation = await this.#harness.createConversation(
@@ -2725,9 +2726,17 @@ export class Agents implements HostAgents {
       )
       conversationId = conversation.id
     } else {
-      const owner =
-        (await this.#entry(source, at)).entry?.conversationId ??
-        conversationIdOf(source)
+      const found = await this.#entry(source, at)
+      const owner = found.entry?.conversationId ?? conversationIdOf(source)
+      if (found.index >= 0) {
+        // The fork's history is the source's history up to `at`. Share those
+        // entries; a reload of a long history from the store takes seconds.
+        const entries = found.transcript.entries.slice(0, found.index + 1)
+        let bytes = found.transcript.bytes
+        for (const entry of found.transcript.entries.slice(found.index + 1))
+          bytes -= approximateBytes(entry)
+        seed = { entries, bytes: Math.max(0, bytes) }
+      }
       const parent = await this.#harness.conversation(owner, ctx)
       if (!parent) throw notFound("Fork source not found")
       const fork = await parent.fork(
@@ -2749,6 +2758,10 @@ export class Agents implements HostAgents {
     const id = publicId(conversationId)
     this.#metas.set(id, base)
     this.#docs.set(id, {})
+    if (seed && !this.#transcripts.has(id) && !this.#loading.has(id)) {
+      this.#transcripts.set(id, seed)
+      this.#evictTranscripts()
+    }
     const transcript = await this.transcript(id)
     const summary = summarize(transcript.entries)
     this.#updateMeta(id, {
@@ -2810,27 +2823,39 @@ export class Agents implements HostAgents {
       throw badRequest(
         "Wait for the agent to finish before navigating the tree."
       )
-    let owner: string | undefined
-    let target: EntryRecord | undefined
-    let targetIndex = -1
-    let ownerTranscript: Transcript | undefined
-    for (const member of this.#family(id)) {
-      const transcript = await this.transcript(member)
-      const index = transcript.entries.findIndex(
-        (entry) => String(entry.id) === targetId
-      )
-      if (index >= 0) {
+    // Look in the agent's own transcript first: it holds every entry of its
+    // branch, so an edit never loads the other branches. A long agent has many
+    // of them, and each transcript holds the full history before its fork.
+    const current = await this.transcript(id)
+    let owner = id
+    let ownerTranscript = current
+    let targetIndex = current.entries.findIndex(
+      (entry) => String(entry.id) === targetId
+    )
+    if (targetIndex < 0) {
+      // Another branch: the newest conversation that holds the entry.
+      for (const member of this.#family(id).reverse()) {
+        if (member === id) continue
+        const transcript = await this.transcript(member)
+        const index = transcript.entries.findIndex(
+          (entry) => String(entry.id) === targetId
+        )
+        if (index < 0) continue
         owner = member
-        target = transcript.entries[index]
-        targetIndex = index
         ownerTranscript = transcript
-        if (member === id) break
+        targetIndex = index
+        break
       }
     }
-    if (!owner || !target || !ownerTranscript)
-      throw notFound("tree target not found")
-    const current = await this.transcript(id)
-    if (String(current.entries.at(-1)?.id) === targetId) {
+    const target = ownerTranscript.entries[targetIndex]
+    if (targetIndex < 0 || !target) throw notFound("tree target not found")
+    // The agent is at the target already. A user message is different: an
+    // edit of the last message (for example after an abort before a reply)
+    // must still go back to before it.
+    if (
+      !isUserInputEntry(target) &&
+      String(current.entries.at(-1)?.id) === targetId
+    ) {
       return { cancelled: false, aborted: false }
     }
     let at: string | undefined = targetId
