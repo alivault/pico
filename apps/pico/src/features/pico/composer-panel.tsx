@@ -469,13 +469,14 @@ const ComposerAttachments = React.memo(function ComposerAttachments({
   if (images.length === 0) return null
 
   return (
-    <div className="flex flex-wrap gap-3">
+    // One line that scrolls sideways: many images do not push the text down.
+    <div className="flex gap-3 overflow-x-auto overscroll-x-contain">
       {images.map((image, index) => (
-        <div key={promptImageKey(image)} className="relative">
+        <div key={promptImageKey(image)} className="relative shrink-0">
           <img
             src={image.previewUrl}
             alt="Attachment preview"
-            className="h-20 rounded-lg border object-cover"
+            className="h-20 max-w-60 rounded-lg border object-cover"
           />
           <Button
             type="button"
