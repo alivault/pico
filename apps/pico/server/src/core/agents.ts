@@ -467,6 +467,10 @@ export class Agents implements HostAgents {
   readonly #metas = new Map<string, AgentMeta>()
   readonly #docs = new Map<string, Docs>()
   readonly #transcripts = new Map<string, Transcript>()
+  /** Projected tree items of conversations, for `tree()`. */
+  readonly #treeItems = new Map<string, TreeItem[]>()
+  /** Reads of tree items in progress; a new entry cancels the copy. */
+  readonly #treeReads = new Map<string, symbol>()
   readonly #loading = new Map<string, Promise<Transcript>>()
   readonly #arrivals = new Map<string, EntryRecord[]>()
   readonly #watchers = new Map<string, number>()
@@ -788,6 +792,8 @@ export class Agents implements HostAgents {
         const entry = change.value
         const id = publicId(entry.conversationId)
         if (!this.#metas.has(id)) continue
+        this.#treeItems.delete(id)
+        this.#treeReads.delete(id)
         const transcript = this.#transcripts.get(id)
         if (transcript) {
           transcript.entries.push(entry)
@@ -2591,38 +2597,35 @@ export class Agents implements HostAgents {
     // thousands of entries deep, and JSON.stringify of a nested tree that
     // deep overflows the stack. The client links the nodes by parentId.
     const nodes = new Map<string, Node>()
+    // For each entry of the family, the nearest entry at or before it that the
+    // tree shows: a fork point can be an entry the tree omits.
+    const shownAt = new Map<string, string | null>()
     const labels = this.meta(id).labels ?? {}
     let leafId: string | null = null
 
     for (const member of members) {
-      const transcript = await this.transcript(member)
       const record = await this.#harness.commit(
         (tx) => tx.conversation(conversationIdOf(member)),
         ctx
       )
-      let parentId: string | null = record?.parent
-        ? String(record.parent.at)
-        : null
-      while (parentId && !nodes.has(parentId)) {
-        // The fork point may be an entry the tree omits; walk back to one it shows.
-        const index = transcript.entries.findIndex(
-          (entry) => String(entry.id) === parentId
-        )
-        const previous = index > 0 ? transcript.entries[index - 1] : undefined
-        parentId = previous ? String(previous.id) : null
-      }
-      for (const entry of transcript.entries) {
-        const entryId = String(entry.id)
-        if (nodes.has(entryId)) {
-          parentId = entryId
+      const forkPoint = record?.parent ? String(record.parent.at) : null
+      let parentId: string | null =
+        forkPoint === null
+          ? null
+          : nodes.has(forkPoint)
+            ? forkPoint
+            : (shownAt.get(forkPoint) ?? null)
+      for (const item of await this.#treeItemsOf(member, forkPoint)) {
+        if (nodes.has(item.id)) {
+          parentId = item.id
           continue
         }
-        if (publicId(entry.conversationId) !== member) continue
-        const projected = projectTreeEntry(entry, parentId)
-        if (!projected) continue
-        const label = labels[entryId]
+        if (!item.own) continue
+        shownAt.set(item.id, item.projected ? item.id : parentId)
+        if (!item.projected) continue
+        const label = labels[item.id]
         const node: Node = {
-          entry: projected,
+          entry: { ...item.projected, parentId },
           ...(label
             ? {
                 label: label.label,
@@ -2630,8 +2633,8 @@ export class Agents implements HostAgents {
               }
             : {}),
         }
-        nodes.set(entryId, node)
-        parentId = entryId
+        nodes.set(item.id, node)
+        parentId = item.id
       }
       if (member === id) leafId = parentId
     }
@@ -2646,6 +2649,58 @@ export class Agents implements HostAgents {
       streamingEntryId: streaming ? leafId : null,
       nodes: [...nodes.values()],
     }
+  }
+
+  /**
+   * The tree items of a conversation: its own entries, projected. Each
+   * conversation's history holds the full history before its fork, so the
+   * tree of a long agent with many edits would read the same entries many
+   * times. Read only the entries after the fork point, and keep the
+   * projections: the earlier conversations of a family seldom change.
+   */
+  async #treeItemsOf(
+    member: string,
+    forkPoint: string | null
+  ): Promise<TreeItem[]> {
+    const loaded = this.#transcripts.get(member)
+    if (loaded) return loaded.entries.map((entry) => treeItem(entry, member))
+    const cached = this.#treeItems.get(member)
+    if (cached) {
+      this.#treeItems.delete(member)
+      this.#treeItems.set(member, cached)
+      return cached
+    }
+    const read = Symbol(member)
+    this.#treeReads.set(member, read)
+    const conversation = await this.conversation(member)
+    const items: TreeItem[] = []
+    let cursor: Parameters<Conversation["entries"]>[2]
+    do {
+      const page = await conversation.entries(
+        {
+          order: "ascending",
+          ...(forkPoint === null
+            ? {}
+            : { minEntryId: (Number(forkPoint) + 1) as never }),
+        },
+        1000,
+        cursor,
+        ctx
+      )
+      for (const entry of page.items) items.push(treeItem(entry, member))
+      cursor = page.next
+    } while (cursor)
+    // Keep no copy when an entry arrived during the read.
+    if (this.#treeReads.get(member) === read) {
+      this.#treeReads.delete(member)
+      this.#treeItems.set(member, items)
+      while (this.#treeItems.size > MAX_TREE_ITEMS) {
+        const oldest = this.#treeItems.keys().next().value
+        if (oldest === undefined) break
+        this.#treeItems.delete(oldest)
+      }
+    }
+    return items
   }
 
   /** User messages to fork from, newest last. */
@@ -2963,6 +3018,26 @@ function summarize(entries: readonly EntryRecord[]): Partial<AgentMeta> {
     ...(lastMessagePreview ? { lastMessagePreview } : {}),
   }
 }
+
+type TreeItem = {
+  id: string
+  /** The entry belongs to this conversation, not to one before its fork. */
+  own: boolean
+  /** Projected with a null parent; undefined when the tree omits the entry. */
+  projected: ReturnType<typeof projectTreeEntry>
+}
+
+function treeItem(entry: EntryRecord, member: string): TreeItem {
+  const own = publicId(entry.conversationId) === member
+  return {
+    id: String(entry.id),
+    own,
+    projected: own ? projectTreeEntry(entry, null) : undefined,
+  }
+}
+
+/** Conversations whose tree items stay in memory. */
+const MAX_TREE_ITEMS = 64
 
 const TREE_PREVIEW = 2000
 
