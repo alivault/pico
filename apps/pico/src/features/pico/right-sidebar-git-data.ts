@@ -598,7 +598,7 @@ export function gitCommitStatCount(
   return match ? Number(match[1]) : 0
 }
 
-async function copyRightSidebarTextToClipboard(text: string) {
+export async function copyRightSidebarTextToClipboard(text: string) {
   if (!text) throw new Error("Nothing to copy")
 
   if (window.isSecureContext && navigator.clipboard?.writeText) {

@@ -7,6 +7,9 @@ import {
   CircleDotIcon,
   CircleSlashIcon,
   ExternalLinkIcon,
+  EyeIcon,
+  HashIcon,
+  LinkIcon,
   MessageSquareIcon,
   MessageSquarePlusIcon,
   PlusIcon,
@@ -21,6 +24,16 @@ import {
 } from "@tanstack/react-query"
 
 import { Button } from "@/components/ui/button"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
 import {
   Dialog,
   DialogContent,
@@ -45,6 +58,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import { MarkdownBlock } from "@/features/pico/markdown-renderer"
+import { copyRightSidebarTextToClipboard } from "@/features/pico/right-sidebar-git-data"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import { GitSectionNote } from "@/features/pico/right-sidebar-section-note"
 import { getErrorMessage } from "@/features/pico/right-sidebar-shared"
@@ -681,18 +695,234 @@ function NewIssueDialog({
   )
 }
 
+function issueQueryOptions({
+  machineId,
+  viewerContextId,
+  cwd,
+  number,
+}: {
+  machineId: string
+  viewerContextId: string
+  cwd: string
+  number: number
+}) {
+  return {
+    queryKey: picoQueryKeys.ghIssue(viewerContextId, cwd, number),
+    queryFn: async (): Promise<CachedIssue> =>
+      (
+        await fetchJson<GhIssueData>(
+          buildRequestUrl(
+            `/api/gh-issue?cwd=${encodeURIComponent(cwd)}&number=${number}`,
+            { machineId, contextId: viewerContextId }
+          )
+        )
+      ).issue,
+    staleTime: ISSUES_STALE_MS,
+  }
+}
+
+/** What the issue page, its buttons, and the context menu of a row can do. */
+function useIssueActions({
+  viewerContextId,
+  cwd,
+  repo,
+  labels,
+  mutations,
+}: {
+  viewerContextId: string
+  cwd: string
+  /** Absent until the repository is known; the actions wait for it. */
+  repo: AvailableRepo | undefined
+  labels: Array<GhLabel>
+  mutations: ReturnType<typeof useIssueMutations>
+}) {
+  const machineId = useMachineId()
+  const queryClient = useQueryClient()
+  const name = repo?.nameWithOwner ?? ""
+  const copy = async (text: string, what: string) => {
+    try {
+      await copyRightSidebarTextToClipboard(text)
+      toast.success(`Copied the ${what}`)
+    } catch (error) {
+      toast.error(getErrorMessage(error, `Could not copy the ${what}`))
+    }
+  }
+  return {
+    /** A new agent with the issue as its prompt; loads the body when needed. */
+    startAgent: async (issue: GhIssueSummary) => {
+      if (!repo) return
+      let full: CachedIssue
+      try {
+        full = await queryClient.fetchQuery(
+          issueQueryOptions({
+            machineId,
+            viewerContextId,
+            cwd,
+            number: issue.number,
+          })
+        )
+      } catch (error) {
+        toast.error(getErrorMessage(error, "Failed to load the issue"))
+        return
+      }
+      queueMachineAction(machineId, {
+        type: "new-agent",
+        project: cwd,
+        draft: { text: issueAgentPrompt(repo, full), images: [] },
+      })
+    },
+    addToPrompt: (issue: GhIssueSummary) => {
+      if (!repo) return
+      queueMachineAction(machineId, {
+        type: "insert-prompt",
+        text: issueReference(repo, issue),
+      })
+    },
+    close: (number: number, reason: "completed" | "not planned") =>
+      mutations.setState.mutate({ number, state: "closed", reason }),
+    reopen: (number: number) =>
+      mutations.setState.mutate({ number, state: "open" }),
+    toggleLabel: (issue: GhIssueSummary, name: string) => {
+      const has = issue.labels.some((label) => label.name === name)
+      const added = labels.find((label) => label.name === name)
+      mutations.editLabels.mutate({
+        number: issue.number,
+        add: has || !added ? [] : [added],
+        remove: has ? [name] : [],
+      })
+    },
+    copyLink: (issue: GhIssueSummary) => void copy(issue.url, "link"),
+    copyReference: (issue: GhIssueSummary) =>
+      void copy(`${name}#${issue.number}`, "reference"),
+  }
+}
+
+type IssueActions = ReturnType<typeof useIssueActions>
+
+/** Quick actions on a right click on an issue of the list. */
+function IssueContextMenu({
+  issue,
+  repo,
+  labels,
+  actions,
+  onOpen,
+  children,
+}: {
+  issue: GhIssueSummary
+  repo: AvailableRepo
+  labels: Array<GhLabel>
+  actions: IssueActions
+  onOpen: () => void
+  children: React.ReactElement
+}) {
+  const selected = issue.labels.map((label) => label.name)
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger render={children} />
+      <ContextMenuContent className="w-56">
+        <ContextMenuItem onClick={onOpen}>
+          <EyeIcon />
+          Open
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => void actions.startAgent(issue)}>
+          <BotIcon />
+          Start agent
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => actions.addToPrompt(issue)}>
+          <MessageSquarePlusIcon />
+          Add to prompt
+        </ContextMenuItem>
+        {repo.viewerCanWrite ? (
+          <>
+            <ContextMenuSeparator />
+            {issue.state === "OPEN" ? (
+              <>
+                <ContextMenuItem
+                  onClick={() => actions.close(issue.number, "completed")}
+                >
+                  <CircleCheckIcon className="text-violet-500" />
+                  Close as completed
+                </ContextMenuItem>
+                <ContextMenuItem
+                  onClick={() => actions.close(issue.number, "not planned")}
+                >
+                  <CircleSlashIcon />
+                  Close as not planned
+                </ContextMenuItem>
+              </>
+            ) : (
+              <ContextMenuItem onClick={() => actions.reopen(issue.number)}>
+                <CircleDotIcon className="text-emerald-500" />
+                Reopen
+              </ContextMenuItem>
+            )}
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <TagIcon />
+                Labels
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent className="max-h-80 min-w-48">
+                {labels.length === 0 ? (
+                  <ContextMenuItem disabled>No labels</ContextMenuItem>
+                ) : null}
+                {labels.map((label) => (
+                  <ContextMenuItem
+                    key={label.name}
+                    closeOnClick={false}
+                    onClick={() => actions.toggleLabel(issue, label.name)}
+                  >
+                    <CheckIcon
+                      className={cn(
+                        "size-3.5",
+                        !selected.includes(label.name) && "invisible"
+                      )}
+                    />
+                    <LabelChip label={label} />
+                  </ContextMenuItem>
+                ))}
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+          </>
+        ) : null}
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          render={<a href={issue.url} target="_blank" rel="noreferrer" />}
+        >
+          <ExternalLinkIcon />
+          Open on GitHub
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => actions.copyLink(issue)}>
+          <LinkIcon />
+          Copy link
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => actions.copyReference(issue)}>
+          <HashIcon />
+          Copy {repo.nameWithOwner}#{issue.number}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
+
+/** A row of the list; takes the props of a context menu trigger. */
 function IssueRow({
   issue,
   onOpen,
-}: {
+  className,
+  ...props
+}: Omit<React.ComponentProps<"button">, "children"> & {
   issue: GhIssueSummary
   onOpen: () => void
 }) {
   return (
     <button
       type="button"
+      {...props}
       onClick={onOpen}
-      className="flex w-full min-w-0 items-start gap-2 border-b border-border/50 px-3 py-2 text-left hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none"
+      className={cn(
+        "flex w-full min-w-0 items-start gap-2 border-b border-border/50 px-3 py-2 text-left hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none data-popup-open:bg-muted/60",
+        className
+      )}
     >
       <IssueStateIcon issue={issue} className="mt-0.5" />
       <span className="grid min-w-0 flex-1 gap-1">
@@ -738,6 +968,7 @@ function IssueDetail({
   active,
   labels,
   mutations,
+  actions,
   onBack,
 }: {
   viewerContextId: string
@@ -747,24 +978,15 @@ function IssueDetail({
   active: boolean
   labels: Array<GhLabel>
   mutations: ReturnType<typeof useIssueMutations>
+  actions: IssueActions
   onBack: () => void
 }) {
   const machineId = useMachineId()
   const [comment, setComment] = React.useState("")
   const cache = useIssueCache(viewerContextId, cwd)
   const issueQuery = useQuery<CachedIssue>({
-    queryKey: picoQueryKeys.ghIssue(viewerContextId, cwd, number),
-    queryFn: async () =>
-      (
-        await fetchJson<GhIssueData>(
-          buildRequestUrl(
-            `/api/gh-issue?cwd=${encodeURIComponent(cwd)}&number=${number}`,
-            { machineId, contextId: viewerContextId }
-          )
-        )
-      ).issue,
+    ...issueQueryOptions({ machineId, viewerContextId, cwd, number }),
     enabled: Boolean(active && viewerContextId && cwd),
-    staleTime: ISSUES_STALE_MS,
     // Show the title, state and labels from the list while the rest loads.
     placeholderData: () => {
       const summary = cache.find(number)
@@ -781,21 +1003,6 @@ function IssueDetail({
       mutationKey: ["pico", "gh-issue-write", viewerContextId, cwd],
     }) > 0
 
-  const startAgent = () => {
-    if (!issue) return
-    queueMachineAction(machineId, {
-      type: "new-agent",
-      project: cwd,
-      draft: { text: issueAgentPrompt(repo, issue), images: [] },
-    })
-  }
-  const addToPrompt = () => {
-    if (!issue) return
-    queueMachineAction(machineId, {
-      type: "insert-prompt",
-      text: issueReference(repo, issue),
-    })
-  }
   const submitComment = (event: React.FormEvent) => {
     event.preventDefault()
     const body = comment.trim()
@@ -808,16 +1015,6 @@ function IssueDetail({
         onError: () => setComment((current) => current || body),
       }
     )
-  }
-  const toggleLabel = (name: string) => {
-    if (!issue) return
-    const has = issue.labels.some((label) => label.name === name)
-    const added = labels.find((label) => label.name === name)
-    mutations.editLabels.mutate({
-      number,
-      add: has || !added ? [] : [added],
-      remove: has ? [name] : [],
-    })
   }
 
   return (
@@ -892,7 +1089,7 @@ function IssueDetail({
                 <LabelPicker
                   labels={labels}
                   selected={issue.labels.map((label) => label.name)}
-                  onToggle={toggleLabel}
+                  onToggle={(name) => actions.toggleLabel(issue, name)}
                   trigger={
                     <Button
                       type="button"
@@ -911,7 +1108,7 @@ function IssueDetail({
                 type="button"
                 size="sm"
                 disabled={loadingRest}
-                onClick={startAgent}
+                onClick={() => void actions.startAgent(issue)}
               >
                 <BotIcon data-icon="inline-start" />
                 Start agent
@@ -920,7 +1117,7 @@ function IssueDetail({
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={addToPrompt}
+                onClick={() => actions.addToPrompt(issue)}
               >
                 <MessageSquarePlusIcon data-icon="inline-start" />
                 Add to prompt
@@ -938,26 +1135,14 @@ function IssueDetail({
                     />
                     <DropdownMenuContent align="start">
                       <DropdownMenuItem
-                        onClick={() =>
-                          mutations.setState.mutate({
-                            number,
-                            state: "closed",
-                            reason: "completed",
-                          })
-                        }
+                        onClick={() => actions.close(number, "completed")}
                       >
                         <CircleCheckIcon className="text-violet-500" />
                         Close as completed
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        onClick={() =>
-                          mutations.setState.mutate({
-                            number,
-                            state: "closed",
-                            reason: "not planned",
-                          })
-                        }
+                        onClick={() => actions.close(number, "not planned")}
                       >
                         <CircleSlashIcon />
                         Close as not planned
@@ -969,9 +1154,7 @@ function IssueDetail({
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() =>
-                      mutations.setState.mutate({ number, state: "open" })
-                    }
+                    onClick={() => actions.reopen(number)}
                   >
                     <CircleDotIcon data-icon="inline-start" />
                     Reopen
@@ -1071,6 +1254,13 @@ export function IssuesPanel({
     Boolean(active && repo)
   )
   const labels = labelsQuery.data ?? []
+  const actions = useIssueActions({
+    viewerContextId,
+    cwd,
+    repo,
+    labels,
+    mutations,
+  })
 
   React.useEffect(() => {
     const timer = window.setTimeout(() => setSearch(searchInput.trim()), 400)
@@ -1175,6 +1365,7 @@ export function IssuesPanel({
         active={active}
         labels={labels}
         mutations={mutations}
+        actions={actions}
         onBack={() => setOpenNumber(null)}
       />
     )
@@ -1291,11 +1482,19 @@ export function IssuesPanel({
           </GitSectionNote>
         ) : issues && issues.length > 0 ? (
           issues.map((issue) => (
-            <IssueRow
+            <IssueContextMenu
               key={issue.number}
               issue={issue}
+              repo={repo}
+              labels={labels}
+              actions={actions}
               onOpen={() => setOpenNumber(issue.number)}
-            />
+            >
+              <IssueRow
+                issue={issue}
+                onOpen={() => setOpenNumber(issue.number)}
+              />
+            </IssueContextMenu>
           ))
         ) : (
           <GitSectionNote className="px-3 py-2.5">No issues.</GitSectionNote>
