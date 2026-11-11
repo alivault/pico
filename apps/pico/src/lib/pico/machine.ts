@@ -248,7 +248,8 @@ export function setMachineNavigator(navigator: MachineNavigator | undefined) {
 /**
  * An action for the app shell of a machine: a new agent (in a project, or in
  * the default project when `project` is not set; optionally with a prompt
- * draft to put in its composer), or a dialog or panel of that machine.
+ * draft to put in its composer), text to add to the composer of the open
+ * agent, or a dialog or panel of that machine.
  */
 export type MachineAction =
   | {
@@ -256,6 +257,7 @@ export type MachineAction =
       project?: string
       draft?: { text: string; images: Array<PromptImage> }
     }
+  | { type: "insert-prompt"; text: string }
   | { type: "add-project" }
   | { type: "open-settings" }
   | { type: "open-terminal" }

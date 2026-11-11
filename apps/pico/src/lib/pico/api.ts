@@ -201,6 +201,64 @@ export type GitChangesResponse =
     }
   | ApiErrorResponse
 
+export type GhLabel = { name: string; color: string; description?: string }
+
+export type GhRepo =
+  | {
+      available: true
+      nameWithOwner: string
+      url: string
+      viewerCanWrite: boolean
+    }
+  | { available: false; reason: string }
+
+export type GhIssueSummary = {
+  number: number
+  title: string
+  state: "OPEN" | "CLOSED"
+  stateReason?: string
+  labels: Array<GhLabel>
+  author: string
+  commentCount: number
+  createdAt: string
+  updatedAt: string
+  url: string
+}
+
+export type GhIssueComment = {
+  id: string
+  author: string
+  body: string
+  createdAt: string
+  url: string
+}
+
+export type GhIssue = GhIssueSummary & {
+  body: string
+  assignees: Array<string>
+  comments: Array<GhIssueComment>
+}
+
+export type GhRepoResponse =
+  | { ok: true; cwd: string; repo: GhRepo }
+  | ApiErrorResponse
+
+export type GhIssuesResponse =
+  | { ok: true; cwd: string; issues: Array<GhIssueSummary> }
+  | ApiErrorResponse
+
+export type GhLabelsResponse =
+  | { ok: true; cwd: string; labels: Array<GhLabel> }
+  | ApiErrorResponse
+
+export type GhIssueResponse =
+  | { ok: true; cwd: string; issue: GhIssue }
+  | ApiErrorResponse
+
+export type GhIssueCreateResponse =
+  | { ok: true; cwd: string; number?: number; url: string }
+  | ApiErrorResponse
+
 export type GitCommitDiffMode = "commit" | "head" | "previous"
 
 export type GitCommitDiffResponse =

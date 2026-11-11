@@ -66,6 +66,31 @@ export const picoQueryKeys = {
       path,
       previousPath,
     ] as const,
+  ghRepo: (viewerContextId: string, cwd: string) =>
+    ["pico", "gh-repo", viewerContextId, cwd] as const,
+  ghLabels: (viewerContextId: string, cwd: string) =>
+    ["pico", "gh-labels", viewerContextId, cwd] as const,
+  ghIssues: (viewerContextId: string, cwd: string) =>
+    ["pico", "gh-issues", viewerContextId, cwd] as const,
+  ghIssueList: (
+    viewerContextId: string,
+    cwd: string,
+    state: string,
+    label: string,
+    search: string
+  ) =>
+    [
+      "pico",
+      "gh-issues",
+      viewerContextId,
+      cwd,
+      "list",
+      state,
+      label,
+      search,
+    ] as const,
+  ghIssue: (viewerContextId: string, cwd: string, number: number) =>
+    ["pico", "gh-issues", viewerContextId, cwd, "issue", number] as const,
   gitCommitFiles: (viewerContextId: string, cwd: string, commit: string) =>
     ["pico", "git-commit-files", viewerContextId, cwd, commit] as const,
   gitAction: (

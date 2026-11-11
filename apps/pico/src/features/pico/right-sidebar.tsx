@@ -74,6 +74,10 @@ import "@/features/pico/agent/register"
 import { AgentPanel, useAgentBusy } from "@/features/pico/agent/agent-panel"
 import { useAgentExtensions } from "@/features/pico/agent/agent-extensions"
 import { BrowserPanel } from "@/features/pico/agent/browser-panel"
+import {
+  IssuesPanel,
+  useGitHubRepo,
+} from "@/features/pico/right-sidebar-issues"
 import { TodoTabProgress } from "@/features/pico/agent/todo"
 import type { GitCommitDiffMode, GitCommitDiffResponse } from "@/lib/pico/api"
 import { cn } from "@/lib/utils"
@@ -1059,6 +1063,12 @@ export function RightSidebar({
   const agentPanelAvailable = useMachineFeature("agent-panel")
   const browserAvailable = useMachineFeature("browser")
   const browserUse = useAgentBrowserUse(viewerContextId, agentId)
+  const issuesAvailable = useMachineFeature("github-issues")
+  const githubRepo = useGitHubRepo({
+    viewerContextId,
+    cwd: normalizeCwd(cwd),
+    enabled: active && issuesAvailable,
+  })
   const [localState, dispatchLocal] = React.useReducer(
     rightSidebarLocalReducer,
     initialRightSidebarLocalState
@@ -1245,6 +1255,10 @@ export function RightSidebar({
           }
           showFiles={isMobile && hasOpenFileTabs}
           showHistory={historyAsTab || activeTab === "history"}
+          showIssues={
+            issuesAvailable &&
+            (githubRepo.data?.available === true || activeTab === "issues")
+          }
           showReview
         />
         <div
@@ -1262,6 +1276,15 @@ export function RightSidebar({
             viewerContextId={viewerContextId}
           />
         </div>
+        {activeTab === "issues" ? (
+          <div className="min-h-0 flex-1 overflow-hidden bg-background">
+            <IssuesPanel
+              viewerContextId={viewerContextId}
+              cwd={normalizedCwd}
+              active={active}
+            />
+          </div>
+        ) : null}
         {activeTab === "browser" ? (
           <div className="min-h-0 flex-1 overflow-hidden bg-background">
             <BrowserPanel

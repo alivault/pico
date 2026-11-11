@@ -41,6 +41,7 @@ import {
 } from "./http.ts"
 import * as files from "./services/files.ts"
 import * as git from "./services/git.ts"
+import * as github from "./services/github.ts"
 import type { Notifier } from "./services/notify.ts"
 import { createWorktree, repoRoot } from "./services/worktree.ts"
 import type { HighlightService } from "./services/highlight.ts"
@@ -244,6 +245,7 @@ export function createApi(api: ApiContext) {
         "browser",
         "tool-profiles",
         "machine-hub",
+        "github-issues",
       ],
     },
   }))
@@ -878,6 +880,87 @@ export function createApi(api: ApiContext) {
       ok: true,
       ...(await api.highlight.highlight(body.code, body.language)),
     }
+  })
+
+  // ---------------------------------------------------------------------------
+  // GitHub issues (through `gh` in the project directory)
+
+  const ghCwd = async (request: Request, requested: unknown) => {
+    const value = typeof requested === "string" ? requested.trim() : ""
+    if (!value) throw badRequest("cwd is required")
+    return await files.resolveDirectory(value, baseCwd(request))
+  }
+
+  router.get("/api/gh-repo", async (request) => {
+    const cwd = await ghCwd(request, request.query.get("cwd"))
+    return { ok: true, cwd, repo: await github.repo(cwd) }
+  })
+
+  router.get("/api/gh-issues", async (request) => {
+    const cwd = await ghCwd(request, request.query.get("cwd"))
+    const issues = await github.listIssues(cwd, {
+      state: stringField(request.query.get("state")),
+      label: stringField(request.query.get("label")),
+      search: stringField(request.query.get("search")),
+      limit: queryNumber(request, "limit"),
+    })
+    return { ok: true, cwd, issues }
+  })
+
+  router.get("/api/gh-labels", async (request) => {
+    const cwd = await ghCwd(request, request.query.get("cwd"))
+    return { ok: true, cwd, labels: await github.listLabels(cwd) }
+  })
+
+  router.get("/api/gh-issue", async (request) => {
+    const cwd = await ghCwd(request, request.query.get("cwd"))
+    const number = github.issueNumber(request.query.get("number"))
+    return { ok: true, cwd, issue: await github.viewIssue(cwd, number) }
+  })
+
+  type GhIssueBody = {
+    cwd?: string
+    number?: unknown
+    title?: unknown
+    body?: unknown
+    labels?: unknown
+    state?: unknown
+    reason?: unknown
+    addLabels?: unknown
+    removeLabels?: unknown
+  }
+
+  router.post("/api/gh-issue/create", async (request) => {
+    const body = await request.body<GhIssueBody>()
+    const cwd = await ghCwd(request, body.cwd)
+    return { ok: true, cwd, ...(await github.createIssue(cwd, body)) }
+  })
+
+  router.post("/api/gh-issue/comment", async (request) => {
+    const body = await request.body<GhIssueBody>()
+    const cwd = await ghCwd(request, body.cwd)
+    const number = github.issueNumber(body.number)
+    return {
+      ok: true,
+      cwd,
+      ...(await github.commentIssue(cwd, number, body.body)),
+    }
+  })
+
+  router.post("/api/gh-issue/state", async (request) => {
+    const body = await request.body<GhIssueBody>()
+    const cwd = await ghCwd(request, body.cwd)
+    const number = github.issueNumber(body.number)
+    await github.setIssueState(cwd, number, body.state, body.reason)
+    return { ok: true, cwd }
+  })
+
+  router.post("/api/gh-issue/labels", async (request) => {
+    const body = await request.body<GhIssueBody>()
+    const cwd = await ghCwd(request, body.cwd)
+    const number = github.issueNumber(body.number)
+    await github.editIssueLabels(cwd, number, body.addLabels, body.removeLabels)
+    return { ok: true, cwd }
   })
 
   // ---------------------------------------------------------------------------

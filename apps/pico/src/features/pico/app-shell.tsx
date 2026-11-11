@@ -2479,7 +2479,23 @@ function useAppShellAgentWorkspaceView({
       case "open-archived-agents":
         emitPicoEvent("pico:open-archived-agents", {})
         return
+      case "insert-prompt": {
+        const current = composerTextRef.current
+        const separator = !current || /\s$/.test(current) ? "" : "\n\n"
+        replaceComposerDraftRef.current(
+          serializeComposerDraft({
+            text: `${current}${separator}${action.text}`,
+            skillName: composerSkillRef.current,
+          }),
+          undefined,
+          { forceSync: true }
+        )
+        if (isMobile) setCurrentTab("conversation")
+        composerPanelRef.current?.focusPrompt({ preventScroll: true })
+        return
+      }
       case "new-agent":
+        if (isMobile) setCurrentTab("conversation")
         break
     }
     const draft = action.draft

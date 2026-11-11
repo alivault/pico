@@ -1330,6 +1330,7 @@ export function RightSidebarTabStrip({
   browserIndicator,
   showFiles = false,
   showHistory = false,
+  showIssues = false,
   showReview = false,
 }: {
   activeCommitDiffKey?: string
@@ -1367,6 +1368,8 @@ export function RightSidebarTabStrip({
   browserIndicator?: string
   showFiles?: boolean
   showHistory?: boolean
+  /** The Issues tab: the GitHub issues of the project. */
+  showIssues?: boolean
   showReview?: boolean
 }) {
   const renderTab = ({
@@ -1496,6 +1499,7 @@ export function RightSidebarTabStrip({
           })
         : null}
       {showHistory ? renderTab({ label: "History", value: "history" }) : null}
+      {showIssues ? renderTab({ label: "Issues", value: "issues" }) : null}
       {showAgent
         ? renderTab({
             extra: agentTabExtra,

@@ -25,7 +25,8 @@ function readStoredRightSidebarActiveTab(): RightSidebarTabValue {
   return stored === "files" ||
     stored === "review" ||
     stored === "agent" ||
-    stored === "browser"
+    stored === "browser" ||
+    stored === "issues"
     ? stored
     : "review"
 }

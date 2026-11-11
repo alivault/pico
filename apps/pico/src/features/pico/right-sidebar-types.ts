@@ -35,6 +35,7 @@ export type RightSidebarTabValue =
   | "commit-diff"
   | "agent"
   | "browser"
+  | "issues"
 
 export type RightSidebarProps = {
   viewerContextId: string
