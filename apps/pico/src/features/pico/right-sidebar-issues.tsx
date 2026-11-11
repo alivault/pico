@@ -217,8 +217,129 @@ function StatePill({
       )}
     >
       <IssueStateIcon issue={issue} className="size-3 text-current" />
-      {open ? "Open" : notPlanned ? "Not planned" : "Closed"}
+      {/* The same words as the state menu. */}
+      {open ? "Open" : notPlanned ? "Not planned" : "Completed"}
     </span>
+  )
+}
+
+type StateChoice = "open" | "completed" | "not_planned"
+
+const STATE_CHOICES: Array<{
+  value: StateChoice
+  label: string
+  icon: Pick<GhIssueSummary, "state" | "stateReason">
+}> = [
+  { value: "open", label: "Open", icon: { state: "OPEN" } },
+  {
+    value: "completed",
+    label: "Completed",
+    icon: { state: "CLOSED", stateReason: "COMPLETED" },
+  },
+  {
+    value: "not_planned",
+    label: "Not planned",
+    icon: { state: "CLOSED", stateReason: "NOT_PLANNED" },
+  },
+]
+
+function stateChoice(issue: Pick<GhIssueSummary, "state" | "stateReason">) {
+  if (issue.state === "OPEN") return "open"
+  return issue.stateReason === "NOT_PLANNED" ? "not_planned" : "completed"
+}
+
+function stateTitle(issue: Pick<GhIssueSummary, "state" | "stateReason">) {
+  return (
+    STATE_CHOICES.find((choice) => choice.value === stateChoice(issue))
+      ?.label ?? "Open"
+  )
+}
+
+/**
+ * The state of an issue as a menu, as the status of a todo: Open, Completed,
+ * or Not planned. Without write access, only the state shows.
+ */
+function StateMenu({
+  issue,
+  canWrite,
+  actions,
+  trigger,
+}: {
+  issue: GhIssueSummary
+  canWrite: boolean
+  actions: IssueActions
+  /** The state as the trigger shows it: the icon, or the pill. */
+  trigger: "icon" | "pill"
+}) {
+  const isMobile = useIsMobile()
+  const shown =
+    trigger === "icon" ? (
+      <IssueStateIcon issue={issue} />
+    ) : (
+      <StatePill issue={issue} />
+    )
+  if (!canWrite) {
+    return trigger === "icon" ? (
+      <span className="flex size-8 shrink-0 items-center justify-center">
+        {shown}
+      </span>
+    ) : (
+      shown
+    )
+  }
+  const choose = (value: StateChoice) => {
+    if (value === stateChoice(issue)) return
+    if (value === "open") actions.reopen(issue.number)
+    else
+      actions.close(
+        issue.number,
+        value === "completed" ? "completed" : "not planned"
+      )
+  }
+  const title = stateTitle(issue)
+  return (
+    <DropdownMenu>
+      <TitleTooltip title={`${title}. Change state`}>
+        <DropdownMenuTrigger
+          render={
+            trigger === "icon" ? (
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                aria-label={`State: ${title}`}
+                className={cn("shrink-0", isMobile && "size-11")}
+              />
+            ) : (
+              <button
+                type="button"
+                aria-label={`State: ${title}`}
+                className="rounded-full outline-none hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring/50"
+              />
+            )
+          }
+        >
+          {shown}
+        </DropdownMenuTrigger>
+      </TitleTooltip>
+      <DropdownMenuContent align="start" className="w-44">
+        <DropdownMenuRadioGroup
+          value={stateChoice(issue)}
+          onValueChange={(value) => choose(value as StateChoice)}
+        >
+          {STATE_CHOICES.map((choice) => (
+            <DropdownMenuRadioItem
+              key={choice.value}
+              value={choice.value}
+              closeOnClick
+            >
+              <IssueStateIcon issue={choice.icon} />
+              {choice.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -675,37 +796,52 @@ function FilterToken({
   )
 }
 
-/** A row like Mail: the title and age, then the number, labels and comments. */
+/**
+ * A row like Mail: the title and age, then the number, labels and comments.
+ * The state icon is a button of its own (a menu), so the row is a group of
+ * two buttons; it takes the props of a context menu trigger.
+ */
 function IssueRow({
   issue,
   selected,
+  canWrite,
+  actions,
   onOpen,
   className,
   ...props
-}: Omit<React.ComponentProps<"button">, "children"> & {
+}: Omit<React.ComponentProps<"div">, "children"> & {
   issue: GhIssueSummary
   selected: boolean
+  canWrite: boolean
+  actions: IssueActions
   onOpen: () => void
 }) {
   return (
-    <button
-      type="button"
-      aria-current={selected || undefined}
+    <div
       {...props}
-      onClick={onOpen}
       className={cn(
-        "group/issue-row flex min-h-11 w-full min-w-0 items-start gap-2.5 rounded-lg pl-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+        "flex min-h-11 w-full min-w-0 items-start gap-0.5 rounded-lg pl-1",
         selected
           ? "bg-primary/10"
           : "hover:bg-muted/70 data-popup-open:bg-muted/70",
         className
       )}
     >
-      <IssueStateIcon issue={issue} className="mt-2.5" />
-      {/* The separator starts at the text, as in Mail (an inset separator). */}
-      <span
+      <div className="pt-1">
+        <StateMenu
+          issue={issue}
+          canWrite={canWrite}
+          actions={actions}
+          trigger="icon"
+        />
+      </div>
+      <button
+        type="button"
+        aria-current={selected || undefined}
+        onClick={onOpen}
+        // The separator starts at the text, as in Mail (an inset separator).
         data-row-separator
-        className="grid min-w-0 flex-1 gap-0.5 border-b border-border/60 py-2 pr-2.5"
+        className="grid min-w-0 flex-1 gap-0.5 rounded-r-lg border-b border-border/60 py-2 pr-2.5 pl-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
       >
         <span className="flex min-w-0 items-baseline gap-2">
           <span className="line-clamp-2 min-w-0 flex-1 text-[13px] leading-5 font-semibold wrap-break-word">
@@ -732,8 +868,8 @@ function IssueRow({
             </span>
           ) : null}
         </span>
-      </span>
-    </button>
+      </button>
+    </div>
   )
 }
 
@@ -943,6 +1079,8 @@ function IssueList({
       <IssueRow
         issue={issue}
         selected={selectedNumber === issue.number}
+        canWrite={repo.viewerCanWrite}
+        actions={actions}
         onOpen={() => onOpenIssue(issue.number)}
       />
     )
@@ -1234,7 +1372,12 @@ function IssueDetail({
                 {issue.title}
               </h2>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                <StatePill issue={issue} />
+                <StateMenu
+                  issue={issue}
+                  canWrite={repo.viewerCanWrite}
+                  actions={actions}
+                  trigger="pill"
+                />
                 <span title={formatFullDate(issue.createdAt)}>
                   {issue.author} opened {ageText(issue.createdAt)}
                 </span>
