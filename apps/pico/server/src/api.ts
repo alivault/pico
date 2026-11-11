@@ -933,7 +933,7 @@ export function createApi(api: ApiContext) {
   router.post("/api/gh-issue/create", async (request) => {
     const body = await request.body<GhIssueBody>()
     const cwd = await ghCwd(request, body.cwd)
-    return { ok: true, cwd, ...(await github.createIssue(cwd, body)) }
+    return { ok: true, cwd, issue: await github.createIssue(cwd, body) }
   })
 
   router.post("/api/gh-issue/comment", async (request) => {
@@ -943,7 +943,7 @@ export function createApi(api: ApiContext) {
     return {
       ok: true,
       cwd,
-      ...(await github.commentIssue(cwd, number, body.body)),
+      comment: await github.commentIssue(cwd, number, body.body),
     }
   })
 
@@ -951,16 +951,24 @@ export function createApi(api: ApiContext) {
     const body = await request.body<GhIssueBody>()
     const cwd = await ghCwd(request, body.cwd)
     const number = github.issueNumber(body.number)
-    await github.setIssueState(cwd, number, body.state, body.reason)
-    return { ok: true, cwd }
+    return {
+      ok: true,
+      cwd,
+      issue: await github.setIssueState(cwd, number, body.state, body.reason),
+    }
   })
 
   router.post("/api/gh-issue/labels", async (request) => {
     const body = await request.body<GhIssueBody>()
     const cwd = await ghCwd(request, body.cwd)
     const number = github.issueNumber(body.number)
-    await github.editIssueLabels(cwd, number, body.addLabels, body.removeLabels)
-    return { ok: true, cwd }
+    const labels = await github.editIssueLabels(
+      cwd,
+      number,
+      body.addLabels,
+      body.removeLabels
+    )
+    return { ok: true, cwd, ...(labels ? { labels } : {}) }
   })
 
   // ---------------------------------------------------------------------------

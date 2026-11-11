@@ -45,6 +45,8 @@ export type GhRepo =
       available: true
       nameWithOwner: string
       url: string
+      /** The GitHub login of `gh`; empty when unknown. */
+      viewerLogin: string
       viewerCanWrite: boolean
     }
   | { available: false; reason: string }
@@ -121,6 +123,8 @@ async function ghJson<T>(cwd: string, args: Array<string>) {
 
 /** The repository from the git remote of `cwd`, or why there is none. */
 export async function repo(cwd: string): Promise<GhRepo> {
+  // Ask for the login at the same time; it does not need the repository.
+  const login = run(cwd, ["api", "user", "--jq", ".login"]).catch(() => "")
   try {
     const output = await run(cwd, [
       "repo",
@@ -140,8 +144,10 @@ export async function repo(cwd: string): Promise<GhRepo> {
     if (data.hasIssuesEnabled === false) {
       return { available: false, reason: "Issues are off for this repository" }
     }
+    const viewerLogin = (await login).trim()
     return {
       available: true,
+      viewerLogin,
       nameWithOwner: data.nameWithOwner,
       url: data.url ?? `https://github.com/${data.nameWithOwner}`,
       viewerCanWrite: ["ADMIN", "MAINTAIN", "WRITE", "TRIAGE"].includes(
@@ -301,7 +307,87 @@ function cleanLabels(value: unknown) {
   )
 }
 
-/** Make an issue. Returns its number and URL. */
+// Writes go through the REST API (`gh api`): one request each, and the
+// answer has the new data, so the web needs no reload after a write. `gh`
+// fills in {owner} and {repo} from the git remote of `cwd`.
+const ISSUES_PATH = "repos/{owner}/{repo}/issues"
+
+type RestIssue = {
+  number: number
+  title?: string
+  state?: string
+  state_reason?: string | null
+  labels?: Array<RawLabel | string>
+  user?: { login?: string } | null
+  comments?: number
+  created_at?: string
+  updated_at?: string
+  html_url?: string
+  body?: string | null
+  assignees?: Array<{ login?: string }> | null
+}
+
+type RestComment = {
+  id?: number
+  user?: { login?: string } | null
+  body?: string
+  created_at?: string
+  html_url?: string
+}
+
+function restLabel(raw: RawLabel | string) {
+  return label(typeof raw === "string" ? { name: raw } : raw)
+}
+
+/** An issue from the REST API, without its comments. */
+function restIssue(raw: RestIssue): Omit<GhIssue, "comments"> {
+  return {
+    number: raw.number,
+    title: raw.title ?? "",
+    state: raw.state === "closed" ? "CLOSED" : "OPEN",
+    ...(raw.state_reason
+      ? { stateReason: raw.state_reason.toUpperCase() }
+      : {}),
+    labels: (raw.labels ?? []).map(restLabel),
+    author: raw.user?.login ?? "",
+    commentCount: raw.comments ?? 0,
+    createdAt: raw.created_at ?? "",
+    updatedAt: raw.updated_at ?? "",
+    url: raw.html_url ?? "",
+    body: raw.body ?? "",
+    assignees: (raw.assignees ?? []).flatMap((assignee) =>
+      assignee.login ? [assignee.login] : []
+    ),
+  }
+}
+
+function restComment(raw: RestComment): GhIssueComment {
+  return {
+    id: String(raw.id ?? ""),
+    author: raw.user?.login ?? "",
+    body: raw.body ?? "",
+    createdAt: raw.created_at ?? "",
+    url: raw.html_url ?? "",
+  }
+}
+
+async function api<T>(
+  cwd: string,
+  method: string,
+  path: string,
+  body?: Record<string, unknown>
+) {
+  const args = ["api", "--method", method, path]
+  if (body) args.push("--input", "-")
+  const output = await gh(cwd, args, body ? JSON.stringify(body) : undefined)
+  try {
+    return (output.trim() ? JSON.parse(output) : undefined) as T
+  } catch {
+    throw badRequest("gh returned output that is not JSON")
+  }
+}
+
+/** Make an issue. Returns the new issue. */
 export async function createIssue(
   cwd: string,
   input: { title?: unknown; body?: unknown; labels?: unknown }
@@ -309,54 +395,79 @@ export async function createIssue(
   const title = typeof input.title === "string" ? input.title.trim() : ""
   if (!title) throw badRequest("A title is required")
   const body = typeof input.body === "string" ? input.body : ""
-  const args = ["issue", "create", "--title", title, "--body-file", "-"]
-  for (const name of cleanLabels(input.labels)) args.push("--label", name)
-  const output = await gh(cwd, args, body)
-  const url = output.trim().split("\n").pop() ?? ""
-  const number = Number(url.match(/\/issues\/(\d+)/)?.[1])
-  return { number: Number.isInteger(number) ? number : undefined, url }
+  const raw = await api<RestIssue>(cwd, "POST", ISSUES_PATH, {
+    title,
+    body,
+    labels: cleanLabels(input.labels),
+  })
+  return restIssue(raw)
 }
 
+/** Add a comment. Returns the new comment. */
 export async function commentIssue(cwd: string, number: number, body: unknown) {
   const text = typeof body === "string" ? body : ""
   if (!text.trim()) throw badRequest("A comment is required")
-  const output = await gh(
+  const raw = await api<RestComment>(
     cwd,
-    ["issue", "comment", String(number), "--body-file", "-"],
-    text
+    "POST",
+    `${ISSUES_PATH}/${number}/comments`,
+    { body: text }
   )
-  return { url: output.trim().split("\n").pop() ?? "" }
+  return restComment(raw)
 }
 
+/** Close or reopen an issue. Returns the changed issue. */
 export async function setIssueState(
   cwd: string,
   number: number,
   state: unknown,
   reason?: unknown
 ) {
-  if (state === "closed") {
-    const args = ["issue", "close", String(number)]
-    if (reason === "not planned" || reason === "completed")
-      args.push("--reason", reason)
-    await gh(cwd, args)
-    return
+  if (state !== "closed" && state !== "open") {
+    throw badRequest("state must be open or closed")
   }
-  if (state === "open") {
-    await gh(cwd, ["issue", "reopen", String(number)])
-    return
-  }
-  throw badRequest("state must be open or closed")
+  const stateReason =
+    state === "open"
+      ? "reopened"
+      : reason === "not planned"
+        ? "not_planned"
+        : "completed"
+  const raw = await api<RestIssue>(cwd, "PATCH", `${ISSUES_PATH}/${number}`, {
+    state,
+    state_reason: stateReason,
+  })
+  return restIssue(raw)
 }
 
+/** Add and remove labels. Returns the labels of the issue after the change. */
 export async function editIssueLabels(
   cwd: string,
   number: number,
   add: unknown,
   remove: unknown
-) {
-  const args = ["issue", "edit", String(number)]
-  for (const name of cleanLabels(add)) args.push("--add-label", name)
-  for (const name of cleanLabels(remove)) args.push("--remove-label", name)
-  if (args.length === 3) return
-  await gh(cwd, args)
+): Promise<Array<GhLabel> | undefined> {
+  const adds = cleanLabels(add)
+  const removes = cleanLabels(remove)
+  let labels: Array<RawLabel> | undefined
+  if (adds.length > 0) {
+    labels = await api<Array<RawLabel>>(
+      cwd,
+      "POST",
+      `${ISSUES_PATH}/${number}/labels`,
+      { labels: adds }
+    )
+  }
+  for (const name of removes) {
+    try {
+      labels = await api<Array<RawLabel>>(
+        cwd,
+        "DELETE",
+        `${ISSUES_PATH}/${number}/labels/${encodeURIComponent(name)}`
+      )
+    } catch (error) {
+      // The label is not on the issue: nothing to remove.
+      if (!/Label does not exist|HTTP 404/i.test(String(error))) throw error
+    }
+  }
+  return labels?.map(label)
 }

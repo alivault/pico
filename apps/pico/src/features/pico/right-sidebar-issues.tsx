@@ -13,7 +13,12 @@ import {
   RefreshCwIcon,
   TagIcon,
 } from "lucide-react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  useIsMutating,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -45,7 +50,11 @@ import { GitSectionNote } from "@/features/pico/right-sidebar-section-note"
 import { getErrorMessage } from "@/features/pico/right-sidebar-shared"
 import type {
   GhIssue,
+  GhIssueComment,
+  GhIssueCommentResponse,
   GhIssueCreateResponse,
+  GhIssueLabelsResponse,
+  GhIssueStateResponse,
   GhIssueResponse,
   GhIssueSummary,
   GhIssuesResponse,
@@ -53,7 +62,6 @@ import type {
   GhLabelsResponse,
   GhRepo,
   GhRepoResponse,
-  SimpleOkResponse,
 } from "@/lib/pico/api"
 import { useMachineId } from "@/lib/pico/machine-context"
 import { queueMachineAction } from "@/lib/pico/machine"
@@ -66,6 +74,9 @@ type GhIssuesData = Extract<GhIssuesResponse, { ok: true }>
 type GhLabelsData = Extract<GhLabelsResponse, { ok: true }>
 type GhIssueData = Extract<GhIssueResponse, { ok: true }>
 type GhIssueCreateData = Extract<GhIssueCreateResponse, { ok: true }>
+type GhIssueStateData = Extract<GhIssueStateResponse, { ok: true }>
+type GhIssueCommentData = Extract<GhIssueCommentResponse, { ok: true }>
+type GhIssueLabelsData = Extract<GhIssueLabelsResponse, { ok: true }>
 type AvailableRepo = Extract<GhRepo, { available: true }>
 
 const REPO_STALE_MS = 5 * 60_000
@@ -113,6 +124,11 @@ function formatAge(value: string) {
   const months = Math.round(days / 30)
   if (months < 12) return `${months}mo`
   return `${Math.round(days / 365)}y`
+}
+
+function ageText(value: string) {
+  const age = formatAge(value)
+  return age === "now" || !age ? age : `${age} ago`
 }
 
 function formatFullDate(value: string) {
@@ -191,15 +207,155 @@ function issueReference(repo: AvailableRepo, issue: GhIssueSummary) {
   return `GitHub issue ${repo.nameWithOwner}#${issue.number}: ${issue.title} (${issue.url})`
 }
 
+/** A comment that is sent, but GitHub has not answered yet. */
+type ShownComment = GhIssueComment & { pending?: boolean }
+type CachedIssue = Omit<GhIssue, "comments"> & {
+  comments: Array<ShownComment>
+}
+type QuerySnapshot = Array<[ReadonlyArray<unknown>, unknown]>
+
+const SUMMARY_KEYS = [
+  "number",
+  "title",
+  "state",
+  "stateReason",
+  "labels",
+  "author",
+  "commentCount",
+  "createdAt",
+  "updatedAt",
+  "url",
+] as const
+
+function issueSummary(issue: GhIssueSummary): GhIssueSummary {
+  const summary = {} as Record<string, unknown>
+  for (const key of SUMMARY_KEYS) {
+    if (issue[key] !== undefined) summary[key] = issue[key]
+  }
+  return summary as GhIssueSummary
+}
+
+/**
+ * The issue caches of a project: one list for each filter, and one entry for
+ * each opened issue. A change goes into all of them at once, so the panel
+ * shows it before GitHub answers.
+ */
+function useIssueCache(viewerContextId: string, cwd: string) {
+  const queryClient = useQueryClient()
+  const prefix = picoQueryKeys.ghIssues(viewerContextId, cwd)
+  const queries = () =>
+    queryClient.getQueryCache().findAll({ queryKey: prefix })
+
+  const find = (number: number): GhIssueSummary | undefined => {
+    const detail = queryClient.getQueryData<CachedIssue>(
+      picoQueryKeys.ghIssue(viewerContextId, cwd, number)
+    )
+    if (detail) return detail
+    for (const query of queries()) {
+      const data = query.state.data
+      if (!Array.isArray(data)) continue
+      const found = (data as Array<GhIssueSummary>).find(
+        (item) => item.number === number
+      )
+      if (found) return found
+    }
+    return undefined
+  }
+
+  /** Put the new data of an issue in its entry and in every list. */
+  const apply = (
+    issue: GhIssueSummary & Partial<Omit<CachedIssue, keyof GhIssueSummary>>
+  ) => {
+    queryClient.setQueryData<CachedIssue>(
+      picoQueryKeys.ghIssue(viewerContextId, cwd, issue.number),
+      (current) =>
+        current
+          ? {
+              ...current,
+              ...issue,
+              comments: issue.comments ?? current.comments,
+            }
+          : issue.body !== undefined
+            ? {
+                body: "",
+                assignees: [],
+                ...issue,
+                comments: issue.comments ?? [],
+              }
+            : undefined
+    )
+    const summary = issueSummary(issue)
+    for (const query of queries()) {
+      const key = query.queryKey
+      if (key[4] !== "list" || !Array.isArray(query.state.data)) continue
+      const [state, label, search] = key.slice(5) as [string, string, string]
+      const list = query.state.data as Array<GhIssueSummary>
+      const index = list.findIndex((item) => item.number === issue.number)
+      // A search runs on GitHub; only change the issues that it found.
+      if (search) {
+        if (index < 0) continue
+        queryClient.setQueryData(key, list.with(index, summary))
+        continue
+      }
+      const belongs =
+        (state === "all" || state === issue.state.toLowerCase()) &&
+        (!label || issue.labels.some((item) => item.name === label))
+      let next = list
+      if (!belongs) {
+        if (index >= 0) next = list.toSpliced(index, 1)
+      } else if (index >= 0) {
+        next = list.with(index, summary)
+      } else {
+        // The lists are newest first.
+        const at = list.findIndex((item) => item.number < issue.number)
+        next = list.toSpliced(at < 0 ? list.length : at, 0, summary)
+      }
+      if (next !== list) queryClient.setQueryData(key, next)
+    }
+  }
+
+  const changeComments = (
+    number: number,
+    change: (comments: Array<ShownComment>) => Array<ShownComment>
+  ) => {
+    queryClient.setQueryData<CachedIssue>(
+      picoQueryKeys.ghIssue(viewerContextId, cwd, number),
+      (current) =>
+        current ? { ...current, comments: change(current.comments) } : current
+    )
+  }
+
+  /** Stop loads that could overwrite a change, and keep the old data. */
+  const begin = async (): Promise<QuerySnapshot> => {
+    await queryClient.cancelQueries({ queryKey: prefix })
+    return queryClient.getQueriesData({ queryKey: prefix })
+  }
+  const rollBack = (snapshot: QuerySnapshot | undefined) => {
+    for (const [key, data] of snapshot ?? [])
+      queryClient.setQueryData(key, data)
+  }
+
+  return { find, apply, changeComments, begin, rollBack }
+}
+
 function useIssueMutations({
   viewerContextId,
   cwd,
+  viewerLogin,
 }: {
   viewerContextId: string
   cwd: string
+  viewerLogin: string
 }) {
   const machineId = useMachineId()
   const queryClient = useQueryClient()
+  const cache = useIssueCache(viewerContextId, cwd)
+  const prefix = picoQueryKeys.ghIssues(viewerContextId, cwd)
+  const mutationKey = ["pico", "gh-issue-write", viewerContextId, cwd]
+  // Writes of a project run one after the other, in the order of the
+  // clicks: two writes at the same time can reach GitHub in the other order
+  // (add, then remove, a label). The panel shows each change at once.
+  const scope = { id: `gh-issue-write:${viewerContextId}:${cwd}` }
   const post = <T,>(path: string, body: Record<string, unknown>) =>
     fetchJson<T>(
       buildRequestUrl(path, { machineId, contextId: viewerContextId }),
@@ -209,45 +365,158 @@ function useIssueMutations({
         body: JSON.stringify({ cwd, ...body }),
       }
     )
-  const invalidate = () =>
-    queryClient.invalidateQueries({
-      queryKey: picoQueryKeys.ghIssues(viewerContextId, cwd),
+  // The answers have the new data. Load the lists again only after the last
+  // write, so that an older answer does not undo a newer change; the lists
+  // can have more changes from other people.
+  const onSettled = () => {
+    if (queryClient.isMutating({ mutationKey }) > 1) return
+    void queryClient.invalidateQueries({
+      queryKey: prefix,
+      predicate: (query) => query.queryKey[4] === "list",
     })
-  const onError = (error: unknown) => {
+  }
+  const onError = (
+    error: unknown,
+    _input: unknown,
+    snapshot: QuerySnapshot | undefined
+  ) => {
+    cache.rollBack(snapshot)
+    void queryClient.invalidateQueries({ queryKey: prefix })
     toast.error(getErrorMessage(error, "The GitHub request failed"))
   }
+
   return {
     create: useMutation({
+      mutationKey,
+      scope,
       mutationFn: (input: {
         title: string
         body: string
         labels: Array<string>
       }) => post<GhIssueCreateData>("/api/gh-issue/create", input),
-      onSettled: invalidate,
-      onError,
+      onSuccess: (data) => cache.apply({ ...data.issue, comments: [] }),
+      onSettled,
+      onError: (error) => onError(error, undefined, undefined),
     }),
     comment: useMutation({
-      mutationFn: (input: { number: number; body: string }) =>
-        post<SimpleOkResponse>("/api/gh-issue/comment", input),
-      onSettled: invalidate,
+      mutationKey,
+      scope,
+      mutationFn: (input: {
+        number: number
+        body: string
+        pendingId: string
+      }) =>
+        post<GhIssueCommentData>("/api/gh-issue/comment", {
+          number: input.number,
+          body: input.body,
+        }),
+      onMutate: async (input) => {
+        const snapshot = await cache.begin()
+        const issue = cache.find(input.number)
+        if (issue)
+          cache.apply({ ...issue, commentCount: issue.commentCount + 1 })
+        cache.changeComments(input.number, (comments) => [
+          ...comments,
+          {
+            id: input.pendingId,
+            author: viewerLogin,
+            body: input.body,
+            createdAt: new Date().toISOString(),
+            url: "",
+            pending: true,
+          },
+        ])
+        return snapshot
+      },
+      onSuccess: (data, input) =>
+        cache.changeComments(input.number, (comments) =>
+          comments.map((item) =>
+            item.id === input.pendingId ? data.comment : item
+          )
+        ),
+      onSettled,
       onError,
     }),
     setState: useMutation({
+      mutationKey,
+      scope,
       mutationFn: (input: {
         number: number
         state: "open" | "closed"
         reason?: "completed" | "not planned"
-      }) => post<SimpleOkResponse>("/api/gh-issue/state", input),
-      onSettled: invalidate,
+      }) => post<GhIssueStateData>("/api/gh-issue/state", input),
+      onMutate: async (input) => {
+        const snapshot = await cache.begin()
+        const issue = cache.find(input.number)
+        if (issue) {
+          cache.apply({
+            ...issue,
+            state: input.state === "open" ? "OPEN" : "CLOSED",
+            stateReason:
+              input.state === "open"
+                ? "REOPENED"
+                : input.reason === "not planned"
+                  ? "NOT_PLANNED"
+                  : "COMPLETED",
+          })
+        }
+        return snapshot
+      },
+      onSuccess: (data, input) => {
+        // Take only the state: a label write can still be on its way.
+        const issue = cache.find(input.number) ?? data.issue
+        cache.apply({
+          ...issue,
+          state: data.issue.state,
+          stateReason: data.issue.stateReason,
+          updatedAt: data.issue.updatedAt,
+        })
+      },
+      onSettled,
       onError,
     }),
     editLabels: useMutation({
+      mutationKey,
+      scope,
       mutationFn: (input: {
         number: number
-        addLabels: Array<string>
-        removeLabels: Array<string>
-      }) => post<SimpleOkResponse>("/api/gh-issue/labels", input),
-      onSettled: invalidate,
+        add: Array<GhLabel>
+        remove: Array<string>
+      }) =>
+        post<GhIssueLabelsData>("/api/gh-issue/labels", {
+          number: input.number,
+          addLabels: input.add.map((label) => label.name),
+          removeLabels: input.remove,
+        }),
+      onMutate: async (input) => {
+        const snapshot = await cache.begin()
+        const issue = cache.find(input.number)
+        if (issue) {
+          const names = new Set([
+            ...input.remove,
+            ...input.add.map((label) => label.name),
+          ])
+          cache.apply({
+            ...issue,
+            labels: [
+              ...issue.labels.filter((label) => !names.has(label.name)),
+              ...input.add,
+            ].sort((a, b) => a.name.localeCompare(b.name)),
+          })
+        }
+        return snapshot
+      },
+      onSuccess: (data, input) => {
+        const issue = cache.find(input.number)
+        // Only the last write knows all the labels.
+        if (
+          issue &&
+          data.labels &&
+          queryClient.isMutating({ mutationKey }) <= 1
+        )
+          cache.apply({ ...issue, labels: data.labels })
+      },
+      onSettled,
       onError,
     }),
   }
@@ -482,7 +751,8 @@ function IssueDetail({
 }) {
   const machineId = useMachineId()
   const [comment, setComment] = React.useState("")
-  const issueQuery = useQuery({
+  const cache = useIssueCache(viewerContextId, cwd)
+  const issueQuery = useQuery<CachedIssue>({
     queryKey: picoQueryKeys.ghIssue(viewerContextId, cwd, number),
     queryFn: async () =>
       (
@@ -495,12 +765,21 @@ function IssueDetail({
       ).issue,
     enabled: Boolean(active && viewerContextId && cwd),
     staleTime: ISSUES_STALE_MS,
+    // Show the title, state and labels from the list while the rest loads.
+    placeholderData: () => {
+      const summary = cache.find(number)
+      return summary
+        ? { ...summary, body: "", assignees: [], comments: [] }
+        : undefined
+    },
   })
   const issue = issueQuery.data
-  const busy =
-    mutations.setState.isPending ||
-    mutations.comment.isPending ||
-    mutations.editLabels.isPending
+  const loadingRest = issueQuery.isPlaceholderData
+  // Changes show at once; the spinner tells that GitHub has not answered.
+  const saving =
+    useIsMutating({
+      mutationKey: ["pico", "gh-issue-write", viewerContextId, cwd],
+    }) > 0
 
   const startAgent = () => {
     if (!issue) return
@@ -521,18 +800,23 @@ function IssueDetail({
     event.preventDefault()
     const body = comment.trim()
     if (!body) return
+    setComment("")
     mutations.comment.mutate(
-      { number, body },
-      { onSuccess: () => setComment("") }
+      { number, body, pendingId: `pending:${Date.now()}` },
+      {
+        // Give the text back, so that it is not lost.
+        onError: () => setComment((current) => current || body),
+      }
     )
   }
   const toggleLabel = (name: string) => {
     if (!issue) return
     const has = issue.labels.some((label) => label.name === name)
+    const added = labels.find((label) => label.name === name)
     mutations.editLabels.mutate({
       number,
-      addLabels: has ? [] : [name],
-      removeLabels: has ? [name] : [],
+      add: has || !added ? [] : [added],
+      remove: has ? [name] : [],
     })
   }
 
@@ -551,7 +835,7 @@ function IssueDetail({
         <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground tabular-nums">
           {repo.nameWithOwner}#{number}
         </span>
-        {issueQuery.isFetching || busy ? <Spinner size="xs" /> : null}
+        {issueQuery.isFetching || saving ? <Spinner size="xs" /> : null}
         <TitleTooltip title="Open on GitHub">
           <Button
             type="button"
@@ -591,7 +875,7 @@ function IssueDetail({
               <span>{issue.author}</span>
               <span aria-hidden="true">·</span>
               <span title={formatFullDate(issue.createdAt)}>
-                opened {formatAge(issue.createdAt)} ago
+                opened {ageText(issue.createdAt)}
               </span>
               {issue.assignees.length > 0 ? (
                 <>
@@ -609,7 +893,6 @@ function IssueDetail({
                   labels={labels}
                   selected={issue.labels.map((label) => label.name)}
                   onToggle={toggleLabel}
-                  disabled={busy}
                   trigger={
                     <Button
                       type="button"
@@ -624,7 +907,12 @@ function IssueDetail({
               ) : null}
             </div>
             <div className="flex flex-wrap gap-1.5">
-              <Button type="button" size="sm" onClick={startAgent}>
+              <Button
+                type="button"
+                size="sm"
+                disabled={loadingRest}
+                onClick={startAgent}
+              >
                 <BotIcon data-icon="inline-start" />
                 Start agent
               </Button>
@@ -641,7 +929,6 @@ function IssueDetail({
                 issue.state === "OPEN" ? (
                   <DropdownMenu>
                     <DropdownMenuTrigger
-                      disabled={busy}
                       render={
                         <Button type="button" size="sm" variant="outline">
                           <CircleCheckIcon data-icon="inline-start" />
@@ -682,7 +969,6 @@ function IssueDetail({
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={busy}
                     onClick={() =>
                       mutations.setState.mutate({ number, state: "open" })
                     }
@@ -694,7 +980,11 @@ function IssueDetail({
               ) : null}
             </div>
             <div className="rounded-lg border border-border/70 px-3 py-2">
-              {issue.body.trim() ? (
+              {loadingRest ? (
+                <GitSectionNote>
+                  <Spinner /> Loading the description…
+                </GitSectionNote>
+              ) : issue.body.trim() ? (
                 <MarkdownBlock
                   className="[&>*>:first-child]:mt-0 [&>*>:last-child]:mb-0"
                   text={issue.body}
@@ -708,7 +998,10 @@ function IssueDetail({
             {issue.comments.map((item) => (
               <div
                 key={item.id}
-                className="rounded-lg border border-border/70 px-3 py-2"
+                className={cn(
+                  "rounded-lg border border-border/70 px-3 py-2",
+                  item.pending && "opacity-60"
+                )}
               >
                 <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                   <span className="font-medium text-foreground">
@@ -716,7 +1009,7 @@ function IssueDetail({
                   </span>
                   <span aria-hidden="true">·</span>
                   <span title={formatFullDate(item.createdAt)}>
-                    {formatAge(item.createdAt)} ago
+                    {item.pending ? "sending…" : ageText(item.createdAt)}
                   </span>
                 </div>
                 <MarkdownBlock
@@ -737,12 +1030,7 @@ function IssueDetail({
                 }}
               />
               <div className="flex justify-end">
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={!comment.trim() || mutations.comment.isPending}
-                >
-                  {mutations.comment.isPending ? <Spinner /> : null}
+                <Button type="submit" size="sm" disabled={!comment.trim()}>
                   Comment
                 </Button>
               </div>
@@ -772,7 +1060,11 @@ export function IssuesPanel({
   const [search, setSearch] = React.useState("")
   const [openNumber, setOpenNumber] = React.useState<number | null>(null)
   const [newIssueOpen, setNewIssueOpen] = React.useState(false)
-  const mutations = useIssueMutations({ viewerContextId, cwd })
+  const mutations = useIssueMutations({
+    viewerContextId,
+    cwd,
+    viewerLogin: repo?.viewerLogin ?? "",
+  })
   const labelsQuery = useGitHubLabels(
     viewerContextId,
     cwd,
@@ -826,10 +1118,8 @@ export function IssuesPanel({
     try {
       const created = await mutations.create.mutateAsync(input)
       setNewIssueOpen(false)
-      toast.success(
-        created.number ? `Created issue #${created.number}` : "Created issue"
-      )
-      if (created.number) setOpenNumber(created.number)
+      toast.success(`Created issue #${created.issue.number}`)
+      setOpenNumber(created.issue.number)
       return true
     } catch {
       return false
@@ -984,7 +1274,13 @@ export function IssuesPanel({
           </DropdownMenu>
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto transition-opacity",
+          // The list of the old filter, while the new one loads.
+          issuesQuery.isPlaceholderData && "opacity-50"
+        )}
+      >
         {issuesQuery.isPending && !issues ? (
           <GitSectionNote className="px-3 py-2.5">
             <Spinner /> Loading issues…

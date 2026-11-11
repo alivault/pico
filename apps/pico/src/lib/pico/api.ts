@@ -208,6 +208,8 @@ export type GhRepo =
       available: true
       nameWithOwner: string
       url: string
+      /** The GitHub login of `gh`; empty when unknown. */
+      viewerLogin: string
       viewerCanWrite: boolean
     }
   | { available: false; reason: string }
@@ -256,7 +258,19 @@ export type GhIssueResponse =
   | ApiErrorResponse
 
 export type GhIssueCreateResponse =
-  | { ok: true; cwd: string; number?: number; url: string }
+  | { ok: true; cwd: string; issue: Omit<GhIssue, "comments"> }
+  | ApiErrorResponse
+
+export type GhIssueStateResponse =
+  | { ok: true; cwd: string; issue: Omit<GhIssue, "comments"> }
+  | ApiErrorResponse
+
+export type GhIssueCommentResponse =
+  | { ok: true; cwd: string; comment: GhIssueComment }
+  | ApiErrorResponse
+
+export type GhIssueLabelsResponse =
+  | { ok: true; cwd: string; labels?: Array<GhLabel> }
   | ApiErrorResponse
 
 export type GitCommitDiffMode = "commit" | "head" | "previous"
