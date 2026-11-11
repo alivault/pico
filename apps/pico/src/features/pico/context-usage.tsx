@@ -46,7 +46,15 @@ function formatContextUsagePercent(value: number) {
   return String(Math.round(value))
 }
 
-function contextUsageStroke(percent: number) {
+/**
+ * The color of a usage bar or ring. With a pace (how much of the window
+ * passed), usage shows a warning only when it is ahead of the pace.
+ */
+function contextUsageStroke(percent: number, pacePercent?: number | null) {
+  if (pacePercent != null) {
+    if (percent <= pacePercent) return "var(--primary)"
+    return percent >= 90 ? "var(--destructive)" : "var(--warning)"
+  }
   if (percent >= 90) return "var(--destructive)"
   if (percent >= 80) return "var(--warning)"
   return "var(--primary)"
@@ -113,6 +121,8 @@ type ContextUsageRing = {
   key: string
   label: string
   percent: number | null
+  /** How much of the window passed, when known. */
+  pacePercent?: number | null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -355,10 +365,12 @@ function formatContextUsageQuotaValue(value: number | null) {
 
 function TooltipUsageProgress({
   marks = [],
+  pacePercent,
   percent,
 }: {
   /** Positions, in percent, to mark on the bar. */
   marks?: Array<number>
+  pacePercent?: number | null
   percent: number
 }) {
   const clampedPercent = Math.max(0, Math.min(100, percent))
@@ -369,7 +381,7 @@ function TooltipUsageProgress({
         className="h-full rounded-full"
         style={{
           width: `${clampedPercent}%`,
-          backgroundColor: contextUsageStroke(clampedPercent),
+          backgroundColor: contextUsageStroke(clampedPercent, pacePercent),
         }}
       />
       {marks.map((mark) => (
@@ -404,6 +416,7 @@ function UsageRow({
   detail,
   label,
   marks,
+  pacePercent,
   percent,
   percentText,
   title,
@@ -412,6 +425,7 @@ function UsageRow({
   detail?: string | null
   label: string
   marks?: Array<number>
+  pacePercent?: number | null
   percent: number | null
   percentText: string | null
   title?: string
@@ -430,7 +444,11 @@ function UsageRow({
         ) : null}
       </div>
       {percent == null ? null : (
-        <TooltipUsageProgress percent={percent} marks={marks} />
+        <TooltipUsageProgress
+          percent={percent}
+          marks={marks}
+          pacePercent={pacePercent}
+        />
       )}
     </div>
   )
@@ -477,6 +495,7 @@ function ProviderUsageTooltipLine({ window }: { window: ProviderUsageWindow }) {
       percent={window.usedPercent}
       percentText={`${formatContextUsagePercent(window.usedPercent)}%`}
       marks={elapsed == null ? [] : [elapsed]}
+      pacePercent={elapsed}
       title={title || undefined}
     />
   )
@@ -535,6 +554,7 @@ function getContextUsageRings(
         ? `${fiveHourProviderUsage.label} usage`
         : (fiveHourUsage?.label ?? "5h usage"),
       percent: clampContextUsageRingPercent(fiveHourPercent),
+      pacePercent: fiveHourProviderUsage?.elapsedPercent,
     })
   }
 
@@ -548,6 +568,7 @@ function getContextUsageRings(
             ? `${weeklyProviderUsage.label} usage`
             : (weeklyUsage?.label ?? "Weekly usage"),
       percent: clampContextUsageRingPercent(weeklyPercent),
+      pacePercent: weeklyProviderUsage?.elapsedPercent,
     })
   }
 
@@ -724,7 +745,7 @@ export function ContextUsageRings({
             cy={CONTEXT_USAGE_CIRCLE_CENTER}
             r={ringGeometry.radius}
             pathLength={100}
-            stroke={contextUsageStroke(ring.percent)}
+            stroke={contextUsageStroke(ring.percent, ring.pacePercent)}
             strokeWidth={ringGeometry.strokeWidth}
             strokeDasharray={`${ring.percent.toFixed(1)} 100`}
             strokeLinecap="round"
