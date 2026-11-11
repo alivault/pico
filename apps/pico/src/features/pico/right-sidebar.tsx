@@ -74,10 +74,8 @@ import "@/features/pico/agent/register"
 import { AgentPanel, useAgentBusy } from "@/features/pico/agent/agent-panel"
 import { useAgentExtensions } from "@/features/pico/agent/agent-extensions"
 import { BrowserPanel } from "@/features/pico/agent/browser-panel"
-import {
-  IssuesPanel,
-  useGitHubRepo,
-} from "@/features/pico/right-sidebar-issues"
+import { IssuesPanel } from "@/features/pico/right-sidebar-issues"
+import { useGitHubRepo } from "@/features/pico/right-sidebar-issues-data"
 import { TodoTabProgress } from "@/features/pico/agent/todo"
 import type { GitCommitDiffMode, GitCommitDiffResponse } from "@/lib/pico/api"
 import { cn } from "@/lib/utils"
