@@ -150,6 +150,13 @@ export type PressureDeps = ResourceDeps & {
   dropTranscripts: () => number
   notifier?: Notifier | undefined
   agentLink: (agentId: string) => string
+  /** The title of a job's agent, so the user can find the job in Pico. */
+  agentTitle?: (agentId: string) => string | undefined
+}
+
+/** At most `max` characters, with an ellipsis when cut. */
+function clip(text: string, max: number) {
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text
 }
 
 /** Watches memory pressure and frees what Pico can give back. */
@@ -218,7 +225,11 @@ export class MemoryPressure {
         .send({
           title: "Pico: the machine is low on memory",
           body: `Jobs that use the most: ${heavy
-            .map((job) => `${job.name} (${formatBytes(job.memory)})`)
+            .map((job) => {
+              const title = this.#deps.agentTitle?.(job.agentId)
+              const owner = title ? `, agent "${clip(title, 40)}"` : ""
+              return `${job.name} (${formatBytes(job.memory)}${owner})`
+            })
             .join(", ")}. Pico does not stop them.`,
           url: this.#deps.agentLink(heavy[0]!.agentId),
           tag: "memory-pressure",

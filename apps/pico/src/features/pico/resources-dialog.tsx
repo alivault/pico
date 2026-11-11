@@ -117,6 +117,21 @@ function Section({
 
 type ResourceJob = MachineResources["jobs"][number]
 
+/** The last folder name of a project path. */
+function projectName(project: string | undefined) {
+  return project?.replace(/\/+$/, "").split("/").pop() || undefined
+}
+
+/** The job, its agent, and the agent's project: where the job shows. */
+function jobLabel(job: ResourceJob) {
+  const project = projectName(job.project)
+  return [
+    job.name,
+    `${job.agentTitle || job.agentId}${job.archived ? " (archived)" : ""}`,
+    ...(project ? [project] : []),
+  ].join(" · ")
+}
+
 /** Show a job: in its agent's terminal panel, or in the archived agents. */
 function openResourceJob(job: ResourceJob) {
   if (job.archived) {
@@ -205,7 +220,7 @@ function ResourcesView({
               onClick={() => onOpenJob(job)}
             >
               <Row
-                label={`${job.name} · ${job.agentTitle || job.agentId}${job.archived ? " (archived)" : ""}`}
+                label={jobLabel(job)}
                 value={`${formatBytes(job.memory)} · ${job.processes} proc${job.scoped ? " · scope" : ""}`}
               />
             </button>
@@ -231,7 +246,8 @@ function ResourcesDialog({
           <DialogTitle>Resources</DialogTitle>
           <DialogDescription>
             What uses memory on this machine for Pico. Jobs include every
-            process they started.
+            process they started. A job shows in the terminal panel of the agent
+            that started it.
           </DialogDescription>
         </DialogHeader>
         {query.data ? (

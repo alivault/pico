@@ -217,13 +217,14 @@ void test("memory pressure frees idle things and names the heaviest jobs, one ti
           },
         } as never,
         agentLink: (agentId) => `/?agent=${agentId}`,
+        agentTitle: () => "Resume match",
       },
       async () => pressure
     )
     const first = await watch.check()
     assert.equal(first?.freed.transcripts, 2)
     assert.equal(first?.notified, true)
-    assert.match(sent[0]!.body, /big build/)
+    assert.match(sent[0]!.body, /big build \(.*, agent "Resume match"\)/)
     // The same episode does nothing more.
     assert.equal(await watch.check(), undefined)
     pressure = { some: 1, full: 0 }

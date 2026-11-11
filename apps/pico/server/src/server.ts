@@ -574,6 +574,10 @@ export async function startServer(options: {
     dropTranscripts: () => agents.dropUnwatchedTranscripts(),
     notifier,
     agentLink: (agentId) => agentLink(agentId),
+    agentTitle: (agentId) => {
+      const id = agents.current(agentId) ?? agentId
+      return agents.has(id) ? agents.summary(id, new Set()).title : undefined
+    },
   })
   pressure.start()
 
