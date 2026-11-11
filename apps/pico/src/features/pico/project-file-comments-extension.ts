@@ -22,6 +22,7 @@ import {
   GutterMarker,
   gutter,
   showTooltip,
+  ViewPlugin,
   WidgetType,
   type Tooltip,
 } from "@codemirror/view"
@@ -132,19 +133,31 @@ const hoverLineField = StateField.define<number | null>({
   },
 })
 
-const hoverTracking = EditorView.domEventHandlers({
-  mousemove(event, view) {
-    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
-    const line = pos === null ? null : view.state.doc.lineAt(pos).number
+// Listen on the whole editor, not only on the content: the pointer must be
+// able to move from the text into the gutter to click the "+".
+const hoverTracking = ViewPlugin.define((view) => {
+  const setLine = (line: number | null) => {
     if (line !== view.state.field(hoverLineField))
       view.dispatch({ effects: setHoverLine.of(line) })
-    return false
-  },
-  mouseleave(_event, view) {
-    if (view.state.field(hoverLineField) !== null)
-      view.dispatch({ effects: setHoverLine.of(null) })
-    return false
-  },
+  }
+  const onMove = (event: MouseEvent) => {
+    const height = event.clientY - view.documentTop
+    const inDoc = height >= 0 && height <= view.contentHeight
+    setLine(
+      inDoc
+        ? view.state.doc.lineAt(view.lineBlockAtHeight(height).from).number
+        : null
+    )
+  }
+  const onLeave = () => setLine(null)
+  view.dom.addEventListener("mousemove", onMove)
+  view.dom.addEventListener("mouseleave", onLeave)
+  return {
+    destroy() {
+      view.dom.removeEventListener("mousemove", onMove)
+      view.dom.removeEventListener("mouseleave", onLeave)
+    },
+  }
 })
 
 class PlusMarker extends GutterMarker {
