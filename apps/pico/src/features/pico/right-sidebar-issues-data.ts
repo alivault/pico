@@ -123,6 +123,66 @@ function issueSummary(issue: GhIssueSummary): GhIssueSummary {
 }
 
 /**
+ * Recent writes of this page, for each project. GitHub can answer a read
+ * just after a write with the old data: a list load can then put a closed
+ * issue back in the Open list. Each load puts these changes over what
+ * GitHub sends, until they are old enough that GitHub has them.
+ */
+const RECENT_WRITE_MS = 30_000
+const recentWrites = new Map<
+  string,
+  Map<number, { summary: GhIssueSummary; until: number }>
+>()
+
+function writesKey(viewerContextId: string, cwd: string) {
+  return `${viewerContextId}\0${cwd}`
+}
+
+function rememberWrite(key: string, summary: GhIssueSummary) {
+  let writes = recentWrites.get(key)
+  if (!writes) {
+    writes = new Map()
+    recentWrites.set(key, writes)
+  }
+  writes.set(summary.number, {
+    summary,
+    until: Date.now() + RECENT_WRITE_MS,
+  })
+}
+
+function currentWrites(key: string) {
+  const writes = recentWrites.get(key)
+  if (!writes) return []
+  const now = Date.now()
+  for (const [number, write] of writes) {
+    if (write.until <= now) writes.delete(number)
+  }
+  return [...writes.values()].map((write) => write.summary)
+}
+
+type ListFilter = { state: string; label: string; search: string }
+
+/**
+ * Put an issue in a list as its filter wants it: in it or out of it, newest
+ * first. A search runs on GitHub, so it only changes the issues it found.
+ */
+function placeInList(
+  list: Array<GhIssueSummary>,
+  issue: GhIssueSummary,
+  filter: ListFilter
+) {
+  const index = list.findIndex((item) => item.number === issue.number)
+  if (filter.search) return index < 0 ? list : list.with(index, issue)
+  const belongs =
+    (filter.state === "all" || filter.state === issue.state.toLowerCase()) &&
+    (!filter.label || issue.labels.some((item) => item.name === filter.label))
+  if (!belongs) return index < 0 ? list : list.toSpliced(index, 1)
+  if (index >= 0) return list.with(index, issue)
+  const at = list.findIndex((item) => item.number < issue.number)
+  return list.toSpliced(at < 0 ? list.length : at, 0, issue)
+}
+
+/**
  * The issue caches of a project: one list for each filter, and one entry for
  * each opened issue. A change goes into all of them at once, so the panel
  * shows it before GitHub answers.
@@ -172,31 +232,13 @@ export function useIssueCache(viewerContextId: string, cwd: string) {
             : undefined
     )
     const summary = issueSummary(issue)
+    rememberWrite(writesKey(viewerContextId, cwd), summary)
     for (const query of queries()) {
       const key = query.queryKey
       if (key[4] !== "list" || !Array.isArray(query.state.data)) continue
       const [state, label, search] = key.slice(5) as [string, string, string]
       const list = query.state.data as Array<GhIssueSummary>
-      const index = list.findIndex((item) => item.number === issue.number)
-      // A search runs on GitHub; only change the issues that it found.
-      if (search) {
-        if (index < 0) continue
-        queryClient.setQueryData(key, list.with(index, summary))
-        continue
-      }
-      const belongs =
-        (state === "all" || state === issue.state.toLowerCase()) &&
-        (!label || issue.labels.some((item) => item.name === label))
-      let next = list
-      if (!belongs) {
-        if (index >= 0) next = list.toSpliced(index, 1)
-      } else if (index >= 0) {
-        next = list.with(index, summary)
-      } else {
-        // The lists are newest first.
-        const at = list.findIndex((item) => item.number < issue.number)
-        next = list.toSpliced(at < 0 ? list.length : at, 0, summary)
-      }
+      const next = placeInList(list, summary, { state, label, search })
       if (next !== list) queryClient.setQueryData(key, next)
     }
   }
@@ -218,6 +260,8 @@ export function useIssueCache(viewerContextId: string, cwd: string) {
     return queryClient.getQueriesData({ queryKey: prefix })
   }
   const rollBack = (snapshot: QuerySnapshot | undefined) => {
+    // A failed write must not come back with the next load.
+    recentWrites.delete(writesKey(viewerContextId, cwd))
     for (const [key, data] of snapshot ?? [])
       queryClient.setQueryData(key, data)
   }
@@ -444,15 +488,26 @@ export function issueQueryOptions({
 }) {
   return {
     queryKey: picoQueryKeys.ghIssue(viewerContextId, cwd, number),
-    queryFn: async (): Promise<CachedIssue> =>
-      (
-        await fetchJson<GhIssueData>(
-          buildRequestUrl(
-            `/api/gh-issue?cwd=${encodeURIComponent(cwd)}&number=${number}`,
-            { machineId, contextId: viewerContextId }
-          )
+    queryFn: async (): Promise<CachedIssue> => {
+      const { issue } = await fetchJson<GhIssueData>(
+        buildRequestUrl(
+          `/api/gh-issue?cwd=${encodeURIComponent(cwd)}&number=${number}`,
+          { machineId, contextId: viewerContextId }
         )
-      ).issue,
+      )
+      // GitHub can still send the state from before a recent write.
+      const write = currentWrites(writesKey(viewerContextId, cwd)).find(
+        (item) => item.number === number
+      )
+      return write
+        ? {
+            ...issue,
+            state: write.state,
+            stateReason: write.stateReason,
+            labels: write.labels,
+          }
+        : issue
+    },
     staleTime: ISSUES_STALE_MS,
   }
 }
@@ -564,14 +619,17 @@ export function useIssueList({
       const params = new URLSearchParams({ cwd, state })
       if (label) params.set("label", label)
       if (search) params.set("search", search)
-      return (
-        await fetchJson<GhIssuesData>(
-          buildRequestUrl(`/api/gh-issues?${params.toString()}`, {
-            machineId,
-            contextId: viewerContextId,
-          })
-        )
-      ).issues
+      const { issues } = await fetchJson<GhIssuesData>(
+        buildRequestUrl(`/api/gh-issues?${params.toString()}`, {
+          machineId,
+          contextId: viewerContextId,
+        })
+      )
+      // GitHub can still send the state from before a recent write.
+      return currentWrites(writesKey(viewerContextId, cwd)).reduce(
+        (list, issue) => placeInList(list, issue, { state, label, search }),
+        issues
+      )
     },
     enabled: Boolean(enabled && viewerContextId && cwd),
     staleTime: ISSUES_STALE_MS,
