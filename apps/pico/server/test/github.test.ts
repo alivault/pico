@@ -70,7 +70,7 @@ async function withFakeGh(
   }
 }
 
-test("github: repo, list, view, create, comment, state, labels", async () => {
+void test("github: repo, list, view, create, comment, state, labels", async () => {
   await withFakeGh("", async (cwd, log) => {
     assert.deepEqual(await github.repo(cwd), {
       available: true,
@@ -157,7 +157,7 @@ test("github: repo, list, view, create, comment, state, labels", async () => {
   })
 })
 
-test("github: bad input and a logged-out gh", async () => {
+void test("github: bad input and a logged-out gh", async () => {
   await withFakeGh("logged-out", async (cwd) => {
     const repo = await github.repo(cwd)
     assert.equal(repo.available, false)
@@ -172,7 +172,7 @@ test("github: bad input and a logged-out gh", async () => {
   await assert.rejects(github.setIssueState("/", 1, "merged"), /state/)
 })
 
-test("github: gh is not installed", async () => {
+void test("github: gh is not installed", async () => {
   const saved = process.env.PATH
   process.env.PATH = "/nonexistent"
   try {
