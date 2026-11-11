@@ -10,6 +10,9 @@ import {
 } from "@tanstack/react-query"
 import { RotateCwIcon, ZapIcon } from "lucide-react"
 
+import { SidebarMenuAction, SidebarMenuItem } from "@/components/ui/sidebar"
+import { Spinner } from "@/components/ui/spinner"
+import { TitleTooltip } from "@/components/ui/tooltip"
 import { fetchJson } from "@/features/pico/app-shell-utils"
 import {
   registerSettingsPage,
@@ -65,8 +68,21 @@ export function serverStatusLabel(health: ServerHealth | undefined) {
   return `v${health.version}`
 }
 
-/** Wait until a new server process answers, and give its health. */
-async function waitForNewServer(machineId: string, before: ServerHealth) {
+/**
+ * Wait until a new server process answers, and give its health. `onDown`
+ * runs one time, when the old server stops answering.
+ */
+async function waitForNewServer(
+  machineId: string,
+  before: ServerHealth,
+  onDown: () => void
+) {
+  let down = false
+  const markDown = () => {
+    if (down) return
+    down = true
+    onDown()
+  }
   const deadline = Date.now() + 12 * 60_000
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 1000))
@@ -75,12 +91,16 @@ async function waitForNewServer(machineId: string, before: ServerHealth) {
         machineApiUrl(machineId, "/api/system/health"),
         { cache: "no-store" }
       )
-      if (!response.ok) continue
+      if (!response.ok) {
+        markDown()
+        continue
+      }
       const health = (await response.json()) as ServerHealth
       if (health.pid !== before.pid || health.startedAt !== before.startedAt)
         return health
     } catch {
       // The server is down for the restart.
+      markDown()
     }
   }
   return undefined
@@ -106,15 +126,21 @@ export async function restartServer({
         body: JSON.stringify({ now }),
       }
     )
-    toast.loading("Pico is restarting…", {
-      id: toastId,
-      description:
-        !now && started.activeTurnCount > 0
-          ? `It waits for ${started.activeTurnCount} active turn(s) to finish.`
-          : undefined,
-    })
+    const showRestarting = () =>
+      toast.loading("Pico is restarting…", { id: toastId })
+    // While Pico waits for turns, the sidebar shows the restart
+    // (`ServerRestartStatus`). The toast only shows when the server stops.
+    const turns = now ? 0 : started.activeTurnCount
+    if (turns > 0)
+      toast.info(`Pico restarts when ${turnsText(turns)} finish`, {
+        id: toastId,
+        description: "The sidebar shows the restart until then.",
+      })
+    else showRestarting()
     void queryClient.invalidateQueries({ queryKey: serverHealthKey(machineId) })
-    const after = await waitForNewServer(machineId, before)
+    const after = await waitForNewServer(machineId, before, () => {
+      if (turns > 0) showRestarting()
+    })
     if (!after) {
       toast.error("Pico did not start again in time", {
         id: toastId,
@@ -142,6 +168,46 @@ export async function restartServer({
       description: error instanceof Error ? error.message : String(error),
     })
   }
+}
+
+function turnsText(count: number) {
+  return count === 1 ? "1 turn" : `${count} turns`
+}
+
+/**
+ * A row in the sidebar footer while the server waits for active turns to
+ * finish before it restarts. It also shows a restart from the command line.
+ */
+export function ServerRestartStatus() {
+  const machineId = useMachineId()
+  const queryClient = useQueryClient()
+  const health = useServerHealth(machineId)
+  if (!health?.restart?.pending) return null
+  const turns = health.activeTurnCount
+  return (
+    <SidebarMenuItem>
+      <div className="flex h-(--sidebar-item-size) items-center gap-2 rounded-md px-(--sidebar-item-pad) pr-8 text-xs text-muted-foreground">
+        <Spinner size="xs" aria-label="Restarting" />
+        <span className="min-w-0 truncate">
+          {turns > 0
+            ? `Restarts after ${turnsText(turns)}`
+            : "Pico is restarting…"}
+        </span>
+      </div>
+      {turns > 0 ? (
+        <TitleTooltip title="Restart now">
+          <SidebarMenuAction
+            aria-label="Restart now"
+            onClick={() =>
+              void restartServer({ machineId, now: true, queryClient })
+            }
+          >
+            <ZapIcon />
+          </SidebarMenuAction>
+        </TitleTooltip>
+      ) : null}
+    </SidebarMenuItem>
+  )
 }
 
 function ServerPage() {

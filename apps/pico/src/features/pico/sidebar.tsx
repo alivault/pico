@@ -117,6 +117,7 @@ import {
   OtherMachineRenameDialog,
 } from "@/features/pico/other-machine-agent-dialogs"
 import { startSidebarSync } from "@/features/pico/sidebar-sync"
+import { ServerRestartStatus } from "@/features/pico/server-restart"
 import { useSidebarAgentNumber } from "@/features/pico/sidebar-agent-numbers"
 import { openMachine, openAgent as openMachineAgent } from "@/lib/pico/machine"
 import {
@@ -3387,23 +3388,26 @@ function useAppSidebarView({
             contentSlot
           )
         : null}
-      {bottomSlot && onOpenArchivedAgents
+      {bottomSlot
         ? createPortal(
             <SidebarGroup className="pt-0">
               <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    type="button"
-                    className="text-muted-foreground"
-                    onClick={() => {
-                      if (isMobile) setOpenMobile(false)
-                      onOpenArchivedAgents()
-                    }}
-                  >
-                    <ArchiveIcon />
-                    <span>Archived agents</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                <ServerRestartStatus />
+                {onOpenArchivedAgents ? (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      type="button"
+                      className="text-muted-foreground"
+                      onClick={() => {
+                        if (isMobile) setOpenMobile(false)
+                        onOpenArchivedAgents()
+                      }}
+                    >
+                      <ArchiveIcon />
+                      <span>Archived agents</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ) : null}
               </SidebarMenu>
             </SidebarGroup>,
             bottomSlot
