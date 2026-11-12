@@ -48,12 +48,12 @@ function formatContextUsagePercent(value: number) {
 
 /**
  * The color of a usage bar or ring. With a pace (how much of the window
- * passed), usage shows a warning only when it is ahead of the pace.
+ * passed), usage shows a warning (yellow, never red) only when it is ahead
+ * of the pace.
  */
 function contextUsageStroke(percent: number, pacePercent?: number | null) {
   if (pacePercent != null) {
-    if (percent <= pacePercent) return "var(--primary)"
-    return percent >= 90 ? "var(--destructive)" : "var(--warning)"
+    return percent <= pacePercent ? "var(--primary)" : "var(--warning)"
   }
   if (percent >= 90) return "var(--destructive)"
   if (percent >= 80) return "var(--warning)"
