@@ -95,9 +95,18 @@ void test("server needs no token, refuses a second owner, and stops cleanly", as
       "s1",
     ])
     assert.ok(JSON.parse(await readFile(join(data, "sidebar.json"), "utf8")))
-    const duplicate = spawn(process.execPath, args, { env, stdio: "ignore" })
+    // A second owner reports the running server and exits with code 0, so a
+    // supervisor with Restart=on-failure does not start it again.
+    const duplicate = spawn(process.execPath, args, {
+      env,
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+    let duplicateOutput = ""
+    duplicate.stdout.on("data", (chunk) => (duplicateOutput += String(chunk)))
     const code = await new Promise((done) => duplicate.once("exit", done))
-    assert.equal(code, 1)
+    assert.equal(code, 0)
+    assert.match(duplicateOutput, /already running/)
+    assert.equal((await fetch(`${url}/api/system/health`)).status, 200)
     assert.equal(
       (await fetch(`${url}/api/system/shutdown`, { method: "POST" })).status,
       200
