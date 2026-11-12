@@ -738,6 +738,13 @@ export function ContextUsageRings({
       {view.rings.map((ring, index) => {
         const ringGeometry = geometry[index]
         if (!ringGeometry || ring.percent == null) return null
+        // The round caps add half the stroke width at each end. Make the
+        // dash shorter by one stroke width, so that the arc ends where the
+        // percent is. Without this, 91% on the inner ring looks full.
+        const capPercent =
+          (ringGeometry.strokeWidth / (2 * Math.PI * ringGeometry.radius)) * 100
+        const dashPercent = Math.max(0, ring.percent - capPercent)
+        const dashOffset = -Math.min(ring.percent, capPercent) / 2
         return (
           <circle
             key={ring.key}
@@ -747,7 +754,8 @@ export function ContextUsageRings({
             pathLength={100}
             stroke={contextUsageStroke(ring.percent, ring.pacePercent)}
             strokeWidth={ringGeometry.strokeWidth}
-            strokeDasharray={`${ring.percent.toFixed(1)} 100`}
+            strokeDasharray={`${dashPercent.toFixed(2)} 100`}
+            strokeDashoffset={dashOffset.toFixed(2)}
             strokeLinecap="round"
             vectorEffect="non-scaling-stroke"
             className="origin-center -rotate-90"
