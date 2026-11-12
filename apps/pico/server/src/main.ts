@@ -16,7 +16,9 @@
  *
  * Only one server may own a data directory: the durable database has no
  * locking across processes. A second `serve` finds the running server and
- * reports it instead of starting.
+ * reports it instead of starting. When that server answers, the exit code
+ * is 0, so a supervisor (a systemd unit with `Restart=on-failure`) does not
+ * start `serve` again and again.
  */
 import {
   closeSync,
@@ -320,6 +322,13 @@ async function serve(options: Map<string, string | boolean>) {
   const port = requestedPort ? Number(requestedPort) : DEFAULT_PORT
   if (!Number.isInteger(port) || port < 0 || port > 65535)
     throw new Error("Invalid port")
+  const running = readState(paths)
+  if (running && alive(running.pid) && (await health(running))) {
+    console.log(
+      `Pico is already running (pid ${running.pid}) at http://${running.host}:${running.port}`
+    )
+    return
+  }
   const release = await acquireLock(paths)
   let server: PicoServer
   let requestStop: (drain: boolean) => void = () => undefined

@@ -45,10 +45,14 @@ const [major, minor] = process.versions.node.split(".").map(Number)
 if (major < 22 || (major === 22 && minor < 19))
   throw new Error("Pico requires Node.js 22.19 or later")
 const command = args[0] && !args[0].startsWith("-") ? args.shift() : "serve"
+// Open a browser only for a person who starts Pico, not for a service
+// manager: systemd sets INVOCATION_ID, and a unit that starts again after a
+// failure would open a new tab each time.
 const open =
   !args.includes("--no-open") &&
   !args.includes("--detach") &&
   process.env.PICO_OPEN !== "0" &&
+  !process.env.INVOCATION_ID &&
   command === "serve"
 const forwarded = args.filter((arg) => !["--open", "--no-open"].includes(arg))
 const expandHome = (path) => path?.replace(/^~(?=$|\/)/, homedir())
@@ -117,11 +121,17 @@ for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, () => child.kill(signal))
 if (open) {
   const deadline = Date.now() + 30_000
-  while (Date.now() < deadline && child.exitCode === null) {
+  while (Date.now() < deadline) {
+    // Open our own server. When another server already runs, the child
+    // reports it and exits with code 0; open that server one time. Until
+    // the child has started, server.json can still name an older server.
+    const exited = child.exitCode !== null
+    if (exited && child.exitCode !== 0) break
     try {
       const state = JSON.parse(
         readFileSync(join(dataDir, "server.json"), "utf8")
       )
+      if (!exited && state.pid !== child.pid) throw new Error("not ours yet")
       const host = ["0.0.0.0", "::"].includes(state.host)
         ? "localhost"
         : state.host
@@ -144,6 +154,7 @@ if (open) {
     } catch {
       /* Wait for the server. */
     }
+    if (exited) break
     await new Promise((done) => setTimeout(done, 250))
   }
 }

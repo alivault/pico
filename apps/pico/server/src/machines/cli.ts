@@ -279,10 +279,19 @@ async function setup(
       await installRemote(transport, nodeDir, VERSION)
       cache = cacheFromDiscovery(await discover(transport), cache)
       writeCache(dir, cache)
-      await transport.exec(picoCommand(cache, profile, ["stop", "--wait"]), {
-        timeoutMs: 11 * 60_000,
-      })
-      await startRemote(transport, cache, profile)
+      // Ask the server to restart itself, so that it stays under its
+      // launcher or systemd unit. Only servers without a restart route
+      // are stopped and started again in the background.
+      const restarted = await transport.exec(
+        picoCommand(cache, profile, ["restart"]),
+        { timeoutMs: 13 * 60_000 }
+      )
+      if (restarted.code !== 0) {
+        await transport.exec(picoCommand(cache, profile, ["stop", "--wait"]), {
+          timeoutMs: 11 * 60_000,
+        })
+        await startRemote(transport, cache, profile)
+      }
       status = await remoteStatus(transport, cache, profile)
       if (!status) throw new Error(`Pico did not start on ${profile.label}.`)
       await transport.attach(status.port)
