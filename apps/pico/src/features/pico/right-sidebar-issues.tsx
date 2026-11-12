@@ -1140,6 +1140,9 @@ function IssueList({
           </InputGroupAddon>
           <InputGroupInput
             type="search"
+            autoComplete="off"
+            // The field has its own clear button; hide the one of the browser.
+            className="[&::-webkit-search-cancel-button]:appearance-none"
             aria-label="Search issues"
             placeholder="Search"
             value={searchInput}
