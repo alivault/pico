@@ -11,6 +11,7 @@
     "check": "pnpm --filter @alivault/pico check",
     "release": "pnpm --filter @alivault/pico release",
     "media": "pnpm --filter @alivault/pico media",
+    "og-image": "pnpm --filter @alivault/pico og-image",
     "website:dev": "pnpm --filter @pico/website run dev",
     "website:deploy": "pnpm --filter @pico/website run deploy"
   },
