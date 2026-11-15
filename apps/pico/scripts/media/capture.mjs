@@ -18,7 +18,8 @@
  * minutes. It gets an agent folder of its own, with a link to your
  * `auth.json` and only the model lines of your `settings.json`, so your
  * AGENTS.md, skills, and extensions do not change what the agent does.
- * Chromium draws the pages, and ffmpeg makes the video.
+ * Chromium draws the pages, and ffmpeg makes the video (and cwebp the
+ * poster, when ffmpeg has no libwebp).
  *
  * The output folder gets:
  *   pico-workspace.png       desktop, dark (2898×1916)
@@ -37,6 +38,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -407,22 +409,7 @@ function encodeVideo(frames, marks, out) {
     "+faststart",
     video,
   ])
-  run("ffmpeg", [
-    "-loglevel",
-    "error",
-    "-y",
-    "-ss",
-    String(poster),
-    "-i",
-    video,
-    "-frames:v",
-    "1",
-    "-c:v",
-    "libwebp",
-    "-quality",
-    "80",
-    join(out, "pico-child-sessions-demo.webp"),
-  ])
+  writePoster(video, poster, join(out, "pico-child-sessions-demo.webp"))
   run("ffmpeg", [
     "-loglevel",
     "error",
@@ -438,6 +425,37 @@ function encodeVideo(frames, marks, out) {
   console.log(
     `  video: ${Math.round(time)} s, poster at ${poster.toFixed(1)} s`
   )
+}
+
+/** True if this ffmpeg can write WebP (some builds have no libwebp). */
+function ffmpegHasWebp() {
+  const encoders = spawnSync("ffmpeg", ["-hide_banner", "-encoders"], {
+    encoding: "utf8",
+  })
+  return encoders.stdout.includes("libwebp")
+}
+
+/** Write the frame at `time` of the video as a WebP poster. */
+function writePoster(video, time, target) {
+  const frame = ["-loglevel", "error", "-y", "-ss", String(time), "-i", video]
+  if (ffmpegHasWebp()) {
+    run("ffmpeg", [
+      ...frame,
+      "-frames:v",
+      "1",
+      "-c:v",
+      "libwebp",
+      "-quality",
+      "80",
+      target,
+    ])
+    return
+  }
+  // Without libwebp: write a PNG, and let cwebp make the WebP.
+  const png = `${target}.png`
+  run("ffmpeg", [...frame, "-frames:v", "1", png])
+  run("cwebp", ["-quiet", "-q", "80", png, "-o", target])
+  rmSync(png)
 }
 
 /** Open the folded tool calls of the turn ("Worked for 38s"). */
@@ -522,12 +540,12 @@ function compressPng(source, target) {
   ])
 }
 
-/** Copy the files into the website and the README screenshots. */
+/** Copy the files into the website (the README uses them by URL). */
 function install(out, names) {
   for (const name of names)
     for (const dir of INSTALL[name])
       copyFileSync(join(out, name), join(repoDir, dir, name))
-  console.log("Copied them into the website and the README screenshots.")
+  console.log("Copied them into the website.")
 }
 
 async function main() {
@@ -538,7 +556,12 @@ async function main() {
   }
   need("ffmpeg")
   need("git")
-  const root = join(tmpdir(), "pico-demo")
+  if (options.video && !ffmpegHasWebp()) need("cwebp")
+  // The real path: on macOS the temporary folder is a symlink
+  // (/var -> /private/var), and Pico keys a new agent's draft by the real
+  // path of its project. A sidebar project with a symlink in its path
+  // does not match it, and the page stays on the draft.
+  const root = join(realpathSync(tmpdir()), "pico-demo")
   const project = join(root, "tiny-tasks")
   const dataDir = join(root, "data")
   const raw = join(root, "raw")
