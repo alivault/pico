@@ -4,13 +4,13 @@ A web workspace for durable [Pi](https://www.npmjs.com/package/@earendil-works/p
 coding agents. One Node server hosts the agent runtime and serves the
 React web app.
 
-![Pico workspace where an agent runs two subagents, each in its own worktree](apps/pico/public/screenshots/pico-workspace.png)
+![Pico workspace where an agent runs two subagents, each in its own worktree](https://pico.aliabbas.net/screenshots/pico-workspace.png)
 
-![Pico workspace in light mode with subagents in the sidebar and the Agent tab](apps/pico/public/screenshots/pico-workspace-alt.png)
+![Pico workspace in light mode with subagents in the sidebar and the Agent tab](https://pico.aliabbas.net/screenshots/pico-workspace-alt.png)
 
-| Dark mobile browser                                                               | Light mobile browser                                                                   |
-| --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| ![Pico mobile browser in dark mode](apps/pico/public/screenshots/pico-mobile.png) | ![Pico mobile browser in light mode](apps/pico/public/screenshots/pico-mobile-alt.png) |
+| Dark mobile browser                                                                        | Light mobile browser                                                                            |
+| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| ![Pico mobile browser in dark mode](https://pico.aliabbas.net/screenshots/pico-mobile.png) | ![Pico mobile browser in light mode](https://pico.aliabbas.net/screenshots/pico-mobile-alt.png) |
 
 ## Requirements
 

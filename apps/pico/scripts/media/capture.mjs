@@ -3,7 +3,7 @@
  * Take the screenshots and the demo video of the website and the README.
  *
  *   pnpm media                  # video and screenshots, into the output folder
- *   pnpm media --install        # and copy them into the website and the README
+ *   pnpm media --install        # and copy them into the website (the README uses its URLs)
  *   pnpm media --screenshots    # only the screenshots (the agent still runs)
  *   pnpm media --video          # only the video
  *   pnpm media --no-build       # use the built web and server as they are
@@ -66,24 +66,15 @@ const MOBILE = {
   hasTouch: true,
 }
 
-/** Where `--install` copies each file. */
+/**
+ * Where `--install` copies each file. The README uses the screenshots of the
+ * website by URL, so they are in one place only.
+ */
 const INSTALL = {
-  "pico-workspace.png": [
-    "apps/website/site/screenshots",
-    "apps/pico/public/screenshots",
-  ],
-  "pico-workspace-alt.png": [
-    "apps/website/site/screenshots",
-    "apps/pico/public/screenshots",
-  ],
-  "pico-mobile.png": [
-    "apps/website/site/screenshots",
-    "apps/pico/public/screenshots",
-  ],
-  "pico-mobile-alt.png": [
-    "apps/website/site/screenshots",
-    "apps/pico/public/screenshots",
-  ],
+  "pico-workspace.png": ["apps/website/site/screenshots"],
+  "pico-workspace-alt.png": ["apps/website/site/screenshots"],
+  "pico-mobile.png": ["apps/website/site/screenshots"],
+  "pico-mobile-alt.png": ["apps/website/site/screenshots"],
   "pico-child-sessions-demo.mp4": ["apps/website/site/videos"],
   "pico-child-sessions-demo.webp": ["apps/website/site/videos"],
 }
