@@ -21,6 +21,9 @@ import { ctx, openHarness, tempDir, TEST_MODEL } from "./support.ts"
 
 // Tests start real pty-host processes, one for each temp data directory.
 process.env.PICO_PTY_HOST_SYSTEMD = "0"
+// A plain shell, not the login shell of the user: fish 4, for example,
+// queries the terminal at start and waits for answers that no test sends.
+process.env.PICO_TERMINAL_SHELL ??= "/bin/sh"
 const script = join(
   dirname(fileURLToPath(import.meta.url)),
   "..",
