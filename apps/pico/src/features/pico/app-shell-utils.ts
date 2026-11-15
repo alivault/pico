@@ -398,8 +398,17 @@ export function updateStateFromSync(
   const nextDraftOwnerKey = promptDraftKey({
     cwd: typeof sync.cwd === "string" ? sync.cwd : previous.cwd,
   })
+  // The tab keyed its optimistic draft by the path that it sent, which
+  // can differ from the server's real path (requestedCwd).
+  const requestedDraftOwnerKey =
+    typeof sync.requestedCwd === "string"
+      ? promptDraftKey({ cwd: sync.requestedCwd })
+      : undefined
   const replacingOptimisticDraft =
-    replacingAgent && previous.agentKey === `optimistic:${nextDraftOwnerKey}`
+    replacingAgent &&
+    (previous.agentKey === `optimistic:${nextDraftOwnerKey}` ||
+      (requestedDraftOwnerKey !== undefined &&
+        previous.agentKey === `optimistic:${requestedDraftOwnerKey}`))
   const incomingHistoryOffset =
     typeof sync.historyOffset === "number"
       ? sync.historyOffset

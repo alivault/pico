@@ -390,9 +390,16 @@ export function createApi(api: ApiContext) {
     // The tab shows an optimistic draft until this state comes. Without
     // it, the tab ignores the state of the agent that its first prompt
     // makes, and stays on the draft.
-    hub.push(await agents.draftStateSync({ agentKey: key, cwd }), {
-      contextId,
-    })
+    // The tab keys its optimistic draft by the path that it sent. When
+    // the real path is different (a symlink, or ~), send that path too, so
+    // the tab can match this state to its draft.
+    hub.push(
+      {
+        ...(await agents.draftStateSync({ agentKey: key, cwd })),
+        ...(body.cwd && body.cwd !== cwd ? { requestedCwd: body.cwd } : {}),
+      },
+      { contextId }
+    )
     return { ok: true, draft: true, agentKey: key, cwd }
   })
 
@@ -545,19 +552,23 @@ export function createApi(api: ApiContext) {
       resume?: unknown
     }>()
     const edits: PendingEdit[] | undefined = Array.isArray(body.pendingMessages)
-      ? body.pendingMessages.map((message): PendingEdit => ({
-          ...(typeof message?.pendingId === "string" && message.pendingId
-            ? { pendingId: message.pendingId }
-            : {}),
-          ...(typeof message?.text === "string" ? { text: message.text } : {}),
-          ...(Array.isArray(message?.images)
-            ? { images: message.images as never }
-            : {}),
-          ...(message?.streamingBehavior === "steer" ||
-          message?.streamingBehavior === "followUp"
-            ? { streamingBehavior: message.streamingBehavior as never }
-            : {}),
-        }))
+      ? body.pendingMessages.map(
+          (message): PendingEdit => ({
+            ...(typeof message?.pendingId === "string" && message.pendingId
+              ? { pendingId: message.pendingId }
+              : {}),
+            ...(typeof message?.text === "string"
+              ? { text: message.text }
+              : {}),
+            ...(Array.isArray(message?.images)
+              ? { images: message.images as never }
+              : {}),
+            ...(message?.streamingBehavior === "steer" ||
+            message?.streamingBehavior === "followUp"
+              ? { streamingBehavior: message.streamingBehavior as never }
+              : {}),
+          })
+        )
       : Array.isArray(body.pendingIds)
         ? body.pendingIds.map((pendingId) => ({ pendingId: String(pendingId) }))
         : undefined
@@ -2096,6 +2107,8 @@ function streamEvents(
   let ready = false
   let stream: SseStream | undefined
   let liveAgent: string | undefined
+  // Drafts have no agent ID; their key tells two drafts apart.
+  let liveAgentKey: unknown
   let releaseWatch: (() => void) | undefined
   let watchedAgent: string | undefined
   let previousItems: Item[] = []
@@ -2136,10 +2149,12 @@ function streamEvents(
       const historyOffset = payload.historyOffset
       if (
         syncedAgent !== liveAgent ||
+        payload.agentKey !== liveAgentKey ||
         itemsChangedByDelta ||
         historyOffset !== previousHistoryOffset
       ) {
         liveAgent = syncedAgent
+        liveAgentKey = payload.agentKey
         bindWatch(syncedAgent)
         previousItems = items
         previousHistoryOffset = historyOffset
@@ -2213,6 +2228,7 @@ function streamEvents(
       }
     }
     liveAgent = agent
+    liveAgentKey = statePayload.agentKey
     bindWatch(agent)
     previousItems = Array.isArray(statePayload.items) ? statePayload.items : []
     stream.send(statePayload)

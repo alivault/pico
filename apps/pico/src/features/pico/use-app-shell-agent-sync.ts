@@ -516,13 +516,26 @@ function stateSyncPayloadDraftKey(payload: StateSyncPayload) {
   })
 }
 
+/**
+ * The draft keys of a state: by the server's real path, and by the path
+ * that the tab sent, when they are different (for example a symlink).
+ */
+function stateSyncPayloadDraftKeys(payload: StateSyncPayload) {
+  const keys = [stateSyncPayloadDraftKey(payload)]
+  if (typeof payload.requestedCwd === "string")
+    keys.push(promptDraftKey({ cwd: payload.requestedCwd }))
+  return keys
+}
+
 function stateSyncPayloadConfirmsPendingDraft(
   payload: StateSyncPayload,
   ownerKey: string | null
 ) {
   if (!ownerKey || payload.draft !== true) return false
 
-  return promptDraftKeyMatchesOwner(stateSyncPayloadDraftKey(payload), ownerKey)
+  return stateSyncPayloadDraftKeys(payload).some((key) =>
+    promptDraftKeyMatchesOwner(key, ownerKey)
+  )
 }
 
 function stateSyncPayloadConfirmsOptimisticDraft(
@@ -531,9 +544,8 @@ function stateSyncPayloadConfirmsOptimisticDraft(
 ) {
   if (payload.draft !== true) return false
 
-  return promptDraftKeyMatchesOwner(
-    stateSyncPayloadDraftKey(payload),
-    promptDraftKey(previousState)
+  return stateSyncPayloadDraftKeys(payload).some((key) =>
+    promptDraftKeyMatchesOwner(key, promptDraftKey(previousState))
   )
 }
 

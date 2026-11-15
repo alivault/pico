@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
-import { readFile } from "node:fs/promises"
+import { mkdir, readFile, realpath, symlink } from "node:fs/promises"
 import { join } from "node:path"
 import { test } from "node:test"
 
@@ -129,6 +129,7 @@ void test("an open event stream follows agent selection and moves its live watch
             agentKey?: string
             draft?: boolean
             cwd?: string
+            requestedCwd?: string
             items?: Array<{ images?: Array<{ url: string }> }>
           }
           if (event.type === "state_sync") return event
@@ -179,6 +180,25 @@ void test("an open event stream follows agent selection and moves its live watch
     const draft = await nextState()
     assert.equal(draft.draft, true)
     assert.equal(draft.agentKey, agentKey)
+    // Through a symlink: the state has the real path, and also the path
+    // that the tab sent, so that the tab can match it to its draft.
+    const project = join(data, "project")
+    const link = join(data, "link")
+    await mkdir(project)
+    await symlink(project, link)
+    const linked = await fetch(`${url}/api/agent/new?context=browser`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cwd: link }),
+    })
+    assert.equal(linked.status, 200)
+    const { agentKey: linkedKey } = (await linked.json()) as {
+      agentKey: string
+    }
+    let linkedDraft = await nextState()
+    while (linkedDraft.agentKey !== linkedKey) linkedDraft = await nextState()
+    assert.equal(linkedDraft.cwd, await realpath(project))
+    assert.equal(linkedDraft.requestedCwd, link)
   } finally {
     clearTimeout(timeout)
     abort.abort()

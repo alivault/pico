@@ -394,6 +394,11 @@ export type StateSyncPayload = {
   agentName?: string
   firstMessage?: string
   cwd?: string
+  /**
+   * The path that the tab sent for a new draft, when the server's real
+   * path (`cwd`) is different, for example because of a symlink.
+   */
+  requestedCwd?: string
   project?: string
   modified?: string
   uiState?: AgentUiState & {
