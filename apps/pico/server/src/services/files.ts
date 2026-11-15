@@ -15,12 +15,42 @@ import {
   writeFile,
 } from "node:fs/promises"
 import { homedir } from "node:os"
-import { basename, dirname, isAbsolute, join, relative, sep } from "node:path"
+import {
+  basename,
+  dirname,
+  extname,
+  isAbsolute,
+  join,
+  relative,
+  sep,
+} from "node:path"
 
 import { badRequest, conflict } from "../http.ts"
 
 const TREE_LIMIT = 20_000
 const READ_LIMIT = 1_000_000
+const IMAGE_LIMIT = 50_000_000
+
+/**
+ * Images that the file viewer shows. SVG is text: the viewer reads it as
+ * text, and can also show it as an image.
+ */
+const IMAGE_TYPES: Record<string, string> = {
+  ".apng": "image/apng",
+  ".avif": "image/avif",
+  ".bmp": "image/bmp",
+  ".gif": "image/gif",
+  ".ico": "image/x-icon",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".webp": "image/webp",
+}
+
+function imageType(path: string) {
+  return IMAGE_TYPES[extname(path).toLowerCase()]
+}
 const SEARCH_DEPTH = 4
 const SEARCH_LIMIT = 50
 const FILE_COMPLETION_LIMIT = 20
@@ -273,6 +303,19 @@ async function resolveProjectFile(cwd: string, path: string) {
 
 export async function readProjectFile(cwd: string, path: string) {
   const { normalized, resolved, info } = await resolveProjectFile(cwd, path)
+  const mimeType = imageType(normalized)
+  if (mimeType && mimeType !== "image/svg+xml") {
+    // The viewer loads the bytes from /api/files/raw; the version (from
+    // the size and the time of change) makes its URL change with the file.
+    if (info.size > IMAGE_LIMIT)
+      throw badRequest("Image is too large to preview")
+    return {
+      path: display(normalized),
+      content: "",
+      version: `${info.size.toString(36)}-${Math.floor(info.mtimeMs).toString(36)}`,
+      image: { mimeType, size: info.size },
+    }
+  }
   if (info.size > READ_LIMIT) throw badRequest("File is too large to preview")
   const bytes = await readFile(resolved)
   if (bytes.includes(0)) throw badRequest("Binary files cannot be previewed")
@@ -286,6 +329,15 @@ export async function readProjectFile(cwd: string, path: string) {
   } catch {
     throw badRequest("Binary files cannot be previewed")
   }
+}
+
+/** An image file of the project, for /api/files/raw. */
+export async function projectImageFile(cwd: string, path: string) {
+  const { resolved, info } = await resolveProjectFile(cwd, path)
+  const mimeType = imageType(resolved)
+  if (!mimeType) throw badRequest("Only images can be shown")
+  if (info.size > IMAGE_LIMIT) throw badRequest("Image is too large to preview")
+  return { resolved, size: info.size, mimeType }
 }
 
 /**

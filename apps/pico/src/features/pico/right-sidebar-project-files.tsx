@@ -74,6 +74,11 @@ import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
 import { MarkdownBlock } from "@/features/pico/markdown-renderer"
 import { useFileLineComments } from "@/features/pico/file-line-comments"
 import { useProjectFileEditing } from "@/features/pico/project-file-editing"
+import {
+  ProjectFileImage,
+  isSvgFilePath,
+} from "@/features/pico/project-file-image"
+import { formatBytes } from "@/features/pico/resources-dialog"
 import { useDirtyProjectFilePaths } from "@/features/pico/project-file-edits"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
@@ -762,15 +767,33 @@ export function ProjectFileContent({
   // disk, so comments wait for a save.
   const commentsBlocked = Boolean(edit && editing.dirty)
   const content = fileQuery.data?.content ?? ""
+  // A raster image has no text; an SVG is text and also an image.
+  const image = fileQuery.data?.image
   const isMarkdownFile = isMarkdownFilePath(path)
+  const isSvgFile = isSvgFilePath(path)
+  const hasPreview = isMarkdownFile || isSvgFile
   const [markdownViewModes, setMarkdownViewModes] = React.useState<
     Record<string, MarkdownFileViewMode>
   >({})
-  const markdownViewMode: MarkdownFileViewMode = isMarkdownFile
+  const [imageSize, setImageSize] = React.useState<
+    { width: number; height: number } | undefined
+  >()
+  const markdownViewMode: MarkdownFileViewMode = hasPreview
     ? markdownViewModes[path] || "preview"
     : "source"
   const showMarkdownPreview =
     !edit && isMarkdownFile && markdownViewMode === "preview"
+  const showImage =
+    !edit &&
+    Boolean(fileQuery.data) &&
+    (Boolean(image) || (isSvgFile && markdownViewMode === "preview"))
+  const imageSrc =
+    fileQuery.data && (image || isSvgFile)
+      ? buildRequestUrl(
+          `/api/files/raw?cwd=${encodeURIComponent(normalizedCwd)}&path=${encodeURIComponent(path)}&v=${encodeURIComponent(fileQuery.data.version)}`,
+          { machineId, contextId: viewerContextId }
+        )
+      : undefined
   if (!path) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
@@ -779,7 +802,7 @@ export function ProjectFileContent({
     )
   }
 
-  const canEdit = Boolean(fileQuery.data) && !fileQuery.error
+  const canEdit = Boolean(fileQuery.data) && !fileQuery.error && !image
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -787,7 +810,16 @@ export function ProjectFileContent({
         <div className="flex min-w-0 items-center gap-2 truncate text-xs font-medium text-muted-foreground">
           {edit ? (
             <span>{editing.dirty ? "Unsaved changes" : "Editing"}</span>
-          ) : isMarkdownFile ? (
+          ) : image ? (
+            <span className="truncate">
+              {[
+                imageSize ? `${imageSize.width} × ${imageSize.height}` : "",
+                formatBytes(image.size),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          ) : hasPreview ? (
             <ToggleGroup
               variant="outline"
               size="sm"
@@ -834,7 +866,7 @@ export function ProjectFileContent({
                 </Button>
               </TitleTooltip>
             </>
-          ) : (
+          ) : image ? null : (
             <Button
               type="button"
               variant="outline"
@@ -898,6 +930,8 @@ export function ProjectFileContent({
               {getErrorMessage(fileQuery.error, "Failed to load file")}
             </GitSectionNote>
           </div>
+        ) : showImage && imageSrc ? (
+          <ProjectFileImage src={imageSrc} path={path} onSize={setImageSize} />
         ) : showMarkdownPreview ? (
           <div className="h-full overflow-auto p-4 text-foreground">
             <MarkdownBlock text={content} />

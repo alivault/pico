@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { test } from "node:test"
 
 import {
+  projectImageFile,
   projectTree,
   readProjectFile,
   writeProjectFile,
@@ -27,6 +28,45 @@ void test("workspace files reject traversal, escaped symlinks, and binary data",
   const outside = await readProjectFile(workspace, join(root, "secret"))
   assert.equal(outside.content, "outside")
   assert.equal(outside.path, join(root, "secret"))
+})
+
+void test("image files have a version for the viewer, and only images are served raw", async () => {
+  const workspace = await tempDir("pico-files-test-")
+  // A 1×1 PNG.
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "base64"
+  )
+  await writeFile(join(workspace, "dot.PNG"), png)
+  await writeFile(join(workspace, "icon.svg"), "<svg/>")
+  await writeFile(join(workspace, "notes.txt"), "text")
+
+  const read = await readProjectFile(workspace, "dot.PNG")
+  assert.deepEqual(read.image, { mimeType: "image/png", size: png.length })
+  assert.equal(read.content, "")
+  assert.ok(read.version)
+  // A change of the file changes the version, so the viewer loads it again.
+  await writeFile(join(workspace, "dot.PNG"), Buffer.concat([png, png]))
+  assert.notEqual(
+    (await readProjectFile(workspace, "dot.PNG")).version,
+    read.version
+  )
+
+  // An SVG is text, and also an image.
+  const svg = await readProjectFile(workspace, "icon.svg")
+  assert.equal(svg.content, "<svg/>")
+  assert.equal(svg.image, undefined)
+  assert.equal(
+    (await projectImageFile(workspace, "icon.svg")).mimeType,
+    "image/svg+xml"
+  )
+
+  assert.equal(
+    (await projectImageFile(workspace, "dot.PNG")).mimeType,
+    "image/png"
+  )
+  await assert.rejects(projectImageFile(workspace, "notes.txt"), /images/)
+  await assert.rejects(projectImageFile(workspace, "../dot.PNG"), /inside/)
 })
 
 void test("workspace file saves keep the mode and stop on a conflict", async () => {

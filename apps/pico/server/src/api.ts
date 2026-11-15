@@ -3,6 +3,7 @@
  * agent store, workspace routes (git, files, terminals, highlighting), and
  * provider auth. Request and response shapes follow the client's contract.
  */
+import { createReadStream } from "node:fs"
 import { homedir } from "node:os"
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
@@ -834,6 +835,33 @@ export function createApi(api: ApiContext) {
     if (!requested) throw badRequest("cwd is required")
     const cwd = await files.resolveDirectory(requested, baseCwd(request))
     return { ok: true, cwd, ...(await files.readProjectFile(cwd, path)) }
+  })
+
+  // The bytes of an image file, for the file viewer. The viewer adds the
+  // version of the file (from /api/files/read) to the URL, so the browser
+  // can keep a copy until the file changes.
+  router.get("/api/files/raw", async (request, response) => {
+    const path = stringField(request.query.get("path"))
+    if (!path) throw badRequest("path is required")
+    const requested = stringField(request.query.get("cwd"))
+    if (!requested) throw badRequest("cwd is required")
+    const cwd = await files.resolveDirectory(requested, baseCwd(request))
+    const image = await files.projectImageFile(cwd, path)
+    response.writeHead(200, {
+      "content-type": image.mimeType,
+      "content-length": image.size,
+      "cache-control": request.query.get("v")
+        ? "private, max-age=31536000, immutable"
+        : "no-cache",
+      "x-content-type-options": "nosniff",
+      // An SVG opened from this origin could run script: allow none.
+      "content-security-policy":
+        "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox",
+    })
+    createReadStream(image.resolved)
+      .on("error", () => response.destroy())
+      .pipe(response)
+    return HANDLED
   })
 
   router.post("/api/files/write", async (request) => {

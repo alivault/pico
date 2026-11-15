@@ -124,6 +124,11 @@ export type ProjectFileReadResponse =
       content: string
       /** A hash of the content. A save sends it back to see changes. */
       version: string
+      /**
+       * An image (not SVG, which is text): `content` is empty, and the
+       * viewer loads the bytes from /api/files/raw.
+       */
+      image?: { mimeType: string; size: number }
     }
   | ApiErrorResponse
 
