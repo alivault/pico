@@ -1,5 +1,6 @@
 import * as React from "react"
 
+import { ImageLightbox } from "@/features/pico/image-lightbox"
 import { cn } from "@/lib/utils"
 
 /** Images that the file viewer shows as images. */
@@ -30,8 +31,7 @@ export function isSvgFilePath(path: string) {
 
 /**
  * An image file of the project, on a checkerboard so that transparent parts
- * show. It fits the panel; a click shows it at its real size, and a second
- * click fits it again.
+ * show. It fits the panel; a click opens it in the lightbox, which can zoom.
  */
 export function ProjectFileImage({
   src,
@@ -42,10 +42,10 @@ export function ProjectFileImage({
   path: string
   onSize?: (size: { width: number; height: number } | undefined) => void
 }) {
-  const [actualSize, setActualSize] = React.useState(false)
   const [failed, setFailed] = React.useState(false)
-  const [fits, setFits] = React.useState(true)
+  const [lightboxOpen, setLightboxOpen] = React.useState(false)
   const svg = isSvgFilePath(path)
+  const name = path.split(/[/\\]/).pop() || path
 
   React.useEffect(() => {
     setFailed(false)
@@ -67,46 +67,46 @@ export function ProjectFileImage({
         "bg-[image:linear-gradient(45deg,color-mix(in_oklab,var(--muted)_60%,transparent)_25%,transparent_25%,transparent_75%,color-mix(in_oklab,var(--muted)_60%,transparent)_75%),linear-gradient(45deg,color-mix(in_oklab,var(--muted)_60%,transparent)_25%,transparent_25%,transparent_75%,color-mix(in_oklab,var(--muted)_60%,transparent)_75%)]"
       )}
     >
-      <div
-        className={cn(
-          "flex min-h-full min-w-full items-center justify-center p-4",
-          actualSize ? "w-max" : "h-full"
-        )}
-      >
-        <img
-          src={src}
-          alt={path}
-          draggable={false}
+      <div className="flex size-full items-center justify-center p-4">
+        <button
+          type="button"
+          aria-label={`Open ${name} in a lightbox`}
           className={cn(
-            "block",
-            actualSize ? "max-w-none" : "max-h-full max-w-full object-contain",
+            "flex max-h-full max-w-full cursor-zoom-in items-center justify-center rounded-sm focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
             // An SVG scales without loss: show a small one larger.
-            svg && !actualSize && "size-full max-h-128 max-w-128",
-            // Only an image that is larger than the panel can zoom.
-            fits
-              ? "cursor-default"
-              : actualSize
-                ? "cursor-zoom-out"
-                : "cursor-zoom-in"
+            svg && "size-full max-h-128 max-w-128"
           )}
-          onLoad={(event) => {
-            const image = event.currentTarget
-            const width = image.naturalWidth
-            const height = image.naturalHeight
-            onSize?.(width && height ? { width, height } : undefined)
-            const frame = image.parentElement?.parentElement
-            setFits(
-              !frame ||
-                (width <= frame.clientWidth - 32 &&
-                  height <= frame.clientHeight - 32)
-            )
-          }}
-          onError={() => setFailed(true)}
-          onClick={() => {
-            if (!fits) setActualSize((current) => !current)
-          }}
-        />
+          onClick={() => setLightboxOpen(true)}
+        >
+          <img
+            src={src}
+            alt={path}
+            draggable={false}
+            className={cn(
+              "block max-h-full max-w-full object-contain",
+              svg && "size-full"
+            )}
+            onLoad={(event) => {
+              const { naturalWidth: width, naturalHeight: height } =
+                event.currentTarget
+              onSize?.(width && height ? { width, height } : undefined)
+            }}
+            onError={() => setFailed(true)}
+          />
+        </button>
       </div>
+      {lightboxOpen ? (
+        <ImageLightbox
+          open={true}
+          onOpenChange={setLightboxOpen}
+          imageSrc={src}
+          imageAlt={path}
+          title={name}
+          description={`Expanded preview of ${path}.`}
+          // An SVG scales without loss: let it fill the lightbox.
+          imageClassName={svg ? "size-full" : undefined}
+        />
+      ) : null}
     </div>
   )
 }

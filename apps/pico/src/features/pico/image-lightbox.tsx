@@ -22,6 +22,8 @@ type ImageLightboxProps = {
   description?: string
   emptyState?: React.ReactNode
   className?: string
+  /** Classes for the image, for example to show a small SVG larger. */
+  imageClassName?: string
   /** Position of this image in a set. With more than one image, the
    * lightbox shows previous and next buttons and handles arrow keys. */
   index?: number
@@ -82,6 +84,7 @@ export function ImageLightbox({
   description,
   emptyState,
   className,
+  imageClassName,
   index = 0,
   count = 1,
   onIndexChange,
@@ -421,7 +424,10 @@ export function ImageLightbox({
               src={imageSrc}
               alt={imageAlt}
               draggable={false}
-              className="block max-h-full max-w-full cursor-grab object-contain active:cursor-grabbing"
+              className={cn(
+                "block max-h-full max-w-full cursor-grab object-contain active:cursor-grabbing",
+                imageClassName
+              )}
               style={{
                 transform: `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`,
               }}
