@@ -24,6 +24,8 @@ export type PicoEventMap = {
   "pico:collapse-projects": { machineId: string; collapsed: boolean }
   /** Open the machines dialog. */
   "pico:open-machines": Record<string, never>
+  /** Ask to remove a machine from the hub. */
+  "pico:remove-machine": { machineId: string }
   /** Open the resources dialog of the shown machine. */
   "pico:open-resources": Record<string, never>
   /**

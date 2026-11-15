@@ -2873,25 +2873,43 @@ function useAppSidebarView({
   pinnedAgentKeys,
   emptyStateText,
   statusFilterActive = false,
-  onOpenAddProjectDialog,
+  onOpenAddProjectDialog: openAddProjectDialog,
   onAgentClick,
-  onRenameAgent,
-  onDeleteAgent,
+  onRenameAgent: renameAgent,
+  onDeleteAgent: deleteAgent,
   onSetAgentUnread,
   onMoveAgent,
-  onMoveAgentAnyProject,
+  onMoveAgentAnyProject: moveAgentAnyProject,
   onTogglePinnedAgent,
   onCreateAgentInProject,
-  onDeleteOldAgentsInProject,
+  onDeleteOldAgentsInProject: deleteOldAgentsInProject,
   onMarkAgentsRead,
   onRemoveProject,
   onReorderProjects,
   onOpenArchivedAgents,
   archivedJobAgents,
-  onOpenArchivedJobs,
+  onOpenArchivedJobs: openArchivedJobs,
 }: AppSidebarProps) {
   const machineId = useMachineId()
   const { isMobile, setOpenMobile } = useSidebar()
+  // On mobile, the sidebar is a modal sheet above the page, so it covers a
+  // dialog that opens from it. The actions that open a dialog close it first.
+  const closingSheet = <Args extends Array<unknown>>(
+    action: (...args: Args) => void
+  ) => {
+    return (...args: Args) => {
+      if (isMobile) setOpenMobile(false)
+      action(...args)
+    }
+  }
+  const onOpenAddProjectDialog = closingSheet(openAddProjectDialog)
+  const onRenameAgent = renameAgent && closingSheet(renameAgent)
+  const onDeleteAgent = deleteAgent && closingSheet(deleteAgent)
+  const onMoveAgentAnyProject =
+    moveAgentAnyProject && closingSheet(moveAgentAnyProject)
+  const onDeleteOldAgentsInProject =
+    deleteOldAgentsInProject && closingSheet(deleteOldAgentsInProject)
+  const onOpenArchivedJobs = openArchivedJobs && closingSheet(openArchivedJobs)
   const searchActive = agentSearch.trim().length > 0
   // A search or a state filter shows all matching agents, with their
   // groups open, and stops the drag to reorder.

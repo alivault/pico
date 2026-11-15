@@ -340,6 +340,7 @@ const PROBLEM_BADGES: Record<string, string> = {
  * group.
  */
 function MachineProblemBadge({ machine }: { machine: MachineInfo }) {
+  const { isMobile, setOpenMobile } = useSidebar()
   const label = PROBLEM_BADGES[machine.problem?.kind ?? ""] ?? "! error"
   return (
     <TitleTooltip
@@ -349,7 +350,11 @@ function MachineProblemBadge({ machine }: { machine: MachineInfo }) {
         variant="ghost"
         size="sm"
         className="h-6 shrink-0 px-1.5 font-mono text-[11px] font-normal text-destructive hover:bg-destructive/10 hover:text-destructive"
-        onClick={() => emitOpenMachines()}
+        onClick={() => {
+          // The mobile sidebar sheet would cover the dialog.
+          if (isMobile) setOpenMobile(false)
+          emitOpenMachines()
+        }}
         aria-label={`${machine.label}: ${machineStateLabel(machine)}. Show details`}
       >
         {label}
@@ -537,7 +542,6 @@ function MachineGroup({
   const collapsed = useMachineCollapsed(machine.id)
   const onOpenChange = useMachineOpenChange(machine.id)
   const [renaming, setRenaming] = React.useState(false)
-  const [removing, setRemoving] = React.useState(false)
   const dimmed = machine.state !== "online"
   // A drag on the heading moves the group.
   const { listeners, setNodeRef, transform, transition, isDragging } =
@@ -556,7 +560,11 @@ function MachineGroup({
       shown={shown}
       shownMachineId={shownMachineId}
       onRename={() => setRenaming(true)}
-      onRemove={() => setRemoving(true)}
+      // The window shows the dialog: the mobile sidebar sheet, which
+      // holds this group, closes first.
+      onRemove={() =>
+        emitPicoEvent("pico:remove-machine", { machineId: machine.id })
+      }
     >
       <div {...listeners}>
         <MachineGroupLabel
@@ -570,13 +578,6 @@ function MachineGroup({
       </div>
     </MachineContextMenu>
   )
-  const removeDialog = (
-    <RemoveMachineDialog
-      machine={machine}
-      open={removing}
-      onOpenChange={setRemoving}
-    />
-  )
   if (shown)
     return (
       <Collapsible open={!collapsed} onOpenChange={onOpenChange} {...sortable}>
@@ -584,7 +585,6 @@ function MachineGroup({
         <CollapsibleContent className={contentClass}>
           {shownContent}
         </CollapsibleContent>
-        {removeDialog}
       </Collapsible>
     )
   return (
@@ -597,7 +597,6 @@ function MachineGroup({
           </SidebarGroupContent>
         </CollapsibleContent>
       </SidebarGroup>
-      {removeDialog}
     </Collapsible>
   )
 }
@@ -906,7 +905,12 @@ function MachineContextMenu({
           >
             Settings for {machine.label}…
           </ContextMenuItem>
-          <ContextMenuItem onClick={() => emitOpenMachines()}>
+          <ContextMenuItem
+            onClick={() => {
+              if (isMobile) setOpenMobile(false)
+              emitOpenMachines()
+            }}
+          >
             Manage machines…
           </ContextMenuItem>
           {local ? null : (
@@ -923,7 +927,13 @@ function MachineContextMenu({
                 {machine.enabled ? "Disable" : "Enable"}
               </ContextMenuItem>
               <ContextMenuSeparator />
-              <ContextMenuItem variant="destructive" onClick={onRemove}>
+              <ContextMenuItem
+                variant="destructive"
+                onClick={() => {
+                  if (isMobile) setOpenMobile(false)
+                  onRemove()
+                }}
+              >
                 Remove {machine.label}…
               </ContextMenuItem>
             </>
@@ -1403,12 +1413,34 @@ function MachinesDialog({
   )
 }
 
-/** Mounted once in the app shell; opens on the `pico:open-machines` event. */
+/**
+ * Mounted once in the app shell, outside the sidebar: the machines dialog
+ * (`pico:open-machines`) and the dialog that removes a machine
+ * (`pico:remove-machine`).
+ */
 export function MachinesDialogController() {
   const [open, setOpen] = React.useState(false)
+  const [removingId, setRemovingId] = React.useState<string>()
+  const { machines } = useMachines()
   usePicoEvent("pico:open-machines", () => setOpen(true))
-  if (!open) return null
-  return <MachinesDialog open={open} onOpenChange={setOpen} />
+  usePicoEvent("pico:remove-machine", ({ machineId }) =>
+    setRemovingId(machineId)
+  )
+  const removing = machines.find((machine) => machine.id === removingId)
+  return (
+    <>
+      {open ? <MachinesDialog open={open} onOpenChange={setOpen} /> : null}
+      {removing ? (
+        <RemoveMachineDialog
+          machine={removing}
+          open
+          onOpenChange={(next) => {
+            if (!next) setRemovingId(undefined)
+          }}
+        />
+      ) : null}
+    </>
+  )
 }
 
 function SettingsSection({
