@@ -640,15 +640,17 @@ function getSettingsCommandGroups({
         ...settingsPageEntries()
           .filter((entry) => entry.group === "Agent")
           .filter((entry) => hasFeature(entry.feature))
-          .map((entry): SettingsCommand => ({
-            id: entry.key,
-            title: entry.title,
-            description: entry.description,
-            valueLabel: "",
-            page: entry.key,
-            keywords: ["agent", ...entry.keywords],
-            onSelect: () => onOpenPage(entry.key),
-          })),
+          .map(
+            (entry): SettingsCommand => ({
+              id: entry.key,
+              title: entry.title,
+              description: entry.description,
+              valueLabel: "",
+              page: entry.key,
+              keywords: ["agent", ...entry.keywords],
+              onSelect: () => onOpenPage(entry.key),
+            })
+          ),
         {
           id: "machines",
           title: "Machines",
