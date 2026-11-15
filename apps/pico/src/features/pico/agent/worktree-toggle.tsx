@@ -79,8 +79,10 @@ function NewAgentWorktreeToggleView({
         }
       ),
     onSuccess: (data) => {
-      queryClient.setQueryData(queryKey, (current: DraftWorktree | undefined) =>
-        current ? { ...current, ...data } : data
+      queryClient.setQueryData(
+        queryKey,
+        (current: DraftWorktree | undefined) =>
+          current ? { ...current, ...data } : data
       )
     },
     onError: (error) => toast.error(errorText(error)),
