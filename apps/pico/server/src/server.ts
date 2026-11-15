@@ -48,6 +48,7 @@ import { LocalAgentOps } from "./control/agent-ops.ts"
 import { AgentSearch } from "./core/agent-search.ts"
 import { SearchIndex } from "./services/search-index.ts"
 import { addMcpRoutes } from "./control/mcp.ts"
+import { isUpdateChannel, Updater } from "./services/self-update.ts"
 
 export type PicoServer = {
   readonly server: Server
@@ -244,6 +245,8 @@ export async function startServer(options: {
   const auth = new Auth(runtime.models, ui, runtime.agentDir)
   const gitWatcher = new GitWatcher(hub)
   const highlight = new HighlightService()
+  const updater = new Updater(options.paths.dataDir)
+  updater.start()
   let draining = false
   let restarting = false
   let hurried = false
@@ -269,6 +272,7 @@ export async function startServer(options: {
     restart: () =>
       options.onRestartRequest ? { pending: restarting } : undefined,
     webDir: options.paths.webDir,
+    updater,
   })
   const ops = new LocalAgentOps({
     agents,
@@ -300,11 +304,43 @@ export async function startServer(options: {
     const onRestart = options.onRestartRequest
     if (!onRestart)
       throw new ApiError(501, "This Pico server cannot restart itself")
+    if (updater.status().installing)
+      throw new ApiError(
+        409,
+        "An update is installing. Restart when it is done."
+      )
     const body = await request.body<{ now?: unknown }>()
     const now = body.now === true
     // Answer first: the restart closes the connections.
     setImmediate(() => onRestart(now))
     return { ok: true, now, activeTurnCount: agents.activeTurnCount() }
+  })
+  // Updates of Pico itself (services/self-update.ts).
+  router.get("/api/system/update", () => ({ ok: true, ...updater.status() }))
+  router.post("/api/system/update/check", async () => {
+    await updater.check().catch(() => undefined)
+    return { ok: true, ...updater.status() }
+  })
+  router.post("/api/system/update/install", () => {
+    try {
+      updater.install()
+    } catch (error) {
+      throw new ApiError(
+        409,
+        error instanceof Error ? error.message : String(error)
+      )
+    }
+    return { ok: true, ...updater.status() }
+  })
+  router.post("/api/system/update/settings", async (request) => {
+    const body = await request.body<{ channel?: unknown; check?: unknown }>()
+    if (body.channel !== undefined && !isUpdateChannel(body.channel))
+      throw new ApiError(400, "channel must be stable or preview")
+    updater.setConfig({
+      ...(isUpdateChannel(body.channel) ? { channel: body.channel } : {}),
+      ...(typeof body.check === "boolean" ? { check: body.check } : {}),
+    })
+    return { ok: true, ...updater.status() }
   })
 
   const server = createServer((request, response) => {
@@ -603,6 +639,7 @@ export async function startServer(options: {
           }
         }
         host.stopping = true
+        updater.stop()
         pressure.stop()
         ui.cancelAll()
         auth.cancelLogins()

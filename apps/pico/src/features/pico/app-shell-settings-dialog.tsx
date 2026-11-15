@@ -672,7 +672,7 @@ function getSettingsCommandGroups({
                 id: "server",
                 title: "Server",
                 description:
-                  "The version of Pico on this machine, and a restart that loads an update.",
+                  "The version of Pico on this machine, its updates, and a restart that loads them.",
                 valueLabel: serverStatus,
                 page: "server",
                 keywords: [
@@ -682,6 +682,8 @@ function getSettingsCommandGroups({
                   "update",
                   "upgrade",
                   "version",
+                  "channel",
+                  "preview",
                 ],
                 onSelect: () => onOpenPage("server"),
               } satisfies SettingsCommand,

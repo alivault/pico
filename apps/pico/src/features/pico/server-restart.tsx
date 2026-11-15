@@ -1,19 +1,29 @@
 /**
  * The server of a machine: its version, a newer build on disk, and a
  * restart that loads it. Turns that a restart cuts off continue after it,
- * and terminals and jobs run on in the pty-host.
+ * and terminals and jobs run on in the pty-host. With the `self-update`
+ * feature, the server also finds new releases and installs them.
  */
 import {
   useQuery,
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query"
-import { RotateCwIcon, ZapIcon } from "lucide-react"
+import {
+  ArrowUpCircleIcon,
+  CopyIcon,
+  DownloadIcon,
+  FlaskConicalIcon,
+  RefreshCwIcon,
+  RotateCwIcon,
+  ZapIcon,
+} from "lucide-react"
 
 import { SidebarMenuAction, SidebarMenuItem } from "@/components/ui/sidebar"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { fetchJson } from "@/features/pico/app-shell-utils"
+import { copyTextToClipboard } from "@/features/pico/markdown-renderer"
 import {
   registerSettingsPage,
   SettingsListPage,
@@ -34,10 +44,34 @@ export type ServerHealth = {
   /** Not set when the server cannot restart itself. */
   restart?: { pending: boolean }
   update?: { available: boolean; version?: string }
+  /** A newer release on the update channel (`self-update`). */
+  release?: {
+    available: boolean
+    installing: boolean
+    canInstall?: boolean
+    latest?: string
+  }
   webBuild?: string
 }
 
+/** What `/api/system/update` reports (server/src/services/self-update.ts). */
+export type UpdateStatus = {
+  current: string
+  installed: string
+  channel: "stable" | "preview"
+  check: boolean
+  install: "npm" | "source" | "other"
+  latest?: string
+  available: boolean
+  command?: string
+  checkedAt?: string
+  checking: boolean
+  installing: boolean
+  error?: string
+}
+
 export const SERVER_RESTART_FEATURE = "server-restart"
+export const SELF_UPDATE_FEATURE = "self-update"
 
 const serverHealthKey = (machineId: string) =>
   ["pico", "server-health", machineId] as const
@@ -65,6 +99,9 @@ export function serverStatusLabel(health: ServerHealth | undefined) {
   if (!health) return ""
   if (health.restart?.pending) return "Restarting…"
   if (health.update?.available) return "Update ready"
+  if (health.release?.installing) return "Updating…"
+  if (health.release?.available && health.release.latest)
+    return `v${health.release.latest} available`
   return `v${health.version}`
 }
 
@@ -149,24 +186,173 @@ export async function restartServer({
       return
     }
     queryClient.setQueryData(serverHealthKey(machineId), after)
+    void queryClient.invalidateQueries({ queryKey: updateStatusKey(machineId) })
+    const updated = after.version !== before.version
     // This page comes from the local server. Load its new web client too.
     if (
       !isRemoteMachine(machineId) &&
       after.webBuild &&
       after.webBuild !== before.webBuild
     ) {
+      // Tell the reloaded page to show what is new.
+      if (updated) sessionStorage.setItem(UPDATED_KEY, after.version)
       window.location.reload()
       return
     }
-    toast.success(`Pico ${after.version} is running`, {
-      id: toastId,
-      description: undefined,
-    })
+    showRunning(after.version, updated, toastId)
   } catch (error) {
     toast.error("Could not restart Pico", {
       id: toastId,
       description: error instanceof Error ? error.message : String(error),
     })
+  }
+}
+
+const UPDATED_KEY = "pico:updated-to"
+
+function releaseNotesUrl(version: string) {
+  return `https://github.com/alivault/pico/releases/tag/v${version}`
+}
+
+/** The toast after a restart; after an update, it links the release notes. */
+function showRunning(version: string, updated: boolean, id?: string) {
+  toast.success(
+    updated ? `Pico is updated to ${version}` : `Pico ${version} is running`,
+    {
+      ...(id ? { id } : {}),
+      description: undefined,
+      ...(updated
+        ? {
+            action: {
+              label: "What’s new",
+              onClick: () =>
+                window.open(releaseNotesUrl(version), "_blank", "noopener"),
+            },
+          }
+        : {}),
+    }
+  )
+}
+
+// A page that an update reloaded shows the toast that the old page could not.
+if (typeof window !== "undefined") {
+  const version = sessionStorage.getItem(UPDATED_KEY)
+  if (version) {
+    sessionStorage.removeItem(UPDATED_KEY)
+    setTimeout(() => showRunning(version, true), 500)
+  }
+}
+
+const updateStatusKey = (machineId: string) =>
+  ["pico", "server-update", machineId] as const
+
+function updateUrl(machineId: string, path = "") {
+  return machineApiUrl(machineId, `/api/system/update${path}`)
+}
+
+/** The update state of the machine's server, while a page shows it. */
+export function useUpdateStatus(machineId: string) {
+  const hasFeature = useMachineFeatureCheck()
+  const query = useQuery({
+    queryKey: updateStatusKey(machineId),
+    queryFn: () => fetchJson<UpdateStatus & { ok: true }>(updateUrl(machineId)),
+    enabled: hasFeature(SELF_UPDATE_FEATURE),
+    refetchInterval: (current) =>
+      current.state.data?.installing || current.state.data?.checking
+        ? 1500
+        : 60_000,
+    staleTime: 5_000,
+  })
+  return query.data
+}
+
+async function postUpdate(
+  machineId: string,
+  path: string,
+  body: Record<string, unknown> = {}
+) {
+  return fetchJson<UpdateStatus & { ok: true }>(updateUrl(machineId, path), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  })
+}
+
+export async function checkForUpdate({
+  machineId,
+  queryClient,
+}: {
+  machineId: string
+  queryClient: QueryClient
+}) {
+  const status = await postUpdate(machineId, "/check")
+  queryClient.setQueryData(updateStatusKey(machineId), status)
+  void queryClient.invalidateQueries({ queryKey: serverHealthKey(machineId) })
+  if (status.error) toast.error(status.error)
+  else if (!status.available)
+    toast.success(`Pico ${status.installed} is up to date`, {
+      description: `The newest ${status.channel} version is ${status.latest}.`,
+    })
+  return status
+}
+
+export async function changeUpdateSettings({
+  machineId,
+  queryClient,
+  change,
+}: {
+  machineId: string
+  queryClient: QueryClient
+  change: { channel?: UpdateStatus["channel"]; check?: boolean }
+}) {
+  try {
+    const status = await postUpdate(machineId, "/settings", change)
+    queryClient.setQueryData(updateStatusKey(machineId), status)
+    // A new channel has its own newest version.
+    if (change.channel) await checkForUpdate({ machineId, queryClient })
+  } catch (error) {
+    toast.error("Could not change the update settings", {
+      description: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
+
+/**
+ * Install the newest release, then restart when the agents finish, so the
+ * server runs it.
+ */
+export async function updateServer({
+  machineId,
+  queryClient,
+}: {
+  machineId: string
+  queryClient: QueryClient
+}) {
+  const toastId = `server-restart:${machineId}`
+  try {
+    let status = await postUpdate(machineId, "/install")
+    toast.loading(
+      status.latest ? `Installing Pico ${status.latest}…` : "Installing…",
+      { id: toastId }
+    )
+    void queryClient.invalidateQueries({ queryKey: serverHealthKey(machineId) })
+    const deadline = Date.now() + 15 * 60_000
+    while (status.installing && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      status = await fetchJson<UpdateStatus & { ok: true }>(
+        updateUrl(machineId)
+      )
+      queryClient.setQueryData(updateStatusKey(machineId), status)
+    }
+    if (status.installing) throw new Error("The install takes too long.")
+    if (status.error) throw new Error(status.error)
+    await restartServer({ machineId, now: false, queryClient })
+  } catch (error) {
+    toast.error("Could not update Pico", {
+      id: toastId,
+      description: error instanceof Error ? error.message : String(error),
+    })
+    void queryClient.invalidateQueries({ queryKey: updateStatusKey(machineId) })
   }
 }
 
@@ -182,7 +368,42 @@ export function ServerRestartStatus() {
   const machineId = useMachineId()
   const queryClient = useQueryClient()
   const health = useServerHealth(machineId)
-  if (!health?.restart?.pending) return null
+  if (!health?.restart?.pending) {
+    const release = health?.release
+    if (
+      !release?.latest ||
+      !release.canInstall ||
+      !(release.available || release.installing) ||
+      health?.update?.available
+    )
+      return null
+    return (
+      <SidebarMenuItem>
+        <div className="flex h-(--sidebar-item-size) items-center gap-2 rounded-md px-(--sidebar-item-pad) pr-8 text-xs text-muted-foreground">
+          {release.installing ? (
+            <Spinner size="xs" aria-label="Installing" />
+          ) : (
+            <ArrowUpCircleIcon className="size-4 shrink-0" />
+          )}
+          <span className="min-w-0 truncate">
+            {release.installing
+              ? `Installing Pico ${release.latest}…`
+              : `Pico ${release.latest} is available`}
+          </span>
+        </div>
+        {release.installing ? null : (
+          <TitleTooltip title="Update and restart when agents finish">
+            <SidebarMenuAction
+              aria-label="Update Pico"
+              onClick={() => void updateServer({ machineId, queryClient })}
+            >
+              <DownloadIcon />
+            </SidebarMenuAction>
+          </TitleTooltip>
+        )}
+      </SidebarMenuItem>
+    )
+  }
   const turns = health.activeTurnCount
   return (
     <SidebarMenuItem>
@@ -219,6 +440,7 @@ function ServerPage() {
   const canRestart = Boolean(health?.restart)
   const restart = (now: boolean) =>
     void restartServer({ machineId, now, queryClient })
+  const update = useUpdateStatus(machineId)
 
   const version: SettingsItem = {
     id: "version",
@@ -231,6 +453,9 @@ function ServerPage() {
     value: health?.update?.available ? "Update ready" : undefined,
     disabled: true,
   }
+  const updateItems = update
+    ? updateSettingsItems({ status: update, machineId, queryClient, pending })
+    : []
   const items: Array<SettingsItem> = canRestart
     ? [
         {
@@ -266,7 +491,12 @@ function ServerPage() {
           : undefined
       }
       loading={!health}
-      groups={[{ items: [version, ...items] }]}
+      groups={[
+        { items: [version, ...items] },
+        ...(updateItems.length
+          ? [{ heading: "Updates", items: updateItems }]
+          : []),
+      ]}
       note={
         health && !canRestart
           ? "This server cannot restart itself. Restart it where it runs."
@@ -274,6 +504,110 @@ function ServerPage() {
       }
     />
   )
+}
+
+/** The update items of the Server page. */
+function updateSettingsItems({
+  status,
+  machineId,
+  queryClient,
+  pending,
+}: {
+  status: UpdateStatus
+  machineId: string
+  queryClient: QueryClient
+  /** A restart waits for turns. */
+  pending: boolean
+}): Array<SettingsItem> {
+  const latest = status.latest
+  const items: Array<SettingsItem> = []
+  if (status.available && latest && status.install === "npm")
+    items.push({
+      id: "update",
+      title: `Update to Pico ${latest}`,
+      description: status.installing
+        ? "Installing with npm. Pico restarts when the agents finish."
+        : "Install it with npm, then restart when the agents finish.",
+      keywords: ["update", "upgrade", "install", "new version"],
+      icon: <DownloadIcon />,
+      busy: status.installing,
+      disabled: status.installing || pending,
+      onSelect: () => void updateServer({ machineId, queryClient }),
+    })
+  else if (status.available && latest && status.command) {
+    const command = status.command
+    items.push({
+      id: "update-command",
+      title: `Pico ${latest} is available`,
+      description: `Pico cannot update this install by itself. Run: ${command}`,
+      keywords: ["update", "upgrade", "install", "command"],
+      icon: <CopyIcon />,
+      value: "Copy command",
+      onSelect: () =>
+        void copyTextToClipboard(command).then(
+          () => toast.success("Copied the update command"),
+          () => toast.error("Could not copy the command")
+        ),
+    })
+  }
+  items.push(
+    {
+      id: "update-check",
+      title: "Check for updates",
+      description:
+        status.error ??
+        (status.checkedAt
+          ? `Last checked ${new Date(status.checkedAt).toLocaleString()}${latest ? `. The newest ${status.channel} version is ${latest}.` : "."}`
+          : status.install === "source"
+            ? "This Pico runs from a source checkout; update it with git."
+            : "Not checked yet."),
+      keywords: ["update", "check", "version", "latest"],
+      icon: <RefreshCwIcon />,
+      busy: status.checking,
+      disabled: status.checking || status.installing,
+      onSelect: () =>
+        void checkForUpdate({ machineId, queryClient }).catch(
+          (error: unknown) =>
+            toast.error("Could not check for updates", {
+              description:
+                error instanceof Error ? error.message : String(error),
+            })
+        ),
+    },
+    {
+      id: "update-preview",
+      title: "Preview releases",
+      description:
+        "Get prereleases (npm tag next) before they become stable releases.",
+      keywords: ["channel", "preview", "beta", "prerelease", "next"],
+      icon: <FlaskConicalIcon />,
+      checked: status.channel === "preview",
+      onSelect: () =>
+        void changeUpdateSettings({
+          machineId,
+          queryClient,
+          change: {
+            channel: status.channel === "preview" ? "stable" : "preview",
+          },
+        }),
+    },
+    {
+      id: "update-auto-check",
+      title: "Check automatically",
+      description:
+        "Look for a new version every six hours, and show it in the sidebar.",
+      keywords: ["update", "automatic", "background", "notify"],
+      icon: <ArrowUpCircleIcon />,
+      checked: status.check,
+      onSelect: () =>
+        void changeUpdateSettings({
+          machineId,
+          queryClient,
+          change: { check: !status.check },
+        }),
+    }
+  )
+  return items
 }
 
 registerSettingsPage({ key: "server", Component: ServerPage })

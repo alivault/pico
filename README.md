@@ -28,6 +28,23 @@ pico-app
 
 Or try it without a global install: `npx @alivault/pico`.
 
+### Update
+
+```sh
+pico-app update
+```
+
+This installs the newest version where Pico is installed (the same npm
+prefix, for example `~/.local`), and restarts Pico when the agents finish.
+`pico-app update --check` only looks, `--no-restart` leaves the restart to
+you, and `pico-app update 2.8.0` installs a given version.
+
+Pico also looks for a new version every six hours. The sidebar shows it, and
+Settings, Server can install it. There you can also turn on preview releases
+(`pico-app channel set preview`, the npm tag `next`) or turn off the check.
+Pico that runs from source, or that pnpm or npx installed, shows the command to
+run instead.
+
 ## Run from source
 
 ```sh

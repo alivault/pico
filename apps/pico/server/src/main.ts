@@ -10,6 +10,10 @@
  *   pico-server restart [--now]
  *     Stop after active turns finish (or at once, with `--now`), and start
  *     again with the same options. Turns that a restart cuts off continue.
+ *   pico-server update [version] [--check] [--channel stable|preview] [--no-restart] [--now]
+ *     Install the newest version on the update channel the way this copy
+ *     was installed, and restart a running server (see services/self-update.ts).
+ *   pico-server channel [show | set stable|preview]
  *   pico-server machine add|list|status|reconnect|rename|enable|disable|remove …
  *   pico-server agent list|start|send|show|wait|stop …   (see control/cli.ts)
  *   pico-server mcp      the MCP URL (see control/mcp.ts)
@@ -53,6 +57,18 @@ import { agentCommand, mcpCommand } from "./control/cli.ts"
 import { machineCommand } from "./machines/cli.ts"
 import { startServer, type PicoServer } from "./server.ts"
 import { stopPtyHost } from "./pty-host/client.ts"
+import {
+  compareVersions,
+  detectInstall,
+  diskVersion,
+  fetchLatest,
+  installCommand,
+  installVersion,
+  isUpdateChannel,
+  readUpdateConfig,
+  UPDATE_CHANNELS,
+  writeUpdateConfig,
+} from "./services/self-update.ts"
 
 type ServerState = {
   pid: number
@@ -508,6 +524,104 @@ async function restartCommand(options: Map<string, string | boolean>) {
   throw new Error(`Pico did not start again in time. See ${paths.logFile}`)
 }
 
+/**
+ * `pico-server update`: install the newest version on the channel, then
+ * restart a running server so that it runs it.
+ */
+async function updateCommand(
+  argv: string[],
+  options: Map<string, string | boolean>
+) {
+  const dataDir = dataDirOption(options)
+  const channelOption = options.get("channel")
+  if (channelOption !== undefined && !isUpdateChannel(channelOption))
+    throw new Error("--channel must be stable or preview")
+  const channel = isUpdateChannel(channelOption)
+    ? channelOption
+    : readUpdateConfig(dataDir).channel
+  const install = detectInstall()
+  const installed = diskVersion(install.root) ?? VERSION
+  const wanted = positional(argv, ["channel", "data-dir"])[0]
+  let target: string
+  if (typeof wanted === "string") target = wanted.replace(/^v/, "")
+  else {
+    console.log(`Looking for the newest ${channel} version…`)
+    target = await fetchLatest(channel)
+  }
+  const newer = compareVersions(target, installed) > 0
+  if (typeof wanted !== "string" && !newer) {
+    console.log(`Pico ${installed} is up to date (${channel} channel).`)
+    return
+  }
+  if (options.get("check")) {
+    console.log(
+      `Pico ${target} is available (${channel} channel); ${installed} is installed. Run \`pico-app update\` to install it.`
+    )
+    return
+  }
+  if (install.kind !== "npm") {
+    console.log(
+      install.kind === "source"
+        ? `This Pico runs from a source checkout (${install.root}). Update it with:\n  ${installCommand(install, target)}`
+        : `Pico cannot update this install (${install.root}) by itself. Run:\n  ${installCommand(install, target)}`
+    )
+    process.exitCode = 1
+    return
+  }
+  console.log(`Installing Pico ${target} into ${install.prefix}…`)
+  await installVersion(install, target, {
+    onOutput: (chunk) => process.stdout.write(chunk),
+  })
+  console.log(`Pico ${target} is installed.`)
+  console.log(
+    `Release notes: https://github.com/alivault/pico/releases/tag/v${target}`
+  )
+  const paths = serverPaths(dataDir)
+  const state = readState(paths)
+  if (!state || !alive(state.pid)) {
+    console.log("Pico is not running. Start it with `pico-app serve --detach`.")
+    return
+  }
+  if (options.get("no-restart")) {
+    console.log("Run `pico-app restart` to load it.")
+    return
+  }
+  await restartCommand(options)
+}
+
+/** The words that are not options or option values. */
+function positional(argv: string[], valueOptions: string[]) {
+  return argv.filter(
+    (arg, index) =>
+      !arg.startsWith("--") &&
+      !valueOptions.some((name) => argv[index - 1] === `--${name}`)
+  )
+}
+
+/** `pico-server channel [show | set stable|preview]`. */
+function channelCommand(
+  argv: string[],
+  options: Map<string, string | boolean>
+) {
+  const dataDir = dataDirOption(options)
+  const [action = "show", value] = positional(argv, ["data-dir"])
+  if (action === "show") {
+    console.log(readUpdateConfig(dataDir).channel)
+    return
+  }
+  if (action === "set" && isUpdateChannel(value)) {
+    writeUpdateConfig(dataDir, { channel: value })
+    console.log(
+      `The update channel is ${value}. Run \`pico-app update\` to install its newest version.`
+    )
+    return
+  }
+  console.error(
+    `Usage: pico-app channel [show | set ${UPDATE_CHANNELS.join("|")}]`
+  )
+  process.exitCode = 2
+}
+
 async function importCommand(options: Map<string, string | boolean>) {
   const paths = serverPaths(dataDirOption(options))
   const source = resolve(
@@ -592,10 +706,16 @@ async function main() {
     case "restart":
       await restartCommand(options)
       break
+    case "update":
+      await updateCommand(argv.slice(1), options)
+      break
+    case "channel":
+      channelCommand(argv.slice(1), options)
+      break
     default:
       console.error(`Unknown command: ${command}`)
       console.error(
-        "Usage: pico-server serve|status|stop|restart|import-pi|machine|agent|mcp [--port N] [--host H] [--data-dir D] [--web-dir D] [--source-dir D] [--detach] [--json]"
+        "Usage: pico-server serve|status|stop|restart|update|channel|import-pi|machine|agent|mcp [--port N] [--host H] [--data-dir D] [--web-dir D] [--source-dir D] [--detach] [--json]"
       )
       process.exitCode = 2
   }

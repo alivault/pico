@@ -51,6 +51,7 @@ import { validSize } from "./services/containment.ts"
 import { collectResources } from "./services/resources.ts"
 import { saveUpload } from "./services/uploads.ts"
 import { serverUpdate, webBuildId } from "./services/build-info.ts"
+import type { Updater } from "./services/self-update.ts"
 
 export type ApiContext = {
   runtime: Runtime
@@ -72,6 +73,7 @@ export type ApiContext = {
   /** Undefined when the server cannot restart itself. */
   restart: () => { pending: boolean } | undefined
   webDir: string | undefined
+  updater: Updater
 }
 
 type Target = {
@@ -204,6 +206,7 @@ export function createApi(api: ApiContext) {
       features: [
         "durable-agents",
         "server-restart",
+        "self-update",
         "agent-index",
         "conversation",
         "paginated-conversation-history",
@@ -262,6 +265,7 @@ export function createApi(api: ApiContext) {
     startedAt: new Date(api.startedAt).toISOString(),
     restart: api.restart(),
     update: serverUpdate(),
+    release: releaseStatus(api.updater),
     webBuild: webBuildId(api.webDir),
     listenHosts: api.listenHosts(),
     port: api.port(),
@@ -1985,6 +1989,18 @@ export function createApi(api: ApiContext) {
   })
 
   return router
+}
+
+/** A newer release on the update channel, from the last check. */
+function releaseStatus(updater: Updater) {
+  const status = updater.status()
+  return {
+    available: status.available,
+    installing: status.installing,
+    /** The server can install it by itself. */
+    canInstall: status.install === "npm",
+    ...(status.latest ? { latest: status.latest } : {}),
+  }
 }
 
 function agentSettings(runtime: Runtime) {

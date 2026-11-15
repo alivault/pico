@@ -16,6 +16,9 @@ Usage: pico-app [serve|status|stop|restart|import-pi] [--port N] [--host H]
                  [--data-dir D] [--web-dir D] [--open|--no-open] [--wait]
                  [--source-dir D] [--detach] [--json] [--no-pty-host]
                  [--pty-host] [--now]
+       pico-app update [version] [--check] [--channel stable|preview]
+                 [--no-restart] [--now]
+       pico-app channel [show | set stable|preview]
        pico-app machine add|list|status|reconnect|rename|enable|disable|remove
        pico-app agent list|start|send|show|wait|stop
        pico-app mcp
@@ -25,6 +28,10 @@ serve --detach starts Pico in the background (output in <data>/server.log).
 restart stops Pico after active turns finish and starts it again with the
 same options, for example after an update; restart --now does not wait.
 Turns that a restart cuts off continue.
+update installs the newest version on the update channel (stable, or
+preview for prereleases) where Pico is installed, and restarts Pico;
+update --check only looks. Pico also looks in the background and shows a
+new version in Settings, Server.
 status --json prints the server state as JSON; the exit code is 1 when Pico is
 not running.
 Terminals and jobs run in a pty-host process and survive a restart;
