@@ -212,9 +212,11 @@ pico-app</code></pre>
         </div>
         <p>Useful commands:</p>
         <div class="code">
-          <pre><code>pico-app status       # is Pico running?
+          <pre><code>pico-app serve --detach  # run in the background
+pico-app status       # is Pico running?
 pico-app stop --wait  # stop after active turns finish
-pico-app restart      # load an update (also in Settings, Server)
+pico-app update       # install the newest version and restart
+pico-app restart      # restart after active turns finish
 pico-app import-pi    # import Pi sessions as agents (stop Pico first)
 pico-app machine add ali@workbox  # show the agents of another computer
 pico-app agent start . "Fix the flaky test" --wait  # run an agent from a script

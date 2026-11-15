@@ -28,6 +28,26 @@ pico-app
 
 Or try it without a global install: `npx @alivault/pico`.
 
+### Run Pico
+
+`pico-app` runs Pico in this terminal and opens
+`http://127.0.0.1:3141`. Pico stops when you close the terminal. To keep it
+running in the background, use `--detach`:
+
+```sh
+pico-app serve --detach       # output goes to ~/.pico/server.log
+pico-app status               # is Pico running? --json for scripts
+pico-app stop --wait          # stop after active turns finish
+pico-app stop --pty-host      # also end terminals and jobs
+pico-app restart              # restart --now does not wait for turns
+pico-app --port 3141 --no-open
+pico-app --data-dir PATH      # default: ~/.pico
+pico-app import-pi            # import Pi sessions as agents (stop Pico first)
+```
+
+Pico does not start again after a reboot. Run `pico-app serve --detach`
+again, or start it from a service manager without `--detach`.
+
 ### Update
 
 ```sh
@@ -107,7 +127,7 @@ Pico has no login. Anyone who can reach it can run commands as your user.
 Use Tailscale and never expose it to the public internet.
 
 ```sh
-pnpm start --host <tailscale-ip> --no-open
+pico-app --host <tailscale-ip> --no-open
 ```
 
 Use Tailscale Serve for HTTPS (needed for push notifications).
@@ -123,7 +143,9 @@ hub goes offline.
 ```sh
 pico-app machine add ali@workbox      # SSH target, alias, or Tailscale name
 pico-app machine list
+pico-app machine status workbox
 pico-app machine reconnect workbox    # after a password, key, or check prompt
+pico-app machine disable workbox      # stop connecting; enable connects again
 pico-app machine remove workbox       # Pico keeps running on workbox
 ```
 
@@ -162,8 +184,9 @@ interrupts: a busy agent gets the message after its current turn, unless you
 add `--steer`. A goal or message of `-` comes from stdin. With `--wait`,
 `send` and `start` print the answer; the exit code is 0 when the agent is
 done, 1 when it failed or stopped, 2 when it waits for you, and 3 when
-`--timeout` passes first. `--json` prints JSON. Run `pico-app agent help` for
-all options.
+`--timeout` passes first. `--json` prints JSON. `pico-app agent wait ID`
+waits for an agent, and `pico-app agent stop ID` stops its current turn. Run
+`pico-app agent help` for all options.
 
 Pico is also an MCP server, at `/mcp`. Agents outside Pico, such as Claude
 Code and Codex, can then list, start, message, read, wait for, and stop Pico
