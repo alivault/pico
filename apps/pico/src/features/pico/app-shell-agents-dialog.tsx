@@ -380,7 +380,7 @@ type AgentsDialogAction =
 
 const initialAgentsDialogState: AgentsDialogState = {
   query: "",
-  scope: "current",
+  scope: "all",
   stage: "browse",
   selectedAgentKey: "",
   renameValue: "",
@@ -397,7 +397,7 @@ function agentsDialogReducer(
     case "closed":
       if (
         state.query === "" &&
-        state.scope === "current" &&
+        state.scope === "all" &&
         state.stage === "browse" &&
         state.renameValue === ""
       ) {
@@ -407,7 +407,7 @@ function agentsDialogReducer(
       return {
         ...state,
         query: "",
-        scope: "current",
+        scope: "all",
         stage: "browse",
         renameValue: "",
       }
