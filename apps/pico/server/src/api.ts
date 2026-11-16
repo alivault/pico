@@ -833,6 +833,15 @@ export function createApi(api: ApiContext) {
     return { ok: true, cwd, ...(await files.readProjectFile(cwd, path)) }
   })
 
+  // The favicon of a project, for the sidebar. The client loads its bytes
+  // from /api/files/raw with the version, so the browser keeps a copy.
+  router.get("/api/files/favicon", async (request) => {
+    const requested = stringField(request.query.get("cwd"))
+    if (!requested) throw badRequest("cwd is required")
+    const cwd = await files.resolveDirectory(requested, baseCwd(request))
+    return { ok: true, cwd, favicon: await files.projectFavicon(cwd) }
+  })
+
   // The bytes of an image file, for the file viewer. The viewer adds the
   // version of the file (from /api/files/read) to the URL, so the browser
   // can keep a copy until the file changes.

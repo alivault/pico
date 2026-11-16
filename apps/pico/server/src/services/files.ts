@@ -340,6 +340,103 @@ export async function projectImageFile(cwd: string, path: string) {
   return { resolved, size: info.size, mimeType }
 }
 
+// Where a project keeps its favicon, in the order to look. Web apps keep it
+// in their public folder; Next.js apps keep it in their app folder.
+const FAVICON_DIRECTORIES = [
+  "",
+  "public",
+  "static",
+  "app",
+  "src/app",
+  "src",
+  "assets",
+  "site",
+  "web",
+  "www",
+]
+const FAVICON_NAMES = [
+  "favicon.svg",
+  "icon.svg",
+  "favicon.png",
+  "icon.png",
+  "favicon.ico",
+  "apple-touch-icon.png",
+  "apple-icon.png",
+]
+// The folders of the apps and packages in a monorepo.
+const FAVICON_WORKSPACE_DIRECTORIES = ["apps", "packages"]
+const FAVICON_WORKSPACE_LIMIT = 20
+const FAVICON_SIZE_LIMIT = 1_000_000
+const FAVICON_CACHE_MS = 60_000
+
+type ProjectFavicon = { path: string; version: string } | null
+
+const faviconCache = new Map<
+  string,
+  { at: number; favicon: Promise<ProjectFavicon> }
+>()
+
+async function directoryNames(directory: string) {
+  try {
+    return await readdir(directory, { withFileTypes: true })
+  } catch {
+    return []
+  }
+}
+
+async function faviconIn(root: string, base: string): Promise<ProjectFavicon> {
+  for (const directory of FAVICON_DIRECTORIES) {
+    const relativeDirectory = join(base, directory)
+    const entries = await directoryNames(join(root, relativeDirectory))
+    const files = new Set(
+      entries.filter((entry) => entry.isFile()).map((entry) => entry.name)
+    )
+    for (const name of FAVICON_NAMES) {
+      if (!files.has(name)) continue
+      const path = join(relativeDirectory, name)
+      const info = await stat(join(root, path)).catch(() => null)
+      if (!info?.isFile() || info.size > FAVICON_SIZE_LIMIT) continue
+      return {
+        path: path.split(sep).join("/"),
+        version: `${Math.round(info.mtimeMs)}-${info.size}`,
+      }
+    }
+  }
+  return null
+}
+
+async function findProjectFavicon(root: string): Promise<ProjectFavicon> {
+  const own = await faviconIn(root, "")
+  if (own) return own
+  for (const workspace of FAVICON_WORKSPACE_DIRECTORIES) {
+    const children = (await directoryNames(join(root, workspace)))
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .map((entry) => entry.name)
+      .sort()
+      .slice(0, FAVICON_WORKSPACE_LIMIT)
+    for (const child of children) {
+      const favicon = await faviconIn(root, join(workspace, child))
+      if (favicon) return favicon
+    }
+  }
+  return null
+}
+
+/**
+ * The favicon of a project, for its row in the sidebar: the path from the
+ * project folder and a version that changes with the file. Null when the
+ * project has none. The result stays for a minute.
+ */
+export async function projectFavicon(cwd: string) {
+  const root = await realpath(cwd)
+  const now = Date.now()
+  const cached = faviconCache.get(root)
+  if (cached && now - cached.at < FAVICON_CACHE_MS) return cached.favicon
+  const favicon = findProjectFavicon(root)
+  faviconCache.set(root, { at: now, favicon })
+  return favicon
+}
+
 /**
  * Save a text file in the project. `version` is the version that the client
  * read. When the file changed after that read, the save stops with a conflict,

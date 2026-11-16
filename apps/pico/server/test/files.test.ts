@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { test } from "node:test"
 
 import {
+  projectFavicon,
   projectImageFile,
   projectTree,
   readProjectFile,
@@ -112,4 +113,26 @@ void test("workspace file saves keep the mode and stop on a conflict", async () 
     /not found/i
   )
   assert.equal(await readFile(join(root, "secret"), "utf8"), "outside")
+})
+
+void test("a project favicon is found in its folder, or in a monorepo app", async () => {
+  const plain = await tempDir("pico-files-test-")
+  assert.equal(await projectFavicon(plain), null)
+
+  const web = await tempDir("pico-files-test-")
+  await mkdir(join(web, "public"))
+  await writeFile(join(web, "public", "favicon.ico"), "ico")
+  await writeFile(join(web, "public", "favicon.svg"), "<svg/>")
+  // An SVG comes before an ICO in the same folder.
+  assert.equal((await projectFavicon(web))?.path, "public/favicon.svg")
+
+  const monorepo = await tempDir("pico-files-test-")
+  await mkdir(join(monorepo, "apps", "web", "src", "app"), { recursive: true })
+  await writeFile(
+    join(monorepo, "apps", "web", "src", "app", "icon.png"),
+    "png"
+  )
+  const favicon = await projectFavicon(monorepo)
+  assert.equal(favicon?.path, "apps/web/src/app/icon.png")
+  assert.match(favicon?.version ?? "", /^\d+-3$/)
 })

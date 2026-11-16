@@ -127,6 +127,7 @@ import {
 } from "@/features/pico/other-machine-agent-dialogs"
 import { startSidebarSync } from "@/features/pico/sidebar-sync"
 import { ServerRestartStatus } from "@/features/pico/server-restart"
+import { ProjectIcon } from "@/features/pico/project-icon"
 import { useSidebarAgentNumber } from "@/features/pico/sidebar-agent-numbers"
 import { openMachine, openAgent as openMachineAgent } from "@/lib/pico/machine"
 import {
@@ -1767,7 +1768,7 @@ const ProjectAgentGroup = React.memo(function ProjectAgentGroup({
         {...(attributes ?? {})}
         {...(listeners ?? {})}
       >
-        <FolderIcon className="size-4 shrink-0 text-sidebar-foreground/50" />
+        <ProjectIcon project={project} />
         <span className="max-w-full min-w-0">
           <ProjectPathLabel path={project} />
         </span>
@@ -3336,7 +3337,7 @@ function SplitProjectRow({
         {...(attributes ?? {})}
         {...(listeners ?? {})}
       >
-        <FolderIcon className="size-4 shrink-0 text-sidebar-foreground/50" />
+        <ProjectIcon project={project} />
         <span className="min-w-0 truncate">
           {formatFolderName(project) || project}
         </span>
