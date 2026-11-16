@@ -750,9 +750,19 @@ function useFileReviewContentView({
     }
 
     updateDefaultHistoryPanelHeight()
-    window.addEventListener("resize", updateDefaultHistoryPanelHeight)
+    // Watch the container, not the window: the panel can mount while it is
+    // hidden (height 0), and then show without a window resize.
+    const container = reviewContentRef.current
+    if (!container || typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateDefaultHistoryPanelHeight)
+      return () => {
+        window.removeEventListener("resize", updateDefaultHistoryPanelHeight)
+      }
+    }
+    const observer = new ResizeObserver(updateDefaultHistoryPanelHeight)
+    observer.observe(container)
     return () => {
-      window.removeEventListener("resize", updateDefaultHistoryPanelHeight)
+      observer.disconnect()
     }
   }, [historyOpen, isMobile, normalizedCwd])
 
