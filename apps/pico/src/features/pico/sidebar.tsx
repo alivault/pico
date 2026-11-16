@@ -36,7 +36,6 @@ import {
   Rows2Icon,
   SearchIcon,
   SquarePenIcon,
-  XIcon,
 } from "lucide-react"
 
 import type { AgentJob, AgentListEntry } from "@/lib/pico/api"
@@ -3115,34 +3114,54 @@ function useSidebarAgentSource(machineId: string) {
   return useSelector(sidebarAgentSources, (sources) => sources.get(machineId))
 }
 
-/** A click on a project row shows only the agents of that project. */
-type SplitProjectFilter = { machineId: string; project: string } | null
-
-const splitProjectFilter = createPicoStore<SplitProjectFilter>(
-  null,
-  (left, right) =>
-    left === right ||
-    Boolean(
-      left &&
-      right &&
-      left.machineId === right.machineId &&
-      left.project === right.project
-    )
-)
-
-function toggleSplitProjectFilter(machineId: string, project: string) {
-  setStoreState(splitProjectFilter, (current) =>
-    current?.machineId === machineId && current.project === project
-      ? null
-      : { machineId, project }
-  )
+/**
+ * The agent that a click on a project row opens: the top-level agent of the
+ * project with the newest activity. Undefined when the project has no
+ * agents.
+ */
+function newestProjectAgent(state: ProjectAgentsState, project: string) {
+  let newest: AgentListEntry | undefined
+  let newestTime = -1
+  for (const key of state.agentKeysByProject[project] ?? []) {
+    if (state.depthByKey.get(key)) continue
+    const entry = state.entriesByKey.get(key)
+    if (!entry) continue
+    const value =
+      entry.lastMessageAt || entry.modified || entry.lastUserMessageAt
+    const time = value ? new Date(value).getTime() : 0
+    if (Number.isFinite(time) && time > newestTime) {
+      newest = entry
+      newestTime = time
+    }
+  }
+  return newest
 }
 
-function useSplitProjectFilterActive(machineId: string, project: string) {
-  return useSelector(
-    splitProjectFilter,
-    (filter) => filter?.machineId === machineId && filter.project === project
+/** The open agent of the shown machine is in the project. */
+function useProjectHasActiveAgent(
+  store: ProjectAgentsStore,
+  activeAgentStore: ActiveSidebarAgentStore | undefined,
+  project: string
+) {
+  const [noActiveAgent] = React.useState(createActiveSidebarAgentStore)
+  const active = useSelector(
+    activeAgentStore ?? noActiveAgent,
+    (value) => value,
+    {
+      compare: (left, right) =>
+        left.agentId === right.agentId && left.agentKey === right.agentKey,
+    }
   )
+  return useSelector(store, (state) => {
+    if (!active.agentId && !active.agentKey) return false
+    const keys = state.agentKeysByProject[project] ?? EMPTY_PROJECT_AGENT_KEYS
+    return keys.some((key) => {
+      if (active.agentKey && key === active.agentKey) return true
+      return Boolean(
+        active.agentId && state.entriesByKey.get(key)?.id === active.agentId
+      )
+    })
+  })
 }
 
 /**
@@ -3206,11 +3225,15 @@ function SplitProjectCounts({
 }
 
 type SplitProjectRowProps = {
-  machineId: string
   project: string
   store: ProjectAgentsStore
   actions: SidebarProjectActions
+  /** Opens an agent of the project. */
+  onOpenAgent?: (entry: AgentListEntry) => void
+  /** The open agent of the shown machine, to mark its project. */
+  activeAgentStore?: ActiveSidebarAgentStore
   isMobile: boolean
+  setOpenMobile?: (open: boolean) => void
   overlay?: boolean
   isDragging?: boolean
   attributes?: Record<string, unknown>
@@ -3218,21 +3241,24 @@ type SplitProjectRowProps = {
 }
 
 /**
- * A project in the split layout: one line with its state. A click shows
- * only its agents in the agent list; a second click shows all agents.
+ * A project in the split layout: one line with its state. As in Herdr, a
+ * click goes to the project: it opens its newest agent, or starts an agent
+ * in a project without agents.
  */
 function SplitProjectRow({
-  machineId,
   project,
   store,
   actions,
+  onOpenAgent,
+  activeAgentStore,
   isMobile,
+  setOpenMobile,
   overlay = false,
   isDragging = false,
   attributes,
   listeners,
 }: SplitProjectRowProps) {
-  const active = useSplitProjectFilterActive(machineId, project)
+  const active = useProjectHasActiveAgent(store, activeAgentStore, project)
   const hasUnreadAgents = useSelector(
     store,
     (state) => projectUnreadAgents(state, project).length > 0
@@ -3298,7 +3324,14 @@ function SplitProjectRow({
         aria-pressed={active}
         className="min-w-0 flex-1 gap-2"
         onClick={() => {
-          if (!overlay) toggleSplitProjectFilter(machineId, project)
+          if (overlay) return
+          const newest = newestProjectAgent(store.state, project)
+          if (newest && onOpenAgent) {
+            onOpenAgent(newest)
+            if (isMobile) setOpenMobile?.(false)
+          } else if (!newest) {
+            actions.onCreateAgentInProject?.(project)
+          }
         }}
         {...(attributes ?? {})}
         {...(listeners ?? {})}
@@ -3376,7 +3409,7 @@ function SplitProjectRow({
 
 /** The project rows of another machine in the split layout. */
 function SplitOtherMachineProjects({ machine }: { machine: MachineInfo }) {
-  const { isMobile } = useSidebar()
+  const { isMobile, setOpenMobile } = useSidebar()
   const source = useSidebarAgentSource(machine.id)
   if (!source) return null
   if (source.projects.length === 0) {
@@ -3388,11 +3421,17 @@ function SplitOtherMachineProjects({ machine }: { machine: MachineInfo }) {
       {source.projects.map((project) => (
         <SplitProjectRow
           key={project}
-          machineId={machine.id}
           project={project}
           store={source.store}
           actions={source.projectActions}
+          onOpenAgent={(entry) =>
+            source.agentActions.onAgentClick?.(entry, {
+              multiSelectKey: false,
+              shiftKey: false,
+            })
+          }
           isMobile={isMobile}
+          setOpenMobile={setOpenMobile}
         />
       ))}
     </div>
@@ -3449,8 +3488,7 @@ type SplitAgentRows = {
  * (`compareSidebarAgents`), so the newest come first.
  */
 function buildSplitAgentRows(
-  sources: Array<SidebarAgentSource>,
-  filter: SplitProjectFilter
+  sources: Array<SidebarAgentSource>
 ): SplitAgentRows {
   const pinned: Array<SplitAgentRow> = []
   const chunksByStatus = Object.fromEntries(
@@ -3464,20 +3502,14 @@ function buildSplitAgentRows(
   >
   let isLoading = false
   for (const source of sources) {
-    if (filter && filter.machineId !== source.machineId) continue
     const state = source.store.state
     if (Object.values(state.loadingByProject).some(Boolean)) isLoading = true
-    const inFilter = filter
-      ? new Set(state.agentKeysByProject[filter.project] ?? [])
-      : null
-    const shows = (key: string) => !inFilter || inFilter.has(key)
     for (const row of pinnedAgentRows(state.agentTree, source.pinnedAgentKeys))
-      if (shows(row.key))
-        pinned.push({
-          machineId: source.machineId,
-          key: row.key,
-          depth: row.depth,
-        })
+      pinned.push({
+        machineId: source.machineId,
+        key: row.key,
+        depth: row.depth,
+      })
     const pinnedKeys = pinnedAgentTreeKeys(
       state.agentTree,
       source.pinnedAgentKeys
@@ -3486,7 +3518,7 @@ function buildSplitAgentRows(
       let chunk: { root: AgentListEntry; rows: Array<SplitAgentRow> } | null =
         null
       for (const key of state.agentKeysByStatus[status]) {
-        if (pinnedKeys.has(key) || !shows(key)) continue
+        if (pinnedKeys.has(key)) continue
         const entry = state.entriesByKey.get(key)
         if (!entry) continue
         if (!chunk || !state.depthByKey.get(key)) {
@@ -3521,8 +3553,8 @@ function splitAgentRowsSignature(rows: SplitAgentRows) {
 /** Keeps the last rows while they stay the same, so the list does not draw again. */
 function createSplitAgentRowsCache() {
   let last: { signature: string; rows: SplitAgentRows } | null = null
-  return (sources: Array<SidebarAgentSource>, filter: SplitProjectFilter) => {
-    const rows = buildSplitAgentRows(sources, filter)
+  return (sources: Array<SidebarAgentSource>) => {
+    const rows = buildSplitAgentRows(sources)
     const signature = splitAgentRowsSignature(rows)
     if (last?.signature === signature) return last.rows
     last = { signature, rows }
@@ -3530,10 +3562,7 @@ function createSplitAgentRowsCache() {
   }
 }
 
-function useSplitAgentRows(
-  sources: Array<SidebarAgentSource>,
-  filter: SplitProjectFilter
-) {
+function useSplitAgentRows(sources: Array<SidebarAgentSource>) {
   const [getRows] = React.useState(createSplitAgentRowsCache)
   const subscribe = (listener: () => void) => {
     const subscriptions = sources.map((source) =>
@@ -3543,7 +3572,7 @@ function useSplitAgentRows(
       for (const subscription of subscriptions) subscription.unsubscribe()
     }
   }
-  const getSnapshot = () => getRows(sources, filter)
+  const getSnapshot = () => getRows(sources)
   return React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
@@ -3551,7 +3580,6 @@ type SplitAgentRowViewProps = {
   row: SplitAgentRow
   source: SidebarAgentSource
   pinned: boolean
-  showProjectLabel: boolean
   machineLabel?: string
   dimmed: boolean
   isMobile: boolean
@@ -3562,7 +3590,6 @@ function SplitAgentRowView({
   row,
   source,
   pinned,
-  showProjectLabel,
   machineLabel,
   dimmed,
   isMobile,
@@ -3575,7 +3602,7 @@ function SplitAgentRowView({
           entryKey={row.key}
           inProject={pinned}
           depth={row.depth}
-          showProjectLabel={showProjectLabel}
+          showProjectLabel
           machineLabel={machineLabel}
           dimmed={dimmed}
           projectAgentsStore={source.store}
@@ -3602,8 +3629,6 @@ type SplitAgentGroupProps = {
   machineLabels: ReadonlyMap<string, string> | null
   /** The machines that are not online. */
   dimmedMachines: ReadonlySet<string>
-  /** False when the list shows only one project. */
-  showProjectLabel: boolean
   pinned?: boolean
   /** Show only the first rows, with "Show N more". */
   limited?: boolean
@@ -3616,7 +3641,6 @@ const SplitAgentGroup = React.memo(function SplitAgentGroup({
   sources,
   machineLabels,
   dimmedMachines,
-  showProjectLabel,
   pinned = false,
   limited = false,
   isMobile,
@@ -3647,7 +3671,6 @@ const SplitAgentGroup = React.memo(function SplitAgentGroup({
               row={row}
               source={source}
               pinned={pinned}
-              showProjectLabel={showProjectLabel}
               machineLabel={machineLabels?.get(row.machineId)}
               dimmed={dimmedMachines.has(row.machineId)}
               isMobile={isMobile}
@@ -3702,7 +3725,6 @@ export function SplitAgentList({
 }) {
   const { isMobile, setOpenMobile } = useSidebar()
   const sourceMap = useSelector(sidebarAgentSources, (sources) => sources)
-  const filter = useSelector(splitProjectFilter, (value) => value)
   const order = machines.map((machine) => machine.id)
   const sources = [
     ...order.flatMap((id) => {
@@ -3713,15 +3735,9 @@ export function SplitAgentList({
       (source) => !order.includes(source.machineId)
     ),
   ]
-  // A filter of a project that is gone, or of a machine that does not
-  // show, shows all agents.
-  const filterSource = filter ? sourceMap.get(filter.machineId) : undefined
-  const activeFilter =
-    filter && filterSource?.projects.includes(filter.project) ? filter : null
-  const rows = useSplitAgentRows(sources, activeFilter)
-  // With a project filter, all rows have the same project and machine.
+  const rows = useSplitAgentRows(sources)
   const machineLabels =
-    sources.length > 1 && !activeFilter
+    sources.length > 1
       ? new Map(machines.map((machine) => [machine.id, machine.label]))
       : null
   const dimmedMachines = new Set(
@@ -3742,7 +3758,6 @@ export function SplitAgentList({
     sources: sourceMap,
     machineLabels,
     dimmedMachines,
-    showProjectLabel: !activeFilter,
     isMobile,
     setOpenMobile,
   }
@@ -3752,27 +3767,7 @@ export function SplitAgentList({
       <SidebarGroup className="shrink-0 pb-0">
         <SidebarGroupLabel className="group/heading justify-between gap-2 pr-0">
           <span className="min-w-0 truncate">Agents</span>
-          <span className="flex min-w-0 items-center gap-1">
-            {activeFilter ? (
-              <TitleTooltip title="Show all agents">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 min-w-0 gap-1 px-1.5 text-[11px] font-normal text-sidebar-foreground ring-1 ring-sidebar-border hover:bg-sidebar-accent"
-                  aria-label={`Show all agents, not only the agents of ${activeFilter.project}`}
-                  onClick={() => setStoreState(splitProjectFilter, null)}
-                >
-                  <FolderIcon className="size-3 shrink-0" />
-                  <span className="min-w-0 truncate">
-                    {formatFolderName(activeFilter.project) ||
-                      activeFilter.project}
-                  </span>
-                  <XIcon className="size-3 shrink-0" />
-                </Button>
-              </TitleTooltip>
-            ) : null}
-            <SidebarViewMenu machineId={shownMachineId} />
-          </span>
+          <SidebarViewMenu machineId={shownMachineId} />
         </SidebarGroupLabel>
       </SidebarGroup>
       <div className="no-scrollbar min-h-0 flex-1 overflow-auto">
@@ -3806,8 +3801,6 @@ export function SplitAgentList({
                   )}
                   Loading agents…
                 </>
-              ) : activeFilter ? (
-                "No agents in this project."
               ) : (
                 "No agents."
               )}
@@ -4222,11 +4215,18 @@ function useAppSidebarView({
                           >
                             {({ attributes, listeners, isDragging }) => (
                               <SplitProjectRow
-                                machineId={machineId}
                                 project={project}
                                 store={projectAgentsStore}
                                 actions={projectActions}
+                                onOpenAgent={(entry) =>
+                                  onAgentClick?.(entry, {
+                                    multiSelectKey: false,
+                                    shiftKey: false,
+                                  })
+                                }
+                                activeAgentStore={activeAgentStore}
                                 isMobile={isMobile}
+                                setOpenMobile={setOpenMobile}
                                 isDragging={isDragging}
                                 attributes={attributes}
                                 listeners={listeners}
@@ -4241,7 +4241,6 @@ function useAppSidebarView({
                 <DragOverlay>
                   {activeProject ? (
                     <SplitProjectRow
-                      machineId={machineId}
                       project={activeProject}
                       store={projectAgentsStore}
                       actions={projectActions}
