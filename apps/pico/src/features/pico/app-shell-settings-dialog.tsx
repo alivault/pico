@@ -25,10 +25,13 @@ import {
 } from "@/features/pico/keyboard-shortcuts"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import {
+  SIDEBAR_VIEWS,
   setShowAgentPreviews,
-  setSidebarGroupBy,
+  setSidebarView,
+  sidebarViewLabel,
   useShowAgentPreviews,
-  useSidebarGroupBy,
+  useSidebarView,
+  type SidebarView,
 } from "@/features/pico/sidebar-display-settings"
 import type { DesktopNotificationPermission } from "@/features/pico/agent-done-notifications"
 import type {
@@ -436,9 +439,9 @@ type SettingsCommandGroupsOptions = Pick<
   /** Whether the server of the machine has a feature. */
   hasFeature: (feature: string | undefined) => boolean
   showAgentPreviews: boolean
-  /** The sidebar groups the agents of this machine by state. */
-  groupByStatus: boolean
-  onGroupByStatusChange: (enabled: boolean) => void
+  /** How the sidebar shows the agents of this machine. */
+  sidebarView: SidebarView
+  onSidebarViewChange: (view: SidebarView) => void
   piTransport: PiTransport
   piCacheRetention: PiCacheRetention
   onPiTransportChange: (transport: PiTransport) => void | Promise<void>
@@ -485,8 +488,8 @@ function getSettingsCommandGroups({
   onOpenPage,
   hasFeature,
   showAgentPreviews,
-  groupByStatus,
-  onGroupByStatusChange,
+  sidebarView,
+  onSidebarViewChange,
   piTransport,
   piCacheRetention,
   onPiTransportChange,
@@ -591,14 +594,27 @@ function getSettingsCommandGroups({
           onSelect: () => setShowAgentPreviews(!showAgentPreviews),
         },
         {
-          id: "sidebar-group-by-status",
-          title: "Group agents by state",
+          id: "sidebar-view",
+          title: "Sidebar view",
           description:
-            "Show the agents of this machine in groups by state, not by project.",
-          valueLabel: formatToggleValue(groupByStatus),
-          toggled: groupByStatus,
-          keywords: ["sidebar", "group", "status", "state", "project"],
-          onSelect: () => onGroupByStatusChange(!groupByStatus),
+            "Show the agents in their projects, in groups by state, or in one list under the projects.",
+          valueLabel: sidebarViewLabel(sidebarView),
+          keywords: [
+            "sidebar",
+            "group",
+            "status",
+            "state",
+            "project",
+            "split",
+            "layout",
+            "herdr",
+          ],
+          onSelect: () => {
+            const index = SIDEBAR_VIEWS.indexOf(sidebarView)
+            onSidebarViewChange(
+              SIDEBAR_VIEWS[(index + 1) % SIDEBAR_VIEWS.length]
+            )
+          },
         },
       ],
     },
@@ -1042,7 +1058,7 @@ function AppShellSettingsDialog({
   const machineId = useMachineId()
   const queryClient = useQueryClient()
   const showAgentPreviews = useShowAgentPreviews()
-  const groupByStatus = useSidebarGroupBy(machineId) === "status"
+  const sidebarView = useSidebarView(machineId)
   const performanceQuery = useQuery({
     queryKey: picoQueryKeys.piPerformance(viewerContextId),
     queryFn: () =>
@@ -1185,9 +1201,8 @@ function AppShellSettingsDialog({
     onLoginProviders,
     onLogoutProviders,
     showAgentPreviews,
-    groupByStatus,
-    onGroupByStatusChange: (enabled) =>
-      setSidebarGroupBy(machineId, enabled ? "status" : "project"),
+    sidebarView,
+    onSidebarViewChange: (view) => setSidebarView(machineId, view),
     piTransport: performance?.transport ?? "auto",
     piCacheRetention: performance?.cacheRetention ?? "standard",
     onPiTransportChange: async (transport) => {

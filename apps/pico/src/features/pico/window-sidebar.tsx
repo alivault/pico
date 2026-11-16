@@ -7,6 +7,8 @@ import {
 import { SidebarMachineGroups } from "@/features/pico/machines"
 import type { MachineInfo } from "@/features/pico/machine-store"
 import { ProjectActions, OtherMachineProjects } from "@/features/pico/sidebar"
+import { useSidebarLayout } from "@/features/pico/sidebar-display-settings"
+import { SplitSidebarBody } from "@/features/pico/sidebar-split-layout"
 import { sidebarSlotRef } from "@/features/pico/sidebar-slots"
 import { openMachine, queueMachineAction } from "@/lib/pico/machine"
 import { MachineProvider } from "@/lib/pico/machine-context"
@@ -24,36 +26,48 @@ import { MachineProvider } from "@/lib/pico/machine-context"
  */
 export function WindowSidebar({ shownMachineId }: { shownMachineId: string }) {
   const { isMobile } = useSidebar()
+  const split = useSidebarLayout() === "split"
+  const machineGroups = (
+    <SidebarMachineGroups
+      shownMachineId={shownMachineId}
+      shownContent={
+        <div
+          key={`content:${shownMachineId}`}
+          ref={sidebarSlotRef("content", shownMachineId)}
+          className="contents"
+        />
+      }
+      renderContent={(machine) => (
+        <MachineProvider machineId={machine.id}>
+          <OtherMachineProjects machine={machine} />
+        </MachineProvider>
+      )}
+      renderActions={(machine, shown) => (
+        <MachineProjectActions machine={machine} shown={shown} />
+      )}
+    />
+  )
   return (
     <Sidebar
       collapsible="offcanvas"
       className="border-r border-sidebar-border/70 pt-[env(safe-area-inset-top)]"
     >
-      <SidebarContent>
+      {/* In the split layout, its two parts scroll, not the whole sidebar. */}
+      <SidebarContent className={split ? "overflow-hidden" : undefined}>
         {/* Search covers all machines, so it stays above their groups. */}
         <div
           key={`top:${shownMachineId}`}
           ref={sidebarSlotRef("top", shownMachineId)}
           className="contents"
         />
-        <SidebarMachineGroups
-          shownMachineId={shownMachineId}
-          shownContent={
-            <div
-              key={`content:${shownMachineId}`}
-              ref={sidebarSlotRef("content", shownMachineId)}
-              className="contents"
-            />
-          }
-          renderContent={(machine) => (
-            <MachineProvider machineId={machine.id}>
-              <OtherMachineProjects machine={machine} />
-            </MachineProvider>
-          )}
-          renderActions={(machine, shown) => (
-            <MachineProjectActions machine={machine} shown={shown} />
-          )}
-        />
+        {split ? (
+          <SplitSidebarBody
+            shownMachineId={shownMachineId}
+            projects={machineGroups}
+          />
+        ) : (
+          machineGroups
+        )}
         <div
           key={`bottom:${shownMachineId}`}
           ref={sidebarSlotRef("bottom", shownMachineId)}

@@ -33,8 +33,10 @@ import {
   ListTodoIcon,
   MessageCircleQuestionIcon,
   PinIcon,
+  Rows2Icon,
   SearchIcon,
   SquarePenIcon,
+  XIcon,
 } from "lucide-react"
 
 import type { AgentJob, AgentListEntry } from "@/lib/pico/api"
@@ -64,6 +66,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -77,9 +81,14 @@ import {
 } from "@/components/ui/sidebar"
 import { Kbd } from "@/components/ui/kbd"
 import {
-  setSidebarGroupBy,
+  SIDEBAR_VIEWS,
+  setSidebarView,
+  sidebarViewLabel,
   useShowAgentPreviews,
   useSidebarGroupBy,
+  useSidebarLayout,
+  useSidebarView,
+  type SidebarView,
 } from "@/features/pico/sidebar-display-settings"
 import { Spinner } from "@/components/ui/spinner"
 import {
@@ -101,6 +110,7 @@ import { openJobTerminal, usePicoEvent } from "@/features/pico/agent/events"
 import {
   SidebarAgentJobDots,
   SidebarAgentJobsContext,
+  type SidebarAgentJobsActions,
 } from "@/features/pico/sidebar-agent-jobs"
 import {
   isAltChange,
@@ -135,9 +145,12 @@ import {
   type PicoStore,
 } from "@/features/pico/tanstack-store-utils"
 import { cn } from "@/lib/utils"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { MachineProvider, useMachineId } from "@/lib/pico/machine-context"
 import { useSidebarSlot } from "@/features/pico/sidebar-slots"
-import { sortSidebarAgents } from "@/features/pico/agent-order"
+import {
+  compareSidebarAgents,
+  sortSidebarAgents,
+} from "@/features/pico/agent-order"
 import {
   buildAgentTree,
   pinnedAgentRows,
@@ -691,6 +704,10 @@ type SidebarAgentItemProps = {
   depth?: number
   /** Show the project of the agent under its title, as pinned rows do. */
   showProjectLabel?: boolean
+  /** The machine of the agent, after its project, in a list of machines. */
+  machineLabel?: string
+  /** The machine of the agent is not online: its state can be old. */
+  dimmed?: boolean
   isMobile: boolean
   overlay: boolean
   /** False for an agent of another machine: it cannot move here. */
@@ -715,6 +732,8 @@ function SidebarAgentItem({
   isPinned,
   depth,
   showProjectLabel = false,
+  machineLabel,
+  dimmed = false,
   isMobile,
   overlay,
   agentDraggable = true,
@@ -906,7 +925,10 @@ function SidebarAgentItem({
           {projectLabel ? (
             <span className="flex min-w-0 items-center gap-1 text-[11px] font-normal text-sidebar-foreground/50">
               <FolderIcon className="size-3 shrink-0" aria-label="Folder" />
-              <span className="truncate">{projectLabel}</span>
+              <span className="truncate">
+                {projectLabel}
+                {machineLabel ? ` · ${machineLabel}` : ""}
+              </span>
             </span>
           ) : null}
         </span>
@@ -965,7 +987,7 @@ function SidebarAgentItem({
   )
 
   return (
-    <SidebarMenuItem>
+    <SidebarMenuItem className={cn(dimmed && "opacity-60")}>
       {hasAgentActions ? (
         <ContextMenu>
           <ContextMenuTrigger render={agentRow} />
@@ -2477,30 +2499,10 @@ export function ProjectActions({
   /** The machine headings have Group by in their context menu instead. */
   showGroupBy?: boolean
 }) {
-  const groupBy = useSidebarGroupBy(machineId)
   const { isMobile } = useSidebar()
-  const groupByTitle =
-    groupBy === "status" ? "Group by project" : "Group by state"
   return (
     <span className="flex items-center gap-1">
-      {showGroupBy ? (
-        <TitleTooltip title={groupByTitle}>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-            onClick={() =>
-              setSidebarGroupBy(
-                machineId,
-                groupBy === "status" ? "project" : "status"
-              )
-            }
-            aria-label={groupByTitle}
-          >
-            {groupBy === "status" ? <FolderTreeIcon /> : <ListTodoIcon />}
-          </Button>
-        </TitleTooltip>
-      ) : null}
+      {showGroupBy ? <SidebarViewMenu machineId={machineId} /> : null}
       <TitleTooltip
         title={title}
         kbd={showShortcut ? formatShortcutLabel(appShortcut("D")) : undefined}
@@ -2522,6 +2524,54 @@ export function ProjectActions({
         </Button>
       </TitleTooltip>
     </span>
+  )
+}
+
+const SIDEBAR_VIEW_ICONS: Record<SidebarView, React.ComponentType> = {
+  project: FolderTreeIcon,
+  status: ListTodoIcon,
+  split: Rows2Icon,
+}
+
+/** A menu with the 3 sidebar views. Its icon shows the current view. */
+export function SidebarViewMenu({ machineId }: { machineId: string }) {
+  const view = useSidebarView(machineId)
+  const Icon = SIDEBAR_VIEW_ICONS[view]
+  return (
+    <DropdownMenu>
+      <TitleTooltip title="Sidebar view">
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+              aria-label="Sidebar view"
+            />
+          }
+        >
+          <Icon />
+        </DropdownMenuTrigger>
+      </TitleTooltip>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuRadioGroup
+          value={view}
+          onValueChange={(value: SidebarView) =>
+            setSidebarView(machineId, value)
+          }
+        >
+          {SIDEBAR_VIEWS.map((entry) => {
+            const EntryIcon = SIDEBAR_VIEW_ICONS[entry]
+            return (
+              <DropdownMenuRadioItem key={entry} value={entry}>
+                <EntryIcon />
+                {sidebarViewLabel(entry)}
+              </DropdownMenuRadioItem>
+            )
+          })}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -2611,14 +2661,21 @@ function useOtherMachinePinnedAgentKeys(machineId: string, online: boolean) {
   return [keys, toggle] as const
 }
 
-/**
- * The projects and agents of another machine of the hub, from its
- * summary. They look like the projects of this machine. A click opens the
- * agent on its machine; the new-agent button of a project opens the
- * machine and starts an agent there. Pin, rename, and archive change the
- * agent on its machine.
- */
+/** The content of the group of another machine of the hub. */
 export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
+  // In the split layout, the window keeps the data of the machine (see
+  // `OtherMachineAgentSource`), so its agents show when the group is
+  // folded. The group shows only the project rows.
+  const split = useSidebarLayout() === "split"
+  if (split) return <SplitOtherMachineProjects machine={machine} />
+  return <OtherMachineGroupedProjects machine={machine} />
+}
+
+/**
+ * The data and the actions of the sidebar of another machine, from its
+ * summary.
+ */
+function useOtherMachineSidebar(machine: MachineInfo) {
   const { isMobile, setOpenMobile } = useSidebar()
   // Projects that this page removed, hidden until the summary of the
   // machine stops showing them.
@@ -2698,31 +2755,23 @@ export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
   const pinnedAgentKeys = storedPinnedKeys.filter((key) =>
     knownAgentKeys.has(key)
   )
-  const groupByStatus = useSidebarGroupBy(machine.id) === "status"
-  const collapseAllKeys = [
-    PINNED_AGENT_GROUP_COLLAPSE_KEY,
-    ...(groupByStatus ? [] : grouped.projects),
-  ]
-  usePicoEvent("pico:collapse-projects", (detail) => {
-    if (detail.machineId === machine.id)
-      stores.collapsed.setAll(collapseAllKeys, detail.collapsed)
-  })
   const [renameEntry, setRenameEntry] = React.useState<AgentListEntry>()
   const [archiveEntry, setArchiveEntry] = React.useState<AgentListEntry>()
-  const agentActions = online
+  const openAgent = (entry: AgentListEntry) => {
+    if (entry.id) openMachineAgent({ machineId: machine.id, agentId: entry.id })
+  }
+  const agentActions: SidebarAgentActions = online
     ? {
+        onAgentClick: openAgent,
         onRenameAgent: setRenameEntry,
         onDeleteAgent: setArchiveEntry,
         onTogglePinnedAgent: (entry: AgentListEntry) =>
           togglePinnedKey(agentListEntryKey(entry)),
       }
-    : {}
-  const openAgent = (entry: AgentListEntry) => {
-    if (entry.id) openMachineAgent({ machineId: machine.id, agentId: entry.id })
-  }
+    : { onAgentClick: openAgent }
   // The terminal panel of another machine is not on this page: a click on
   // a job dot opens the agent there.
-  const jobActions = {
+  const jobActions: SidebarAgentJobsActions = {
     machineId: machine.id,
     openJob: (entry: AgentListEntry) => {
       if (isMobile) setOpenMobile(false)
@@ -2749,6 +2798,72 @@ export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
     )
     setRemovedProjects((current) => new Set([...current, project]))
   }
+  const projectActions: SidebarProjectActions = online
+    ? { onCreateAgentInProject: createAgent, onRemoveProject: removeProject }
+    : {}
+  const dialogs = (
+    <>
+      <OtherMachineRenameDialog
+        machineId={machine.id}
+        machineLabel={machine.label}
+        entry={renameEntry}
+        onOpenChange={(open) => {
+          if (!open) setRenameEntry(undefined)
+        }}
+      />
+      <OtherMachineArchiveDialog
+        machineId={machine.id}
+        machineLabel={machine.label}
+        entry={archiveEntry}
+        onOpenChange={(open) => {
+          if (!open) setArchiveEntry(undefined)
+        }}
+      />
+    </>
+  )
+
+  return {
+    grouped,
+    stores,
+    online,
+    statusFilter,
+    pinnedAgentKeys,
+    agentActions,
+    projectActions,
+    jobActions,
+    dialogs,
+  }
+}
+
+/**
+ * The projects and agents of another machine of the hub, from its
+ * summary. They look like the projects of this machine. A click opens the
+ * agent on its machine; the new-agent button of a project opens the
+ * machine and starts an agent there. Pin, rename, and archive change the
+ * agent on its machine.
+ */
+function OtherMachineGroupedProjects({ machine }: { machine: MachineInfo }) {
+  const { isMobile, setOpenMobile } = useSidebar()
+  const {
+    grouped,
+    stores,
+    online,
+    statusFilter,
+    pinnedAgentKeys,
+    agentActions,
+    projectActions,
+    jobActions,
+    dialogs,
+  } = useOtherMachineSidebar(machine)
+  const groupByStatus = useSidebarGroupBy(machine.id) === "status"
+  const collapseAllKeys = [
+    PINNED_AGENT_GROUP_COLLAPSE_KEY,
+    ...(groupByStatus ? [] : grouped.projects),
+  ]
+  usePicoEvent("pico:collapse-projects", (detail) => {
+    if (detail.machineId === machine.id)
+      stores.collapsed.setAll(collapseAllKeys, detail.collapsed)
+  })
 
   // A machine without projects: add the first one there. The heading
   // shows the state of a machine that is not online.
@@ -2764,23 +2879,7 @@ export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
     )
   if (!statusFilter && grouped.projects.length === 0) {
     if (!online) return null
-    return (
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            type="button"
-            className="text-sidebar-foreground/60"
-            onClick={() => {
-              if (isMobile) setOpenMobile(false)
-              openMachine(machine.id, { action: { type: "add-project" } })
-            }}
-          >
-            <FolderPlusIcon className="text-sidebar-foreground/50" />
-            <span>Add project…</span>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
-    )
+    return <OtherMachineAddProjectButton machineId={machine.id} />
   }
 
   return (
@@ -2798,7 +2897,6 @@ export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
         moveTargetProjects={NO_MOVE_TARGET_PROJECTS}
         setOpenMobile={setOpenMobile}
         agentsDraggable={false}
-        onAgentClick={openAgent}
         {...agentActions}
       />
       {groupByStatus ? (
@@ -2811,7 +2909,6 @@ export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
           pinnedAgentKeys={pinnedAgentKeys}
           isMobile={isMobile}
           setOpenMobile={setOpenMobile}
-          onAgentClick={openAgent}
           {...agentActions}
         />
       ) : (
@@ -2830,30 +2927,895 @@ export function OtherMachineProjects({ machine }: { machine: MachineInfo }) {
             isMobile={isMobile}
             setOpenMobile={setOpenMobile}
             agentsDraggable={false}
-            onAgentClick={openAgent}
-            onCreateAgentInProject={online ? createAgent : undefined}
-            onRemoveProject={online ? removeProject : undefined}
             {...agentActions}
+            {...projectActions}
           />
         ))
       )}
-      <OtherMachineRenameDialog
-        machineId={machine.id}
-        machineLabel={machine.label}
-        entry={renameEntry}
-        onOpenChange={(open) => {
-          if (!open) setRenameEntry(undefined)
-        }}
-      />
-      <OtherMachineArchiveDialog
-        machineId={machine.id}
-        machineLabel={machine.label}
-        entry={archiveEntry}
-        onOpenChange={(open) => {
-          if (!open) setArchiveEntry(undefined)
-        }}
-      />
+      {dialogs}
     </SidebarAgentJobsContext>
+  )
+}
+
+/** "Add project…" on a machine without projects. */
+function OtherMachineAddProjectButton({ machineId }: { machineId: string }) {
+  const { isMobile, setOpenMobile } = useSidebar()
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          type="button"
+          className="text-sidebar-foreground/60"
+          onClick={() => {
+            if (isMobile) setOpenMobile(false)
+            openMachine(machineId, { action: { type: "add-project" } })
+          }}
+        >
+          <FolderPlusIcon className="text-sidebar-foreground/50" />
+          <span>Add project…</span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// The split layout ("Projects and agents"). As in Herdr, the projects of all
+// machines are at the top of the sidebar, and one list of the agents of all
+// machines is at the bottom. Each machine gives its agents as a source: the
+// shell of the shown machine gives its live data, and the window gives the
+// hub summaries of the other machines.
+
+type SidebarAgentActions = Pick<
+  SidebarAgentItemProps,
+  | "onAgentClick"
+  | "onRenameAgent"
+  | "onDeleteAgent"
+  | "onSetAgentUnread"
+  | "onMoveAgent"
+  | "onMoveAgentAnyProject"
+  | "onTogglePinnedAgent"
+>
+
+type SidebarProjectActions = Pick<
+  ProjectAgentGroupProps,
+  | "onCreateAgentInProject"
+  | "onDeleteOldAgentsInProject"
+  | "onMarkAgentsRead"
+  | "onRemoveProject"
+>
+
+const AGENT_ACTION_NAMES = [
+  "onAgentClick",
+  "onRenameAgent",
+  "onDeleteAgent",
+  "onSetAgentUnread",
+  "onMoveAgent",
+  "onMoveAgentAnyProject",
+  "onTogglePinnedAgent",
+] as const satisfies ReadonlyArray<keyof SidebarAgentActions>
+
+const PROJECT_ACTION_NAMES = [
+  "onCreateAgentInProject",
+  "onDeleteOldAgentsInProject",
+  "onMarkAgentsRead",
+  "onRemoveProject",
+] as const satisfies ReadonlyArray<keyof SidebarProjectActions>
+
+/** The agents of one machine, for the agent list of the split layout. */
+type SidebarAgentSource = {
+  machineId: string
+  store: ProjectAgentsStore
+  activeAgentStore: ActiveSidebarAgentStore
+  selectedAgentKeyStore: SelectedAgentKeyStore
+  projects: Array<string>
+  pinnedAgentKeys: Array<string>
+  moveTargetProjects: Array<string>
+  agentActions: SidebarAgentActions
+  projectActions: SidebarProjectActions
+  jobActions: SidebarAgentJobsActions
+}
+
+const sidebarAgentSources = createPicoStore<
+  ReadonlyMap<string, SidebarAgentSource>
+>(new Map())
+
+type AnyAction = (...args: Array<never>) => unknown
+
+/**
+ * Actions that do not change from render to render: each one calls the
+ * newest action of its name. Only the actions that `current` has are set,
+ * so a menu shows the same items as before.
+ */
+function stableActions<T extends Partial<Record<string, AnyAction>>>(
+  names: ReadonlyArray<keyof T & string>,
+  current: T,
+  latest: () => T | undefined
+): T {
+  const result: Partial<Record<string, AnyAction>> = {}
+  for (const name of names) {
+    if (!current[name]) continue
+    result[name] = (...args: Array<never>) =>
+      (latest()?.[name] as AnyAction | undefined)?.(...args)
+  }
+  return result as T
+}
+
+function actionNames(actions: Record<string, unknown>) {
+  return Object.keys(actions)
+    .filter((name) => Boolean(actions[name]))
+    .sort()
+    .join()
+}
+
+/**
+ * Gives the agents of a machine to the agent list of the split layout,
+ * while the component shows. Null gives nothing.
+ */
+function useRegisterSidebarAgentSource(source: SidebarAgentSource | null) {
+  const latestRef = React.useRef(source)
+  React.useLayoutEffect(() => {
+    latestRef.current = source
+  })
+  // Register again only when the data of the list changes. The actions
+  // change at each render, so the list calls the newest ones.
+  const signature = source
+    ? [
+        source.machineId,
+        source.projects.join("\n"),
+        source.pinnedAgentKeys.join("\n"),
+        source.moveTargetProjects.join("\n"),
+        actionNames(source.agentActions),
+        actionNames(source.projectActions),
+      ].join("\0")
+    : ""
+  const store = source?.store
+  const activeAgentStore = source?.activeAgentStore
+  const selectedAgentKeyStore = source?.selectedAgentKeyStore
+  React.useEffect(() => {
+    const current = latestRef.current
+    if (!current || !store || !activeAgentStore || !selectedAgentKeyStore)
+      return
+    const registered: SidebarAgentSource = {
+      ...current,
+      store,
+      activeAgentStore,
+      selectedAgentKeyStore,
+      agentActions: stableActions(
+        AGENT_ACTION_NAMES,
+        current.agentActions,
+        () => latestRef.current?.agentActions
+      ),
+      projectActions: stableActions(
+        PROJECT_ACTION_NAMES,
+        current.projectActions,
+        () => latestRef.current?.projectActions
+      ),
+      jobActions: {
+        machineId: current.machineId,
+        openJob: (entry, job) =>
+          latestRef.current?.jobActions.openJob(entry, job),
+      },
+    }
+    setStoreState(sidebarAgentSources, (sources) =>
+      new Map(sources).set(registered.machineId, registered)
+    )
+    return () => {
+      setStoreState(sidebarAgentSources, (sources) => {
+        if (sources.get(registered.machineId) !== registered) return sources
+        const next = new Map(sources)
+        next.delete(registered.machineId)
+        return next
+      })
+    }
+  }, [signature, store, activeAgentStore, selectedAgentKeyStore])
+}
+
+function useSidebarAgentSource(machineId: string) {
+  return useSelector(sidebarAgentSources, (sources) => sources.get(machineId))
+}
+
+/** A click on a project row shows only the agents of that project. */
+type SplitProjectFilter = { machineId: string; project: string } | null
+
+const splitProjectFilter = createPicoStore<SplitProjectFilter>(
+  null,
+  (left, right) =>
+    left === right ||
+    Boolean(
+      left &&
+      right &&
+      left.machineId === right.machineId &&
+      left.project === right.project
+    )
+)
+
+function toggleSplitProjectFilter(machineId: string, project: string) {
+  setStoreState(splitProjectFilter, (current) =>
+    current?.machineId === machineId && current.project === project
+      ? null
+      : { machineId, project }
+  )
+}
+
+function useSplitProjectFilterActive(machineId: string, project: string) {
+  return useSelector(
+    splitProjectFilter,
+    (filter) => filter?.machineId === machineId && filter.project === project
+  )
+}
+
+/**
+ * The state of the agents of a project, as small counts. They are not
+ * buttons: a click on the row filters the agent list.
+ */
+function SplitProjectCounts({
+  store,
+  project,
+}: {
+  store: ProjectAgentsStore
+  project: string
+}) {
+  const counts = useSelector(
+    store,
+    (state) =>
+      agentStatusCounts(
+        state,
+        state.agentKeysByProject[project] ?? EMPTY_PROJECT_AGENT_KEYS
+      ),
+    { compare: sameProjectStatusCounts }
+  )
+  const total = useSelector(
+    store,
+    (state) => (state.agentKeysByProject[project] ?? []).length
+  )
+  const parts: Array<React.ReactNode> = []
+  if (counts.waiting > 0)
+    parts.push(
+      <span key="waiting" className="flex items-center gap-1 text-amber-500">
+        <MessageCircleQuestionIcon
+          className="size-3"
+          aria-label="Waiting for you"
+        />
+        {counts.waiting}
+      </span>
+    )
+  if (counts.working > 0)
+    parts.push(
+      <span key="working" className="flex items-center gap-1">
+        <Spinner size="xs" aria-label="Working" />
+        {counts.working}
+      </span>
+    )
+  if (counts.done > 0)
+    parts.push(
+      <span key="done" className="flex items-center gap-1">
+        <span className="size-2 rounded-full bg-primary" aria-label="Done" />
+        {counts.done}
+      </span>
+    )
+  return (
+    <span className="ml-auto flex shrink-0 items-center gap-2 text-[11px] font-normal text-sidebar-foreground/50">
+      {parts.length > 0 ? (
+        parts
+      ) : total > 0 ? (
+        <span aria-label={`${total} agents`}>{total}</span>
+      ) : null}
+    </span>
+  )
+}
+
+type SplitProjectRowProps = {
+  machineId: string
+  project: string
+  store: ProjectAgentsStore
+  actions: SidebarProjectActions
+  isMobile: boolean
+  overlay?: boolean
+  isDragging?: boolean
+  attributes?: Record<string, unknown>
+  listeners?: Record<string, unknown>
+}
+
+/**
+ * A project in the split layout: one line with its state. A click shows
+ * only its agents in the agent list; a second click shows all agents.
+ */
+function SplitProjectRow({
+  machineId,
+  project,
+  store,
+  actions,
+  isMobile,
+  overlay = false,
+  isDragging = false,
+  attributes,
+  listeners,
+}: SplitProjectRowProps) {
+  const active = useSplitProjectFilterActive(machineId, project)
+  const hasUnreadAgents = useSelector(
+    store,
+    (state) => projectUnreadAgents(state, project).length > 0
+  )
+  const {
+    onCreateAgentInProject,
+    onDeleteOldAgentsInProject,
+    onMarkAgentsRead,
+    onRemoveProject,
+  } = actions
+  const markAgentsRead = () => {
+    onMarkAgentsRead?.(projectUnreadAgents(store.state, project))
+  }
+  const hasActions =
+    !overlay &&
+    Boolean(
+      onCreateAgentInProject ||
+      onDeleteOldAgentsInProject ||
+      onMarkAgentsRead ||
+      onRemoveProject
+    )
+  const menuItems = [
+    onCreateAgentInProject
+      ? {
+          label: "New agent",
+          onClick: () => onCreateAgentInProject(project),
+        }
+      : null,
+    onDeleteOldAgentsInProject
+      ? {
+          label: "Archive old agents…",
+          onClick: () => onDeleteOldAgentsInProject(project),
+        }
+      : null,
+    onMarkAgentsRead
+      ? {
+          label: "Mark all as read",
+          disabled: !hasUnreadAgents,
+          onClick: markAgentsRead,
+        }
+      : null,
+    onRemoveProject
+      ? {
+          label: "Remove from sidebar",
+          destructive: true,
+          onClick: () => onRemoveProject(project),
+        }
+      : null,
+  ].filter((item) => item !== null)
+
+  const row = (
+    <div
+      className={cn(
+        "group/project-row relative flex items-center",
+        overlay &&
+          "rounded-md bg-sidebar shadow-lg ring-1 ring-sidebar-border/70",
+        isDragging && !overlay && "opacity-0"
+      )}
+    >
+      <SidebarMenuButton
+        type="button"
+        isActive={active}
+        aria-pressed={active}
+        className="min-w-0 flex-1 gap-2"
+        onClick={() => {
+          if (!overlay) toggleSplitProjectFilter(machineId, project)
+        }}
+        {...(attributes ?? {})}
+        {...(listeners ?? {})}
+      >
+        <FolderIcon className="size-4 shrink-0 text-sidebar-foreground/50" />
+        <span className="min-w-0 truncate">
+          {formatFolderName(project) || project}
+        </span>
+        <SplitProjectCounts store={store} project={project} />
+      </SidebarMenuButton>
+      {onCreateAgentInProject && !overlay && !isMobile ? (
+        <TitleTooltip title={`Create an agent in ${project}`}>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={`Create an agent in ${project}`}
+            // Only the row under the pointer shows its button.
+            className="absolute top-0 right-0 hidden shrink-0 bg-sidebar-accent text-sidebar-foreground/70 group-hover/project-row:flex hover:text-sidebar-accent-foreground focus-visible:flex"
+            onClick={() => onCreateAgentInProject(project)}
+          >
+            <SquarePenIcon className="size-4" />
+          </Button>
+        </TitleTooltip>
+      ) : null}
+      {hasActions && isMobile ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                size="icon"
+                variant="ghost"
+                className="shrink-0 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                aria-label={`Project actions for ${project}`}
+              />
+            }
+          >
+            <EllipsisVerticalIcon className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            {menuItems.map((item) => (
+              <DropdownMenuItem
+                key={item.label}
+                disabled={item.disabled}
+                variant={item.destructive ? "destructive" : undefined}
+                onClick={item.onClick}
+              >
+                {item.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+    </div>
+  )
+
+  if (!hasActions || isMobile) return row
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger render={row} />
+      <ContextMenuContent className="w-48">
+        {menuItems.map((item) => (
+          <ContextMenuItem
+            key={item.label}
+            disabled={item.disabled}
+            variant={item.destructive ? "destructive" : undefined}
+            onClick={item.onClick}
+          >
+            {item.label}
+          </ContextMenuItem>
+        ))}
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
+
+/** The project rows of another machine in the split layout. */
+function SplitOtherMachineProjects({ machine }: { machine: MachineInfo }) {
+  const { isMobile } = useSidebar()
+  const source = useSidebarAgentSource(machine.id)
+  if (!source) return null
+  if (source.projects.length === 0) {
+    if (machine.state !== "online") return null
+    return <OtherMachineAddProjectButton machineId={machine.id} />
+  }
+  return (
+    <div className="flex flex-col gap-0.5">
+      {source.projects.map((project) => (
+        <SplitProjectRow
+          key={project}
+          machineId={machine.id}
+          project={project}
+          store={source.store}
+          actions={source.projectActions}
+          isMobile={isMobile}
+        />
+      ))}
+    </div>
+  )
+}
+
+/**
+ * The agents of another machine for the agent list of the split layout.
+ * The window shows one for each machine that does not show, also when its
+ * group is folded. It draws only the rename and archive dialogs.
+ */
+export function OtherMachineAgentSource({ machine }: { machine: MachineInfo }) {
+  const {
+    grouped,
+    stores,
+    pinnedAgentKeys,
+    agentActions,
+    projectActions,
+    jobActions,
+    dialogs,
+  } = useOtherMachineSidebar(machine)
+  useRegisterSidebarAgentSource({
+    machineId: machine.id,
+    store: stores.agents,
+    activeAgentStore: stores.active,
+    selectedAgentKeyStore: stores.selected,
+    projects: grouped.projects,
+    pinnedAgentKeys,
+    moveTargetProjects: NO_MOVE_TARGET_PROJECTS,
+    agentActions,
+    projectActions,
+    jobActions,
+  })
+  return dialogs
+}
+
+type SplitAgentRow = {
+  machineId: string
+  key: string
+  /** The depth under a pinned agent. Other rows use their depth. */
+  depth?: number
+}
+
+type SplitAgentRows = {
+  pinned: Array<SplitAgentRow>
+  byStatus: Record<AgentStatusGroup, Array<SplitAgentRow>>
+  isLoading: boolean
+}
+
+/**
+ * The rows of the agent list: the pinned agents of each machine, then the
+ * agents of all machines in their state groups. In a group, an agent tree
+ * stays together, and the trees of all machines are in sidebar order
+ * (`compareSidebarAgents`), so the newest come first.
+ */
+function buildSplitAgentRows(
+  sources: Array<SidebarAgentSource>,
+  filter: SplitProjectFilter
+): SplitAgentRows {
+  const pinned: Array<SplitAgentRow> = []
+  const chunksByStatus = Object.fromEntries(
+    AGENT_STATUS_GROUPS.map((status) => [
+      status,
+      [] as Array<{ root: AgentListEntry; rows: Array<SplitAgentRow> }>,
+    ])
+  ) as Record<
+    AgentStatusGroup,
+    Array<{ root: AgentListEntry; rows: Array<SplitAgentRow> }>
+  >
+  let isLoading = false
+  for (const source of sources) {
+    if (filter && filter.machineId !== source.machineId) continue
+    const state = source.store.state
+    if (Object.values(state.loadingByProject).some(Boolean)) isLoading = true
+    const inFilter = filter
+      ? new Set(state.agentKeysByProject[filter.project] ?? [])
+      : null
+    const shows = (key: string) => !inFilter || inFilter.has(key)
+    for (const row of pinnedAgentRows(state.agentTree, source.pinnedAgentKeys))
+      if (shows(row.key))
+        pinned.push({
+          machineId: source.machineId,
+          key: row.key,
+          depth: row.depth,
+        })
+    const pinnedKeys = pinnedAgentTreeKeys(
+      state.agentTree,
+      source.pinnedAgentKeys
+    )
+    for (const status of AGENT_STATUS_GROUPS) {
+      let chunk: { root: AgentListEntry; rows: Array<SplitAgentRow> } | null =
+        null
+      for (const key of state.agentKeysByStatus[status]) {
+        if (pinnedKeys.has(key) || !shows(key)) continue
+        const entry = state.entriesByKey.get(key)
+        if (!entry) continue
+        if (!chunk || !state.depthByKey.get(key)) {
+          chunk = { root: entry, rows: [] }
+          chunksByStatus[status].push(chunk)
+        }
+        chunk.rows.push({ machineId: source.machineId, key })
+      }
+    }
+  }
+  const byStatus = Object.fromEntries(
+    AGENT_STATUS_GROUPS.map((status) => [
+      status,
+      chunksByStatus[status]
+        .toSorted((left, right) => compareSidebarAgents(left.root, right.root))
+        .flatMap((chunk) => chunk.rows),
+    ])
+  ) as Record<AgentStatusGroup, Array<SplitAgentRow>>
+  return { pinned, byStatus, isLoading }
+}
+
+function splitAgentRowsSignature(rows: SplitAgentRows) {
+  const part = (list: Array<SplitAgentRow>) =>
+    list.map((row) => `${row.machineId}\t${row.key}\t${row.depth ?? ""}`)
+  return JSON.stringify([
+    part(rows.pinned),
+    AGENT_STATUS_GROUPS.map((status) => part(rows.byStatus[status])),
+    rows.isLoading,
+  ])
+}
+
+/** Keeps the last rows while they stay the same, so the list does not draw again. */
+function createSplitAgentRowsCache() {
+  let last: { signature: string; rows: SplitAgentRows } | null = null
+  return (sources: Array<SidebarAgentSource>, filter: SplitProjectFilter) => {
+    const rows = buildSplitAgentRows(sources, filter)
+    const signature = splitAgentRowsSignature(rows)
+    if (last?.signature === signature) return last.rows
+    last = { signature, rows }
+    return rows
+  }
+}
+
+function useSplitAgentRows(
+  sources: Array<SidebarAgentSource>,
+  filter: SplitProjectFilter
+) {
+  const [getRows] = React.useState(createSplitAgentRowsCache)
+  const subscribe = (listener: () => void) => {
+    const subscriptions = sources.map((source) =>
+      source.store.subscribe(listener)
+    )
+    return () => {
+      for (const subscription of subscriptions) subscription.unsubscribe()
+    }
+  }
+  const getSnapshot = () => getRows(sources, filter)
+  return React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
+type SplitAgentRowViewProps = {
+  row: SplitAgentRow
+  source: SidebarAgentSource
+  pinned: boolean
+  showProjectLabel: boolean
+  machineLabel?: string
+  dimmed: boolean
+  isMobile: boolean
+  setOpenMobile: (open: boolean) => void
+}
+
+function SplitAgentRowView({
+  row,
+  source,
+  pinned,
+  showProjectLabel,
+  machineLabel,
+  dimmed,
+  isMobile,
+  setOpenMobile,
+}: SplitAgentRowViewProps) {
+  return (
+    <MachineProvider machineId={row.machineId}>
+      <SidebarAgentJobsContext value={source.jobActions}>
+        <SidebarAgentItem
+          entryKey={row.key}
+          inProject={pinned}
+          depth={row.depth}
+          showProjectLabel={showProjectLabel}
+          machineLabel={machineLabel}
+          dimmed={dimmed}
+          projectAgentsStore={source.store}
+          activeAgentStore={source.activeAgentStore}
+          selectedAgentKeyStore={source.selectedAgentKeyStore}
+          isPinned={pinned}
+          isMobile={isMobile}
+          overlay={false}
+          // The project rows are in another part of the sidebar, so an
+          // agent moves with its menu.
+          agentDraggable={false}
+          moveTargetProjects={source.moveTargetProjects}
+          setOpenMobile={setOpenMobile}
+          {...source.agentActions}
+        />
+      </SidebarAgentJobsContext>
+    </MachineProvider>
+  )
+}
+
+type SplitAgentGroupProps = {
+  rows: Array<SplitAgentRow>
+  sources: ReadonlyMap<string, SidebarAgentSource>
+  machineLabels: ReadonlyMap<string, string> | null
+  /** The machines that are not online. */
+  dimmedMachines: ReadonlySet<string>
+  /** False when the list shows only one project. */
+  showProjectLabel: boolean
+  pinned?: boolean
+  /** Show only the first rows, with "Show N more". */
+  limited?: boolean
+  isMobile: boolean
+  setOpenMobile: (open: boolean) => void
+}
+
+const SplitAgentGroup = React.memo(function SplitAgentGroup({
+  rows,
+  sources,
+  machineLabels,
+  dimmedMachines,
+  showProjectLabel,
+  pinned = false,
+  limited = false,
+  isMobile,
+  setOpenMobile,
+}: SplitAgentGroupProps) {
+  const [renderCount, setRenderCount] = React.useState(
+    INITIAL_PROJECT_AGENT_RENDER_COUNT
+  )
+  const altKeyHeld = useAltKeyHeld()
+  const visibleCount = limited
+    ? Math.min(rows.length, renderCount)
+    : rows.length
+  const hasMoreAgents = visibleCount < rows.length
+  // Holding Option turns "Show N more" into "Show less".
+  const showLess =
+    altKeyHeld && limited && visibleCount > INITIAL_PROJECT_AGENT_RENDER_COUNT
+  if (rows.length === 0) return null
+  return (
+    <div data-sidebar-agent-group="" className="relative flex flex-col">
+      {pinned ? <SidebarTreeLine level={0} /> : null}
+      <SidebarMenu>
+        {rows.slice(0, visibleCount).map((row) => {
+          const source = sources.get(row.machineId)
+          if (!source) return null
+          return (
+            <SplitAgentRowView
+              key={`${row.machineId}\t${row.key}`}
+              row={row}
+              source={source}
+              pinned={pinned}
+              showProjectLabel={showProjectLabel}
+              machineLabel={machineLabels?.get(row.machineId)}
+              dimmed={dimmedMachines.has(row.machineId)}
+              isMobile={isMobile}
+              setOpenMobile={setOpenMobile}
+            />
+          )
+        })}
+      </SidebarMenu>
+      {hasMoreAgents || showLess ? (
+        <div
+          className="flex flex-col"
+          style={agentTreeStyle(0) as React.CSSProperties}
+        >
+          <Button
+            variant="ghost"
+            className="h-8 justify-start pl-(--agent-text-left) text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+            onClick={() => {
+              if (showLess) {
+                setRenderCount(INITIAL_PROJECT_AGENT_RENDER_COUNT)
+                return
+              }
+              setRenderCount((current) =>
+                Math.min(rows.length, current + PROJECT_AGENT_LOAD_MORE_COUNT)
+              )
+            }}
+          >
+            {showLess
+              ? "Show less"
+              : `Show ${Math.min(
+                  PROJECT_AGENT_LOAD_MORE_COUNT,
+                  rows.length - visibleCount
+                )} more`}
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  )
+})
+
+/**
+ * The bottom part of the split layout: the heading, then the agents of all
+ * machines, in their own scroll area. `machines` gives the order of the
+ * machines; the rows of a machine show its label when there is more than
+ * one.
+ */
+export function SplitAgentList({
+  shownMachineId,
+  machines,
+}: {
+  shownMachineId: string
+  machines: Array<MachineInfo>
+}) {
+  const { isMobile, setOpenMobile } = useSidebar()
+  const sourceMap = useSelector(sidebarAgentSources, (sources) => sources)
+  const filter = useSelector(splitProjectFilter, (value) => value)
+  const order = machines.map((machine) => machine.id)
+  const sources = [
+    ...order.flatMap((id) => {
+      const source = sourceMap.get(id)
+      return source ? [source] : []
+    }),
+    ...[...sourceMap.values()].filter(
+      (source) => !order.includes(source.machineId)
+    ),
+  ]
+  // A filter of a project that is gone, or of a machine that does not
+  // show, shows all agents.
+  const filterSource = filter ? sourceMap.get(filter.machineId) : undefined
+  const activeFilter =
+    filter && filterSource?.projects.includes(filter.project) ? filter : null
+  const rows = useSplitAgentRows(sources, activeFilter)
+  // With a project filter, all rows have the same project and machine.
+  const machineLabels =
+    sources.length > 1 && !activeFilter
+      ? new Map(machines.map((machine) => [machine.id, machine.label]))
+      : null
+  const dimmedMachines = new Set(
+    machines
+      .filter(
+        (machine) => machine.id !== shownMachineId && machine.state !== "online"
+      )
+      .map((machine) => machine.id)
+  )
+  const hasRows =
+    rows.pinned.length > 0 ||
+    AGENT_STATUS_GROUPS.some((status) => rows.byStatus[status].length > 0)
+  const showLoadingSpinner = useDelayedTrue(
+    rows.isLoading && !hasRows,
+    SIDEBAR_LOADING_SPINNER_DELAY_MS
+  )
+  const shared = {
+    sources: sourceMap,
+    machineLabels,
+    dimmedMachines,
+    showProjectLabel: !activeFilter,
+    isMobile,
+    setOpenMobile,
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <SidebarGroup className="shrink-0 pb-0">
+        <SidebarGroupLabel className="group/heading justify-between gap-2 pr-0">
+          <span className="min-w-0 truncate">Agents</span>
+          <span className="flex min-w-0 items-center gap-1">
+            {activeFilter ? (
+              <TitleTooltip title="Show all agents">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 min-w-0 gap-1 px-1.5 text-[11px] font-normal text-sidebar-foreground ring-1 ring-sidebar-border hover:bg-sidebar-accent"
+                  aria-label={`Show all agents, not only the agents of ${activeFilter.project}`}
+                  onClick={() => setStoreState(splitProjectFilter, null)}
+                >
+                  <FolderIcon className="size-3 shrink-0" />
+                  <span className="min-w-0 truncate">
+                    {formatFolderName(activeFilter.project) ||
+                      activeFilter.project}
+                  </span>
+                  <XIcon className="size-3 shrink-0" />
+                </Button>
+              </TitleTooltip>
+            ) : null}
+            <SidebarViewMenu machineId={shownMachineId} />
+          </span>
+        </SidebarGroupLabel>
+      </SidebarGroup>
+      <div className="no-scrollbar min-h-0 flex-1 overflow-auto">
+        <SidebarGroup className="pt-0">
+          {rows.pinned.length > 0 ? (
+            <div className="flex flex-col pb-1">
+              <div className="flex h-(--sidebar-item-size) items-center gap-2 pl-(--sidebar-item-pad) text-sm text-sidebar-foreground">
+                <PinIcon className="size-4 shrink-0 text-sidebar-foreground/50" />
+                <span className="min-w-0 truncate">Pinned</span>
+              </div>
+              <SplitAgentGroup rows={rows.pinned} pinned {...shared} />
+            </div>
+          ) : null}
+          {AGENT_STATUS_GROUPS.map((status) => (
+            <SplitAgentGroup
+              key={status}
+              rows={rows.byStatus[status]}
+              // Only the idle agents can be many.
+              limited={status === "idle"}
+              {...shared}
+            />
+          ))}
+          {!hasRows ? (
+            <div className="flex items-center gap-2 p-2 text-sm text-sidebar-foreground/70">
+              {rows.isLoading ? (
+                <>
+                  {showLoadingSpinner ? (
+                    <Spinner size="xs" />
+                  ) : (
+                    <span className="size-4" aria-hidden="true" />
+                  )}
+                  Loading agents…
+                </>
+              ) : activeFilter ? (
+                "No agents in this project."
+              ) : (
+                "No agents."
+              )}
+            </div>
+          ) : null}
+        </SidebarGroup>
+      </div>
+    </div>
   )
 }
 
@@ -2914,9 +3876,13 @@ function useAppSidebarView({
   // A search or a state filter shows all matching agents, with their
   // groups open, and stops the drag to reorder.
   const listFiltered = searchActive || statusFilterActive
+  // In the split layout, the project rows are in the top part of the
+  // sidebar, and the window shows the agents of all machines under them.
+  const split = useSidebarLayout() === "split"
   // Grouped by state, no project groups show: the drag to reorder
   // projects and to move agents stops.
-  const groupByStatus = useSidebarGroupBy(machineId) === "status"
+  const groupBy = useSidebarGroupBy(machineId)
+  const groupByStatus = !split && groupBy === "status"
   const projectOrderingEnabled =
     !listFiltered && !groupByStatus && visibleProjects.length > 1
   const [activeProject, setActiveProject] = React.useState<string | null>(null)
@@ -3165,6 +4131,39 @@ function useAppSidebarView({
       openJobTerminal(job.id, entry.id)
     },
   }
+  const agentActions: SidebarAgentActions = {
+    onAgentClick,
+    onRenameAgent,
+    onDeleteAgent,
+    onSetAgentUnread,
+    onMoveAgent,
+    onMoveAgentAnyProject,
+    onTogglePinnedAgent,
+  }
+  const projectActions: SidebarProjectActions = {
+    onCreateAgentInProject,
+    onDeleteOldAgentsInProject,
+    onMarkAgentsRead,
+    onRemoveProject: onRemoveProject ? removeProject : undefined,
+  }
+  // In the split layout, the window draws the agents of this machine with
+  // the agents of the other machines.
+  useRegisterSidebarAgentSource(
+    split
+      ? {
+          machineId,
+          store: projectAgentsStore,
+          activeAgentStore,
+          selectedAgentKeyStore,
+          projects: visibleProjects,
+          pinnedAgentKeys,
+          moveTargetProjects: visibleProjects,
+          agentActions,
+          projectActions,
+          jobActions,
+        }
+      : null
+  )
   const contentSlot = useSidebarSlot("content", machineId)
   const bottomSlot = useSidebarSlot("bottom", machineId)
   // On mobile, the menus of the rows render in the sidebar sheet.
@@ -3183,7 +4182,7 @@ function useAppSidebarView({
         : null}
       {contentSlot
         ? createPortal(
-            <SidebarAgentJobsContext value={jobActions}>
+            split ? (
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
@@ -3192,204 +4191,252 @@ function useAppSidebarView({
                 onDragEnd={handleDragEnd}
                 onDragCancel={handleDragCancel}
               >
-                <PinnedAgentGroup
-                  pinnedAgentKeys={pinnedAgentKeys}
-                  projectAgentsStore={projectAgentsStore}
-                  collapsedProjectStore={collapsedProjectStore}
-                  collapseAllKeys={collapseAllKeys}
-                  searchActive={listFiltered}
-                  activeAgentStore={activeAgentStore}
-                  selectedAgentKeyStore={selectedAgentKeyStore}
-                  isMobile={isMobile}
-                  moveTargetProjects={visibleProjects}
-                  setOpenMobile={setOpenMobile}
-                  agentsDraggable={!groupByStatus}
-                  onAgentClick={onAgentClick}
-                  onRenameAgent={onRenameAgent}
-                  onDeleteAgent={onDeleteAgent}
-                  onSetAgentUnread={onSetAgentUnread}
-                  onMoveAgent={onMoveAgent}
-                  onTogglePinnedAgent={onTogglePinnedAgent}
-                />
-                <Collapsible
-                  open={showProjectsHeader ? !projectsCollapsed : true}
-                  onOpenChange={(open, details) => {
-                    if (searchActive) return
-                    // An Option-click also expands or collapses all projects.
-                    if (isAltChange(details)) {
-                      collapsedProjectStore.setAll(
-                        [
-                          PROJECTS_AGENT_GROUP_COLLAPSE_KEY,
-                          ...groupCollapseKeys,
-                        ],
-                        !open
-                      )
-                      return
-                    }
-                    collapsedProjectStore.setCollapsed(
-                      PROJECTS_AGENT_GROUP_COLLAPSE_KEY,
-                      !open
-                    )
-                  }}
+                <SidebarGroup
+                  className={showProjectsHeader ? "py-1" : "pt-0 pb-1"}
                 >
-                  <SidebarGroup
-                    className={showProjectsHeader ? "py-1" : "pt-0 pb-1"}
-                  >
-                    {showProjectsHeader ? (
-                      <AppSidebarProjectsHeader
-                        agentSearch={agentSearch}
-                        matchingAgentCount={matchingAgentCount}
-                        collapsed={projectsCollapsed}
-                        groupByStatus={groupByStatus}
+                  {showProjectsHeader ? (
+                    <SidebarGroupLabel className="group/heading justify-between gap-3 pr-0">
+                      <span className="min-w-0 truncate">Projects</span>
+                      <ProjectActions
+                        machineId={machineId}
                         onOpenAddProjectDialog={onOpenAddProjectDialog}
+                        showGroupBy={false}
                       />
-                    ) : null}
-                    <CollapsibleContent>
-                      <SidebarGroupContent>
-                        {visibleProjects.length === 0 ? (
-                          <div className="p-2">
-                            <Empty className="rounded-xl border border-dashed bg-sidebar-accent/10 py-10">
-                              <EmptyHeader>
-                                <EmptyMedia variant="icon">
-                                  <FolderIcon />
-                                </EmptyMedia>
-                                <EmptyTitle>{emptyStateText}</EmptyTitle>
-                              </EmptyHeader>
-                            </Empty>
-                          </div>
-                        ) : groupByStatus ? (
-                          <StatusAgentGroups
-                            projectAgentsStore={projectAgentsStore}
-                            searchActive={listFiltered}
-                            moveTargetProjects={visibleProjects}
-                            activeAgentStore={activeAgentStore}
-                            selectedAgentKeyStore={selectedAgentKeyStore}
-                            pinnedAgentKeys={pinnedAgentKeys}
-                            isMobile={isMobile}
-                            setOpenMobile={setOpenMobile}
-                            onAgentClick={onAgentClick}
-                            onRenameAgent={onRenameAgent}
-                            onDeleteAgent={onDeleteAgent}
-                            onSetAgentUnread={onSetAgentUnread}
-                            onMoveAgent={onMoveAgent}
-                            onMoveAgentAnyProject={onMoveAgentAnyProject}
-                            onTogglePinnedAgent={onTogglePinnedAgent}
-                          />
-                        ) : (
-                          <SortableContext
-                            items={orderedVisibleProjects}
-                            strategy={verticalListSortingStrategy}
+                    </SidebarGroupLabel>
+                  ) : null}
+                  {visibleProjects.length === 0 ? (
+                    <div className="p-2 text-sm text-sidebar-foreground/70">
+                      {emptyStateText}
+                    </div>
+                  ) : (
+                    <SortableContext
+                      items={orderedVisibleProjects}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <div className="flex flex-col gap-0.5">
+                        {orderedVisibleProjects.map((project) => (
+                          <SortableProjectGroup
+                            key={project}
+                            id={project}
+                            disabled={!projectOrderingEnabled}
                           >
-                            {orderedVisibleProjects.map((project) => {
-                              return (
-                                <SortableProjectGroup
-                                  key={project}
-                                  id={project}
-                                  disabled={!projectOrderingEnabled}
-                                >
-                                  {({ attributes, listeners, isDragging }) => (
-                                    <ProjectAgentGroup
-                                      project={project}
-                                      projectAgentsStore={projectAgentsStore}
-                                      collapsedProjectStore={
-                                        collapsedProjectStore
-                                      }
-                                      collapseAllKeys={collapseAllKeys}
-                                      searchActive={listFiltered}
-                                      moveTargetProjects={visibleProjects}
-                                      activeAgentStore={activeAgentStore}
-                                      selectedAgentKeyStore={
-                                        selectedAgentKeyStore
-                                      }
-                                      pinnedAgentKeys={pinnedAgentKeys}
-                                      isMobile={isMobile}
-                                      setOpenMobile={setOpenMobile}
-                                      isDragging={isDragging}
-                                      isAgentDropTarget={
-                                        agentDropProject === project
-                                      }
-                                      attributes={attributes}
-                                      listeners={listeners}
-                                      onAgentClick={onAgentClick}
-                                      onRenameAgent={onRenameAgent}
-                                      onDeleteAgent={onDeleteAgent}
-                                      onSetAgentUnread={onSetAgentUnread}
-                                      onMoveAgent={onMoveAgent}
-                                      onMoveAgentAnyProject={
-                                        onMoveAgentAnyProject
-                                      }
-                                      onTogglePinnedAgent={onTogglePinnedAgent}
-                                      onCreateAgentInProject={
-                                        onCreateAgentInProject
-                                      }
-                                      onDeleteOldAgentsInProject={
-                                        onDeleteOldAgentsInProject
-                                      }
-                                      onMarkAgentsRead={onMarkAgentsRead}
-                                      onRemoveProject={
-                                        onRemoveProject
-                                          ? removeProject
-                                          : undefined
-                                      }
-                                      archivedJobAgents={
-                                        archivedJobAgents?.[project]
-                                      }
-                                      onOpenArchivedJobs={onOpenArchivedJobs}
-                                    />
-                                  )}
-                                </SortableProjectGroup>
-                              )
-                            })}
-                          </SortableContext>
-                        )}
-                      </SidebarGroupContent>
-                    </CollapsibleContent>
-                  </SidebarGroup>
-                </Collapsible>
-
+                            {({ attributes, listeners, isDragging }) => (
+                              <SplitProjectRow
+                                machineId={machineId}
+                                project={project}
+                                store={projectAgentsStore}
+                                actions={projectActions}
+                                isMobile={isMobile}
+                                isDragging={isDragging}
+                                attributes={attributes}
+                                listeners={listeners}
+                              />
+                            )}
+                          </SortableProjectGroup>
+                        ))}
+                      </div>
+                    </SortableContext>
+                  )}
+                </SidebarGroup>
                 <DragOverlay>
                   {activeProject ? (
-                    <ProjectAgentGroup
+                    <SplitProjectRow
+                      machineId={machineId}
                       project={activeProject}
-                      projectAgentsStore={projectAgentsStore}
-                      collapsedProjectStore={collapsedProjectStore}
-                      collapseAllKeys={collapseAllKeys}
-                      searchActive={listFiltered}
-                      moveTargetProjects={visibleProjects}
-                      activeAgentStore={activeAgentStore}
-                      selectedAgentKeyStore={selectedAgentKeyStore}
-                      pinnedAgentKeys={pinnedAgentKeys}
+                      store={projectAgentsStore}
+                      actions={projectActions}
                       isMobile={isMobile}
-                      setOpenMobile={setOpenMobile}
                       overlay
-                      onAgentClick={onAgentClick}
-                      onRenameAgent={onRenameAgent}
-                      onDeleteAgent={onDeleteAgent}
-                      onSetAgentUnread={onSetAgentUnread}
-                      onMoveAgent={onMoveAgent}
-                      onMoveAgentAnyProject={onMoveAgentAnyProject}
-                      onTogglePinnedAgent={onTogglePinnedAgent}
-                      onCreateAgentInProject={onCreateAgentInProject}
-                      onDeleteOldAgentsInProject={onDeleteOldAgentsInProject}
-                      onMarkAgentsRead={onMarkAgentsRead}
-                      onRemoveProject={
-                        onRemoveProject ? removeProject : undefined
-                      }
                     />
-                  ) : activeAgentDrag ? (
-                    <SidebarMenu className="w-full rounded-md bg-sidebar shadow-lg ring-1 ring-sidebar-border/70">
-                      <SidebarAgentItem
-                        entryKey={activeAgentDrag.entryKey}
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
+            ) : (
+              <SidebarAgentJobsContext value={jobActions}>
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragStart={handleDragStart}
+                  onDragOver={handleDragOver}
+                  onDragEnd={handleDragEnd}
+                  onDragCancel={handleDragCancel}
+                >
+                  <PinnedAgentGroup
+                    pinnedAgentKeys={pinnedAgentKeys}
+                    projectAgentsStore={projectAgentsStore}
+                    collapsedProjectStore={collapsedProjectStore}
+                    collapseAllKeys={collapseAllKeys}
+                    searchActive={listFiltered}
+                    activeAgentStore={activeAgentStore}
+                    selectedAgentKeyStore={selectedAgentKeyStore}
+                    isMobile={isMobile}
+                    moveTargetProjects={visibleProjects}
+                    setOpenMobile={setOpenMobile}
+                    agentsDraggable={!groupByStatus}
+                    onAgentClick={onAgentClick}
+                    onRenameAgent={onRenameAgent}
+                    onDeleteAgent={onDeleteAgent}
+                    onSetAgentUnread={onSetAgentUnread}
+                    onMoveAgent={onMoveAgent}
+                    onTogglePinnedAgent={onTogglePinnedAgent}
+                  />
+                  <Collapsible
+                    open={showProjectsHeader ? !projectsCollapsed : true}
+                    onOpenChange={(open, details) => {
+                      if (searchActive) return
+                      // An Option-click also expands or collapses all projects.
+                      if (isAltChange(details)) {
+                        collapsedProjectStore.setAll(
+                          [
+                            PROJECTS_AGENT_GROUP_COLLAPSE_KEY,
+                            ...groupCollapseKeys,
+                          ],
+                          !open
+                        )
+                        return
+                      }
+                      collapsedProjectStore.setCollapsed(
+                        PROJECTS_AGENT_GROUP_COLLAPSE_KEY,
+                        !open
+                      )
+                    }}
+                  >
+                    <SidebarGroup
+                      className={showProjectsHeader ? "py-1" : "pt-0 pb-1"}
+                    >
+                      {showProjectsHeader ? (
+                        <AppSidebarProjectsHeader
+                          agentSearch={agentSearch}
+                          matchingAgentCount={matchingAgentCount}
+                          collapsed={projectsCollapsed}
+                          groupByStatus={groupByStatus}
+                          onOpenAddProjectDialog={onOpenAddProjectDialog}
+                        />
+                      ) : null}
+                      <CollapsibleContent>
+                        <SidebarGroupContent>
+                          {visibleProjects.length === 0 ? (
+                            <div className="p-2">
+                              <Empty className="rounded-xl border border-dashed bg-sidebar-accent/10 py-10">
+                                <EmptyHeader>
+                                  <EmptyMedia variant="icon">
+                                    <FolderIcon />
+                                  </EmptyMedia>
+                                  <EmptyTitle>{emptyStateText}</EmptyTitle>
+                                </EmptyHeader>
+                              </Empty>
+                            </div>
+                          ) : groupByStatus ? (
+                            <StatusAgentGroups
+                              projectAgentsStore={projectAgentsStore}
+                              searchActive={listFiltered}
+                              moveTargetProjects={visibleProjects}
+                              activeAgentStore={activeAgentStore}
+                              selectedAgentKeyStore={selectedAgentKeyStore}
+                              pinnedAgentKeys={pinnedAgentKeys}
+                              isMobile={isMobile}
+                              setOpenMobile={setOpenMobile}
+                              onAgentClick={onAgentClick}
+                              onRenameAgent={onRenameAgent}
+                              onDeleteAgent={onDeleteAgent}
+                              onSetAgentUnread={onSetAgentUnread}
+                              onMoveAgent={onMoveAgent}
+                              onMoveAgentAnyProject={onMoveAgentAnyProject}
+                              onTogglePinnedAgent={onTogglePinnedAgent}
+                            />
+                          ) : (
+                            <SortableContext
+                              items={orderedVisibleProjects}
+                              strategy={verticalListSortingStrategy}
+                            >
+                              {orderedVisibleProjects.map((project) => {
+                                return (
+                                  <SortableProjectGroup
+                                    key={project}
+                                    id={project}
+                                    disabled={!projectOrderingEnabled}
+                                  >
+                                    {({
+                                      attributes,
+                                      listeners,
+                                      isDragging,
+                                    }) => (
+                                      <ProjectAgentGroup
+                                        project={project}
+                                        projectAgentsStore={projectAgentsStore}
+                                        collapsedProjectStore={
+                                          collapsedProjectStore
+                                        }
+                                        collapseAllKeys={collapseAllKeys}
+                                        searchActive={listFiltered}
+                                        moveTargetProjects={visibleProjects}
+                                        activeAgentStore={activeAgentStore}
+                                        selectedAgentKeyStore={
+                                          selectedAgentKeyStore
+                                        }
+                                        pinnedAgentKeys={pinnedAgentKeys}
+                                        isMobile={isMobile}
+                                        setOpenMobile={setOpenMobile}
+                                        isDragging={isDragging}
+                                        isAgentDropTarget={
+                                          agentDropProject === project
+                                        }
+                                        attributes={attributes}
+                                        listeners={listeners}
+                                        onAgentClick={onAgentClick}
+                                        onRenameAgent={onRenameAgent}
+                                        onDeleteAgent={onDeleteAgent}
+                                        onSetAgentUnread={onSetAgentUnread}
+                                        onMoveAgent={onMoveAgent}
+                                        onMoveAgentAnyProject={
+                                          onMoveAgentAnyProject
+                                        }
+                                        onTogglePinnedAgent={
+                                          onTogglePinnedAgent
+                                        }
+                                        onCreateAgentInProject={
+                                          onCreateAgentInProject
+                                        }
+                                        onDeleteOldAgentsInProject={
+                                          onDeleteOldAgentsInProject
+                                        }
+                                        onMarkAgentsRead={onMarkAgentsRead}
+                                        onRemoveProject={
+                                          onRemoveProject
+                                            ? removeProject
+                                            : undefined
+                                        }
+                                        archivedJobAgents={
+                                          archivedJobAgents?.[project]
+                                        }
+                                        onOpenArchivedJobs={onOpenArchivedJobs}
+                                      />
+                                    )}
+                                  </SortableProjectGroup>
+                                )
+                              })}
+                            </SortableContext>
+                          )}
+                        </SidebarGroupContent>
+                      </CollapsibleContent>
+                    </SidebarGroup>
+                  </Collapsible>
+
+                  <DragOverlay>
+                    {activeProject ? (
+                      <ProjectAgentGroup
+                        project={activeProject}
                         projectAgentsStore={projectAgentsStore}
+                        collapsedProjectStore={collapsedProjectStore}
+                        collapseAllKeys={collapseAllKeys}
+                        searchActive={listFiltered}
+                        moveTargetProjects={visibleProjects}
                         activeAgentStore={activeAgentStore}
                         selectedAgentKeyStore={selectedAgentKeyStore}
-                        isPinned={pinnedAgentKeys.includes(
-                          activeAgentDrag.entryKey
-                        )}
+                        pinnedAgentKeys={pinnedAgentKeys}
                         isMobile={isMobile}
-                        overlay
-                        moveTargetProjects={visibleProjects}
                         setOpenMobile={setOpenMobile}
+                        overlay
                         onAgentClick={onAgentClick}
                         onRenameAgent={onRenameAgent}
                         onDeleteAgent={onDeleteAgent}
@@ -3397,12 +4444,41 @@ function useAppSidebarView({
                         onMoveAgent={onMoveAgent}
                         onMoveAgentAnyProject={onMoveAgentAnyProject}
                         onTogglePinnedAgent={onTogglePinnedAgent}
+                        onCreateAgentInProject={onCreateAgentInProject}
+                        onDeleteOldAgentsInProject={onDeleteOldAgentsInProject}
+                        onMarkAgentsRead={onMarkAgentsRead}
+                        onRemoveProject={
+                          onRemoveProject ? removeProject : undefined
+                        }
                       />
-                    </SidebarMenu>
-                  ) : null}
-                </DragOverlay>
-              </DndContext>
-            </SidebarAgentJobsContext>,
+                    ) : activeAgentDrag ? (
+                      <SidebarMenu className="w-full rounded-md bg-sidebar shadow-lg ring-1 ring-sidebar-border/70">
+                        <SidebarAgentItem
+                          entryKey={activeAgentDrag.entryKey}
+                          projectAgentsStore={projectAgentsStore}
+                          activeAgentStore={activeAgentStore}
+                          selectedAgentKeyStore={selectedAgentKeyStore}
+                          isPinned={pinnedAgentKeys.includes(
+                            activeAgentDrag.entryKey
+                          )}
+                          isMobile={isMobile}
+                          overlay
+                          moveTargetProjects={visibleProjects}
+                          setOpenMobile={setOpenMobile}
+                          onAgentClick={onAgentClick}
+                          onRenameAgent={onRenameAgent}
+                          onDeleteAgent={onDeleteAgent}
+                          onSetAgentUnread={onSetAgentUnread}
+                          onMoveAgent={onMoveAgent}
+                          onMoveAgentAnyProject={onMoveAgentAnyProject}
+                          onTogglePinnedAgent={onTogglePinnedAgent}
+                        />
+                      </SidebarMenu>
+                    ) : null}
+                  </DragOverlay>
+                </DndContext>
+              </SidebarAgentJobsContext>
+            ),
             contentSlot
           )
         : null}

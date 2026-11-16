@@ -89,9 +89,11 @@ import {
   formatShortcutLabel,
 } from "@/features/pico/keyboard-shortcuts"
 import {
-  setSidebarGroupBy,
-  useSidebarGroupBy,
-  type SidebarGroupBy,
+  SIDEBAR_VIEWS,
+  setSidebarView,
+  sidebarViewLabel,
+  useSidebarView,
+  type SidebarView,
 } from "@/features/pico/sidebar-display-settings"
 import { cn } from "@/lib/utils"
 import {
@@ -264,8 +266,9 @@ function MachineCounts({
 }) {
   const { working, waiting, done, live } = agentCounts(machine)
   const online = machine.state === "online"
-  // Grouped by state, the state groups replace the filters.
-  const groupByStatus = useSidebarGroupBy(machine.id) === "status"
+  // Grouped by state, the state groups replace the filters. In the split
+  // layout, the agent list has the state groups.
+  const groupByStatus = useSidebarView(machine.id) !== "project"
   // A machine that goes offline, or that groups its agents by state,
   // shows all its agents again.
   React.useEffect(() => {
@@ -735,7 +738,7 @@ function MachineContextMenu({
   const { machines } = useMachines()
   const prefs = useMachineSidebarPrefs()
   const { isMobile, setOpenMobile } = useSidebar()
-  const groupBy = useSidebarGroupBy(machine.id)
+  const view = useSidebarView(machine.id)
   const local = machine.id === LOCAL_MACHINE_ID
   const online = machine.state === "online"
   const hidden = orderMachines(machines, prefs.order).filter(
@@ -798,20 +801,19 @@ function MachineContextMenu({
         <ContextMenuSeparator />
         <ContextMenuGroup>
           <ContextMenuSub>
-            <ContextMenuSubTrigger>Group by</ContextMenuSubTrigger>
-            <ContextMenuSubContent className="w-40">
+            <ContextMenuSubTrigger>Sidebar view</ContextMenuSubTrigger>
+            <ContextMenuSubContent className="w-48">
               <ContextMenuRadioGroup
-                value={groupBy}
-                onValueChange={(value: SidebarGroupBy) =>
-                  setSidebarGroupBy(machine.id, value)
+                value={view}
+                onValueChange={(value: SidebarView) =>
+                  setSidebarView(machine.id, value)
                 }
               >
-                <ContextMenuRadioItem value="project">
-                  Project
-                </ContextMenuRadioItem>
-                <ContextMenuRadioItem value="status">
-                  State
-                </ContextMenuRadioItem>
+                {SIDEBAR_VIEWS.map((entry) => (
+                  <ContextMenuRadioItem key={entry} value={entry}>
+                    {sidebarViewLabel(entry)}
+                  </ContextMenuRadioItem>
+                ))}
               </ContextMenuRadioGroup>
             </ContextMenuSubContent>
           </ContextMenuSub>
@@ -1032,6 +1034,13 @@ function setMachineHidden(id: string, hidden: boolean) {
   const prefs = getMachineSidebarPrefs()
   const rest = prefs.hidden.filter((entry) => entry !== id)
   setMachineSidebarPrefs({ ...prefs, hidden: hidden ? [...rest, id] : rest })
+}
+
+/** The machines that the sidebar shows, in the order of the user. */
+export function useSidebarMachines(shownMachineId: string) {
+  const { machines } = useMachines()
+  const prefs = useMachineSidebarPrefs()
+  return visibleMachines(machines, prefs, shownMachineId)
 }
 
 /** Whether the hub has more than one machine, so the sidebar has groups. */
