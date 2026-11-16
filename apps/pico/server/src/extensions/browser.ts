@@ -10,7 +10,8 @@ import { homedir } from "node:os"
 import { isAbsolute, join } from "node:path"
 
 import type { Context } from "@earendil-works/chord"
-import { Type } from "@earendil-works/pi-ai"
+import { Type, type ImageContent } from "@earendil-works/pi-ai"
+import { resizeImage } from "@earendil-works/pi-coding-agent"
 import {
   defineDoc,
   defineExtension,
@@ -239,22 +240,75 @@ export function createBrowserExtension(host: HostBridge) {
     )
   }
 
+  /**
+   * The model API refuses an image larger than 8000 px, and larger than
+   * 2000 px when a request has many images. That error comes back on every
+   * later turn, because the image stays in the history. So a full-page
+   * screenshot is cut into parts of at most SHOT_PART_PX, and each image is
+   * fitted to 2000 px and 4.5 MB.
+   */
+  const SHOT_PART_PX = 2000
+  const SHOT_MAX_PARTS = 4
+
+  const fitShot = async (png: Buffer): Promise<ImageContent> => {
+    const data = png.toString("base64")
+    try {
+      const resized = await resizeImage(png, "image/png")
+      if (resized?.wasResized) {
+        return { type: "image", mimeType: resized.mimeType, data: resized.data }
+      }
+    } catch {
+      // Send the original image.
+    }
+    return { type: "image", mimeType: "image/png", data }
+  }
+
   const screenshot: Action = async (browser, tabs, args, api) => {
     const { page } = await browser.page(Number(api.conversationId), tabs)
-    const image = await page.screenshot({
-      fullPage: Boolean(args.full_page),
-      type: "png",
-    })
-    const data = image.toString("base64")
+    const shots: Buffer[] = []
+    let note = ""
+    if (args.full_page) {
+      const size = (await page.evaluate(
+        "({ width: document.documentElement.clientWidth, height: Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0) })"
+      )) as { width: number; height: number }
+      const height = Math.max(1, Math.ceil(size.height))
+      const width = Math.max(1, Math.ceil(size.width))
+      const parts = Math.min(SHOT_MAX_PARTS, Math.ceil(height / SHOT_PART_PX))
+      for (let i = 0; i < parts; i++) {
+        const y = i * SHOT_PART_PX
+        shots.push(
+          await page.screenshot({
+            fullPage: true,
+            type: "png",
+            clip: {
+              x: 0,
+              y,
+              width,
+              height: Math.min(SHOT_PART_PX, height - y),
+            },
+          })
+        )
+      }
+      if (parts > 1) {
+        note = ` (page ${width}x${height} px, in ${parts} parts of ${SHOT_PART_PX} px from the top)`
+      }
+      if (height > parts * SHOT_PART_PX) {
+        note += `. Only the top ${parts * SHOT_PART_PX} px are shown: scroll and take viewport screenshots to see the rest`
+      }
+    } else {
+      shots.push(await page.screenshot({ type: "png" }))
+    }
+    const images = await Promise.all(shots.map(fitShot))
+    const first = images[0]
     return {
       output: [
-        { type: "text", text: `Screenshot of ${page.url()}` },
-        { type: "image", mimeType: "image/png", data },
+        { type: "text", text: `Screenshot of ${page.url()}${note}` },
+        ...images,
       ],
       details: {
         kind: "image",
         title: page.url(),
-        data: `data:image/png;base64,${data}`,
+        data: first ? `data:${first.mimeType};base64,${first.data}` : "",
       },
     }
   }
