@@ -8,8 +8,8 @@
  * web client answers through `answerQuestion()`. A chat message that the user
  * sends while a question is open also answers it.
  */
-import type { Context } from "@earendil-works/chord"
-import { Type } from "@earendil-works/pi-ai"
+import type { Context } from "@earendil-works/chord/context"
+import Type from "typebox"
 import {
   defineDoc,
   defineExtension,
@@ -178,7 +178,9 @@ function waitForAnswer(
           return
         }
         check(handle.value)
-        handle.start(async (value) => check(value))
+        handle.start(async (call) => {
+          if (call.kind === "value") check(call.value)
+        })
       })
       .catch((error: unknown) => finish(undefined, error))
   })
@@ -227,8 +229,8 @@ const fieldSchema = Type.Object({
   label: Type.Optional(Type.String()),
   type: Type.Optional(
     Type.Union(
-      ["text", "textarea", "number", "boolean", "select"].map((kind) =>
-        Type.Literal(kind)
+      (["text", "textarea", "number", "boolean", "select"] as const).map(
+        (kind) => Type.Literal(kind)
       )
     )
   ),
@@ -248,7 +250,7 @@ const askTool = defineTool({
     question: Type.String({ description: "The question, in markdown" }),
     kind: Type.Optional(
       Type.Union(
-        ["choice", "multi", "text", "form", "confirm"].map((kind) =>
+        (["choice", "multi", "text", "form", "confirm"] as const).map((kind) =>
           Type.Literal(kind)
         )
       )

@@ -2,7 +2,7 @@
 import { readFile, readdir, realpath } from "node:fs/promises"
 import { join } from "node:path"
 
-import type { JsonValue } from "@earendil-works/chord"
+import type { JsonValue } from "@earendil-works/chord/json"
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context"
 import type { Message, ModelThinkingLevel } from "@earendil-works/pi-ai"
 import type {

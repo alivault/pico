@@ -8,7 +8,7 @@
  * MCP server also uses. Pico drives the same core and its MCP tool schemas.
  * Configuration is pi-web-access's own `~/.pi/web-search.json`.
  */
-import { Type, type TSchema } from "@earendil-works/pi-ai"
+import Type, { type TSchema } from "typebox"
 import {
   defineExtension,
   type Extension,

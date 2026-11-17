@@ -631,7 +631,7 @@ void test("the scratchpad stores entries and spills large output", async () => {
   const big = "line\n".repeat(600)
   const { defineExtension, defineTool } =
     await import("@earendil-works/pi-durable")
-  const { Type } = await import("@earendil-works/pi-ai")
+  const { default: Type } = await import("typebox")
   const noisy = defineExtension({
     name: "noisy",
     tools: [

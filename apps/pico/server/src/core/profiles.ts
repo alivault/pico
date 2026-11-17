@@ -18,7 +18,7 @@
  * `reviewer` profiles keep bash only in that sandbox, so a model cannot change
  * files with a script instead of the edit tool.
  */
-import type { Context } from "@earendil-works/chord"
+import type { Context } from "@earendil-works/chord/context"
 import type {
   Conversation,
   Extension,

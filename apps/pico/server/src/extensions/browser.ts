@@ -9,8 +9,9 @@ import { existsSync } from "node:fs"
 import { homedir } from "node:os"
 import { isAbsolute, join } from "node:path"
 
-import type { Context } from "@earendil-works/chord"
-import { Type, type ImageContent } from "@earendil-works/pi-ai"
+import type { Context } from "@earendil-works/chord/context"
+import type { ImageContent } from "@earendil-works/pi-ai"
+import Type from "typebox"
 import { resizeImage } from "@earendil-works/pi-coding-agent"
 import {
   defineDoc,

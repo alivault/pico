@@ -13,7 +13,7 @@
  * completion events for the clients that watch them.
  */
 import { getHeapStatistics } from "node:v8"
-import type { JsonValue } from "@earendil-works/chord"
+import type { JsonValue } from "@earendil-works/chord/json"
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
 import {
   getSupportedThinkingLevels,
@@ -570,7 +570,10 @@ export class Agents implements HostAgents {
       })
     )
     await this.#reapplyStaleProfiles()
-    this.#harness.subscribeCommits((publication) => this.#observe(publication))
+    this.#harness.observeCommits({
+      advance: (publication) => this.#observe(publication),
+      end: () => {},
+    })
     // Continue turns an earlier process left unfinished.
     this.#harness.resume()
   }
@@ -827,7 +830,7 @@ export class Agents implements HostAgents {
         const kind = change.record.kind
         const docs = this.#docs.get(id) ?? {}
         this.#docs.set(id, docs)
-        const value = change.value ?? undefined
+        const value = change.kind === "change" ? change.value : undefined
         if (kind === "pi.live") {
           docs.live = value as LiveState | undefined
           this.#noteRunningTools(id, docs.live)

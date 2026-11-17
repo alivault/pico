@@ -164,6 +164,10 @@ export async function openRuntime(
       return currentPiSettings().getFollowUpMode()
     },
     toolExecution: "parallel",
+    // Pico follows live answers and tool output through `observeCommits()`,
+    // which sees a commit only once it is stored. Store progress at once, as
+    // before pi-durable 1.5, so streaming stays live in the client.
+    progress: { persistWithinMs: 0 },
   }
 
   // The settings have an override for each model, so build them again only

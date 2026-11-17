@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { join } from "node:path"
 import { test } from "node:test"
 
-import { Type } from "@earendil-works/pi-ai"
+import Type from "typebox"
 import { defineExtension, defineTool } from "@earendil-works/pi-durable"
 
 import { HostBridge } from "../src/extensions/host.ts"

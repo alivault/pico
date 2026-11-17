@@ -27,8 +27,8 @@
  */
 import { createHash } from "node:crypto"
 
-import type { Context } from "@earendil-works/chord"
-import { Type } from "@earendil-works/pi-ai"
+import type { Context } from "@earendil-works/chord/context"
+import Type from "typebox"
 import {
   AgentDoc,
   defineDoc,

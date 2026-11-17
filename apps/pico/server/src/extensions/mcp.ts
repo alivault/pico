@@ -16,7 +16,8 @@ import { execSync } from "node:child_process"
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 
-import type { ImageContent, TextContent, TSchema } from "@earendil-works/pi-ai"
+import type { ImageContent, TextContent } from "@earendil-works/pi-ai"
+import type { TSchema } from "typebox"
 import {
   McpClient,
   StdioTransport,

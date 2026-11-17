@@ -5,8 +5,8 @@
  * survives compaction. A prompt section shows the open items to the model.
  * Tree navigation sees the list as it was at the fork point (`asOf`).
  */
-import type { Context } from "@earendil-works/chord"
-import { Type } from "@earendil-works/pi-ai"
+import type { Context } from "@earendil-works/chord/context"
+import Type from "typebox"
 import {
   defineDoc,
   defineExtension,

@@ -19,7 +19,7 @@
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 
-import { Type } from "@earendil-works/pi-ai"
+import Type from "typebox"
 
 import {
   defineExtension,
