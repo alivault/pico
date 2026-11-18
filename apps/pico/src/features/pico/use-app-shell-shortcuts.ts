@@ -6,6 +6,7 @@ import type { AgentListEntry } from "@/lib/pico/api"
 import {
   agentNumberModifierFlag,
   appModifierFlag,
+  conversationEdgeModifierFlag,
   matchesShortcutEvent,
   pullShortcut,
   rightSidebarPaneShortcutKeys,
@@ -667,18 +668,23 @@ export function useAppShellShortcuts({
         },
       },
     },
-    ...(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"] as const).map(
-      (key) => ({
-        hotkey: { key, ...appModifierFlag },
-        callback: handleConversationJump,
-        options: {
-          meta: {
-            name: "Navigate conversation",
-            description: "Jump between messages or to conversation boundaries.",
-          },
+    ...(
+      [
+        { key: "ArrowLeft", ...appModifierFlag },
+        { key: "ArrowRight", ...appModifierFlag },
+        { key: "ArrowUp", ...conversationEdgeModifierFlag },
+        { key: "ArrowDown", ...conversationEdgeModifierFlag },
+      ] as const
+    ).map((hotkey) => ({
+      hotkey,
+      callback: handleConversationJump,
+      options: {
+        meta: {
+          name: "Navigate conversation",
+          description: "Jump between messages or to conversation boundaries.",
         },
-      })
-    ),
+      },
+    })),
     ...(
       [
         { key: "ArrowUp", offset: -1 },

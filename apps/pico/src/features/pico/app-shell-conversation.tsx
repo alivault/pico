@@ -33,6 +33,7 @@ import {
 import { DraftGitStatusBadge } from "@/features/pico/right-sidebar-git-header-actions"
 import {
   appShortcut,
+  conversationEdgeShortcut,
   formatShortcutLabel,
 } from "@/features/pico/keyboard-shortcuts"
 import {
@@ -102,7 +103,7 @@ function ConversationLatestMessageButton({
   return (
     <TitleTooltip
       title="Jump to latest message"
-      kbd={formatShortcutLabel(appShortcut("ArrowDown"))}
+      kbd={formatShortcutLabel(conversationEdgeShortcut("ArrowDown"))}
     >
       <Button
         variant="outline"
@@ -143,7 +144,7 @@ function ConversationFirstMessageButton({
   return (
     <TitleTooltip
       title="Jump to first message"
-      kbd={formatShortcutLabel(appShortcut("ArrowUp"))}
+      kbd={formatShortcutLabel(conversationEdgeShortcut("ArrowUp"))}
     >
       <Button
         variant="outline"

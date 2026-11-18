@@ -26,6 +26,15 @@ export function agentNumberShortcut(number: number) {
   return `${agentNumberModifier}+${number}`
 }
 
+// Alt+Up and Alt+Down go to the top and bottom of the conversation on all
+// platforms. On macOS, Control+Up and Control+Down open Mission Control and
+// App Exposé, so Pico does not use them.
+export const conversationEdgeModifierFlag = { alt: true } as const
+
+export function conversationEdgeShortcut(key: "ArrowUp" | "ArrowDown") {
+  return `Alt+${key}`
+}
+
 // Pull uses Alt+P on macOS. On Windows and Linux, Alt+P is Push, so Pull
 // uses Alt+L.
 export const pullShortcut = isMacPlatform ? "Alt+P" : "Alt+L"

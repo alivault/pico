@@ -878,8 +878,8 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
       }
     }
 
-    // Alt+Q edits the queue, Shift+Alt+Q shows or hides it. Not Alt+Up: on
-    // Linux and Windows, Alt+Up goes to the top of the conversation. Use
+    // Alt+Q edits the queue, Shift+Alt+Q shows or hides it. Not Alt+Up:
+    // Alt+Up goes to the top of the conversation. Use
     // event.code, because Alt+Q types "œ" on macOS.
     if (
       event.code === "KeyQ" &&
