@@ -588,16 +588,6 @@ export function formatGitCommitFullDate(value: string) {
   return gitCommitFullDateFormatter.format(date)
 }
 
-export function gitCommitStatCount(
-  stats: string,
-  kind: "insertions" | "deletions"
-) {
-  const pattern =
-    kind === "insertions" ? /(\d+) insertions?\(\+\)/ : /(\d+) deletions?\(-\)/
-  const match = stats.match(pattern)
-  return match ? Number(match[1]) : 0
-}
-
 export async function copyRightSidebarTextToClipboard(text: string) {
   if (!text) throw new Error("Nothing to copy")
 

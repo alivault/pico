@@ -427,18 +427,49 @@ function parseNameStatus(output: string) {
     })
 }
 
+// `git diff-tree --numstat -z` gives `added\tdeleted\tpath\0`, or for a
+// rename `added\tdeleted\t\0old\0new\0`. A binary file gives `-` for both.
+function parseNumstat(output: string) {
+  const counts = new Map<string, { linesAdded: number; linesDeleted: number }>()
+  const records = output.split("\0")
+  for (let index = 0; index < records.length; index += 1) {
+    const fields = records[index]!.split("\t")
+    if (fields.length < 3) continue
+    let path = fields[2]!
+    if (!path) {
+      path = records[index + 2] ?? ""
+      index += 2
+    }
+    const linesAdded = Number.parseInt(fields[0]!, 10)
+    const linesDeleted = Number.parseInt(fields[1]!, 10)
+    if (!path || Number.isNaN(linesAdded) || Number.isNaN(linesDeleted))
+      continue
+    counts.set(path, { linesAdded, linesDeleted })
+  }
+  return counts
+}
+
 export async function commitFiles(cwd: string, commit: string) {
   validateRevision(commit)
-  const output = await git(cwd, [
+  // A merge commit shows its changes against the first parent, as on GitHub.
+  // Without this, diff-tree prints nothing for a merge.
+  const args = [
     "diff-tree",
     "--no-commit-id",
-    "--name-status",
     "-r",
     "-M",
     "--root",
-    commit,
+    "--diff-merges=first-parent",
+  ]
+  const [nameStatus, numstat] = await Promise.all([
+    git(cwd, [...args, "--name-status", commit]),
+    gitAllowFailure(cwd, [...args, "--numstat", "-z", commit]),
   ])
-  return parseNameStatus(output.stdout)
+  const counts = parseNumstat(numstat.stdout)
+  return parseNameStatus(nameStatus.stdout).map((file) => ({
+    ...file,
+    ...counts.get(file.path),
+  }))
 }
 
 export async function commitDiff(
@@ -474,6 +505,7 @@ export async function commitDiff(
             "--stat",
             "--patch",
             "--no-ext-diff",
+            "--diff-merges=first-parent",
             commit,
           ]
   if (relative || previous) {

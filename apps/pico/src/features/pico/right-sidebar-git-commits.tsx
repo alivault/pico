@@ -79,7 +79,6 @@ import {
   formatGitCommitDetailTime,
   formatGitCommitFullDate,
   gitChangesQueryOptions,
-  gitCommitStatCount,
   gitFileStatusCharacters,
   gitFileStatusTone,
   gitFileStatusToneClass,
@@ -1074,6 +1073,75 @@ function GitCommitFileDiffStats({ file }: { file: GitCommitFile }) {
   )
 }
 
+function useGitCommitFilesQuery({
+  viewerContextId,
+  cwd,
+  commit,
+  disabled,
+}: {
+  viewerContextId: string
+  cwd: string
+  commit: string
+  disabled: boolean
+}) {
+  const machineId = useMachineId()
+  return useQuery({
+    queryKey: commit
+      ? picoQueryKeys.gitCommitFiles(viewerContextId, cwd, commit)
+      : ["pico", "git-commit-files", viewerContextId, cwd, ""],
+    queryFn: () =>
+      fetchJson<GitCommitFilesData>(
+        buildRequestUrl(
+          `/api/git-commit-files?cwd=${encodeURIComponent(cwd)}&commit=${encodeURIComponent(
+            commit
+          )}`,
+          { machineId, contextId: viewerContextId }
+        )
+      ),
+    enabled: Boolean(!disabled && viewerContextId && cwd && commit),
+    notifyOnChangeProps: ["data", "isPending", "error"],
+  })
+}
+
+function GitCommitLineTotals({
+  viewerContextId,
+  cwd,
+  commit,
+  disabled,
+}: {
+  viewerContextId: string
+  cwd: string
+  commit: string
+  disabled: boolean
+}) {
+  const filesQuery = useGitCommitFilesQuery({
+    viewerContextId,
+    cwd,
+    commit,
+    disabled,
+  })
+  const files = filesQuery.data?.files
+  if (!files) return null
+
+  let insertions = 0
+  let deletions = 0
+  for (const file of files) {
+    insertions += gitCommitFileLineChangeValue(file.linesAdded)
+    deletions += gitCommitFileLineChangeValue(file.linesDeleted)
+  }
+
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+      <span className="text-emerald-500">
+        +{insertions} addition{insertions === 1 ? "" : "s"}
+      </span>
+      <span className="text-red-400">
+        -{deletions} deletion{deletions === 1 ? "" : "s"}
+      </span>
+    </div>
+  )
+}
+
 function GitCommitFilesList({
   viewerContextId,
   cwd,
@@ -1093,22 +1161,11 @@ function GitCommitFilesList({
   disabled: boolean
   onOpenCommitDiff?: (request: GitCommitDiffTabRequest) => void
 }) {
-  const machineId = useMachineId()
-  const filesQuery = useQuery({
-    queryKey: commit
-      ? picoQueryKeys.gitCommitFiles(viewerContextId, cwd, commit)
-      : ["pico", "git-commit-files", viewerContextId, cwd, ""],
-    queryFn: () =>
-      fetchJson<GitCommitFilesData>(
-        buildRequestUrl(
-          `/api/git-commit-files?cwd=${encodeURIComponent(cwd)}&commit=${encodeURIComponent(
-            commit
-          )}`,
-          { machineId, contextId: viewerContextId }
-        )
-      ),
-    enabled: Boolean(!disabled && viewerContextId && cwd && commit),
-    notifyOnChangeProps: ["data", "isPending", "error"],
+  const filesQuery = useGitCommitFilesQuery({
+    viewerContextId,
+    cwd,
+    commit,
+    disabled,
   })
   const files = filesQuery.data?.files ?? []
 
@@ -1223,8 +1280,6 @@ function useGitCommitRowView({
   const title = parsed.subject.trim()
   const time = formatGitCommitDetailTime(parsed.relativeDate)
   const fullTime = formatGitCommitFullDate(parsed.fullDate)
-  const insertions = gitCommitStatCount(parsed.stats, "insertions")
-  const deletions = gitCommitStatCount(parsed.stats, "deletions")
   const shortHash = parsed.hash || parsed.fullHash.slice(0, 7)
   const canRunCommitAction = Boolean(viewerContextId && cwd && parsed.fullHash)
   const {
@@ -1680,14 +1735,14 @@ function useGitCommitRowView({
                 </TitleTooltip>
               ) : null}
             </div>
-            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-              <span className="text-emerald-500">
-                +{insertions} addition{insertions === 1 ? "" : "s"}
-              </span>
-              <span className="text-red-400">
-                -{deletions} deletion{deletions === 1 ? "" : "s"}
-              </span>
-            </div>
+            {parsed.fullHash ? (
+              <GitCommitLineTotals
+                viewerContextId={viewerContextId}
+                cwd={cwd}
+                commit={parsed.fullHash}
+                disabled={!canRunCommitAction}
+              />
+            ) : null}
             {parsed.fullHash ? (
               <GitCommitFilesList
                 viewerContextId={viewerContextId}
