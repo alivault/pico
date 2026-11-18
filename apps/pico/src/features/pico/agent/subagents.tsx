@@ -78,10 +78,15 @@ function SubagentStatus({ subagent }: { subagent: Subagent }) {
       />
     )
   if (subagent.busy) return <Spinner size="xs" aria-label="Working" />
+  // Done uses the blue dot of the left sidebar. Green is for jobs.
+  const done = Boolean(subagent.lastMessageAt)
   return (
     <span
-      className="size-2 shrink-0 rounded-full bg-emerald-500"
-      aria-label="Idle"
+      className={cn(
+        "size-2 shrink-0 rounded-full",
+        done ? "bg-primary" : "bg-muted-foreground/40"
+      )}
+      aria-label={done ? "Done" : "Idle"}
     />
   )
 }
