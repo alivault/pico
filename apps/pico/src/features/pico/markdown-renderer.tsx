@@ -63,6 +63,8 @@ const MarkdownRenderingContext =
     streaming: false,
   })
 
+const WEB_LINK_PATTERN = /^(?:https?:)?\/\//i
+
 type MarkdownAnchorProps = React.ComponentProps<"a"> & {
   node?: unknown
 }
@@ -73,10 +75,14 @@ function MarkdownAnchor({
   node: _node,
   ...props
 }: MarkdownAnchorProps) {
+  // Web links open in a new tab, so the user does not leave Pico. App links
+  // (as obsidian:) and footnote links stay in the page.
+  const external = href ? WEB_LINK_PATTERN.test(href) : false
   return (
     <a
       href={href}
       onClick={(event) => handleMarkdownAnchorClick(event, href)}
+      {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
       {...props}
     >
       {children}
