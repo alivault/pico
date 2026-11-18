@@ -32,8 +32,7 @@ import {
 } from "@/features/pico/app-shell-working-state"
 import { DraftGitStatusBadge } from "@/features/pico/right-sidebar-git-header-actions"
 import {
-  appShortcut,
-  conversationEdgeShortcut,
+  conversationNavShortcut,
   formatShortcutLabel,
 } from "@/features/pico/keyboard-shortcuts"
 import {
@@ -103,7 +102,7 @@ function ConversationLatestMessageButton({
   return (
     <TitleTooltip
       title="Jump to latest message"
-      kbd={formatShortcutLabel(conversationEdgeShortcut("ArrowDown"))}
+      kbd={formatShortcutLabel(conversationNavShortcut("ArrowDown"))}
     >
       <Button
         variant="outline"
@@ -144,7 +143,7 @@ function ConversationFirstMessageButton({
   return (
     <TitleTooltip
       title="Jump to first message"
-      kbd={formatShortcutLabel(conversationEdgeShortcut("ArrowUp"))}
+      kbd={formatShortcutLabel(conversationNavShortcut("ArrowUp"))}
     >
       <Button
         variant="outline"
@@ -184,7 +183,9 @@ function ConversationMessageJumpButton({
     <TitleTooltip
       title={label}
       kbd={formatShortcutLabel(
-        appShortcut(direction === "next" ? "ArrowRight" : "ArrowLeft")
+        conversationNavShortcut(
+          direction === "next" ? "ArrowRight" : "ArrowLeft"
+        )
       )}
     >
       <Button

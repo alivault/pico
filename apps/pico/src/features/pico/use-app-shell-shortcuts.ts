@@ -6,7 +6,7 @@ import type { AgentListEntry } from "@/lib/pico/api"
 import {
   agentNumberModifierFlag,
   appModifierFlag,
-  conversationEdgeModifierFlag,
+  conversationNavModifierFlag,
   matchesShortcutEvent,
   pullShortcut,
   rightSidebarPaneShortcutKeys,
@@ -391,6 +391,16 @@ export function useAppShellShortcuts({
       return
     }
 
+    // Alt+Left and Alt+Right move the cursor by word, so keep them for the
+    // prompt while it has text.
+    if (
+      (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
+      isPromptTextareaTarget(event.target) &&
+      (event.target as HTMLTextAreaElement).value !== ""
+    ) {
+      return
+    }
+
     event.preventDefault()
 
     if (event.key === "ArrowLeft") {
@@ -668,23 +678,18 @@ export function useAppShellShortcuts({
         },
       },
     },
-    ...(
-      [
-        { key: "ArrowLeft", ...appModifierFlag },
-        { key: "ArrowRight", ...appModifierFlag },
-        { key: "ArrowUp", ...conversationEdgeModifierFlag },
-        { key: "ArrowDown", ...conversationEdgeModifierFlag },
-      ] as const
-    ).map((hotkey) => ({
-      hotkey,
-      callback: handleConversationJump,
-      options: {
-        meta: {
-          name: "Navigate conversation",
-          description: "Jump between messages or to conversation boundaries.",
+    ...(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"] as const).map(
+      (key) => ({
+        hotkey: { key, ...conversationNavModifierFlag },
+        callback: handleConversationJump,
+        options: {
+          meta: {
+            name: "Navigate conversation",
+            description: "Jump between messages or to conversation boundaries.",
+          },
         },
-      },
-    })),
+      })
+    ),
     ...(
       [
         { key: "ArrowUp", offset: -1 },

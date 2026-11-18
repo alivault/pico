@@ -26,12 +26,15 @@ export function agentNumberShortcut(number: number) {
   return `${agentNumberModifier}+${number}`
 }
 
-// Alt+Up and Alt+Down go to the top and bottom of the conversation on all
-// platforms. On macOS, Control+Up and Control+Down open Mission Control and
-// App Exposé, so Pico does not use them.
-export const conversationEdgeModifierFlag = { alt: true } as const
+// Alt+arrow keys move through the conversation on all platforms: Left and
+// Right go to the previous and next message, Up and Down to the top and
+// bottom. On macOS, Control+arrow keys open Mission Control and switch
+// desktops, so Pico does not use them.
+export const conversationNavModifierFlag = { alt: true } as const
 
-export function conversationEdgeShortcut(key: "ArrowUp" | "ArrowDown") {
+export function conversationNavShortcut(
+  key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown"
+) {
   return `Alt+${key}`
 }
 
