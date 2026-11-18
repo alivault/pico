@@ -212,6 +212,8 @@ export type AppShellComposerActions = {
     name: string,
     args: string
   ) => void | Promise<unknown>
+  openModelDialog: () => void
+  setThinkingLevel: (level: string) => void | Promise<unknown>
   submitPrompt: (
     streamingBehavior?: StreamingBehavior
   ) => void | Promise<unknown>

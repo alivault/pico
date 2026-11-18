@@ -603,6 +603,14 @@ export const AppShellComposerController = React.memo(
         void actionsRef.current.runBuiltinSlashCommand(name, args)
       }
     )
+    const onOpenModelDialog = useStableEvent(() => {
+      if (snapshotRef.current.disabled) return
+      actionsRef.current.openModelDialog()
+    })
+    const onSelectThinkingLevel = useStableEvent((level: string) => {
+      if (snapshotRef.current.disabled) return
+      void actionsRef.current.setThinkingLevel(level)
+    })
     const requestPathCompletions = useStableEvent(async (prefix: string) => {
       const currentSnapshot = snapshotRef.current
       if (currentSnapshot.disabled) return []
@@ -675,6 +683,8 @@ export const AppShellComposerController = React.memo(
         onHoldPendingQueue={onHoldPendingQueue}
         onStartPendingQueue={onStartPendingQueue}
         onRunBuiltinSlashCommand={onRunBuiltinSlashCommand}
+        onOpenModelDialog={onOpenModelDialog}
+        onSelectThinkingLevel={onSelectThinkingLevel}
         requestPathCompletions={requestPathCompletions}
         requestFileCompletions={requestFileCompletions}
       />

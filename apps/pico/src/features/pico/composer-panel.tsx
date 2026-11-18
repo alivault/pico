@@ -31,6 +31,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { ComposerAssistMenu } from "@/features/pico/composer-assist-menu"
+import { ComposerModelControls } from "@/features/pico/composer-model-controls"
 import {
   ComposerPendingMessages,
   type ComposerPendingMessagesHandle,
@@ -116,6 +117,8 @@ type ComposerPanelProps = {
   onHoldPendingQueue: () => Promise<(() => void) | null>
   onStartPendingQueue: () => void
   onRunBuiltinSlashCommand: (name: string, args: string) => void
+  onOpenModelDialog: () => void
+  onSelectThinkingLevel: (level: string) => void
   requestPathCompletions: (prefix: string) => Promise<Array<CompletionItem>>
   requestFileCompletions: (
     query: string,
@@ -152,6 +155,8 @@ type ComposerPromptEditorProps = {
   onSubmitPrompt: (streamingBehavior?: StreamingBehavior) => void
   onAbort: () => void
   onRunBuiltinSlashCommand: (name: string, args: string) => void
+  onOpenModelDialog: () => void
+  onSelectThinkingLevel: (level: string) => void
   requestPathCompletions: (prefix: string) => Promise<Array<CompletionItem>>
   requestFileCompletions: (
     query: string,
@@ -316,6 +321,8 @@ export function ComposerPanel({
   onHoldPendingQueue,
   onStartPendingQueue,
   onRunBuiltinSlashCommand,
+  onOpenModelDialog,
+  onSelectThinkingLevel,
   requestPathCompletions,
   requestFileCompletions,
   ref,
@@ -429,6 +436,8 @@ export function ComposerPanel({
             onSubmitPrompt={onSubmitPrompt}
             onAbort={onAbort}
             onRunBuiltinSlashCommand={onRunBuiltinSlashCommand}
+            onOpenModelDialog={onOpenModelDialog}
+            onSelectThinkingLevel={onSelectThinkingLevel}
             requestPathCompletions={requestPathCompletions}
             requestFileCompletions={requestFileCompletions}
           />
@@ -517,6 +526,8 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
   onSubmitPrompt,
   onAbort,
   onRunBuiltinSlashCommand,
+  onOpenModelDialog,
+  onSelectThinkingLevel,
   requestPathCompletions,
   requestFileCompletions,
 }: ComposerPromptEditorProps) {
@@ -1120,6 +1131,13 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
         className="flex flex-nowrap items-center justify-end gap-2 self-end"
         style={{ gridArea: "trailing" }}
       >
+        <ComposerModelControls
+          agentStore={agentStore}
+          disabled={disabled}
+          onOpenModelDialog={onOpenModelDialog}
+          onSelectThinkingLevel={onSelectThinkingLevel}
+        />
+
         {!acceptFollowUps ? (
           <TitleTooltip
             title="Send"

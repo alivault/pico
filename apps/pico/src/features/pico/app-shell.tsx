@@ -3125,6 +3125,8 @@ function useAppShellAgentWorkspaceView({
     savePendingQueue,
     startPendingQueue,
     runBuiltinSlashCommand,
+    openModelDialog: focusModelSelector,
+    setThinkingLevel,
     submitPrompt,
     syncComposerDraft,
     moveDraftToMachine: (targetMachine, project) => {
