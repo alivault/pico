@@ -20,7 +20,13 @@ export const LOCAL_MACHINE_ID = "local"
 const MACHINE_ID_PATTERN = /^m_[a-z0-9]{4,32}$/
 
 /** Paths that always go to the hub, whatever the machine. */
-const HUB_PATHS = ["/api/highlight", "/api/push/", "/api/machines"]
+const HUB_PATHS = [
+  "/api/highlight",
+  "/api/push/",
+  "/api/machines",
+  // The hub shows dev servers of all machines (preview-proxy.ts).
+  "/api/preview/",
+]
 
 /** A machine ID from the URL; `local` for a missing or bad value. */
 export function normalizeMachineId(value: string | null | undefined) {

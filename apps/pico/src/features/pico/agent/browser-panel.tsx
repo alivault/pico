@@ -4,7 +4,8 @@
  * and sends what the user does in it: clicks, the wheel, keys, and text.
  * The agent and the user use the same tabs and cookies, so the user can log
  * in for the agent. When the agent asks for the user (a handoff), a banner
- * shows what to do, and its buttons answer the agent.
+ * shows what to do, and its buttons answer the agent. The Preview shows a dev
+ * server of the machine as a real page (`browser-preview.tsx`).
  */
 import * as React from "react"
 import {
@@ -29,6 +30,14 @@ import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { postAgentJson } from "@/features/pico/agent/agent-extensions"
 import { buildRequestUrl } from "@/features/pico/app-shell-utils"
+import {
+  PreviewPanel,
+  setBrowserMode,
+  useBrowserMode,
+  usePreviewAddress,
+  type BrowserMode,
+} from "@/features/pico/agent/browser-preview"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useMachineReadOnly } from "@/features/pico/machine-store"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useMachineId } from "@/lib/pico/machine-context"
@@ -232,7 +241,7 @@ function useAnswerHandoff(viewerContextId: string, agentId?: string) {
   return { sending, answer }
 }
 
-export function BrowserPanel({
+function AgentBrowserView({
   agentId,
   viewerContextId,
   active,
@@ -726,6 +735,63 @@ export function BrowserPanel({
             {error}
           </div>
         ) : null}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The Browser tab: the Preview of a dev server, or the agent's browser. A
+ * handoff shows the agent's browser, because the agent waits for the user
+ * there.
+ */
+export function BrowserPanel({
+  agentId,
+  viewerContextId,
+  active,
+  cwd,
+  handoff,
+}: {
+  agentId: string | undefined
+  viewerContextId: string
+  active: boolean
+  cwd: string
+  handoff: boolean
+}) {
+  const machineId = useMachineId()
+  const storedMode = useBrowserMode(machineId)
+  const previewAddress = usePreviewAddress(machineId, cwd)
+  // Without a choice: the Preview when the project has one.
+  const mode: BrowserMode = handoff
+    ? "agent"
+    : (storedMode ?? (previewAddress ? "preview" : "agent"))
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 items-center border-b border-border/70 px-1.5 py-1">
+        <ToggleGroup
+          variant="outline"
+          size="sm"
+          value={[mode]}
+          onValueChange={(values) => {
+            const value = values[0]
+            if (value === "preview" || value === "agent")
+              setBrowserMode(machineId, value)
+          }}
+        >
+          <ToggleGroupItem value="preview">Preview</ToggleGroupItem>
+          <ToggleGroupItem value="agent">Agent's browser</ToggleGroupItem>
+        </ToggleGroup>
+      </div>
+      <div className="min-h-0 flex-1">
+        {mode === "preview" ? (
+          <PreviewPanel cwd={cwd} />
+        ) : (
+          <AgentBrowserView
+            agentId={agentId}
+            viewerContextId={viewerContextId}
+            active={active}
+          />
+        )}
       </div>
     </div>
   )

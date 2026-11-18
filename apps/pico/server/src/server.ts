@@ -43,6 +43,12 @@ import {
   type TransportFactory,
 } from "./machines/manager.ts"
 import { MachineProxy } from "./machines/proxy.ts"
+import {
+  handlePreviewProxy,
+  PreviewProxy,
+  upgradePreviewProxy,
+  validPort,
+} from "./services/preview-proxy.ts"
 import { addHubRoutes, addMachineServerRoutes } from "./machines/routes.ts"
 import { LocalAgentOps } from "./control/agent-ops.ts"
 import { AgentSearch } from "./core/agent-search.ts"
@@ -292,6 +298,24 @@ export async function startServer(options: {
     startedAt: Date.now(),
   })
   const proxy = new MachineProxy(machines)
+  // Previews of dev servers in the Browser tab (services/preview-proxy.ts).
+  const previews = new PreviewProxy(options.host, machines, security)
+  router.post("/api/preview/open", async (request) => {
+    const body = await request.body<{ machineId?: unknown; port?: unknown }>()
+    if (!validPort(body.port)) throw new ApiError(400, "port must be a port")
+    const machineId =
+      typeof body.machineId === "string" && body.machineId
+        ? body.machineId
+        : "local"
+    try {
+      return { ok: true, port: await previews.open(machineId, body.port) }
+    } catch (error) {
+      throw new ApiError(
+        400,
+        error instanceof Error ? error.message : String(error)
+      )
+    }
+  })
   router.post("/api/system/shutdown", (request) => {
     const remote = request.raw.socket.remoteAddress ?? ""
     if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(remote)) {
@@ -348,6 +372,7 @@ export async function startServer(options: {
       try {
         security.check(request)
         if (proxy.handle(request, response)) return
+        if (handlePreviewProxy(request, response)) return
         if (await router.handle(request, response)) return
         const path = new URL(request.url ?? "/", "http://localhost").pathname
         if (path.startsWith("/api/") || path === "/events") {
@@ -386,6 +411,7 @@ export async function startServer(options: {
         return
       }
       if (proxy.upgrade(request, socket, head)) return
+      if (upgradePreviewProxy(request, socket, head)) return
       const url = new URL(request.url ?? "/", "http://localhost")
       if (url.pathname === "/api/browser/ws") {
         sockets.handleUpgrade(request, socket, head, (websocket) => {
@@ -646,6 +672,7 @@ export async function startServer(options: {
         gitWatcher.stop()
         terminals.shutdown()
         await machines.close()
+        await previews.close()
         await browser.shutdown()
         for (const client of sockets.clients) client.terminate()
         server.closeAllConnections()

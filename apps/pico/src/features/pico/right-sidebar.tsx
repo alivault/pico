@@ -74,6 +74,7 @@ import "@/features/pico/agent/register"
 import { AgentPanel, useAgentBusy } from "@/features/pico/agent/agent-panel"
 import { useAgentExtensions } from "@/features/pico/agent/agent-extensions"
 import { BrowserPanel } from "@/features/pico/agent/browser-panel"
+import { usePreviewAddress } from "@/features/pico/agent/browser-preview"
 import { IssuesPanel } from "@/features/pico/right-sidebar-issues"
 import { useGitHubRepo } from "@/features/pico/right-sidebar-issues-data"
 import { TodoTabProgress } from "@/features/pico/agent/todo"
@@ -1061,6 +1062,7 @@ export function RightSidebar({
   const agentPanelAvailable = useMachineFeature("agent-panel")
   const browserAvailable = useMachineFeature("browser")
   const browserUse = useAgentBrowserUse(viewerContextId, agentId)
+  const previewAddress = usePreviewAddress(machineId, normalizedCwd)
   const issuesAvailable = useMachineFeature("github-issues")
   const githubRepo = useGitHubRepo({
     viewerContextId,
@@ -1245,7 +1247,10 @@ export function RightSidebar({
           showAgent={!isMobile && agentPanelAvailable}
           showBrowser={
             browserAvailable &&
-            (browserUse.used || browserUse.handoff || activeTab === "browser")
+            (browserUse.used ||
+              browserUse.handoff ||
+              Boolean(previewAddress) ||
+              activeTab === "browser")
           }
           browserIndicator={
             browserUse.handoff
@@ -1290,6 +1295,8 @@ export function RightSidebar({
               active={active}
               agentId={agentId}
               viewerContextId={viewerContextId}
+              cwd={normalizedCwd}
+              handoff={Boolean(browserUse.handoff)}
             />
           </div>
         ) : null}

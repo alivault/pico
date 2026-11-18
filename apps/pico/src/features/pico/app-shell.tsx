@@ -22,6 +22,7 @@ import {
 } from "@/features/pico/app-shell-agent-header"
 import { AppShellSidebarController } from "@/features/pico/app-shell-sidebar-controller"
 import { AppShellWindowEffectsHost } from "@/features/pico/app-shell-window-effects"
+import { setBrowserMode } from "@/features/pico/agent/browser-preview"
 import type { AppShellAddProjectDialogHandle } from "@/features/pico/app-shell-add-project-dialog"
 import type { AppShellAuthDialogHandle } from "@/features/pico/app-shell-auth-dialog"
 import {
@@ -3216,6 +3217,17 @@ function useAppShellAgentWorkspaceView({
         shortcut: formatShortcutLabel(appShortcut("J")),
         keywords: ["terminal", "shell", "console", "bottom", "panel"],
         onSelect: toggleTerminalPanel,
+      },
+      {
+        id: "open-preview",
+        group: "Workspace",
+        title: "Preview a dev server",
+        description: "Show a dev server of this machine in the Browser tab",
+        keywords: ["preview", "browser", "dev", "server", "localhost", "port"],
+        onSelect: () => {
+          setBrowserMode(machineId, "preview")
+          openRightSidebarTab("browser")
+        },
       },
       {
         id: "show-resources",
