@@ -4,6 +4,7 @@ import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys"
 import type { AgentListEntry } from "@/lib/pico/api"
 
 import {
+  agentNumberModifierFlag,
   appModifierFlag,
   matchesShortcutEvent,
   pullShortcut,
@@ -719,7 +720,7 @@ export function useAppShellShortcuts({
     })),
     ...(["1", "2", "3", "4", "5", "6", "7", "8", "9"] as const).map(
       (key, index) => ({
-        hotkey: { key, ...appModifierFlag },
+        hotkey: { key, ...agentNumberModifierFlag },
         callback: (event: KeyboardEvent) => {
           handleSidebarAgentSwitch(event, () => {
             openSidebarAgentAt(index)

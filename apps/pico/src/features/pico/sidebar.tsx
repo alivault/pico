@@ -135,6 +135,7 @@ import {
   formatFolderName,
 } from "@/features/pico/app-shell-common"
 import {
+  agentNumberShortcut,
   appShortcut,
   formatShortcutLabel,
 } from "@/features/pico/keyboard-shortcuts"
@@ -775,11 +776,11 @@ function SidebarAgentItem({
     rowRef.current = node
     setDraggableNodeRef(node)
   }
-  // While the app modifier is held, the row shows its Mod+1…9 number in
+  // While Alt is held, the row shows its Alt+1…9 number in
   // place of its timestamp.
   const agentNumber = useSidebarAgentNumber(rowRef)
   const agentNumberLabel =
-    agentNumber > 0 ? formatShortcutLabel(appShortcut(String(agentNumber))) : ""
+    agentNumber > 0 ? formatShortcutLabel(agentNumberShortcut(agentNumber)) : ""
 
   if (!entry) return null
   const timestamp =

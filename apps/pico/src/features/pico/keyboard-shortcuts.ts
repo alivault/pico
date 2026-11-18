@@ -16,6 +16,16 @@ export const appModifierFlag = isMacPlatform
   ? ({ ctrl: true } as const)
   : ({ alt: true } as const)
 
+// Alt+1…9 opens a sidebar agent by number on all platforms. On macOS,
+// Control+1…9 often switches desktops, so Pico does not use it.
+export const agentNumberModifier = "Alt"
+
+export const agentNumberModifierFlag = { alt: true } as const
+
+export function agentNumberShortcut(number: number) {
+  return `${agentNumberModifier}+${number}`
+}
+
 // Pull uses Alt+P on macOS. On Windows and Linux, Alt+P is Push, so Pull
 // uses Alt+L.
 export const pullShortcut = isMacPlatform ? "Alt+P" : "Alt+L"

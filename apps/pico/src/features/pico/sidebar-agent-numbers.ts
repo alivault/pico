@@ -2,9 +2,9 @@ import * as React from "react"
 
 import { isInShownMachineShell } from "@/lib/pico/machine-context"
 
-import { isMacPlatform } from "./keyboard-shortcuts"
+import { agentNumberModifier } from "./keyboard-shortcuts"
 
-// The number of sidebar agents that Mod+1…9 can open.
+// The number of sidebar agents that Alt+1…9 can open.
 export const SIDEBAR_AGENT_NUMBER_COUNT = 9
 
 // The agent rows that the sidebar shows, in sidebar order. Rows in a
@@ -18,21 +18,19 @@ export function getShownSidebarAgentItems(root: ParentNode = document) {
   )
 }
 
-// How long the app modifier must be held before the numbers show. A quick
-// chord such as Mod+N is shorter, so it does not make the numbers flash.
+// How long Alt must be held before the numbers show. A quick
+// chord such as Alt+Q is shorter, so it does not make the numbers flash.
 const SHOW_NUMBERS_DELAY_MS = 400
 
-const appModifierKey = isMacPlatform ? "Control" : "Alt"
-
-// While the numbers show, the rows that Mod+1…9 open. Empty when they do
+// While the numbers show, the rows that Alt+1…9 open. Empty when they do
 // not show. One shared set of window listeners keeps it.
 let numberedItems: Array<HTMLElement> = []
 let numbersShown = false
 let showNumbersTimer: ReturnType<typeof setTimeout> | undefined
 const numberedItemsListeners = new Set<() => void>()
 
-function isAppModifierHeld(event: KeyboardEvent) {
-  return isMacPlatform ? event.ctrlKey : event.altKey
+function isAgentNumberModifierHeld(event: KeyboardEvent) {
+  return event.altKey
 }
 
 function clearShowNumbersTimer() {
@@ -59,13 +57,13 @@ function setNumberedItems(next: Array<HTMLElement>) {
 }
 
 function handleModifierKeyEvent(event: KeyboardEvent) {
-  if (!isAppModifierHeld(event)) {
+  if (!isAgentNumberModifierHeld(event)) {
     handleModifierReset()
     return
   }
 
   // While the numbers show, keep them in step with the sidebar. For
-  // example, Mod+3 can open an agent that moves the rows.
+  // example, Alt+3 can open an agent that moves the rows.
   if (numbersShown) {
     updateNumberedItems()
     return
@@ -75,7 +73,7 @@ function handleModifierKeyEvent(event: KeyboardEvent) {
 
   // Another key with the modifier is a chord: do not show the numbers
   // until the modifier is pressed again.
-  if (event.key !== appModifierKey) {
+  if (event.key !== agentNumberModifier) {
     clearShowNumbersTimer()
     return
   }
@@ -115,7 +113,7 @@ function subscribeNumberedItems(listener: () => void) {
 }
 
 /**
- * The Mod+1…9 number of the agent row in `rowRef`, while the app modifier
+ * The Alt+1…9 number of the agent row in `rowRef`, while Alt
  * is held. 0 when the modifier is not held or the row has no number.
  */
 export function useSidebarAgentNumber(
