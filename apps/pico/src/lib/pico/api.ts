@@ -875,6 +875,15 @@ export type AgentExtensionsEvent = {
   kind?: string
 }
 
+/** An agent started or opened a dev server (server dev-server-url.ts). */
+export type PreviewAvailableEvent = {
+  type: "preview_available"
+  agentId: string
+  cwd: string
+  port: number
+  path: string
+}
+
 /** The sidebar layout that all devices share. */
 export type SidebarStateSnapshot = {
   projects: Array<string>
@@ -905,6 +914,7 @@ export type PicoServerEvent =
   | GitChangedEvent
   | AgentExtensionsEvent
   | SidebarStateEvent
+  | PreviewAvailableEvent
 
 export function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
   return Boolean(

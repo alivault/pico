@@ -8,6 +8,11 @@ import { WebSocket, WebSocketServer } from "ws"
 import type { MachineManager } from "../src/machines/manager.ts"
 import { Security } from "../src/security.ts"
 import {
+  announcePreview,
+  DevServerScanner,
+  findLocalUrls,
+} from "../src/services/dev-server-url.ts"
+import {
   handlePreviewProxy,
   PREVIEW_PROXY_HEADER,
   PreviewProxy,
@@ -229,4 +234,66 @@ void test("a preview of an unknown machine fails", async () => {
     new Security("127.0.0.1")
   )
   await assert.rejects(previews.open("m_nope", 5173), /Unknown machine/)
+})
+
+void test("findLocalUrls finds dev server addresses in colored output", () => {
+  const vite =
+    "\u001b[32m  ➜\u001b[39m  \u001b[1mLocal\u001b[22m:   \u001b[36mhttp://localhost:\u001b[1m5173\u001b[22m/\u001b[39m"
+  // Vite colors the port apart; the address is still one string without colors.
+  assert.deepEqual(findLocalUrls(vite), [{ port: 5173, path: "/" }])
+  assert.deepEqual(
+    findLocalUrls(
+      "ready - started server on 0.0.0.0:3000, url: http://127.0.0.1:3000/app?x=1\nalso http://127.0.0.1:3000/b"
+    ),
+    [{ port: 3000, path: "/app?x=1" }]
+  )
+  assert.deepEqual(findLocalUrls("http://[::1]:8080"), [
+    { port: 8080, path: "/" },
+  ])
+  assert.deepEqual(
+    findLocalUrls("https://example.com:8080/ ws://localhost:9229"),
+    []
+  )
+})
+
+void test("DevServerScanner finds each port one time, also split over chunks", () => {
+  const found: Array<{ port: number; path: string }> = []
+  const scanner = new DevServerScanner((url) => found.push(url))
+  scanner.output("  Local:   http://local")
+  scanner.output("host:5173/\n")
+  scanner.output("page reload http://localhost:5173/\n")
+  scanner.output("API on http://127.0.0.1:8787\n")
+  assert.deepEqual(found, [
+    { port: 5173, path: "/" },
+    { port: 8787, path: "/" },
+  ])
+})
+
+void test("announcePreview tells the clients when the port listens", async () => {
+  const server = createServer()
+  const port = await listen(server)
+  const pushed: Array<{ payload: unknown; target: unknown }> = []
+  const services = {
+    agents: { current: () => undefined },
+    events: {
+      push: (payload: unknown, target: unknown) =>
+        pushed.push({ payload, target }),
+    },
+  } as unknown as Parameters<typeof announcePreview>[0]
+  try {
+    await announcePreview(services, "7" as never, "/work/app", {
+      port,
+      path: "/",
+    })
+    assert.equal(pushed.length, 1)
+    assert.deepEqual(pushed[0]!.payload, {
+      type: "preview_available",
+      agentId: "s7",
+      cwd: "/work/app",
+      port,
+      path: "/",
+    })
+  } finally {
+    server.close()
+  }
 })

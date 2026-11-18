@@ -202,6 +202,7 @@ export function createApi(api: ApiContext) {
         "extension_ui_dismiss",
         "git_changed",
         "agent_extensions",
+        "preview_available",
       ],
       endpoints: [],
       features: [

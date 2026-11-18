@@ -9,6 +9,17 @@ export type PicoEventMap = {
   "pico:agent-extensions": { agentId: string; kind?: string }
   /** Select an agent, for example a subagent. */
   "pico:open-agent": { agentId: string }
+  /**
+   * An agent started or opened a dev server: the Preview can show it. The
+   * address is saved already; the shell of the machine may open the tab.
+   */
+  "pico:preview-available": {
+    machineId: string
+    agentId: string
+    cwd: string
+    port: number
+    path: string
+  }
   /** Show a right sidebar tab. */
   "pico:open-sidebar-tab": { tab: "agent" | "review" | "browser" }
   /** Show a background job in the terminal panel. */

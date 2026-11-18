@@ -42,6 +42,10 @@ import {
   scanLogLines,
 } from "../services/job-log.ts"
 import { InputWaitWatcher, readTerminalMode } from "../services/input-wait.ts"
+import {
+  announcePreview,
+  DevServerScanner,
+} from "../services/dev-server-url.ts"
 import type { PtyEnd } from "../services/pty-backend.ts"
 import type { JobHandlers } from "../services/terminal.ts"
 import { KEY_NAMES, keyBytes } from "../services/terminal-keys.ts"
@@ -435,6 +439,8 @@ type LiveJob = {
   /** Calls for each output chunk, for `settle`. */
   outputListeners: Set<() => void>
   focused?: boolean
+  /** Finds the address of a dev server in the output. */
+  devServer: DevServerScanner
 }
 
 /** The jobs that run in this process, with their open log files. */
@@ -497,6 +503,11 @@ class JobRunner {
       partial: "",
       episode: 0,
       outputListeners: new Set(),
+      devServer: new DevServerScanner((url) => {
+        void announcePreview(services, conversationId, job.cwd, url).catch(
+          () => undefined
+        )
+      }),
     }
     this.#live.set(job.id, live)
     const handlers: JobHandlers = {
@@ -504,6 +515,7 @@ class JobRunner {
       onOutput: (data) => {
         live.watcher?.output(data)
         this.#matchOutput(live, data)
+        live.devServer.output(data)
         for (const listener of live.outputListeners) listener()
       },
       onInput: (data) => {

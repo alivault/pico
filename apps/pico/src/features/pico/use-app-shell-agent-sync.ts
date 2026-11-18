@@ -1,5 +1,7 @@
 import * as React from "react"
 import { emitPicoEvent } from "@/features/pico/agent/events"
+import { setPreviewAddress } from "@/features/pico/agent/browser-preview"
+import { normalizeCwd } from "@/features/pico/right-sidebar-shared"
 import {
   handleSidebarStateEvent,
   refreshSidebarState,
@@ -1074,6 +1076,19 @@ export function useAppShellAgentSync({
 
     if (payload.type === "sidebar_state") {
       handleSidebarStateEvent(machineId, payload)
+      return
+    }
+
+    if (payload.type === "preview_available") {
+      const detail = {
+        machineId,
+        agentId: payload.agentId,
+        cwd: normalizeCwd(payload.cwd),
+        port: payload.port,
+        path: payload.path || "/",
+      }
+      setPreviewAddress(machineId, detail.cwd, detail)
+      emitPicoEvent("pico:preview-available", detail)
       return
     }
 

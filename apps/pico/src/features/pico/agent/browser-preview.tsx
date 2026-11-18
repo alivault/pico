@@ -91,6 +91,15 @@ function browserModeKey(machineId: string) {
   return `pico-browser-mode:${machineId}`
 }
 
+/** Save the preview address of a project, as an agent's dev server. */
+export function setPreviewAddress(
+  machineId: string,
+  cwd: string,
+  address: { port: number; path: string }
+) {
+  storeValue(previewAddressKey(machineId, cwd), formatAddress(address))
+}
+
 /** The saved preview address of a project, or "". */
 export function usePreviewAddress(machineId: string, cwd: string) {
   return useStoredValue(previewAddressKey(machineId, cwd))
@@ -118,6 +127,8 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
   const [error, setError] = React.useState("")
   // A new key loads the iframe again.
   const [reloads, setReloads] = React.useState(0)
+  // The address that the iframe shows or loads.
+  const loadedAddressRef = React.useRef("")
 
   const open = React.useCallback(
     async (text: string) => {
@@ -128,6 +139,8 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
         )
         return
       }
+      const formatted = formatAddress(parsed)
+      loadedAddressRef.current = formatted
       setLoading(true)
       setError("")
       try {
@@ -139,7 +152,6 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
           body: JSON.stringify({ machineId, port: parsed.port }),
         })
         if (!response.ok) throw new Error(response.error)
-        const formatted = formatAddress(parsed)
         setAddress(formatted)
         storeValue(previewAddressKey(machineId, cwd), formatted)
         setOpened({
@@ -156,16 +168,20 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
     [cwd, machineId]
   )
 
-  // Show the saved address of the project when the panel opens.
-  const startedRef = React.useRef("")
+  // Show the saved address of the project when the panel opens, and a new
+  // one, as the dev server that an agent started.
+  const projectRef = React.useRef("")
   React.useEffect(() => {
-    const key = `${machineId}:${cwd}`
-    if (startedRef.current === key) return
-    startedRef.current = key
-    setOpened(null)
-    setError("")
-    setAddress(savedAddress)
-    if (savedAddress) void open(savedAddress)
+    const project = `${machineId}:${cwd}`
+    if (projectRef.current !== project) {
+      projectRef.current = project
+      loadedAddressRef.current = ""
+      setOpened(null)
+      setError("")
+      setAddress(savedAddress)
+    }
+    if (savedAddress && savedAddress !== loadedAddressRef.current)
+      void open(savedAddress)
   }, [cwd, machineId, open, savedAddress])
 
   const httpsPage = window.location.protocol === "https:"

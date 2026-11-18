@@ -27,7 +27,8 @@ import {
   type BrowserTab,
 } from "../services/browser.ts"
 import { askAndWait } from "./ask.ts"
-import type { HostBridge } from "./host.ts"
+import { agentIdOf, type HostBridge } from "./host.ts"
+import { announcePreview, findLocalUrls } from "../services/dev-server-url.ts"
 import {
   clip,
   deniedAction,
@@ -157,6 +158,19 @@ export function createBrowserExtension(host: HostBridge) {
       Boolean(args.new_tab)
     )
     const snapshot = await browser.snapshot(page)
+    // A local address: the user can see the page in the Preview too.
+    const local = findLocalUrls(url)[0]
+    if (local) {
+      const services = await host.ready()
+      const agentId = agentIdOf(api.conversationId)
+      const cwd = services.agents.has(agentId)
+        ? services.agents.meta(agentId).cwd
+        : undefined
+      if (cwd)
+        void announcePreview(services, api.conversationId, cwd, local).catch(
+          () => undefined
+        )
+    }
     return textResult(`Tab ${id}: ${clip(formatSnapshot(snapshot), 30_000)}`)
   }
 

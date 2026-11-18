@@ -1231,6 +1231,18 @@ function useAppShellAgentWorkspaceView({
   }, [activeAgentFile, activeAgentName, sidebarStore])
   const activeAgentId =
     agentState.agentId || (agentState.agentKey ? undefined : agentId)
+  // An agent started a dev server: show it in the Preview, one time for
+  // each agent and port. Not on phones, where the tab would hide the agent.
+  const shownPreviewsRef = React.useRef(new Set<string>())
+  usePicoEvent("pico:preview-available", (detail) => {
+    if (detail.machineId !== machineId || isMobile) return
+    if (detail.agentId !== activeAgentId) return
+    const key = `${detail.agentId}:${detail.port}`
+    if (shownPreviewsRef.current.has(key)) return
+    shownPreviewsRef.current.add(key)
+    setBrowserMode(machineId, "preview")
+    openRightSidebarTab("browser")
+  })
   const currentAgentQueryScope = agentScrollKey(agentState)
   const contextUsageAgentScopeRef = React.useRef("")
   React.useLayoutEffect(() => {
