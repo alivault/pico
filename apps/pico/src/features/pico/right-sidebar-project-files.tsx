@@ -376,7 +376,7 @@ function ProjectFileTree({
   paths: Array<string>
   revealSelectedPathOnMount?: boolean
   selectedPath: string
-  onSelectFile: (path: string) => void
+  onSelectFile: (path: string, options?: OpenProjectFileOptions) => void
 }) {
   const validPathsRef = useLatestRef(new Set(paths))
   const onSelectFileRef = useLatestRef(onSelectFile)
@@ -476,11 +476,12 @@ function ProjectFileTree({
     })
   }
 
-  const openFocusedFile = () => {
+  // A single click opens a preview tab. A double-click pins it.
+  const openFocusedFile = (options?: OpenProjectFileOptions) => {
     window.requestAnimationFrame(() => {
       const path = model.getFocusedPath()
       if (!path || !validPathsRef.current.has(path)) return
-      onSelectFileRef.current(path)
+      onSelectFileRef.current(path, options)
     })
   }
 
@@ -492,7 +493,7 @@ function ProjectFileTree({
         if (!isProjectFileTreeItemEvent(event)) return
         const path = event.altKey ? projectFileTreeItemPath(event) : null
         if (path) toggleAllFolders(path)
-        openFocusedFile()
+        openFocusedFile(event.detail >= 2 ? { pin: true } : undefined)
       }}
       onKeyUp={(event) => {
         if (event.key !== "Enter" && event.key !== " ") return
@@ -997,6 +998,7 @@ function FileViewerTabContent({
   onCloseFile,
   onCloseFilesToRight,
   onCloseOtherFiles,
+  onPinFile,
   path,
   preview,
   tabCount,
@@ -1014,6 +1016,8 @@ function FileViewerTabContent({
   onCloseFile?: (path: string) => void
   onCloseFilesToRight?: (path: string) => void
   onCloseOtherFiles?: (path: string) => void
+  /** Make a preview tab a pinned tab. */
+  onPinFile?: (path: string) => void
   path: string
   preview: boolean
   tabCount: number
@@ -1035,6 +1039,9 @@ function FileViewerTabContent({
         onClick={() => {
           onActiveTabChange("files")
           onActiveFileChange?.(path)
+        }}
+        onDoubleClick={() => {
+          if (preview) onPinFile?.(path)
         }}
       >
         <ProjectFileTypeIcon path={path} />
@@ -1118,6 +1125,7 @@ function SortableFileViewerTab(props: {
   onCloseFile?: (path: string) => void
   onCloseFilesToRight?: (path: string) => void
   onCloseOtherFiles?: (path: string) => void
+  onPinFile?: (path: string) => void
   path: string
   preview: boolean
   tabCount: number
@@ -1354,6 +1362,7 @@ export function RightSidebarTabStrip({
   onCloseOtherCommitDiffs,
   onCloseOtherFiles,
   onOpenFileDialog,
+  onPinFile,
   onReorderCommitDiffs,
   onReorderFiles,
   agentBusy = false,
@@ -1387,6 +1396,8 @@ export function RightSidebarTabStrip({
   onCloseOtherCommitDiffs?: (key: string) => void
   onCloseOtherFiles?: (path: string) => void
   onOpenFileDialog?: () => void
+  /** Make a preview file tab a pinned tab. */
+  onPinFile?: (path: string) => void
   onReorderCommitDiffs?: (keys: Array<string>) => void
   onReorderFiles?: (paths: Array<string>) => void
   /** Show a dot on the Agent tab while the agent has live work there. */
@@ -1588,6 +1599,7 @@ export function RightSidebarTabStrip({
                     onCloseFile={onCloseFile}
                     onCloseFilesToRight={onCloseFilesToRight}
                     onCloseOtherFiles={onCloseOtherFiles}
+                    onPinFile={onPinFile}
                     path={path}
                     preview={filePreviewPath === path}
                     tabCount={fileTabs.length}

@@ -90,10 +90,9 @@ export function openRightSidebarFile(
 
   storeRightSidebarActiveTab("files")
   setStoreState(store, (state) => {
-    const shouldPin =
-      Boolean(options?.pin) ||
-      state.fileTabs.includes(path) ||
-      state.fileActivePath === path
+    // Only an explicit pin (a double-click, as in VS Code) keeps a
+    // preview tab. Opening the preview file again does not pin it.
+    const shouldPin = Boolean(options?.pin) || state.fileTabs.includes(path)
     const fileTabs = shouldPin
       ? state.fileTabs.includes(path)
         ? state.fileTabs

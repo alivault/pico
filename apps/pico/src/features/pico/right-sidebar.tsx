@@ -1226,6 +1226,7 @@ export function RightSidebar({
           onOpenFileDialog={() => {
             dispatchLocal({ type: "set-open-file-dialog-open", open: true })
           }}
+          onPinFile={(path) => openFile(path, { pin: true })}
           onReorderCommitDiffs={reorderCommitDiffs}
           onReorderFiles={onReorderFiles}
           agentBusy={agentBusy}
