@@ -26,7 +26,7 @@ const TOOL_GUIDELINES: Record<string, string[]> = {
     "Use web_search when current, external, or linked information could help",
   ],
   ask_user: [
-    "When you need an answer, a choice, or a confirmation from the user, ask with ask_user. Do not end your turn with a question in plain text.",
+    "When you need an answer, a choice, or a confirmation from the user, ask with ask_user. This includes an offer at the end of a report, such as 'Should I fix X?'. Write the report, then call ask_user. Do not end your turn with a question in plain text.",
   ],
 }
 

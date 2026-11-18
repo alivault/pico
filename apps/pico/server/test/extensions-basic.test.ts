@@ -8,7 +8,9 @@ import {
   answerQuestion,
   cancelQuestions,
   createAskExtension,
+  endsWithQuestion,
   pendingQuestions,
+  PLAIN_QUESTION_MARKER,
   QuestionsDoc,
   type QuestionsState,
 } from "../src/extensions/ask.ts"
@@ -189,6 +191,74 @@ void test("ask_user waits for an answer, also across a restart", async () => {
       (entry) => entry.kind === "pi.tool-result"
     )
     assert.equal(asks.length, 1)
+  } finally {
+    await harness.close(ctx)
+  }
+})
+
+void test("endsWithQuestion finds a question at the end, outside code", () => {
+  assert.equal(endsWithQuestion("Done.\n\n**Next:** Should I fix it?"), true)
+  assert.equal(
+    endsWithQuestion("Want me to go on? **Recommended: yes.**"),
+    false
+  )
+  assert.equal(endsWithQuestion("Shall I merge it?**"), true)
+  assert.equal(endsWithQuestion("Why? Because.\n\nDone."), false)
+  assert.equal(endsWithQuestion("Run:\n```\nwhich node?\n```"), false)
+  assert.equal(endsWithQuestion("See `a?b`."), false)
+  assert.equal(endsWithQuestion("Done.\nRestart Pico."), false)
+})
+
+void test("a final answer that ends with a question gets one nudge to ask_user", async () => {
+  const dir = await tempDir()
+  const harness = await openHarness(
+    join(dir, "db.sqlite"),
+    [createAskExtension()],
+    // An agent that never learns: the nudge must not loop.
+    () => ({ text: "I fixed it. Should I push?" })
+  )
+  try {
+    const conversation = await harness.createConversation(
+      { ownership: { kind: "ownerless" }, agent: { model: TEST_MODEL } },
+      ctx
+    )
+    await conversation.submit({ type: "input", content: "fix it" }, ctx)
+    await conversation.waitForIdle(ctx)
+    const context = await conversation.context(ctx)
+    const nudges = context.entries.filter((entry) =>
+      JSON.stringify(entry.model ?? []).includes(PLAIN_QUESTION_MARKER)
+    )
+    assert.equal(nudges.length, 1)
+    assert.equal(
+      context.entries.filter((entry) => entry.kind === "pi.assistant").length,
+      2
+    )
+  } finally {
+    await harness.close(ctx)
+  }
+})
+
+void test("an agent without ask_user gets no nudge", async () => {
+  const dir = await tempDir()
+  const ask = createAskExtension()
+  const harness = await openHarness(join(dir, "db.sqlite"), [ask], () => ({
+    text: "Question: should I push?",
+  }))
+  try {
+    const conversation = await harness.createConversation(
+      {
+        ownership: { kind: "ownerless" },
+        agent: { model: TEST_MODEL, tools: { remove: [...(ask.tools ?? [])] } },
+      },
+      ctx
+    )
+    await conversation.submit({ type: "input", content: "fix it" }, ctx)
+    await conversation.waitForIdle(ctx)
+    const context = await conversation.context(ctx)
+    assert.equal(
+      context.entries.filter((entry) => entry.kind === "pi.assistant").length,
+      1
+    )
   } finally {
     await harness.close(ctx)
   }

@@ -7,15 +7,24 @@
  * and waits again, or returns at once when the answer came in meanwhile. The
  * web client answers through `answerQuestion()`. A chat message that the user
  * sends while a question is open also answers it.
+ *
+ * Agents often end a turn with a question in plain text, as in a chat, even
+ * when told to use `ask_user`. The `onYield` hook catches a final answer that
+ * ends with a question and asks the agent one time to ask it with the tool.
  */
 import type { Context } from "@earendil-works/chord/context"
 import Type from "typebox"
+import type { AssistantMessage, Message } from "@earendil-works/pi-ai"
 import {
   defineDoc,
   defineExtension,
   defineTool,
+  GenerationTask,
+  hook,
+  type Agent,
   type ConversationId,
   type Harness,
+  type HookApi,
   type ToolExecutionApi,
 } from "@earendil-works/pi-durable"
 
@@ -243,7 +252,7 @@ const askTool = defineTool({
   name: "ask_user",
   description: [
     "Ask the user a question and wait for the answer. The turn pauses until the user answers in the web client, also hours later and after a server restart.",
-    "Use it when you need a decision or information that you cannot find yourself. Do not use it for questions you can answer by reading the code.",
+    "Use it for every question to the user: a decision or information that you cannot find yourself, and also the offer at the end of a report ('Should I fix X?'). A question in plain text gives the user no buttons. Write your report first, then call ask_user as the last step. Do not use it for questions you can answer by reading the code.",
     "Kinds: choice (one of options), multi (several of options), confirm (yes or no), text (free text), form (named fields).",
   ].join(" "),
   parameters: Type.Object({
@@ -319,6 +328,71 @@ registerState({
   },
 })
 
+/** The start of the message that asks the agent to use `ask_user`. */
+export const PLAIN_QUESTION_MARKER = "[Plain-text question]"
+
+const PLAIN_QUESTION_NUDGE = [
+  `${PLAIN_QUESTION_MARKER} Your last message ends with a question to the user in plain text. The user cannot answer it with a click.`,
+  "Ask it again with ask_user: put the most likely options first and your recommendation at the top. Do not repeat your report.",
+  "If it was not a question for the user, reply with one short line and no question.",
+].join("\n")
+
+/**
+ * True when the end of a final answer asks the user something: one of its
+ * last lines ends with a question mark, outside code.
+ */
+export function endsWithQuestion(text: string) {
+  const lines = text
+    .replace(/```[\s\S]*?(```|$)/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+  return lines
+    .slice(-3)
+    .some((line) => /\?[\s*_)"'”’`]*$/.test(line.replace(/`[^`]*`/g, "")))
+}
+
+function textOf(message: Pick<Message, "content">) {
+  const { content } = message
+  if (typeof content === "string") return content
+  return content
+    .map((part) => (part.type === "text" ? part.text : ""))
+    .join("\n")
+}
+
+/** The agent's offered tools. Hooks get the generation runtime, which has them. */
+async function offersAskUser(api: HookApi, context: Context) {
+  const withAgent = api as HookApi & {
+    agent?: (context: Context) => Promise<Agent>
+  }
+  if (typeof withAgent.agent !== "function") return false
+  const agent = await withAgent.agent(context)
+  return agent.tools.some((tool) => tool.name === "ask_user")
+}
+
+/** True when the last user message of the run is the nudge: ask one time. */
+async function nudgedAlready(api: HookApi, context: Context) {
+  const page = await api.entries({}, 30, undefined, context)
+  for (const entry of page.items) {
+    const user = entry.model?.find((message) => message.role === "user")
+    if (user) return textOf(user).startsWith(PLAIN_QUESTION_MARKER)
+  }
+  return false
+}
+
+const plainQuestionHook = hook(GenerationTask, {
+  async onYield(answer: AssistantMessage, api, context) {
+    if (!endsWithQuestion(textOf(answer))) return undefined
+    if (!(await offersAskUser(api, context))) return undefined
+    if (await nudgedAlready(api, context)) return undefined
+    return { continue: PLAIN_QUESTION_NUDGE }
+  },
+})
+
 export function createAskExtension() {
-  return defineExtension({ name: "ask", tools: [askTool] })
+  return defineExtension({
+    name: "ask",
+    tools: [askTool],
+    hooks: [plainQuestionHook],
+  })
 }
