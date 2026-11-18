@@ -141,10 +141,11 @@ export const SIDEBAR_LAYOUT_STORAGE_KEY = "pico-sidebar-layout"
 const layoutListeners = new Set<() => void>()
 let sidebarLayout: SidebarLayout | undefined
 
+// "split" when the user did not choose a layout.
 function readSidebarLayout(): SidebarLayout {
-  return safeLocalStorageGetItem(SIDEBAR_LAYOUT_STORAGE_KEY) === "split"
-    ? "split"
-    : "groups"
+  return safeLocalStorageGetItem(SIDEBAR_LAYOUT_STORAGE_KEY) === "groups"
+    ? "groups"
+    : "split"
 }
 
 function getSidebarLayout() {
@@ -173,12 +174,12 @@ function subscribeLayout(listener: () => void) {
   }
 }
 
-/** The layout of the sidebar. Groups by default. */
+/** The layout of the sidebar. Split by default. */
 export function useSidebarLayout() {
   return React.useSyncExternalStore(
     subscribeLayout,
     getSidebarLayout,
-    () => "groups" as const
+    () => "split" as const
   )
 }
 
@@ -196,9 +197,9 @@ export function setSidebarLayout(layout: SidebarLayout) {
 export type SidebarView = SidebarGroupBy | "split"
 
 export const SIDEBAR_VIEWS: ReadonlyArray<SidebarView> = [
+  "split",
   "project",
   "status",
-  "split",
 ]
 
 export function sidebarViewLabel(view: SidebarView) {
