@@ -2372,16 +2372,14 @@ function ExploreToolGroupCardBody({
                 <span className="truncate font-medium whitespace-nowrap text-foreground">
                   {line.label}
                 </span>
-                <TitleTooltip title={lineText}>
-                  <span
-                    className={cn(
-                      "truncate text-muted-foreground",
-                      block.isError && "text-destructive"
-                    )}
-                  >
-                    {lineText}
-                  </span>
-                </TitleTooltip>
+                <span
+                  className={cn(
+                    "no-scrollbar overflow-x-auto whitespace-nowrap text-muted-foreground",
+                    block.isError && "text-destructive"
+                  )}
+                >
+                  {lineText}
+                </span>
               </div>
             )
           })}
