@@ -37,6 +37,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import {
   Tooltip,
   TooltipContent,
@@ -507,10 +508,16 @@ function SidebarTrigger({
   className,
   onClick,
   dot = false,
+  busy = false,
   ...props
 }: React.ComponentProps<typeof Button> & {
   /** Show a dot on the button, for example for unread agents. */
   dot?: boolean
+  /**
+   * Show a spinner in place of the icon, for example for working agents.
+   * With `dot`, the dot goes in the middle of the spinner.
+   */
+  busy?: boolean
 }) {
   const { toggleSidebar } = useSidebar()
 
@@ -528,8 +535,20 @@ function SidebarTrigger({
         }}
         {...props}
       >
-        <PanelLeftIcon />
-        {dot ? (
+        {busy ? (
+          <span className="relative flex size-4 items-center justify-center">
+            <Spinner size="md" aria-label="Agents working" />
+            {dot ? (
+              <span
+                data-slot="sidebar-trigger-dot"
+                className="absolute size-1.5 rounded-full bg-primary"
+              />
+            ) : null}
+          </span>
+        ) : (
+          <PanelLeftIcon />
+        )}
+        {dot && !busy ? (
           <span
             data-slot="sidebar-trigger-dot"
             className="absolute top-1 right-1 size-2 rounded-full bg-primary ring-2 ring-background"

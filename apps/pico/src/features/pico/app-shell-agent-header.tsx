@@ -61,6 +61,7 @@ import {
   type ComposerContextUsageStore,
 } from "@/features/pico/context-usage"
 import {
+  machineHasBusyAgents,
   machineHasUnreadAgents,
   useHasMachineGroups,
 } from "@/features/pico/machines"
@@ -117,7 +118,7 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
   const terminalsAvailable = useMachineFeature("native-pty")
   const hasMachineGroups = useHasMachineGroups()
   const activeMachine = useActiveMachine()
-  const hasUnreadAgents = useHasUnreadSidebarAgents(sidebarStore)
+  const sidebarAgentStatus = useSidebarAgentStatus(sidebarStore)
   const agentHeaderState = useSelector(
     agentStore,
     (agentState) => ({
@@ -183,7 +184,11 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
   return (
     <div className="sticky top-0 z-50 flex h-[var(--header-height)] w-full shrink-0 items-center border-b border-border/70 bg-background p-(--sidebar-gutter) pt-[calc(var(--sidebar-gutter)+env(safe-area-inset-top))]">
       <div className="flex w-full min-w-0 items-center gap-1">
-        <SidebarTrigger className="shrink-0" dot={hasUnreadAgents} />
+        <SidebarTrigger
+          className="shrink-0"
+          busy={sidebarAgentStatus.busy}
+          dot={sidebarAgentStatus.unread}
+        />
         <TitleTooltip
           title={
             defaultNewAgentProject
@@ -478,11 +483,12 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
 })
 
 /**
- * On mobile, the sidebar is hidden, so its toggle shows a dot when an agent
- * in the sidebar is done and not read: on the shown machine, or on another
- * machine of the hub.
+ * On mobile, the sidebar is hidden, so its toggle shows the agent status:
+ * a spinner when an agent works, and a dot when an agent is done and not
+ * read. Agents on the shown machine and on the other machines of the hub
+ * count.
  */
-function useHasUnreadSidebarAgents(sidebarStore: AppShellSidebarStore) {
+function useSidebarAgentStatus(sidebarStore: AppShellSidebarStore) {
   const { isMobile } = useSidebar()
   const activeMachine = useActiveMachine()
   const { machines } = useMachines()
@@ -491,10 +497,17 @@ function useHasUnreadSidebarAgents(sidebarStore: AppShellSidebarStore) {
       (agent) => Boolean(agent.unread) && !agent.streaming
     )
   )
-  if (!isMobile) return false
-  if (shownMachineUnread) return true
-  return machines.some(
-    (machine) =>
-      machine.id !== activeMachine?.id && machineHasUnreadAgents(machine)
+  const shownMachineBusy = useSelector(sidebarStore, (snapshot) =>
+    snapshot.derived.sidebarAgents.some(
+      (agent) => Boolean(agent.streaming) && !agent.needsInput
+    )
   )
+  if (!isMobile) return { busy: false, unread: false }
+  const otherMachines = machines.filter(
+    (machine) => machine.id !== activeMachine?.id
+  )
+  return {
+    busy: shownMachineBusy || otherMachines.some(machineHasBusyAgents),
+    unread: shownMachineUnread || otherMachines.some(machineHasUnreadAgents),
+  }
 }

@@ -205,6 +205,17 @@ export function machineHasUnreadAgents(machine: MachineInfo) {
   return agentCounts(machine).done > 0
 }
 
+/** The machine has an agent that works now (not one that waits on a job). */
+export function machineHasBusyAgents(machine: MachineInfo) {
+  const projects = new Set(machine.summary?.projects ?? [])
+  return (machine.summary?.agents ?? []).some(
+    (agent) =>
+      projects.has(agent.project || agent.cwd) &&
+      agent.busy &&
+      !agent.needsInput
+  )
+}
+
 /**
  * A count in a machine heading. A click shows only the agents with that
  * state; a second click shows all agents again.
