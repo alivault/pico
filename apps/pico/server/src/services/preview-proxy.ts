@@ -11,6 +11,10 @@
  * dev server has its own origin. Its paths stay as they are, so absolute
  * paths and hot reload sockets work, and Pico's origin check keeps it away
  * from the Pico API. Network access is the same as for Pico itself.
+ *
+ * When the user opens Pico over HTTPS through Tailscale Serve, the listener
+ * also gets a Serve entry on the same port (services/tailscale-serve.ts),
+ * so the iframe loads `https://<machine>.ts.net:<listener>/<path>`.
  */
 import {
   createServer,
@@ -28,6 +32,7 @@ import type { Duplex } from "node:stream"
 import type { MachineManager } from "../machines/manager.ts"
 import type { Security } from "../security.ts"
 import { isPicoServer } from "./dev-server-url.ts"
+import { serveTarget, type TailscaleServe } from "./tailscale-serve.ts"
 
 /** The hub sets it on requests to `/api/preview-proxy/`. */
 export const PREVIEW_PROXY_HEADER = "x-pico-preview-proxy"
@@ -271,23 +276,55 @@ export function upgradePreviewProxy(
   return true
 }
 
-type Listener = { server: Server; port: number; used: number }
+/** The preview cannot use Tailscale Serve; plain HTTP can still work. */
+export class TailscalePreviewError extends Error {}
+
+type Listener = {
+  server: Server
+  port: number
+  used: number
+  /** The Tailscale Serve port, when the listener has an entry. */
+  serve?: Promise<number>
+}
+
+/** Where the browser loads a preview. */
+export type OpenedPreview = {
+  /** The listener port on the hub. */
+  port: number
+  /** The origin to load, when the page host alone does not give it. */
+  url?: string
+}
 
 /** The hub side: one listener for each previewed machine and port. */
 export class PreviewProxy {
   readonly #host: string
   readonly #machines: MachineManager
   readonly #security: Security
+  readonly #serve: TailscaleServe | undefined
   readonly #listeners = new Map<string, Promise<Listener>>()
 
-  constructor(host: string, machines: MachineManager, security: Security) {
+  constructor(
+    host: string,
+    machines: MachineManager,
+    security: Security,
+    serve?: TailscaleServe
+  ) {
     this.#host = host
     this.#machines = machines
     this.#security = security
+    this.#serve = serve
   }
 
-  /** The listener port that shows `port` of a machine. */
-  async open(machineId: string, port: number) {
+  /**
+   * The listener that shows `port` of a machine. With `tailscaleHost`, the
+   * page came through Tailscale Serve over HTTPS: the listener gets a Serve
+   * entry, and `url` is its HTTPS origin.
+   */
+  async open(
+    machineId: string,
+    port: number,
+    tailscaleHost?: string
+  ): Promise<OpenedPreview> {
     if (machineId !== LOCAL_MACHINE_ID && !this.#machines.get(machineId))
       throw new Error(`Unknown machine: ${machineId}`)
     // Pico cannot show itself: its page would load in a broken frame.
@@ -305,7 +342,51 @@ export class PreviewProxy {
     }
     const opened = await listener
     opened.used = Date.now()
-    return opened.port
+    if (!tailscaleHost) return { port: opened.port }
+    const servePort = await this.#tailscale(opened)
+    return { port: opened.port, url: `https://${tailscaleHost}:${servePort}` }
+  }
+
+  /** The Tailscale Serve port of a listener; adds the entry the first time. */
+  async #tailscale(listener: Listener) {
+    const serve = this.#serve
+    if (!serve)
+      throw new TailscalePreviewError(
+        "This Pico cannot share previews over Tailscale HTTPS."
+      )
+    if (!listener.serve) {
+      const added = serve.add(
+        listener.port,
+        serveTarget(this.#host, listener.port)
+      )
+      listener.serve = added
+      added.catch(() => {
+        if (listener.serve === added) listener.serve = undefined
+      })
+    }
+    try {
+      return await listener.serve
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      throw new TailscalePreviewError(
+        `Pico could not share the preview over Tailscale HTTPS: tailscale serve failed (${reason}).`
+      )
+    }
+  }
+
+  /** Close a listener and remove its Tailscale Serve entry. */
+  async #closeListener(listener: Listener) {
+    await new Promise<void>((resolve) => {
+      listener.server.close(() => resolve())
+      listener.server.closeAllConnections()
+    })
+    const serve = listener.serve
+    listener.serve = undefined
+    if (serve && this.#serve) {
+      const servePort = await serve.catch(() => undefined)
+      if (servePort !== undefined)
+        await this.#serve.remove(servePort).catch(() => {})
+    }
   }
 
   /** Close the least recently used listeners over the limit. */
@@ -323,8 +404,7 @@ export class PreviewProxy {
       .slice(0, this.#listeners.size - MAX_LISTENERS)
       .forEach((entry) => {
         this.#listeners.delete(entry.key)
-        entry.listener!.server.close()
-        entry.listener!.server.closeAllConnections()
+        void this.#closeListener(entry.listener!)
       })
   }
 
@@ -419,13 +499,7 @@ export class PreviewProxy {
     await Promise.all(
       listeners
         .filter((listener) => listener !== undefined)
-        .map(
-          (listener) =>
-            new Promise<void>((resolve) => {
-              listener.server.close(() => resolve())
-              listener.server.closeAllConnections()
-            })
-        )
+        .map((listener) => this.#closeListener(listener))
     )
   }
 }
