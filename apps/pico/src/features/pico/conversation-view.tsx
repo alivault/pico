@@ -2571,7 +2571,7 @@ function AgentNoticeCard({
       >
         <CollapsibleTrigger
           data-conversation-tool-collapsible-trigger="true"
-          className="group/tool-collapsible-trigger -ml-0.5 flex shrink-0 items-center gap-1 rounded-sm text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="group/tool-collapsible-trigger -ml-0.5 flex shrink-0 cursor-pointer items-center gap-1 rounded-sm text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           <ChevronRightIcon className="pointer-events-none size-3.5 shrink-0 transition-transform group-aria-expanded/tool-collapsible-trigger:rotate-90" />
           <Icon className={cn("size-3.5 shrink-0", iconClassName)} />
@@ -2581,7 +2581,7 @@ function AgentNoticeCard({
           <TitleTooltip title={`Open agent ${agentId}`}>
             <button
               type="button"
-              className="shrink-0 rounded-sm font-medium whitespace-nowrap underline-offset-2 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+              className="shrink-0 cursor-pointer rounded-sm font-medium whitespace-nowrap underline-offset-2 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
               onClick={() => emitPicoEvent("pico:open-agent", { agentId })}
             >
               {agentId}
