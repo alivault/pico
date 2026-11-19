@@ -26,9 +26,20 @@ export type ComposerSelection = {
   end: number
 }
 
+/** A completion item, or the menu action that opens the file picker. */
+export type ComposerCompletionItem = CompletionItem & { action?: "upload" }
+
+/** The first item of the `@` menu: it removes the token and opens the picker. */
+const UPLOAD_COMPLETION_ITEM: ComposerCompletionItem = {
+  value: "\u0000upload",
+  label: "Upload from computer…",
+  isDirectory: false,
+  action: "upload",
+}
+
 type CompletionState = {
   query: ComposerCompletionQuery
-  items: Array<CompletionItem>
+  items: Array<ComposerCompletionItem>
   selectedIndex: number
 }
 
@@ -76,6 +87,7 @@ type CompletionAction =
       query: ComposerCompletionQuery
       items: Array<CompletionItem>
     }
+  | { type: "pending"; query: ComposerCompletionQuery }
   | { type: "move-selection"; direction: -1 | 1 }
   | { type: "select"; index: number }
 
@@ -134,6 +146,7 @@ type UseComposerAssistOptions = {
     query: string,
     isQuotedPrefix: boolean
   ) => Promise<Array<CompletionItem>>
+  onUploadFiles: () => void
   applyDraft: (
     text: string,
     skillName?: string,
@@ -232,8 +245,27 @@ function completionStateReducer(
   switch (action.type) {
     case "clear":
       return current ? null : current
+    case "pending":
+      // Show the upload item at once for a new `@` token. Keep the shown files
+      // while the next ones load.
+      if (
+        action.query.kind !== "file-reference" ||
+        current?.query.kind === "file-reference"
+      ) {
+        return current
+      }
+      return {
+        query: action.query,
+        items: [UPLOAD_COMPLETION_ITEM],
+        selectedIndex: 0,
+      }
     case "loaded": {
-      const filteredItems = action.items.filter((item) => Boolean(item.value))
+      const filteredItems: Array<ComposerCompletionItem> = action.items.filter(
+        (item) => Boolean(item.value)
+      )
+      if (action.query.kind === "file-reference") {
+        filteredItems.unshift(UPLOAD_COMPLETION_ITEM)
+      }
       if (filteredItems.length === 0) return current ? null : current
 
       const selectedItem =
@@ -299,6 +331,7 @@ export function useComposerAssist({
   slashCommands,
   requestPathCompletions,
   requestFileCompletions,
+  onUploadFiles,
   applyDraft,
 }: UseComposerAssistOptions) {
   const [completionQuery, setCompletionQuery] =
@@ -376,6 +409,7 @@ export function useComposerAssist({
     }
 
     const requestId = ++completionRequestIdRef.current
+    dispatchCompletionState({ type: "pending", query: completionQuery })
 
     const load = async () => {
       const result = await settle(
@@ -387,7 +421,12 @@ export function useComposerAssist({
       )
       if (!result.ok) {
         if (requestId === completionRequestIdRef.current) {
-          dispatchCompletionState({ type: "clear" })
+          // Keeps the upload item for an `@` token; clears path completions.
+          dispatchCompletionState({
+            type: "loaded",
+            query: completionQuery,
+            items: [],
+          })
         }
         return
       }
@@ -463,13 +502,33 @@ export function useComposerAssist({
     })
   }
 
+  const applyUploadItem = (query: ComposerCompletionQuery) => {
+    const value = draftTextRef.current
+    const nextValue = value.slice(0, query.start) + value.slice(query.end)
+    applyDraft(nextValue, draftSkillRef.current, {
+      selection: { start: query.start, end: query.start },
+    })
+    dismissMenus()
+    setCaret(query.start)
+    // Open the picker in the same user event, or the browser blocks it.
+    onUploadFiles()
+    return true
+  }
+
   const applyCompletion = (
-    item: CompletionItem,
+    item: ComposerCompletionItem,
     queryArg?: ComposerCompletionQuery
   ) => {
     // Not a default parameter: the React Compiler cannot compile `?.` there.
     const query = queryArg === undefined ? visibleCompletion?.query : queryArg
     if (!query) return false
+    if (item.action === "upload") {
+      // The shown query can be stale while files load; use the current token.
+      const currentQuery = completionQueryRef.current
+      return applyUploadItem(
+        currentQuery?.kind === "file-reference" ? currentQuery : query
+      )
+    }
     const next = applyCompletionItem({
       value: draftTextRef.current,
       query,

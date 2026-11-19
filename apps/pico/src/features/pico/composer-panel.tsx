@@ -664,6 +664,7 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
     slashCommands,
     requestPathCompletions,
     requestFileCompletions,
+    onUploadFiles: () => fileInputRef.current?.click(),
     applyDraft,
   })
 
