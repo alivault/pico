@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { ChevronDownIcon } from "lucide-react"
 
 import type { AgentState } from "@/lib/pico"
@@ -8,6 +9,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -24,6 +26,16 @@ import {
   useSelector,
   type PicoStore,
 } from "@/features/pico/tanstack-store-utils"
+import { emitPicoEvent } from "@/features/pico/agent/events"
+import {
+  ContextUsageQuotaDetails,
+  ContextUsageRings,
+  ContextUsageWindowDetails,
+  useContextUsageView,
+  type ComposerContextUsageStore,
+} from "@/features/pico/context-usage"
+import { useMachineReadOnly } from "@/features/pico/machine-store"
+import { picoQueryKeys } from "@/features/pico/query-keys"
 
 /** The model and reasoning buttons of the composer. */
 export const ComposerModelControls = React.memo(function ComposerModelControls({
@@ -53,7 +65,7 @@ export const ComposerModelControls = React.memo(function ComposerModelControls({
         <Button
           type="button"
           variant="ghost"
-          size="sm"
+          size="xs"
           className="max-w-40 min-w-0 cursor-pointer text-muted-foreground hover:text-foreground"
           aria-label={`Model: ${label}`}
           disabled={disabled}
@@ -75,7 +87,7 @@ export const ComposerModelControls = React.memo(function ComposerModelControls({
                 <Button
                   type="button"
                   variant="ghost"
-                  size="sm"
+                  size="xs"
                   className="shrink-0 cursor-pointer text-muted-foreground hover:text-foreground"
                   aria-label={`Reasoning: ${thinkingLabel(thinkingLevel)}`}
                   disabled={disabled}
@@ -86,7 +98,7 @@ export const ComposerModelControls = React.memo(function ComposerModelControls({
               <ChevronDownIcon data-icon="inline-end" />
             </DropdownMenuTrigger>
           </TitleTooltip>
-          <DropdownMenuContent side="top" align="end" className="w-48">
+          <DropdownMenuContent side="top" align="start" className="w-48">
             <DropdownMenuGroup>
               <DropdownMenuLabel>Reasoning</DropdownMenuLabel>
               <DropdownMenuRadioGroup
@@ -107,5 +119,85 @@ export const ComposerModelControls = React.memo(function ComposerModelControls({
         </DropdownMenu>
       ) : null}
     </div>
+  )
+})
+
+/**
+ * The context ring of the composer, with the 5h and weekly usage rings when
+ * the provider tells them. Its menu shows the usage details. It is not shown
+ * when the agent has no usage yet.
+ */
+export const ComposerContextUsage = React.memo(function ComposerContextUsage({
+  activeAgentId,
+  agentStore,
+  contextUsageStore,
+  viewerContextId,
+}: {
+  activeAgentId?: string
+  agentStore: PicoStore<AgentState>
+  contextUsageStore: ComposerContextUsageStore
+  viewerContextId: string
+}) {
+  const queryClient = useQueryClient()
+  const machineReadOnly = useMachineReadOnly()
+  const modelProvider = useSelector(
+    agentStore,
+    (state) => state.model?.provider
+  )
+  const view = useContextUsageView({
+    activeAgentId,
+    contextUsageStore,
+    disabled: machineReadOnly,
+    modelProvider,
+    viewerContextId,
+  })
+  if (!view) return null
+
+  return (
+    <DropdownMenu
+      onOpenChange={(open) => {
+        // The session and weekly usage change with each request, so the
+        // menu gets them again when it opens.
+        if (open)
+          void queryClient.invalidateQueries({
+            queryKey: picoQueryKeys.providerUsageAll(),
+          })
+      }}
+    >
+      <TitleTooltip
+        title={
+          view.percent == null
+            ? "Context usage"
+            : `${view.displayPercent} of the context used`
+        }
+      >
+        <DropdownMenuTrigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="shrink-0 cursor-pointer"
+              aria-label={view.ariaLabel}
+            />
+          }
+        >
+          <ContextUsageRings view={view} className="size-full" />
+        </DropdownMenuTrigger>
+      </TitleTooltip>
+      <DropdownMenuContent side="top" align="start" className="w-64">
+        <DropdownMenuItem
+          className="block"
+          onClick={() =>
+            emitPicoEvent("pico:open-agent-settings", {
+              page: "agent-context",
+            })
+          }
+        >
+          <ContextUsageWindowDetails view={view} />
+        </DropdownMenuItem>
+        <ContextUsageQuotaDetails view={view} />
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 })

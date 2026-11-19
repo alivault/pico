@@ -3638,6 +3638,7 @@ function useAppShellAgentWorkspaceView({
             appUiStore={appUiStore}
             diffLineComments={displayedDiffLineComments}
             composerPanelRef={composerPanelRef}
+            contextUsageStore={contextUsageStore}
             conversationFrameRef={conversationFrameRef}
             conversationItemsStore={conversationItemsStore}
             defaultNewAgentProject={defaultNewAgentProject}

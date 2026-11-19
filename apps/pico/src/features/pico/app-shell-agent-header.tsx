@@ -55,7 +55,6 @@ import { shortModelLabel, thinkingLabel } from "@/features/pico/model-label"
 import { emitPicoEvent } from "@/features/pico/agent/events"
 import {
   ContextUsageQuotaDetails,
-  ContextUsageRings,
   ContextUsageWindowDetails,
   useContextUsageView,
   type ComposerContextUsageStore,
@@ -137,7 +136,7 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
   )
   const machineReadOnly = useMachineReadOnly()
   const queryClient = useQueryClient()
-  // The more button shows the context rings in place of its icon.
+  // The agent menu shows the usage details at its top.
   const usageView = useContextUsageView({
     activeAgentId: agentHeaderState.agentId,
     contextUsageStore,
@@ -145,10 +144,6 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
     modelProvider: agentHeaderState.modelProvider,
     viewerContextId,
   })
-  const agentMenuTitle =
-    usageView?.percent == null
-      ? "Agent menu"
-      : `Agent menu · ${usageView.displayPercent} of the context used`
   const hideToolBlocks = useSelector(
     displaySettingsStore,
     (settings) => settings.hideToolBlocks
@@ -254,29 +249,13 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
                 })
             }}
           >
-            <TitleTooltip title={agentMenuTitle}>
+            <TitleTooltip title="Agent menu">
               <DropdownMenuTrigger
                 render={
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="relative"
-                    aria-label={
-                      usageView
-                        ? `Agent menu. ${usageView.ariaLabel}`
-                        : "Agent menu"
-                    }
-                  />
+                  <Button size="icon" variant="ghost" aria-label="Agent menu" />
                 }
               >
-                {usageView ? (
-                  <ContextUsageRings
-                    view={usageView}
-                    className="absolute inset-0 size-full"
-                  />
-                ) : (
-                  <EllipsisIcon />
-                )}
+                <EllipsisIcon />
               </DropdownMenuTrigger>
             </TitleTooltip>
             <DropdownMenuContent align="end" className="w-64">

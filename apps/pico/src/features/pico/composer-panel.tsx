@@ -31,7 +31,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { ComposerAssistMenu } from "@/features/pico/composer-assist-menu"
-import { ComposerModelControls } from "@/features/pico/composer-model-controls"
+import {
+  ComposerContextUsage,
+  ComposerModelControls,
+} from "@/features/pico/composer-model-controls"
+import type { ComposerContextUsageStore } from "@/features/pico/context-usage"
 import {
   ComposerPendingMessages,
   type ComposerPendingMessagesHandle,
@@ -92,6 +96,7 @@ type ComposerPanelProps = {
   composerSyncNonce: number
   canStartPendingQueue: boolean
   centerMessages: boolean
+  contextUsageStore: ComposerContextUsageStore
   displaySettingsStore: ComposerDisplaySettingsStore
   agentStore: ComposerAgentStore
   isSubmitting: boolean
@@ -155,8 +160,6 @@ type ComposerPromptEditorProps = {
   onSubmitPrompt: (streamingBehavior?: StreamingBehavior) => void
   onAbort: () => void
   onRunBuiltinSlashCommand: (name: string, args: string) => void
-  onOpenModelDialog: () => void
-  onSelectThinkingLevel: (level: string) => void
   requestPathCompletions: (prefix: string) => Promise<Array<CompletionItem>>
   requestFileCompletions: (
     query: string,
@@ -300,6 +303,7 @@ export function ComposerPanel({
   composerSyncNonce,
   canStartPendingQueue,
   centerMessages,
+  contextUsageStore,
   displaySettingsStore,
   agentStore,
   isSubmitting,
@@ -436,10 +440,29 @@ export function ComposerPanel({
             onSubmitPrompt={onSubmitPrompt}
             onAbort={onAbort}
             onRunBuiltinSlashCommand={onRunBuiltinSlashCommand}
-            onOpenModelDialog={onOpenModelDialog}
-            onSelectThinkingLevel={onSelectThinkingLevel}
             requestPathCompletions={requestPathCompletions}
             requestFileCompletions={requestFileCompletions}
+          />
+        </div>
+
+        {/* Below the card, so the prompt keeps the width of its row. The
+            negative margin brings it near the card despite the column gap. */}
+        <div
+          className={`flex min-w-0 items-center gap-0.5 px-2 ${
+            centerMessages ? "-mt-0.5" : "-mt-2"
+          }`}
+        >
+          <ComposerModelControls
+            agentStore={agentStore}
+            disabled={disabled}
+            onOpenModelDialog={onOpenModelDialog}
+            onSelectThinkingLevel={onSelectThinkingLevel}
+          />
+          <ComposerContextUsage
+            activeAgentId={activeAgentId}
+            agentStore={agentStore}
+            contextUsageStore={contextUsageStore}
+            viewerContextId={viewerContextId}
           />
         </div>
       </div>
@@ -526,8 +549,6 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
   onSubmitPrompt,
   onAbort,
   onRunBuiltinSlashCommand,
-  onOpenModelDialog,
-  onSelectThinkingLevel,
   requestPathCompletions,
   requestFileCompletions,
 }: ComposerPromptEditorProps) {
@@ -1132,13 +1153,6 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
         className="flex flex-nowrap items-center justify-end gap-2 self-end"
         style={{ gridArea: "trailing" }}
       >
-        <ComposerModelControls
-          agentStore={agentStore}
-          disabled={disabled}
-          onOpenModelDialog={onOpenModelDialog}
-          onSelectThinkingLevel={onSelectThinkingLevel}
-        />
-
         {!acceptFollowUps ? (
           <TitleTooltip
             title="Send"
