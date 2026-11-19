@@ -6,14 +6,22 @@
  * only from code mode scripts, `direct` as ordinary tools, and `hidden` not
  * at all. Pico has no tool search, so Pi's `deferred` works as `codemode`.
  * Servers connect in the background; the tool list updates when they are
- * ready.
+ * ready. Pico watches `mcp.json` and applies its changes without a restart:
+ * it connects new and changed servers, and closes removed ones.
  *
  * HTTP servers can use OAuth: the user signs in from Pico's settings, and the
  * tokens go to `<data>/mcp-oauth.json`. A server with `replaySafe: true` (for
  * read-only servers) gets replay-safe tools, which rerun after a crash.
  */
 import { execSync } from "node:child_process"
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
+import {
+  type FSWatcher,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  watch,
+  writeFileSync,
+} from "node:fs"
 import { dirname, join } from "node:path"
 
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai"
@@ -64,6 +72,10 @@ type Server = {
   error?: string
   /** The server answered that the user must sign in. */
   needsAuth?: boolean
+  /** Counts connection attempts; an older attempt closes its client. */
+  attempt: number
+  /** The server left `mcp.json`, its config changed, or the extension closed. */
+  dropped?: boolean
 }
 
 export type McpExtension = {
@@ -88,6 +100,8 @@ export type McpExtension = {
   finishAuth(state: string, code: string, iss?: string): Promise<string>
   signOut(name: string): Promise<void>
   reconnect(name: string): Promise<void>
+  /** Read `mcp.json` again and apply its changes; resolves when new servers are ready or failed. */
+  reload(): Promise<void>
   close(): Promise<void>
 }
 
@@ -222,36 +236,93 @@ function exposureOf(config: ServerConfig, tool: string): Exposure {
   return normalizeExposure(config.exposure)
 }
 
+const CONFIG_FILE = "mcp.json"
+const RELOAD_DELAY_MS = 300
+
+/**
+ * The servers in `mcp.json`. A missing file has no servers; a file that does
+ * not parse (for example one that an editor writes now) throws.
+ */
 function readConfig(agentDir: string): Record<string, ServerConfig> {
-  for (const path of [join(agentDir, "mcp.json")]) {
-    try {
-      const parsed = JSON.parse(readFileSync(path, "utf8")) as {
-        mcpServers?: Record<string, ServerConfig>
-      }
-      return parsed.mcpServers ?? {}
-    } catch {
-      // Try the next location.
-    }
+  let text: string
+  try {
+    text = readFileSync(join(agentDir, CONFIG_FILE), "utf8")
+  } catch {
+    return {}
   }
-  return {}
+  try {
+    const parsed = JSON.parse(text) as {
+      mcpServers?: Record<string, ServerConfig>
+    } | null
+    const servers = parsed?.mcpServers ?? {}
+    if (typeof servers !== "object" || Array.isArray(servers))
+      throw new Error("mcpServers is not an object")
+    return servers
+  } catch (error) {
+    throw new Error(
+      `${CONFIG_FILE} is not valid: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      { cause: error }
+    )
+  }
+}
+
+function readConfigOrNone(agentDir: string) {
+  try {
+    return readConfig(agentDir)
+  } catch (error) {
+    console.warn(`[pico] ${(error as Error).message}`)
+    return {}
+  }
+}
+
+/** JSON with sorted keys, to compare two configs. */
+function normalized(value: unknown): string {
+  return JSON.stringify(value, (_key, item: unknown) =>
+    item && typeof item === "object" && !Array.isArray(item)
+      ? Object.fromEntries(
+          Object.entries(item as Record<string, unknown>).sort(([a], [b]) =>
+            a < b ? -1 : a > b ? 1 : 0
+          )
+        )
+      : item
+  )
+}
+
+function newServer(name: string, config: ServerConfig): Server {
+  return { name, config, tools: [], attempt: 0 }
 }
 
 export function createMcpExtension(
   agentDir: string,
   dataDir: string
 ): McpExtension {
-  const servers = readConfigServers(agentDir)
+  let servers = Object.entries(readConfigOrNone(agentDir)).map(
+    ([name, config]) => newServer(name, config)
+  )
   const store = new OAuthStore(join(dataDir, "mcp-oauth.json"))
   const listeners: Array<() => void> = []
   let extension = build(servers)
+  let closed = false
 
   const changed = () => {
     extension = build(servers)
     for (const listener of listeners) listener()
   }
 
+  const drop = async (server: Server) => {
+    server.dropped = true
+    server.attempt += 1
+    const client = server.client
+    delete server.client
+    server.tools = []
+    await client?.close().catch(() => undefined)
+  }
+
   const start = (server: Server) =>
     connect(server, store).then(changed, (error: unknown) => {
+      if (server.dropped) return
       server.needsAuth = error instanceof McpOAuthAuthorizationRequiredError
       server.error = server.needsAuth
         ? "Sign in to this server in Pico's agent settings"
@@ -276,6 +347,7 @@ export function createMcpExtension(
 
   const reconnect = async (name: string) => {
     const server = find(name)
+    server.attempt += 1
     await server.client?.close().catch(() => undefined)
     delete server.client
     server.tools = []
@@ -283,6 +355,73 @@ export function createMcpExtension(
     delete server.needsAuth
     changed()
     await start(server)
+  }
+
+  /** Apply `mcp.json`; returns the connections that it started. */
+  const applyConfig = async () => {
+    if (closed) return []
+    // A file that does not parse keeps the current servers.
+    const configs = readConfig(agentDir)
+    const current = new Map(servers.map((server) => [server.name, server]))
+    const next: Server[] = []
+    const closing: Server[] = []
+    const starting: Server[] = []
+    for (const [name, config] of Object.entries(configs)) {
+      const old = current.get(name)
+      current.delete(name)
+      if (old && normalized(old.config) === normalized(config)) {
+        next.push(old)
+        continue
+      }
+      if (old) closing.push(old)
+      const server = newServer(name, config)
+      next.push(server)
+      if (config.enabled !== false) starting.push(server)
+    }
+    closing.push(...current.values())
+    const same =
+      next.length === servers.length &&
+      next.every((server, index) => server === servers[index])
+    if (same) return []
+    servers = next
+    for (const server of closing)
+      console.info(`[pico] MCP server ${server.name} closes (mcp.json changed)`)
+    await Promise.all(closing.map(drop))
+    changed()
+    return starting.map(start)
+  }
+
+  // One reload at a time, so two reloads cannot both start the same server.
+  let queue: Promise<unknown> = Promise.resolve()
+  const reload = async () => {
+    const applied = queue.then(applyConfig)
+    queue = applied.catch(() => undefined)
+    await Promise.all(await applied)
+  }
+
+  let watcher: FSWatcher | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    // Watch the directory: editors replace the file instead of writing to it.
+    watcher = watch(agentDir, { persistent: false }, (_event, file) => {
+      if (file !== null && file !== CONFIG_FILE) return
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        reload().catch((error: unknown) => {
+          console.warn(
+            `[pico] could not reload ${CONFIG_FILE}: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          )
+        })
+      }, RELOAD_DELAY_MS)
+    })
+    watcher.on("error", (error) => {
+      console.warn("[pico] stopped watching mcp.json:", error)
+      watcher?.close()
+    })
+  } catch (error) {
+    console.warn(`[pico] cannot watch ${agentDir} for mcp.json:`, error)
   }
 
   return {
@@ -376,22 +515,20 @@ export function createMcpExtension(
       await reconnect(name)
     },
     reconnect,
+    reload,
     async close() {
-      for (const server of servers) await server.client?.close()
+      closed = true
+      clearTimeout(timer)
+      watcher?.close()
+      await queue
+      await Promise.all(servers.map(drop))
     },
   }
 }
 
-function readConfigServers(agentDir: string): Server[] {
-  return Object.entries(readConfig(agentDir)).map(([name, config]) => ({
-    name,
-    config,
-    tools: [],
-  }))
-}
-
 async function connect(server: Server, store: OAuthStore) {
   const { config } = server
+  const attempt = server.attempt
   const client = new McpClient({
     name: "pico",
     version: "3",
@@ -419,11 +556,23 @@ async function connect(server: Server, store: OAuthStore) {
         })
       : undefined
   if (!transport) throw new Error("needs a command or a url")
-  await client.connect(transport)
+  let tools: McpTool[]
+  try {
+    await client.connect(transport)
+    tools = await client.listTools()
+  } catch (error) {
+    await client.close().catch(() => undefined)
+    throw error
+  }
+  if (server.attempt !== attempt) {
+    // The server was dropped or reconnected while this attempt ran.
+    await client.close().catch(() => undefined)
+    return
+  }
   server.client = client
-  server.tools = await client.listTools()
+  server.tools = tools
   client.onClose(() => {
-    server.error = "connection closed"
+    if (server.client === client) server.error = "connection closed"
   })
 }
 
