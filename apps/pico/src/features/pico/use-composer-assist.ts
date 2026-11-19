@@ -306,6 +306,11 @@ function completionStateReducer(
   }
 }
 
+/** An `@` token with no text after it yet. */
+export function isBareFileReferenceQuery(query: ComposerCompletionQuery) {
+  return query.kind === "file-reference" && query.rawPrefix === ""
+}
+
 function resolveCompletionQuery({
   draftText,
   selection,
@@ -414,6 +419,18 @@ export function useComposerAssist({
 
     const requestId = ++completionRequestIdRef.current
     dispatchCompletionState({ type: "pending", query: completionQuery })
+
+    // A bare `@` shows only the upload item and a hint. Files load when the
+    // user types, so the menu does not jump while it waits for them.
+    if (isBareFileReferenceQuery(completionQuery)) {
+      completionDebouncer.cancel()
+      dispatchCompletionState({
+        type: "loaded",
+        query: completionQuery,
+        items: [],
+      })
+      return
+    }
 
     const load = async () => {
       const result = await settle(

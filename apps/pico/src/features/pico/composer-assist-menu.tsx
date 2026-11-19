@@ -8,6 +8,7 @@ import type {
   ComposerSlashMenuState,
   ComposerVisibleCompletion,
 } from "@/features/pico/use-composer-assist"
+import { isBareFileReferenceQuery } from "@/features/pico/use-composer-assist"
 
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
@@ -112,9 +113,11 @@ export function ComposerAssistMenu({
             })}
             <Separator />
             <div className="px-2 py-1 text-xs text-muted-foreground">
-              {visibleCompletion.query.kind === "file-reference"
-                ? "@ file references"
-                : "Path suggestions"}
+              {isBareFileReferenceQuery(visibleCompletion.query)
+                ? "Type to search project files"
+                : visibleCompletion.query.kind === "file-reference"
+                  ? "@ file references"
+                  : "Path suggestions"}
             </div>
           </div>
         ) : slashMenuState ? (
