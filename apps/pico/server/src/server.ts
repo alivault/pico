@@ -66,8 +66,6 @@ export type PicoServer = {
   shutdown(options?: { drain?: boolean; timeoutMs?: number }): Promise<void>
   /** Stop the wait of a draining shutdown: close now. */
   hurry(): void
-  /** A restart was asked for; the server shows it until it closes. */
-  markRestarting(): void
 }
 
 export async function startServer(options: {
@@ -77,10 +75,10 @@ export async function startServer(options: {
   /** `pico-server stop` asked this server to drain and stop. */
   onShutdownRequest?: () => void
   /**
-   * A client asked for a restart: drain (or not, with `now`), stop, and
-   * start again. Without it, the server cannot restart itself.
+   * A client asked for a restart: stop at once (without a wait for active
+   * turns), and start again. Without it, the server cannot restart itself.
    */
-  onRestartRequest?: (now: boolean) => void
+  onRestartRequest?: () => void
   /** The transport to remote machines; tests use a fake. */
   machineTransport?: TransportFactory
   /**
@@ -254,7 +252,6 @@ export async function startServer(options: {
   const updater = new Updater(options.paths.dataDir)
   updater.start()
   let draining = false
-  let restarting = false
   let hurried = false
   let listeningPort = options.port
 
@@ -275,8 +272,7 @@ export async function startServer(options: {
     port: () => listeningPort,
     listenHosts: () => [options.host],
     draining: () => draining,
-    restart: () =>
-      options.onRestartRequest ? { pending: restarting } : undefined,
+    canRestart: () => Boolean(options.onRestartRequest),
     webDir: options.paths.webDir,
     updater,
   })
@@ -324,7 +320,7 @@ export async function startServer(options: {
     setImmediate(() => options.onShutdownRequest?.())
     return { ok: true }
   })
-  router.post("/api/system/restart", async (request) => {
+  router.post("/api/system/restart", () => {
     const onRestart = options.onRestartRequest
     if (!onRestart)
       throw new ApiError(501, "This Pico server cannot restart itself")
@@ -333,11 +329,11 @@ export async function startServer(options: {
         409,
         "An update is installing. Restart when it is done."
       )
-    const body = await request.body<{ now?: unknown }>()
-    const now = body.now === true
-    // Answer first: the restart closes the connections.
-    setImmediate(() => onRestart(now))
-    return { ok: true, now, activeTurnCount: agents.activeTurnCount() }
+    // Answer first: the restart closes the connections. A restart does not
+    // wait for active turns; the new server continues them. An old
+    // client's `now` does not matter.
+    setImmediate(() => onRestart())
+    return { ok: true }
   })
   // Updates of Pico itself (services/self-update.ts).
   router.get("/api/system/update", () => ({ ok: true, ...updater.status() }))
@@ -686,9 +682,6 @@ export async function startServer(options: {
     },
     hurry() {
       hurried = true
-    },
-    markRestarting() {
-      restarting = true
     },
   }
 }

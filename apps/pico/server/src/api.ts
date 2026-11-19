@@ -71,8 +71,8 @@ export type ApiContext = {
   port: () => number
   listenHosts: () => string[]
   draining: () => boolean
-  /** Undefined when the server cannot restart itself. */
-  restart: () => { pending: boolean } | undefined
+  /** Whether the server can restart itself (`/api/system/restart`). */
+  canRestart: () => boolean
   webDir: string | undefined
   updater: Updater
 }
@@ -265,7 +265,9 @@ export function createApi(api: ApiContext) {
     phase: api.draining() ? "draining" : "serving",
     pid: process.pid,
     startedAt: new Date(api.startedAt).toISOString(),
-    restart: api.restart(),
+    // An object when the server can restart itself. (Servers before
+    // instant restarts also reported `pending` in it.)
+    restart: api.canRestart() ? {} : undefined,
     update: serverUpdate(),
     release: releaseStatus(api.updater),
     webBuild: webBuildId(api.webDir),

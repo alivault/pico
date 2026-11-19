@@ -1,6 +1,7 @@
 /**
  * The server of a machine: its version, a newer build on disk, and a
- * restart that loads it. Turns that a restart cuts off continue after it,
+ * restart that loads it. A restart is at once: turns that it cuts off
+ * continue after it,
  * and terminals and jobs run on in the pty-host. With the `self-update`
  * feature, the server also finds new releases and installs them.
  */
@@ -16,7 +17,6 @@ import {
   FlaskConicalIcon,
   RefreshCwIcon,
   RotateCwIcon,
-  ZapIcon,
 } from "lucide-react"
 
 import { SidebarMenuAction, SidebarMenuItem } from "@/components/ui/sidebar"
@@ -39,10 +39,8 @@ export type ServerHealth = {
   version: string
   pid?: number
   startedAt?: string
-  phase: "serving" | "draining"
-  activeTurnCount: number
   /** Not set when the server cannot restart itself. */
-  restart?: { pending: boolean }
+  restart?: object
   update?: { available: boolean; version?: string }
   /** A newer release on the update channel (`self-update`). */
   release?: {
@@ -87,17 +85,15 @@ export function useServerHealth(machineId: string) {
     queryKey: serverHealthKey(machineId),
     queryFn: () => fetchHealth(machineId),
     enabled: hasFeature(SERVER_RESTART_FEATURE),
-    refetchInterval: (current) =>
-      current.state.data?.restart?.pending ? 2000 : 60_000,
+    refetchInterval: 60_000,
     staleTime: 10_000,
   })
   return query.data?.ok ? query.data : undefined
 }
 
-/** A short state for the settings list: an update or a restart in progress. */
+/** A short state for the settings list: an update or the version. */
 export function serverStatusLabel(health: ServerHealth | undefined) {
   if (!health) return ""
-  if (health.restart?.pending) return "Restarting…"
   if (health.update?.available) return "Update ready"
   if (health.release?.installing) return "Updating…"
   if (health.release?.available && health.release.latest)
@@ -105,22 +101,9 @@ export function serverStatusLabel(health: ServerHealth | undefined) {
   return `v${health.version}`
 }
 
-/**
- * Wait until a new server process answers, and give its health. `onDown`
- * runs one time, when the old server stops answering.
- */
-async function waitForNewServer(
-  machineId: string,
-  before: ServerHealth,
-  onDown: () => void
-) {
-  let down = false
-  const markDown = () => {
-    if (down) return
-    down = true
-    onDown()
-  }
-  const deadline = Date.now() + 12 * 60_000
+/** Wait until a new server process answers, and give its health. */
+async function waitForNewServer(machineId: string, before: ServerHealth) {
+  const deadline = Date.now() + 2 * 60_000
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 1000))
     try {
@@ -128,56 +111,40 @@ async function waitForNewServer(
         machineApiUrl(machineId, "/api/system/health"),
         { cache: "no-store" }
       )
-      if (!response.ok) {
-        markDown()
-        continue
-      }
+      if (!response.ok) continue
       const health = (await response.json()) as ServerHealth
       if (health.pid !== before.pid || health.startedAt !== before.startedAt)
         return health
     } catch {
       // The server is down for the restart.
-      markDown()
     }
   }
   return undefined
 }
 
+/** Restart the machine's server at once, and wait until it is back. */
 export async function restartServer({
   machineId,
-  now,
   queryClient,
 }: {
   machineId: string
-  now: boolean
   queryClient: QueryClient
 }) {
   const toastId = `server-restart:${machineId}`
   try {
     const before = await fetchHealth(machineId)
-    const started = await fetchJson<{ ok: true; activeTurnCount: number }>(
+    await fetchJson<{ ok: true }>(
       machineApiUrl(machineId, "/api/system/restart"),
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ now }),
+        // An older server waits for active turns without `now`.
+        body: JSON.stringify({ now: true }),
       }
     )
-    const showRestarting = () =>
-      toast.loading("Pico is restarting…", { id: toastId })
-    // While Pico waits for turns, the sidebar shows the restart
-    // (`ServerRestartStatus`). The toast only shows when the server stops.
-    const turns = now ? 0 : started.activeTurnCount
-    if (turns > 0)
-      toast.info(`Pico restarts when ${turnsText(turns)} finish`, {
-        id: toastId,
-        description: "The sidebar shows the restart until then.",
-      })
-    else showRestarting()
+    toast.loading("Pico is restarting…", { id: toastId })
     void queryClient.invalidateQueries({ queryKey: serverHealthKey(machineId) })
-    const after = await waitForNewServer(machineId, before, () => {
-      if (turns > 0) showRestarting()
-    })
+    const after = await waitForNewServer(machineId, before)
     if (!after) {
       toast.error("Pico did not start again in time", {
         id: toastId,
@@ -317,10 +284,7 @@ export async function changeUpdateSettings({
   }
 }
 
-/**
- * Install the newest release, then restart when the agents finish, so the
- * server runs it.
- */
+/** Install the newest release, then restart, so the server runs it. */
 export async function updateServer({
   machineId,
   queryClient,
@@ -346,7 +310,7 @@ export async function updateServer({
     }
     if (status.installing) throw new Error("The install takes too long.")
     if (status.error) throw new Error(status.error)
-    await restartServer({ machineId, now: false, queryClient })
+    await restartServer({ machineId, queryClient })
   } catch (error) {
     toast.error("Could not update Pico", {
       id: toastId,
@@ -356,77 +320,45 @@ export async function updateServer({
   }
 }
 
-function turnsText(count: number) {
-  return count === 1 ? "1 turn" : `${count} turns`
-}
-
 /**
- * A row in the sidebar footer while the server waits for active turns to
- * finish before it restarts. It also shows a restart from the command line.
+ * A row in the sidebar footer when a new release is available or installs.
  */
-export function ServerRestartStatus() {
+export function ServerUpdateStatus() {
   const machineId = useMachineId()
   const queryClient = useQueryClient()
   const health = useServerHealth(machineId)
-  if (!health?.restart?.pending) {
-    const release = health?.release
-    if (
-      !release?.latest ||
-      !release.canInstall ||
-      !(release.available || release.installing) ||
-      health?.update?.available
-    )
-      return null
-    return (
-      <SidebarMenuItem>
-        <div className="flex h-(--sidebar-item-size) items-center gap-2 rounded-md px-(--sidebar-item-pad) pr-8 text-xs text-muted-foreground">
-          {release.installing ? (
-            <Spinner size="xs" aria-label="Installing" />
-          ) : (
-            <ArrowUpCircleIcon className="size-4 shrink-0" />
-          )}
-          <span className="min-w-0 truncate">
-            {release.installing
-              ? `Installing Pico ${release.latest}…`
-              : `Pico ${release.latest} is available`}
-          </span>
-        </div>
-        {release.installing ? null : (
-          <TitleTooltip title="Update and restart when agents finish">
-            <SidebarMenuAction
-              aria-label="Update Pico"
-              onClick={() => void updateServer({ machineId, queryClient })}
-            >
-              <DownloadIcon />
-            </SidebarMenuAction>
-          </TitleTooltip>
-        )}
-      </SidebarMenuItem>
-    )
-  }
-  const turns = health.activeTurnCount
+  const release = health?.release
+  if (
+    !release?.latest ||
+    !release.canInstall ||
+    !(release.available || release.installing) ||
+    health?.update?.available
+  )
+    return null
   return (
     <SidebarMenuItem>
       <div className="flex h-(--sidebar-item-size) items-center gap-2 rounded-md px-(--sidebar-item-pad) pr-8 text-xs text-muted-foreground">
-        <Spinner size="xs" aria-label="Restarting" />
+        {release.installing ? (
+          <Spinner size="xs" aria-label="Installing" />
+        ) : (
+          <ArrowUpCircleIcon className="size-4 shrink-0" />
+        )}
         <span className="min-w-0 truncate">
-          {turns > 0
-            ? `Restarts after ${turnsText(turns)}`
-            : "Pico is restarting…"}
+          {release.installing
+            ? `Installing Pico ${release.latest}…`
+            : `Pico ${release.latest} is available`}
         </span>
       </div>
-      {turns > 0 ? (
-        <TitleTooltip title="Restart now">
+      {release.installing ? null : (
+        <TitleTooltip title="Update and restart">
           <SidebarMenuAction
-            aria-label="Restart now"
-            onClick={() =>
-              void restartServer({ machineId, now: true, queryClient })
-            }
+            aria-label="Update Pico"
+            onClick={() => void updateServer({ machineId, queryClient })}
           >
-            <ZapIcon />
+            <DownloadIcon />
           </SidebarMenuAction>
         </TitleTooltip>
-      ) : null}
+      )}
     </SidebarMenuItem>
   )
 }
@@ -435,11 +367,7 @@ function ServerPage() {
   const machineId = useMachineId()
   const queryClient = useQueryClient()
   const health = useServerHealth(machineId)
-  const pending = Boolean(health?.restart?.pending)
-  const turns = health?.activeTurnCount ?? 0
   const canRestart = Boolean(health?.restart)
-  const restart = (now: boolean) =>
-    void restartServer({ machineId, now, queryClient })
   const update = useUpdateStatus(machineId)
 
   const version: SettingsItem = {
@@ -454,30 +382,17 @@ function ServerPage() {
     disabled: true,
   }
   const updateItems = update
-    ? updateSettingsItems({ status: update, machineId, queryClient, pending })
+    ? updateSettingsItems({ status: update, machineId, queryClient })
     : []
   const items: Array<SettingsItem> = canRestart
     ? [
         {
           id: "restart",
-          title: "Restart when agents finish",
-          description: pending
-            ? `Pico restarts when ${turns} active turn(s) finish.`
-            : turns > 0
-              ? `${turns} active turn(s) finish first. New prompts wait until Pico is back.`
-              : "No agent works now, so Pico restarts at once.",
-          icon: <RotateCwIcon />,
-          busy: pending,
-          disabled: pending,
-          onSelect: () => restart(false),
-        },
-        {
-          id: "restart-now",
-          title: "Restart now",
+          title: "Restart",
           description:
-            "Do not wait. Turns that the restart cuts off continue after it; a running tool call starts again or ends with an error.",
-          icon: <ZapIcon />,
-          onSelect: () => restart(true),
+            "Pico restarts at once. Turns that the restart cuts off continue after it; a running tool call starts again or ends with an error.",
+          icon: <RotateCwIcon />,
+          onSelect: () => void restartServer({ machineId, queryClient }),
         },
       ]
     : []
@@ -511,13 +426,10 @@ function updateSettingsItems({
   status,
   machineId,
   queryClient,
-  pending,
 }: {
   status: UpdateStatus
   machineId: string
   queryClient: QueryClient
-  /** A restart waits for turns. */
-  pending: boolean
 }): Array<SettingsItem> {
   const latest = status.latest
   const items: Array<SettingsItem> = []
@@ -526,12 +438,12 @@ function updateSettingsItems({
       id: "update",
       title: `Update to Pico ${latest}`,
       description: status.installing
-        ? "Installing with npm. Pico restarts when the agents finish."
-        : "Install it with npm, then restart when the agents finish.",
+        ? "Installing with npm. Then Pico restarts."
+        : "Install it with npm, then restart Pico.",
       keywords: ["update", "upgrade", "install", "new version"],
       icon: <DownloadIcon />,
       busy: status.installing,
-      disabled: status.installing || pending,
+      disabled: status.installing,
       onSelect: () => void updateServer({ machineId, queryClient }),
     })
   else if (status.available && latest && status.command) {

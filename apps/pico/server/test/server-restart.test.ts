@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import { spawn, spawnSync } from "node:child_process"
-import { readFile } from "node:fs/promises"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { createServer } from "node:http"
+import type { AddressInfo } from "node:net"
 import { join } from "node:path"
 import { test } from "node:test"
 import { tempDir } from "./support.ts"
@@ -57,15 +59,15 @@ void test("a supervised server exits with the restart code", async () => {
     const state = await startedState(data)
     const url = `http://127.0.0.1:${state.port}`
     const health = (await (await fetch(`${url}/api/system/health`)).json()) as {
-      restart?: { pending: boolean }
+      restart?: object
       update?: { available: boolean }
     }
-    assert.deepEqual(health.restart, { pending: false })
+    assert.deepEqual(health.restart, {})
     assert.equal(health.update?.available, false)
     const response = await fetch(`${url}/api/system/restart`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ now: true }),
+      body: "{}",
     })
     assert.equal(response.status, 200)
     assert.equal(await exited, 75)
@@ -113,5 +115,148 @@ void test("a server without a launcher starts itself again", async () => {
       child.kill("SIGTERM")
       await exited
     }
+  }
+})
+
+/**
+ * A fake OpenAI-compatible model. While `slow` is set, its answers come
+ * after a minute (a restart cuts them off); later answers come at once.
+ */
+async function slowModel() {
+  let requests = 0
+  let slow = true
+  const server = createServer((request, response) => {
+    request.resume()
+    request.on("end", () => {
+      requests += 1
+      const chunk = (delta: Record<string, unknown>, finish: string | null) =>
+        `data: ${JSON.stringify({
+          id: "c1",
+          object: "chat.completion.chunk",
+          created: 1,
+          model: "fake",
+          choices: [{ index: 0, delta, finish_reason: finish }],
+        })}\n\n`
+      response.writeHead(200, { "content-type": "text/event-stream" })
+      response.write(chunk({ role: "assistant", content: "" }, null))
+      const timer = setTimeout(
+        () => {
+          response.write(chunk({ content: `answer ${requests}` }, null))
+          response.write(chunk({}, "stop"))
+          response.end("data: [DONE]\n\n")
+        },
+        slow ? 60_000 : 10
+      )
+      response.on("close", () => clearTimeout(timer))
+    })
+  })
+  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done))
+  return {
+    server,
+    requests: () => requests,
+    answerFast: () => {
+      slow = false
+    },
+  }
+}
+
+void test("a restart does not wait for an active turn, and the turn continues", async () => {
+  const data = await tempDir("pico-restart-test-")
+  const project = await tempDir("pico-restart-project-")
+  const model = await slowModel()
+  const agentDir = join(data, "agent")
+  await mkdir(agentDir, { recursive: true })
+  await writeFile(
+    join(agentDir, "models.json"),
+    JSON.stringify({
+      providers: {
+        fake: {
+          baseUrl: `http://127.0.0.1:${(model.server.address() as AddressInfo).port}/v1`,
+          api: "openai-completions",
+          apiKey: "test",
+          models: [
+            {
+              id: "fake",
+              name: "Fake",
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            },
+          ],
+        },
+      },
+    })
+  )
+  const env = {
+    ...process.env,
+    PI_CODING_AGENT_DIR: agentDir,
+    PICO_SUPERVISED: undefined,
+  }
+  const child = spawn(process.execPath, serverArgs(data), {
+    env,
+    stdio: "ignore",
+  })
+  const exited = new Promise<number | null>((done) =>
+    child.once("exit", (code) => done(code))
+  )
+  // Not spawnSync: the fake model answers in this process.
+  const cli = (args: string[]) =>
+    new Promise<{ status: number | null; stdout: string; stderr: string }>(
+      (done) => {
+        const command = spawn(
+          process.execPath,
+          ["dist/pico-server.mjs", ...args, "--data-dir", data],
+          { env, stdio: ["ignore", "pipe", "pipe"] }
+        )
+        let stdout = ""
+        let stderr = ""
+        command.stdout.on("data", (chunk) => (stdout += chunk.toString()))
+        command.stderr.on("data", (chunk) => (stderr += chunk.toString()))
+        command.once("exit", (status) => done({ status, stdout, stderr }))
+      }
+    )
+  try {
+    const before = await startedState(data)
+    const start = await cli([
+      "agent",
+      "start",
+      project,
+      "hello",
+      "--model",
+      "fake/fake",
+    ])
+    assert.equal(start.status, 0, start.stderr + start.stdout)
+    for (let i = 0; i < 100 && model.requests() === 0; i++)
+      await new Promise((done) => setTimeout(done, 100))
+    assert.ok(model.requests() > 0)
+    const health = (await (
+      await fetch(`http://127.0.0.1:${before.port}/api/system/health`)
+    ).json()) as { activeTurnCount: number }
+    assert.equal(health.activeTurnCount, 1)
+
+    // Without --now: the restart is at once all the same.
+    model.answerFast()
+    const started = Date.now()
+    const restart = await cli(["restart"])
+    assert.equal(restart.status, 0, restart.stderr + restart.stdout)
+    assert.doesNotMatch(restart.stdout, /active turn/)
+    assert.equal(await exited, 0)
+    assert.ok(Date.now() - started < 30_000, "the restart waited")
+    const after = await startedState(data, before.pid)
+    assert.notEqual(after.pid, before.pid)
+
+    // The new server continues the turn that the restart cut off.
+    const list = await cli(["agent", "list", "--json"])
+    assert.equal(list.status, 0, list.stderr)
+    const agentId = (JSON.parse(list.stdout) as Array<{ id: string }>)[0]!.id
+    const wait = await cli(["agent", "wait", agentId, "--timeout", "30"])
+    assert.equal(wait.status, 0, wait.stderr + wait.stdout)
+    assert.match(wait.stdout, /answer \d+/)
+  } finally {
+    await cli(["stop", "--wait"])
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill("SIGTERM")
+      await exited
+    }
+    model.server.closeAllConnections()
+    model.server.close()
   }
 })
