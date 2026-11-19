@@ -319,6 +319,15 @@ registerToolRenderer("agents", {
       const message = typeof args.message === "string" ? args.message : ""
       return [action, id, message].filter(Boolean).join(" · ")
     }
+    if (action === "unsend") {
+      // The text that the call took out of the queue, or the item ID.
+      const id = typeof args.id === "string" ? args.id : ""
+      const removed = toolDetails<{ removed: string }>(block).removed
+      const item = typeof args.item === "string" ? args.item : ""
+      return [action, id, typeof removed === "string" ? removed : item]
+        .filter(Boolean)
+        .join(" · ")
+    }
     const ids = Array.isArray(args.ids)
       ? args.ids.join(", ")
       : typeof args.id === "string"

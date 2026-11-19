@@ -8,6 +8,7 @@ import { test } from "node:test"
 import type { Message } from "@earendil-works/pi-ai"
 import type { Harness } from "@earendil-works/pi-durable"
 
+import { queuedItems, recordQueueOrigin } from "../src/core/queue.ts"
 import { DEFAULT_SETTINGS } from "../src/core/settings.ts"
 import {
   HostBridge,
@@ -54,6 +55,27 @@ function fakeAgents(harness: Harness) {
   const unread = new Set<string>()
   /** The agents that a test marks busy; the others are idle. */
   const busy = new Set<string>()
+  /** Submit like `Agents`: a prompt that stays queued records its sender. */
+  const submit = async (
+    id: string,
+    input: {
+      content: string
+      requestId?: string
+      whenBusy: "steer" | "followUp"
+    },
+    from: string
+  ) => {
+    const conversation = await harness.conversation(conversationOf(id), ctx)
+    const submission = await conversation!.submit(
+      { type: "input", ...input },
+      ctx
+    )
+    if ((await submission.status(ctx)).status === "queued")
+      await recordQueueOrigin(harness, conversationOf(id), submission.id, {
+        from,
+        at: Date.now(),
+      })
+  }
   const agents = {
     has: (id: string | undefined): id is string => Boolean(id && metas.has(id)),
     current: (id: string | undefined) => id,
@@ -121,26 +143,47 @@ function fakeAgents(harness: Harness) {
         message: string
         requestId?: string
         streamingBehavior?: "steer" | "followUp"
+        from?: string
       }
     ) {
-      const conversation = await harness.conversation(conversationOf(id), ctx)
-      await conversation!.submit(
+      await submit(
+        id,
         {
-          type: "input",
           content: input.message,
           ...(input.requestId ? { requestId: input.requestId } : {}),
           whenBusy: input.streamingBehavior ?? "followUp",
         },
-        ctx
+        input.from ?? "user"
       )
       return { queued: false }
     },
-    async followUp(id: string, message: string, requestId: string) {
-      const conversation = await harness.conversation(conversationOf(id), ctx)
-      await conversation!.submit(
-        { type: "input", content: message, requestId, whenBusy: "followUp" },
-        ctx
+    async followUp(
+      id: string,
+      message: string,
+      requestId: string,
+      from = "pico"
+    ) {
+      await submit(
+        id,
+        { content: message, requestId, whenBusy: "followUp" },
+        from
       )
+    },
+    queue: (id: string) => queuedItems(harness, conversationOf(id), []),
+    async unqueue(id: string, itemId: string) {
+      const item = (await queuedItems(harness, conversationOf(id), [])).find(
+        (entry) => entry.itemId === itemId
+      )
+      const result = item
+        ? await harness.abortSubmission(
+            Number(itemId.replace("pending:", "")) as never,
+            ctx,
+            conversationOf(id)
+          )
+        : "not_found"
+      if (!item || result !== "aborted")
+        throw new Error("The prompt was already sent")
+      return item
     },
     async withdrawFollowUp(id: string, requestId: string) {
       const submission = await harness.commit(
@@ -927,6 +970,233 @@ void test("a subagent's message to its parent gets no report back", async () => 
     assert.match(reports.join("\n"), /Half done\./)
     // The parent's "Noted." does not go back to the subagent.
     assert.deepEqual(await reportsIn(harness, subagent), [])
+  } finally {
+    await harness.close(ctx)
+  }
+})
+
+void test("agents queue and unsend: a parent manages its subagent's queue, others only their own messages", async () => {
+  const dir = await tempDir()
+  const host = new HostBridge()
+  let release = false
+  const script: Script = (messages) => {
+    const user = lastUser(messages)
+    const result = lastToolResult(messages)
+    // The subagent works until the test releases it, so messages queue.
+    if (user.startsWith("Slow work"))
+      return release
+        ? { text: "The work is done." }
+        : { tools: [{ name: "agents", arguments: { action: "list" } }] }
+    // `call {...}` makes one agents tool call with these arguments.
+    if (user.startsWith("call "))
+      return result !== undefined
+        ? { text: "ok" }
+        : {
+            tools: [
+              {
+                name: "agents",
+                arguments: JSON.parse(user.slice(5)) as Record<string, unknown>,
+              },
+            ],
+          }
+    return { text: "noted" }
+  }
+  const harness = await openHarness(
+    join(dir, "db.sqlite"),
+    [createAgentsExtension(host)],
+    script,
+    dir
+  )
+  const pushed: Array<{ payload: unknown; target: unknown }> = []
+  const fake = fakeAgents(harness)
+  host.bind({
+    agents: fake.agents as unknown as HostServices["agents"],
+    events: {
+      push: (payload: unknown, target: unknown) =>
+        pushed.push({ payload, target }),
+    },
+    terminals: {} as HostServices["terminals"],
+    harness,
+    settings: () => ({ ...DEFAULT_SETTINGS }),
+    dataDir: dir,
+  })
+  /** Run one agents call in `agent`'s conversation; returns its result. */
+  const call = async (agent: string, args: Record<string, unknown>) => {
+    const conversation = (await harness.conversation(
+      conversationOf(agent),
+      ctx
+    ))!
+    await (
+      await conversation.submit(
+        { type: "input", content: `call ${JSON.stringify(args)}` },
+        ctx
+      )
+    ).wait(ctx)
+    const results = (await conversation.context(ctx)).entries.filter(
+      (entry) => entry.kind === "pi.tool-result"
+    )
+    const message = results.at(-1)!.model![0] as {
+      content: Array<{ text?: string }>
+      isError?: boolean
+    }
+    return {
+      text: message.content.map((part) => part.text ?? "").join(""),
+      isError: Boolean(message.isError),
+    }
+  }
+  const itemIds = (text: string) =>
+    [...text.matchAll(/^\d+\. (pending:\d+) from (.+?)(?:,|$)/gm)].map(
+      (match) => ({ id: match[1]!, from: match[2]! })
+    )
+  try {
+    const parent = await fake.agents.create(dir)
+    const child = await fake.agents.create(dir, { parent, name: "Child" })
+    const other = await fake.agents.create(dir, { name: "Other" })
+    const childConversation = (await harness.conversation(
+      conversationOf(child),
+      ctx
+    ))!
+    await childConversation.submit({ type: "input", content: "Slow work" }, ctx)
+    await eventually(async () =>
+      (await childConversation.context(ctx)).entries.some(
+        (entry) => entry.kind === "pi.assistant"
+      )
+        ? true
+        : undefined
+    )
+    // The queue of the subagent: two prompts of the user, then a message of
+    // another agent and one of the parent.
+    await fake.agents.prompt(child, { message: "First user prompt" })
+    await fake.agents.prompt(child, { message: "Second user prompt" })
+    assert.equal(
+      (await call(other, { action: "send", id: child, message: "From other" }))
+        .isError,
+      false
+    )
+    await call(parent, { action: "send", id: child, message: "From parent" })
+
+    const listed = await call(parent, { action: "queue", id: child })
+    assert.equal(listed.isError, false)
+    const items = itemIds(listed.text)
+    assert.deepEqual(
+      items.map((item) => item.from),
+      ["the user", "the user", `agent ${other} (Other)`, `you (${parent})`],
+      listed.text
+    )
+    assert.match(listed.text, /First user prompt[\s\S]*Second user prompt/)
+    assert.match(listed.text, /queued \d{4}-\d\d-\d\dT/)
+
+    // Another agent sees only its own message.
+    const otherView = await call(other, { action: "queue", id: child })
+    assert.deepEqual(
+      itemIds(otherView.text).map((item) => item.id),
+      [items[2]!.id]
+    )
+    assert.match(otherView.text, /3 other items not shown/)
+    assert.doesNotMatch(otherView.text, /user prompt/)
+
+    // It may not remove the user's prompt, but it may remove its own message.
+    const refused = await call(other, {
+      action: "unsend",
+      id: child,
+      item: items[0]!.id,
+    })
+    assert.equal(refused.isError, true)
+    assert.match(refused.text, /not your subagent/)
+    const own = await call(other, {
+      action: "unsend",
+      id: child,
+      item: items[2]!.id,
+    })
+    assert.equal(own.isError, false, own.text)
+    assert.match(own.text, /Removed .*From other/s)
+
+    // The parent removes the user's first prompt; the user gets a notice.
+    const removed = await call(parent, {
+      action: "unsend",
+      id: child,
+      item: items[0]!.id,
+    })
+    assert.equal(removed.isError, false, removed.text)
+    assert.match(removed.text, /from the user/)
+    assert.match(removed.text, /First user prompt/)
+    assert.ok(
+      pushed.some(
+        ({ payload, target }) =>
+          (payload as { method?: string }).method === "notify" &&
+          (payload as { message?: string }).message ===
+            `${parent} removed your queued message: First user prompt` &&
+          (target as { agentId?: string }).agentId === child
+      ),
+      JSON.stringify(pushed)
+    )
+    assert.deepEqual(
+      itemIds((await call(parent, { action: "queue", id: child })).text).map(
+        (item) => item.id
+      ),
+      [items[1]!.id, items[3]!.id]
+    )
+
+    // After the subagent got the messages, unsend fails.
+    release = true
+    await eventually(async () =>
+      (await fake.agents.queue(child)).length === 0 ? true : undefined
+    )
+    const late = await call(parent, {
+      action: "unsend",
+      id: child,
+      item: items[1]!.id,
+    })
+    assert.equal(late.isError, true)
+    assert.match(late.text, /not in the queue .* already got it/)
+    await childConversation.waitForIdle(ctx)
+    const delivered = JSON.stringify(
+      (await childConversation.context(ctx)).entries
+        .filter((entry) => entry.kind === "pi.user")
+        .map((entry) => entry.model)
+    )
+    assert.match(delivered, /Second user prompt/)
+    assert.match(delivered, /From parent/)
+    assert.doesNotMatch(delivered, /First user prompt/)
+    assert.doesNotMatch(delivered, /From other/)
+  } finally {
+    await harness.close(ctx)
+  }
+})
+
+void test("queued items of a paused queue keep their senders, or get them from the text", async () => {
+  const dir = await tempDir()
+  const harness = await openHarness(join(dir, "db.sqlite"), [], () => ({
+    text: "x",
+  }))
+  try {
+    const conversation = await harness.createConversation(
+      { ownership: { kind: "ownerless" }, agent: { model: TEST_MODEL } },
+      ctx
+    )
+    const items = await queuedItems(harness, conversation.id, [
+      { id: 1, mode: "followUp", content: "Held prompt", from: "user", at: 5 },
+      { id: 2, mode: "followUp", content: "[Message from agent s7] Hi" },
+      { id: 3, mode: "steer", content: "[Subagent s8: done] Helper\nDone." },
+      {
+        id: 4,
+        mode: "followUp",
+        content: "Sent from a hub",
+        requestId: "hub:x",
+      },
+      { id: 5, mode: "followUp", content: "No sender" },
+    ])
+    assert.deepEqual(
+      items.map((item) => [item.itemId, item.from, item.held]),
+      [
+        ["held:1", "user", true],
+        ["held:2", "s7", true],
+        ["held:3", "s8", true],
+        ["held:4", "external", true],
+        ["held:5", undefined, true],
+      ]
+    )
+    assert.equal(items[0]!.at, 5)
   } finally {
     await harness.close(ctx)
   }

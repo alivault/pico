@@ -94,6 +94,14 @@ import {
   type UsageLike,
 } from "./items.ts"
 import { compactionLevels } from "./compaction.ts"
+import {
+  queueOrigins,
+  queuedItems,
+  recordQueueOrigin,
+  type HeldQueueItem,
+  type QueueOrigin,
+  type QueuedItem,
+} from "./queue.ts"
 import { expandPromptTemplate, expandSkillCommand } from "./resources.ts"
 import type { Runtime } from "./runtime.ts"
 import type { DraftSelection, Viewers } from "./viewers.ts"
@@ -381,14 +389,12 @@ function inboxMessage(item: InboxItem): PendingMessage | undefined {
   return pendingMessageOf(`pending:${item.id}`, item.mode, item.content)
 }
 
-/** A queued prompt that Pico holds out of the inbox while the queue is paused. */
-type HeldItem = {
-  id: number
-  mode: "steer" | "followUp"
-  content: JsonValue
-  /** A follow-up from another agent: it is held only one time. */
-  requestId?: string
-}
+/**
+ * A queued prompt that Pico holds out of the inbox while the queue is paused.
+ * `requestId`: a follow-up from another agent, held only one time. `from` and
+ * `at`: who queued it and when (see `core/queue.ts`).
+ */
+type HeldItem = HeldQueueItem
 
 /**
  * The paused queue. An abort, or an open queue edit, moves the queued prompts
@@ -1867,6 +1873,8 @@ export class Agents implements HostAgents {
       streamingBehavior?: "steer" | "followUp"
       thinkingLevel?: string
       requestId?: string
+      /** Who sends it, for the queue (see `QueueOrigin`); default the user. */
+      from?: string
     }
   ) {
     const meta = this.meta(id)
@@ -1919,6 +1927,16 @@ export class Agents implements HostAgents {
     )
     const record = await submission.status(ctx)
     const queued = record.status === "queued"
+    if (queued)
+      await recordQueueOrigin(
+        this.#harness,
+        conversationIdOf(id),
+        submission.id,
+        {
+          from: input.from ?? "user",
+          at: Date.now(),
+        }
+      )
     if (!meta.name) this.#autoName(id, input.message, input.images.length)
     return {
       queued,
@@ -2090,7 +2108,12 @@ export class Agents implements HostAgents {
    * user's queued prompts. It never steers. A paused queue holds it with the
    * user's prompts, so it keeps its place.
    */
-  async followUp(id: string, message: string, requestId: string) {
+  async followUp(
+    id: string,
+    message: string,
+    requestId: string,
+    from = "pico"
+  ) {
     const target = this.current(id) ?? id
     const meta = this.meta(target)
     if (meta.archived) return
@@ -2104,12 +2127,14 @@ export class Agents implements HostAgents {
           mode: "followUp",
           content: (await userContent(message, [])) as unknown as JsonValue,
           requestId,
+          from,
+          at: Date.now(),
         },
       ])
       return
     }
     const conversation = await this.conversation(target)
-    await conversation.submit(
+    const submission = await conversation.submit(
       {
         type: "input",
         content: await userContent(message, []),
@@ -2118,6 +2143,13 @@ export class Agents implements HostAgents {
       },
       ctx
     )
+    if ((await submission.status(ctx)).status === "queued")
+      await recordQueueOrigin(
+        this.#harness,
+        conversationIdOf(target),
+        submission.id,
+        { from, at: Date.now() }
+      )
   }
 
   async withdrawFollowUp(id: string, requestId: string) {
@@ -2177,6 +2209,32 @@ export class Agents implements HostAgents {
   // ---------------------------------------------------------------------------
   // Queued prompts
 
+  /** The prompts that wait in an agent's queue, with who queued them. */
+  async queue(id: string): Promise<QueuedItem[]> {
+    const target = this.current(id) ?? id
+    this.meta(target)
+    return queuedItems(
+      this.#harness,
+      conversationIdOf(target),
+      await this.#heldItems(target)
+    )
+  }
+
+  /**
+   * Take one prompt out of an agent's queue, as the composer does. Returns
+   * it. Throws when it is not in the queue now, for example when the agent
+   * already got it.
+   */
+  async unqueue(id: string, itemId: string): Promise<QueuedItem> {
+    const target = this.current(id) ?? id
+    const item = (await this.queue(target)).find(
+      (entry) => entry.itemId === itemId
+    )
+    if (!item) throw notFound("The message is not in the queue now")
+    await this.removePending(target, itemId)
+    return item
+  }
+
   async pendingMessages(id: string): Promise<PendingMessage[]> {
     const inbox = await this.#doc(id, "inbox")
     return [
@@ -2209,6 +2267,7 @@ export class Agents implements HostAgents {
   /** Take the queued prompts out of the inbox, in order. */
   async #withdrawInbox(id: string): Promise<HeldItem[]> {
     const inbox = await this.#doc(id, "inbox")
+    const origins = await queueOrigins(this.#harness, conversationIdOf(id))
     const withdrawn: HeldItem[] = []
     for (const item of inbox?.items ?? []) {
       if (item.mode === "write") continue
@@ -2217,11 +2276,13 @@ export class Agents implements HostAgents {
         ctx,
         conversationIdOf(id)
       )
+      const origin = origins[String(item.id)]
       if (result === "aborted")
         withdrawn.push({
           id: Number(item.id),
           mode: item.mode,
           content: item.content,
+          ...(origin ? { from: origin.from, at: origin.at } : {}),
         })
     }
     return withdrawn
@@ -2283,6 +2344,8 @@ export class Agents implements HostAgents {
         id: nextId++,
         mode: edit.streamingBehavior ?? "followUp",
         content: content as unknown as JsonValue,
+        from: "user",
+        at: Date.now(),
       })
     }
     for (const item of held) {
@@ -2337,10 +2400,14 @@ export class Agents implements HostAgents {
     const byPending = new Map(
       queued.map((item) => [`pending:${item.id}`, item])
     )
+    const origins = await queueOrigins(this.#harness, conversationIdOf(id))
+    const originOf = (item: (typeof queued)[number]) => origins[String(item.id)]
     type Planned = {
       item?: (typeof queued)[number]
       content: unknown
       mode: "steer" | "followUp"
+      /** Who queued it: a requeued prompt keeps its sender and time. */
+      origin?: QueueOrigin | undefined
     }
     const plan: Planned[] = []
     const withdraw: (typeof queued)[number][] = []
@@ -2365,17 +2432,31 @@ export class Agents implements HostAgents {
         withdraw.push(item)
         const content = await editedContent(item.content, edit)
         if (contentIsEmpty(content)) continue
-        plan.push({ item, content, mode: edit.streamingBehavior ?? item.mode })
+        plan.push({
+          item,
+          content,
+          mode: edit.streamingBehavior ?? item.mode,
+          origin: originOf(item),
+        })
         continue
       }
       const content = await userContent(edit.text ?? "", edit.images ?? [])
       if (contentIsEmpty(content)) continue
-      plan.push({ content, mode: edit.streamingBehavior ?? "followUp" })
+      plan.push({
+        content,
+        mode: edit.streamingBehavior ?? "followUp",
+        origin: { from: "user", at: Date.now() },
+      })
     }
     for (const item of queued) {
       if (named.has(`pending:${item.id}`)) continue
       withdraw.push(item)
-      plan.push({ item, content: item.content, mode: item.mode })
+      plan.push({
+        item,
+        content: item.content,
+        mode: item.mode,
+        origin: originOf(item),
+      })
     }
     // Resume a paused queue: its prompts go first.
     if (!edits && held.length > 0) {
@@ -2383,6 +2464,8 @@ export class Agents implements HostAgents {
         ...heldInDeliveryOrder(held).map((item) => ({
           content: item.content,
           mode: item.mode,
+          origin:
+            item.from && item.at ? { from: item.from, at: item.at } : undefined,
         }))
       )
       await this.#setHeld(id, [])
@@ -2401,7 +2484,7 @@ export class Agents implements HostAgents {
     }
     for (const planned of plan) {
       if (planned.item && !withdrawn.has(planned.item.id)) continue
-      await conversation.submit(
+      const submission = await conversation.submit(
         {
           type: "input",
           content: planned.content as never,
@@ -2409,6 +2492,13 @@ export class Agents implements HostAgents {
         },
         ctx
       )
+      if (planned.origin && (await submission.status(ctx)).status === "queued")
+        await recordQueueOrigin(
+          this.#harness,
+          conversationIdOf(id),
+          submission.id,
+          planned.origin
+        )
     }
     return { missed }
   }
