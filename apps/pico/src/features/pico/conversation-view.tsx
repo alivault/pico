@@ -3,12 +3,18 @@
 import * as React from "react"
 import { PatchDiff } from "@pierre/diffs/react"
 import {
-  BotIcon,
   CheckIcon,
   ChevronRightIcon,
+  CircleCheckIcon,
+  CircleStopIcon,
+  CircleXIcon,
   CopyIcon,
+  MessageCircleQuestionIcon,
+  MessageSquareIcon,
   PencilIcon,
   SquareTerminalIcon,
+  TriangleAlertIcon,
+  type LucideIcon,
 } from "lucide-react"
 
 import type {
@@ -2496,6 +2502,34 @@ const NOTICE_TONE_CLASS: Record<AgentNoticeTone, string> = {
 }
 
 /**
+ * The icon of a notice shows its state: a check when an agent is done, a
+ * question mark when it asks, red when something failed. A job keeps the
+ * terminal icon in the color of its result.
+ */
+function noticeIcon(notice: AgentNotice): {
+  Icon: LucideIcon
+  className: string
+} {
+  const color =
+    notice.tone === "default" ? "text-success" : NOTICE_TONE_CLASS[notice.tone]
+  if (notice.kind === "job")
+    return { Icon: SquareTerminalIcon, className: color }
+  if (notice.state.startsWith("message"))
+    return { Icon: MessageSquareIcon, className: "text-primary" }
+  if (notice.tone === "attention")
+    return {
+      Icon:
+        notice.state === "question"
+          ? MessageCircleQuestionIcon
+          : TriangleAlertIcon,
+      className: color,
+    }
+  if (notice.tone === "error") return { Icon: CircleXIcon, className: color }
+  if (notice.tone === "muted") return { Icon: CircleStopIcon, className: color }
+  return { Icon: CircleCheckIcon, className: color }
+}
+
+/**
  * A notice as a collapsed row in the style of a tool card: the sender, its
  * state, and a summary. Open, it shows the body, the output of a job, and
  * the hint for the model.
@@ -2510,16 +2544,20 @@ function AgentNoticeCard({
   const [isOpen, setIsOpen] = useRememberedToolCollapsibleOpen(
     `notice:${item.itemKey || item.forkEntryId || item.text.slice(0, 200)}`
   )
-  const Icon = notice.kind === "job" ? SquareTerminalIcon : BotIcon
+  const { Icon, className: iconClassName } = noticeIcon(notice)
   const agentId = notice.agentId
 
   return (
+    // A light box sets notices apart from the tool and thinking lines.
     <Collapsible
       data-conversation-row="true"
       data-agent-notice={notice.kind}
       open={isOpen}
       onOpenChange={setIsOpen}
-      className="text-sm"
+      className={cn(
+        "max-w-full rounded-lg border border-border/60 bg-muted/40 px-2.5 py-1.5 text-sm",
+        isOpen ? "w-full" : "w-fit"
+      )}
     >
       {/* The whole line is one hover and click target that opens the
           card. Only the agent link has its own hover. */}
@@ -2536,7 +2574,7 @@ function AgentNoticeCard({
           className="group/tool-collapsible-trigger -ml-0.5 flex shrink-0 items-center gap-1 rounded-sm text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           <ChevronRightIcon className="pointer-events-none size-3.5 shrink-0 transition-transform group-aria-expanded/tool-collapsible-trigger:rotate-90" />
-          <Icon className="size-3.5 shrink-0" />
+          <Icon className={cn("size-3.5 shrink-0", iconClassName)} />
           <span className="font-medium whitespace-nowrap">{notice.label}</span>
         </CollapsibleTrigger>
         {agentId && isLocalAgentId(agentId) ? (
@@ -2566,7 +2604,9 @@ function AgentNoticeCard({
             {notice.state}
           </span>
           {notice.summary ? (
-            <span className="ml-1 min-w-0 truncate">{notice.summary}</span>
+            <span className="ml-1 min-w-0 truncate text-foreground">
+              {notice.summary}
+            </span>
           ) : null}
         </span>
       </div>
