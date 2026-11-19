@@ -376,9 +376,10 @@ function TooltipUsageProgress({
   const clampedPercent = Math.max(0, Math.min(100, percent))
 
   return (
-    <div className="relative mt-1 h-1 overflow-hidden rounded-full bg-muted">
+    // The track uses the text color, so it shows also on a hovered menu item.
+    <div className="relative mt-1 h-1 overflow-hidden rounded-full bg-foreground/15">
       <div
-        className="h-full rounded-full"
+        className="h-full"
         style={{
           width: `${clampedPercent}%`,
           backgroundColor: contextUsageStroke(clampedPercent, pacePercent),
