@@ -39,6 +39,8 @@ export type PicoEventMap = {
   "pico:open-machines": Record<string, never>
   /** Ask to remove a machine from the hub. */
   "pico:remove-machine": { machineId: string }
+  /** Open the dialog that imports cookies from the user's browser. */
+  "pico:open-cookie-import": { machineId: string }
   /** Open the resources dialog of the shown machine. */
   "pico:open-resources": Record<string, never>
   /**

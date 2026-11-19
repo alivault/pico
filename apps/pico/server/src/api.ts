@@ -248,6 +248,7 @@ export function createApi(api: ApiContext) {
         "worktrees",
         "push-notifications",
         "browser",
+        "browser-cookie-import",
         "tool-profiles",
         "machine-hub",
         "github-issues",

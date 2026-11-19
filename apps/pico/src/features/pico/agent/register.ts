@@ -5,6 +5,7 @@
 import "@/features/pico/agent/agent-settings"
 import "@/features/pico/agent/ask"
 import "@/features/pico/agent/browser"
+import "@/features/pico/agent/browser-cookie-import"
 import "@/features/pico/agent/subagents"
 import "@/features/pico/agent/dev-tools"
 import "@/features/pico/agent/instructions"
