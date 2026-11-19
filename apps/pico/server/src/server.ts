@@ -4,6 +4,7 @@
  */
 import { createServer, type IncomingMessage, type Server } from "node:http"
 import { homedir } from "node:os"
+import { join } from "node:path"
 import type { Duplex } from "node:stream"
 
 import { WebSocketServer, type WebSocket } from "ws"
@@ -46,9 +47,14 @@ import { MachineProxy } from "./machines/proxy.ts"
 import {
   handlePreviewProxy,
   PreviewProxy,
+  TailscalePreviewError,
   upgradePreviewProxy,
   validPort,
 } from "./services/preview-proxy.ts"
+import {
+  TailscaleServe,
+  tailscaleHttpsHost,
+} from "./services/tailscale-serve.ts"
 import { addHubRoutes, addMachineServerRoutes } from "./machines/routes.ts"
 import { LocalAgentOps } from "./control/agent-ops.ts"
 import { AgentSearch } from "./core/agent-search.ts"
@@ -295,7 +301,15 @@ export async function startServer(options: {
   })
   const proxy = new MachineProxy(machines)
   // Previews of dev servers in the Browser tab (services/preview-proxy.ts).
-  const previews = new PreviewProxy(options.host, machines, security)
+  // Over Tailscale HTTPS, each listener also gets a Tailscale Serve entry.
+  const previews = new PreviewProxy(
+    options.host,
+    machines,
+    security,
+    new TailscaleServe(
+      join(options.paths.dataDir, "preview-tailscale-serve.json")
+    )
+  )
   router.post("/api/preview/open", async (request) => {
     const body = await request.body<{ machineId?: unknown; port?: unknown }>()
     if (!validPort(body.port)) throw new ApiError(400, "port must be a port")
@@ -304,11 +318,21 @@ export async function startServer(options: {
         ? body.machineId
         : "local"
     try {
-      return { ok: true, port: await previews.open(machineId, body.port) }
+      return {
+        ok: true,
+        ...(await previews.open(
+          machineId,
+          body.port,
+          tailscaleHttpsHost(request.raw.headers)
+        )),
+      }
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
       throw new ApiError(
         400,
-        error instanceof Error ? error.message : String(error)
+        error instanceof TailscalePreviewError
+          ? `${message} Open Pico over plain HTTP, as http://localhost:${listeningPort} on this machine, to use the Preview.`
+          : message
       )
     }
   })

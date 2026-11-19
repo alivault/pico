@@ -80,8 +80,9 @@ void test("a preview listener shows a local dev server on its own origin", async
     new Security("127.0.0.1")
   )
   try {
-    const port = await previews.open("local", dev.port)
-    assert.equal(await previews.open("local", dev.port), port)
+    const { port, url } = await previews.open("local", dev.port)
+    assert.equal(url, undefined)
+    assert.equal((await previews.open("local", dev.port)).port, port)
     const origin = `http://127.0.0.1:${port}`
 
     const response = await fetch(`${origin}/src/main.ts?t=1`, {
@@ -134,7 +135,7 @@ void test("a preview of a port with no server says so", async () => {
     new Security("127.0.0.1")
   )
   try {
-    const port = await previews.open("local", free)
+    const { port } = await previews.open("local", free)
     const response = await fetch(`http://127.0.0.1:${port}/`)
     assert.equal(response.status, 502)
     assert.match(await response.text(), new RegExp(`port ${free}`))
@@ -199,7 +200,7 @@ void test("a preview of a remote machine goes through its Pico server", async ()
     new Security("127.0.0.1")
   )
   try {
-    const port = await previews.open("m_remote", dev.port)
+    const { port } = await previews.open("m_remote", dev.port)
     const origin = `http://127.0.0.1:${port}`
     const response = await fetch(`${origin}/src/app.ts`, {
       headers: { origin },

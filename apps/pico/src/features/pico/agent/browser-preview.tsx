@@ -113,21 +113,25 @@ export function showPreview(detail: PicoEventMap["pico:preview-available"]) {
 
 /**
  * The URL of a dev server of a machine for this browser. The hub shows it on
- * its own port (`/api/preview/open`).
+ * its own port (`/api/preview/open`). Over Tailscale HTTPS, the hub gives the
+ * origin to load (a Tailscale Serve port); else it is the page host.
  */
 export async function previewUrl(
   machineId: string,
   address: { port: number; path: string }
 ) {
   const response = await fetchJson<
-    { ok: true; port: number } | { ok: false; error: string }
+    { ok: true; port: number; url?: string } | { ok: false; error: string }
   >(hubUrl("/api/preview/open"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ machineId, port: address.port }),
   })
   if (!response.ok) throw new Error(response.error)
-  return `${window.location.protocol}//${window.location.hostname}:${response.port}${address.path}`
+  const origin =
+    response.url ??
+    `${window.location.protocol}//${window.location.hostname}:${response.port}`
+  return `${origin}${address.path}`
 }
 
 /**
@@ -217,7 +221,10 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
       void open(savedAddress)
   }, [cwd, machineId, open, savedAddress])
 
-  const httpsPage = window.location.protocol === "https:"
+  // Over Tailscale HTTPS, the hub serves previews over HTTPS too.
+  const httpsPage =
+    window.location.protocol === "https:" &&
+    !window.location.hostname.endsWith(".ts.net")
 
   return (
     <div className="flex h-full min-h-0 flex-col">
