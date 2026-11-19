@@ -4,6 +4,7 @@ import {
   CornerDownLeftIcon,
   ExternalLinkIcon,
   FileTextIcon,
+  HourglassIcon,
   KeyRoundIcon,
   SquareIcon,
   SquareTerminalIcon,
@@ -78,12 +79,18 @@ function statusClass(job: Job) {
   return "bg-destructive"
 }
 
+/** The agent's turn ended on this job; it goes on when the job ends. */
+function agentWaitsOn(job: Job) {
+  return job.status === "running" && Boolean(job.waitOnExit) && !jobPrompt(job)
+}
+
 function statusText(job: Job, now: number) {
   switch (job.status) {
     case "running": {
       const prompt = jobPrompt(job)
-      return prompt
-        ? prompt.text
+      if (prompt) return prompt.text
+      return agentWaitsOn(job)
+        ? `Agent waits for it, started ${relativeTime(job.startedAt, now)}`
         : `Running, started ${relativeTime(job.startedAt, now)}`
     }
     case "exited":
@@ -200,10 +207,18 @@ function JobsSection({
           : {})}
       >
         <ItemMedia>
-          <span
-            className={cn("size-2 rounded-full", statusClass(job))}
-            aria-hidden="true"
-          />
+          {agentWaitsOn(job) ? (
+            // The same hourglass as the agent's row in the sidebar.
+            <HourglassIcon
+              className="size-3.5 text-success"
+              aria-label="The agent waits for this job"
+            />
+          ) : (
+            <span
+              className={cn("size-2 rounded-full", statusClass(job))}
+              aria-hidden="true"
+            />
+          )}
         </ItemMedia>
         <ItemContent
           className={cn("min-w-0", FADE_UNDER_ACTIONS)}

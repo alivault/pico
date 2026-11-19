@@ -21,6 +21,8 @@ export type AgentJob = {
   /** The tool call that started the job. */
   callId?: string
   cwd?: string
+  /** The agent's turn ended on this job, and it goes on when the job ends. */
+  waitOnExit?: boolean
   /** The address of the job's dev server, when it prints one that listens. */
   devServer?: { port: number; path: string }
 }
