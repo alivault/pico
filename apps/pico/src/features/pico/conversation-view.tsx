@@ -2521,10 +2521,19 @@ function AgentNoticeCard({
       onOpenChange={setIsOpen}
       className="text-sm"
     >
-      <div className="flex max-w-full min-w-0 items-center gap-1 text-sm text-muted-foreground">
+      {/* The whole line is one hover and click target that opens the
+          card. Only the agent link has its own hover. */}
+      <div
+        className="group/notice-row flex w-fit max-w-full min-w-0 cursor-pointer items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        onClick={(event) => {
+          // The trigger and the agent link handle their own clicks.
+          if ((event.target as HTMLElement).closest("button")) return
+          setIsOpen(!isOpen)
+        }}
+      >
         <CollapsibleTrigger
           data-conversation-tool-collapsible-trigger="true"
-          className="group/tool-collapsible-trigger -ml-0.5 flex shrink-0 items-center gap-1 rounded-sm text-left transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="group/tool-collapsible-trigger -ml-0.5 flex shrink-0 items-center gap-1 rounded-sm text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           <ChevronRightIcon className="pointer-events-none size-3.5 shrink-0 transition-transform group-aria-expanded/tool-collapsible-trigger:rotate-90" />
           <Icon className="size-3.5 shrink-0" />
@@ -2534,7 +2543,7 @@ function AgentNoticeCard({
           <TitleTooltip title={`Open agent ${agentId}`}>
             <button
               type="button"
-              className="shrink-0 rounded-sm font-medium whitespace-nowrap underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+              className="shrink-0 rounded-sm font-medium whitespace-nowrap underline-offset-2 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
               onClick={() => emitPicoEvent("pico:open-agent", { agentId })}
             >
               {agentId}
@@ -2545,13 +2554,8 @@ function AgentNoticeCard({
             {agentId}
           </span>
         ) : null}
-        {/* The rest of the row also opens the card. The trigger above is
-            the keyboard control. */}
-        <span
-          aria-hidden="true"
-          className="flex min-w-0 cursor-pointer items-center gap-1 hover:text-foreground"
-          onClick={() => setIsOpen(!isOpen)}
-        >
+        {/* The trigger above is the keyboard control. */}
+        <span aria-hidden="true" className="flex min-w-0 items-center gap-1">
           <span className="shrink-0">·</span>
           <span
             className={cn(
