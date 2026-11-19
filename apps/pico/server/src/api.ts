@@ -1700,6 +1700,13 @@ export function createApi(api: ApiContext) {
     servers: runtime.mcp.status(),
   }))
 
+  router.post("/api/mcp/reload", async () => {
+    await runtime.mcp.reload().catch((error: unknown) => {
+      throw badRequest(error instanceof Error ? error.message : String(error))
+    })
+    return { ok: true, servers: runtime.mcp.status() }
+  })
+
   router.post("/api/mcp/:name/auth", async (request) => {
     const headers = request.raw.headers
     const host = String(headers["x-forwarded-host"] ?? headers.host ?? "")

@@ -1,6 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { RotateCwIcon } from "lucide-react"
 import { toast } from "@/lib/pico/toast"
 
+import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
+import { TitleTooltip } from "@/components/ui/tooltip"
 import { errorText } from "@/features/pico/agent/shared"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
 import {
@@ -111,16 +115,45 @@ function useMcpServers(viewerContextId: string) {
     },
     onError: (error) => toast.error(errorText(error)),
   })
-  return { query, action }
+  const reload = useMutation({
+    mutationFn: () =>
+      fetchJson<{ servers: Array<McpServer> }>(
+        buildRequestUrl("/api/mcp/reload", {
+          machineId,
+          contextId: viewerContextId,
+        }),
+        { method: "POST" }
+      ),
+    onSuccess: (result) => {
+      queryClient.setQueryData(queryKey, result)
+      void queryClient.invalidateQueries({ queryKey })
+    },
+    onError: (error) => toast.error(errorText(error)),
+  })
+  return { query, action, reload }
 }
 
 function McpServersPage({ viewerContextId }: SettingsPageProps) {
   const open = useOpenSettingsPage()
-  const { query } = useMcpServers(viewerContextId)
+  const { query, reload } = useMcpServers(viewerContextId)
   return (
     <SettingsListPage
       title="MCP servers"
       subtitle="Add servers to the mcp.json file of Pi."
+      actions={
+        <TitleTooltip title="Read mcp.json again">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={reload.isPending}
+            onClick={() => reload.mutate()}
+          >
+            {reload.isPending ? <Spinner /> : <RotateCwIcon />}
+            Reload
+          </Button>
+        </TitleTooltip>
+      }
       loading={query.isPending}
       emptyText="No MCP servers. Add them to the mcp.json file of Pi."
       groups={[

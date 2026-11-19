@@ -127,10 +127,13 @@ function shouldAutoFocus() {
 function SettingsPageFrame({
   title,
   subtitle,
+  actions,
   children,
 }: {
   title: string
   subtitle?: string
+  /** Small buttons at the right of the title. */
+  actions?: React.ReactNode
   children: React.ReactNode
 }) {
   const nav = useSettingsNav()
@@ -163,6 +166,7 @@ function SettingsPageFrame({
             </div>
           ) : null}
         </div>
+        {actions}
       </div>
       {children}
     </div>
@@ -309,9 +313,12 @@ export function SettingsListPage({
   loading = false,
   emptyText = "No settings found.",
   note,
+  actions,
 }: {
   title: string
   subtitle?: string
+  /** Small buttons at the right of the title. */
+  actions?: React.ReactNode
   groups: Array<SettingsItemGroup>
   loading?: boolean
   emptyText?: string
@@ -327,7 +334,7 @@ export function SettingsListPage({
   }, [])
 
   return (
-    <SettingsPageFrame title={title} subtitle={subtitle}>
+    <SettingsPageFrame title={title} subtitle={subtitle} actions={actions}>
       <Command
         shouldFilter
         filter={settingsSearchFilter}
