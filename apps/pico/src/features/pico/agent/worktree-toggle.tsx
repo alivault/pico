@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { GitForkIcon, PencilIcon } from "lucide-react"
+import { PencilIcon } from "lucide-react"
 import { toast } from "@/lib/pico/toast"
 
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { Switch } from "@/components/ui/switch"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { errorText } from "@/features/pico/agent/shared"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
@@ -96,27 +97,29 @@ function NewAgentWorktreeToggleView({
             : "The new agent works in the project directory"
         }
       >
-        <Button
-          type="button"
-          variant="ghost"
-          aria-pressed={enabled}
-          aria-label="New worktree"
-          disabled={mutation.isPending}
-          className={cn(enabled && "bg-muted text-foreground")}
-          onClick={() =>
-            mutation.mutate(
-              enabled
-                ? { enabled: false }
-                : {
-                    enabled: true,
-                    ...(branch.trim() ? { branch: branch.trim() } : {}),
-                  }
-            )
-          }
+        <label
+          className={cn(
+            "flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-muted-foreground hover:text-foreground",
+            enabled && "text-foreground"
+          )}
         >
-          <GitForkIcon className="size-4 shrink-0" aria-hidden="true" />
-          <span>Worktree</span>
-        </Button>
+          <Switch
+            size="sm"
+            checked={enabled}
+            disabled={mutation.isPending}
+            onCheckedChange={(checked) =>
+              mutation.mutate(
+                checked
+                  ? {
+                      enabled: true,
+                      ...(branch.trim() ? { branch: branch.trim() } : {}),
+                    }
+                  : { enabled: false }
+              )
+            }
+          />
+          Worktree
+        </label>
       </TitleTooltip>
       {enabled ? (
         // The branch name is optional: the first prompt names it.
