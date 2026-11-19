@@ -847,6 +847,19 @@ const ComposerPromptEditor = React.memo(function ComposerPromptEditor({
       return
     }
 
+    // Backspace in an empty prompt removes the last attached file, one at a
+    // time, as it does for the skill and the line comments.
+    if (
+      event.key === "Backspace" &&
+      !draftText &&
+      !currentDraftSkill &&
+      composerImages.length > 0
+    ) {
+      event.preventDefault()
+      onRemoveComposerImage(composerImages.length - 1)
+      return
+    }
+
     if (
       visibleCompletion &&
       (event.key === "ArrowDown" || event.key === "ArrowUp")
