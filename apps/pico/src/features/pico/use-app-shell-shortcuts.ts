@@ -2,6 +2,7 @@ import * as React from "react"
 import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys"
 
 import type { AgentListEntry } from "@/lib/pico/api"
+import type { ArchiveAgentsResult } from "@/features/pico/archive-agents"
 
 import {
   agentNumberModifierFlag,
@@ -32,8 +33,11 @@ type ShortcutActions = {
   openCommandPalette: () => void
   closeCommandPalette: () => void
   openCommitDialog: () => void
-  openDeleteDialog: (targets: Array<AgentListEntry>) => void
-  openDeleteDialogForCurrentAgent: () => void
+  archiveAgents: (
+    targets: Array<AgentListEntry>,
+    options?: { removeWorktree?: boolean }
+  ) => ArchiveAgentsResult
+  archiveCurrentAgent: () => void
   openForkDialog: () => void | Promise<unknown>
   openRenameDialog: () => void
   openAgentsDialog: () => void
@@ -340,7 +344,7 @@ export function useAppShellShortcuts({
     if (context.selectedSidebarAgents.length <= 1) return
 
     event.preventDefault()
-    shortcutActionsRef.current.openDeleteDialog(context.selectedSidebarAgents)
+    shortcutActionsRef.current.archiveAgents(context.selectedSidebarAgents)
   }
 
   const handleFocusPrompt = (event: KeyboardEvent) => {
@@ -601,15 +605,13 @@ export function useAppShellShortcuts({
       if (context.selectedSidebarAgents.length > 1) {
         event.preventDefault()
         closeCommandPaletteForShortcut(context.commandPaletteOpen)
-        shortcutActionsRef.current.openDeleteDialog(
-          context.selectedSidebarAgents
-        )
+        shortcutActionsRef.current.archiveAgents(context.selectedSidebarAgents)
         return
       }
       if (!context.agentHasFile) return
       event.preventDefault()
       closeCommandPaletteForShortcut(context.commandPaletteOpen)
-      shortcutActionsRef.current.openDeleteDialogForCurrentAgent()
+      shortcutActionsRef.current.archiveCurrentAgent()
     }
   }
 

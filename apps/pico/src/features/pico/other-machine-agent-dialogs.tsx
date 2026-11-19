@@ -23,6 +23,11 @@ import {
 import { Input } from "@/components/ui/input"
 import { errorText } from "@/features/pico/agent/shared"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import {
+  agentTitle,
+  archivedAgentsMessage,
+  restoredAgentsMessage,
+} from "@/features/pico/archive-agents"
 import { viewerContextIdForSummaries } from "@/features/pico/machine-store"
 import type { AgentListEntry } from "@/lib/pico/api"
 import { settle } from "@/lib/settle"
@@ -131,35 +136,69 @@ export function OtherMachineRenameDialog({
   )
 }
 
+/** Archive an agent of another machine at once, with Undo in the toast. */
+export async function archiveOtherMachineAgent(
+  machineId: string,
+  entry: AgentListEntry
+) {
+  if (!entry.path) return false
+  const path = entry.path
+  const settled = await settle(
+    postToMachine(machineId, "/api/agents/delete", { paths: [path] })
+  )
+  if (!settled.ok) {
+    toast.error(`Failed to archive the agent: ${errorText(settled.error)}`)
+    return false
+  }
+  toast.success(archivedAgentsMessage([entry]), {
+    action: {
+      label: "Undo",
+      onClick: () => {
+        void (async () => {
+          const restored = await settle(
+            postToMachine(machineId, "/api/agent/restore", { path })
+          )
+          if (!restored.ok) {
+            toast.error(
+              `Failed to restore the agent: ${errorText(restored.error)}`
+            )
+            return
+          }
+          toast.success(restoredAgentsMessage([entry]))
+        })()
+      },
+    },
+  })
+  return true
+}
+
+/**
+ * Asks before archiving an agent of another machine whose subagents still
+ * work: an archived agent does not get their reports.
+ */
 export function OtherMachineArchiveDialog({
   machineId,
   machineLabel,
   entry,
+  subagents,
   onOpenChange,
 }: {
   machineId: string
   machineLabel: string
   /** The agent to archive; the dialog is open while it is set. */
   entry: AgentListEntry | undefined
+  /** The working subagents of the agent. */
+  subagents: Array<AgentListEntry>
   onOpenChange: (open: boolean) => void
 }) {
   const [archiving, setArchiving] = React.useState(false)
 
   const archive = async () => {
-    if (!entry?.path || archiving) return
+    if (!entry || archiving) return
     setArchiving(true)
-    const settled = await settle(
-      postToMachine(machineId, "/api/agents/delete", {
-        paths: [entry.path],
-      })
-    )
+    const archived = await archiveOtherMachineAgent(machineId, entry)
     setArchiving(false)
-    if (!settled.ok) {
-      const error = settled.error
-      toast.error(`Failed to archive the agent: ${errorText(error)}`)
-      return
-    }
-    onOpenChange(false)
+    if (archived) onOpenChange(false)
   }
 
   return (
@@ -168,8 +207,12 @@ export function OtherMachineArchiveDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Archive agent?</AlertDialogTitle>
           <AlertDialogDescription>
-            Archive “{entry?.title}” on {machineLabel}. Its history is kept, and
-            you can restore it from Archived agents on that machine.
+            Archive “{entry?.title}” on {machineLabel}.{" "}
+            {subagents.length === 1
+              ? `Subagent "${agentTitle(subagents[0]!)}" still works.`
+              : `${subagents.length} subagents still work.`}{" "}
+            An archived agent does not get the reports of its subagents, and a
+            restore does not bring them back.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

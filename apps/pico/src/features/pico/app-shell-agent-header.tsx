@@ -67,7 +67,7 @@ import {
 
 export type AppShellAgentHeaderActions = {
   createAgent: (cwdOverride?: string) => void | Promise<unknown>
-  onDeleteCurrentAgent: () => void
+  onDeleteCurrentAgent: (options?: { removeWorktree?: boolean }) => void
   onForkAgent: () => void | Promise<unknown>
   onOpenCommandPalette: () => void
   onOpenModelDialog: () => void
@@ -393,6 +393,19 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
                   {formatShortcutLabel(appShortcut("X"))}
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
+              {agentInfo?.worktree ? (
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={!agentHeaderState.agentHasFile}
+                  onClick={() => {
+                    actionsRef.current.onDeleteCurrentAgent({
+                      removeWorktree: true,
+                    })
+                  }}
+                >
+                  <span>Archive and remove worktree…</span>
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className={cn("md:hidden", !terminalsAvailable && "hidden")}

@@ -11,6 +11,7 @@ import type {
   MoveAgentResponse,
   ModelResponse,
   RenameAgentResponse,
+  RestoreAgentResponse,
   AgentListEntry,
   AgentsEvent,
   ThinkingResponse,
@@ -24,7 +25,14 @@ import {
 } from "@/lib/pico"
 import { useMachineId } from "@/lib/pico/machine-context"
 import { sortSidebarAgents } from "@/features/pico/agent-order"
+import {
+  archivedAgentsMessage,
+  restoredAgentsMessage,
+} from "@/features/pico/archive-agents"
+import { picoQueryKeys } from "@/features/pico/query-keys"
 import { settle } from "@/lib/settle"
+
+type RestoreAgentData = Extract<RestoreAgentResponse, { ok: true }>
 
 type CloneAgentResponseData = Extract<CloneAgentResponse, { ok: true }>
 type ThinkingResponseData = Extract<ThinkingResponse, { ok: true }>
@@ -341,6 +349,8 @@ type UseAppShellAgentMutationsOptions = {
   optimisticallyClearActiveDeletedAgent?: (
     targetPath: string
   ) => (() => void) | undefined
+  /** Open an agent again after Undo restored it. */
+  reopenAgent?: (agentId: string, agentPath: string) => void
   setSelectedSidebarAgentKeys: React.Dispatch<
     React.SetStateAction<Array<string>>
   >
@@ -361,6 +371,7 @@ export function useAppShellAgentMutations({
   setAgentsEvent,
   getSidebarSelection,
   optimisticallyClearActiveDeletedAgent,
+  reopenAgent,
   setSelectedSidebarAgentKeys,
   setSidebarAgentSelectionAnchor,
   setPinnedSidebarAgentKeys,
@@ -980,6 +991,63 @@ export function useAppShellAgentMutations({
     },
   })
 
+  /**
+   * Undo an archive. `reopen` is the agent that was open: it opens again
+   * when no other agent was opened since.
+   */
+  const restoreAgents = async (
+    targets: Array<AgentListEntry>,
+    reopen?: { agentId: string; agentPath: string }
+  ) => {
+    const results = await Promise.all(
+      targets.flatMap((target) =>
+        target.path
+          ? [
+              settle(
+                fetchJson<RestoreAgentData>(
+                  buildRequestUrl("/api/agent/restore", {
+                    machineId,
+                    contextId: viewerContextId,
+                  }),
+                  {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ path: target.path }),
+                  }
+                )
+              ),
+            ]
+          : []
+      )
+    )
+    const projects = new Set(
+      results.flatMap((result) => (result.ok ? [result.value.project] : []))
+    )
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: picoQueryKeys.archivedAgents(viewerContextId),
+      }),
+      ...[...projects].map((project) =>
+        queryClient.invalidateQueries({
+          queryKey: picoQueryKeys.projectAgentsIndex(viewerContextId, project),
+        })
+      ),
+    ])
+    const failed = results.find((result) => !result.ok)
+    if (failed && !failed.ok) {
+      toast.error(
+        failed.error instanceof Error
+          ? failed.error.message
+          : "Failed to restore agent"
+      )
+      return
+    }
+    if (reopen && !agentStateRef.current.agentFile) {
+      reopenAgent?.(reopen.agentId, reopen.agentPath)
+    }
+    toast.success(restoredAgentsMessage(targets))
+  }
+
   const deleteAgents = (
     targets: Array<AgentListEntry>,
     options: { removeWorktree?: boolean } = {}
@@ -1043,6 +1111,18 @@ export function useAppShellAgentMutations({
       current && deletedKeys.has(current) ? "" : current
     )
     const activeDeletedPath = agentStateRef.current.agentFile
+    const activeDeletedId = agentStateRef.current.agentId
+    const reopen =
+      activeDeletedPath &&
+      activeDeletedId &&
+      deletedPathSet.has(activeDeletedPath)
+        ? { agentId: activeDeletedId, agentPath: activeDeletedPath }
+        : undefined
+    const archivedTargets = orderedTargets.filter(
+      (target, index) =>
+        orderedTargets.findIndex((other) => other.path === target.path) ===
+        index
+    )
     const rollbackActiveDeletedAgent =
       activeDeletedPath && deletedPathSet.has(activeDeletedPath)
         ? optimisticallyClearActiveDeletedAgent?.(activeDeletedPath)
@@ -1098,11 +1178,14 @@ export function useAppShellAgentMutations({
         )
         return
       }
-      toast.success(
-        orderedPaths.length === 1
-          ? "Archived agent"
-          : `Archived ${orderedPaths.length} agents`
-      )
+      toast.success(archivedAgentsMessage(archivedTargets), {
+        action: {
+          label: "Undo",
+          onClick: () => {
+            void restoreAgents(archivedTargets, reopen)
+          },
+        },
+      })
     })()
 
     return true

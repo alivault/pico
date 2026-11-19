@@ -1,5 +1,6 @@
 import type { DesktopNotificationPermission } from "@/features/pico/agent-done-notifications"
 import type { AgentDoneEvent, AgentListEntry } from "@/lib/pico/api"
+import type { ArchiveAgentsResult } from "@/features/pico/archive-agents"
 
 export type SelectAgentNavigationOptions = {
   replace?: boolean
@@ -17,7 +18,10 @@ export type AppShellAgentWorkspaceHandle = {
   ) => Promise<void>
   openAddProjectDialog: () => void
   openCommandPalette: () => void
-  openDeleteDialog: (targets: Array<AgentListEntry>) => void
+  archiveAgents: (
+    targets: Array<AgentListEntry>,
+    options?: { removeWorktree?: boolean }
+  ) => ArchiveAgentsResult
   openDeleteOldProjectAgentsDialog: (project: string) => void
   moveAgentToProject: (
     entry: AgentListEntry,

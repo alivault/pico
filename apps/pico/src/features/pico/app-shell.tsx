@@ -42,6 +42,12 @@ import type {
   RenameAgentDialogHandle,
 } from "@/features/pico/app-shell-agent-dialogs"
 import type { AppShellTreeDialogHandle } from "@/features/pico/app-shell-tree-dialog"
+import {
+  type ArchiveAgentsResult,
+  workingAgents,
+  workingAgentsMessage,
+  workingSubagents,
+} from "@/features/pico/archive-agents"
 import type { AppShellUiRequestDialogHandle } from "@/features/pico/app-shell-ui-request-dialog"
 import {
   findSidebarAgentSelectionKey,
@@ -1664,8 +1670,46 @@ function useAppShellAgentWorkspaceView({
     renameDialogRef.current?.openForEntry(entry)
   }
 
-  const openDeleteDialog = (targets: Array<AgentListEntry>) => {
-    deleteDialogRef.current?.open(targets)
+  /**
+   * Archive at once, with Undo in the toast. Ask first only when archive
+   * loses something that Undo cannot bring back (see `ArchiveAgentsResult`).
+   */
+  const archiveAgents = (
+    targets: Array<AgentListEntry>,
+    options: { removeWorktree?: boolean } = {}
+  ): ArchiveAgentsResult => {
+    const { sidebarAgents, sidebarAgentEntriesByKey } =
+      sidebarStore.getWorkspaceSnapshot()
+    // The sidebar has the newest status of each agent.
+    const entries = targets.flatMap((target) => {
+      if (!target.path) return []
+      const known = sidebarAgentEntriesByKey.get(agentListEntryKey(target))
+      return [
+        known
+          ? {
+              ...target,
+              ...known,
+              streaming: target.streaming || known.streaming,
+            }
+          : target,
+      ]
+    })
+    if (entries.length === 0) return false
+
+    const working = workingAgents(entries)
+    if (working.length > 0) {
+      toast.error(workingAgentsMessage(working))
+      return false
+    }
+    const subagents = workingSubagents(entries, sidebarAgents)
+    if (options.removeWorktree || subagents.length > 0) {
+      deleteDialogRef.current?.open(entries, {
+        removeWorktree: options.removeWorktree,
+        subagents,
+      })
+      return "confirm"
+    }
+    return deleteAgents(entries)
   }
 
   const openDeleteOldProjectAgentsDialog = (project: string) => {
@@ -1686,11 +1730,14 @@ function useAppShellAgentWorkspaceView({
     } satisfies AgentListEntry
   }
 
-  const openDeleteDialogForCurrentAgent = () => {
+  const archiveCurrentAgent = (options?: { removeWorktree?: boolean }) => {
     const currentEntry = currentAgentListEntry()
     if (!currentEntry) return
 
-    openDeleteDialog([currentEntry])
+    archiveAgents(
+      [{ ...currentEntry, streaming: agentStore.state.streaming }],
+      options
+    )
   }
 
   const openAddProjectDialog = () => {
@@ -2796,6 +2843,10 @@ function useAppShellAgentWorkspaceView({
         setAgentState(previousState)
       }
     },
+    // Undo runs long after this render: use the newest navigation.
+    reopenAgent: (agentId, agentPath) => {
+      handleSelectAgentRef.current(agentId, { agentPath })
+    },
     setSelectedSidebarAgentKeys: sidebarStore.setSelectedSidebarAgentKeys,
     setSidebarAgentSelectionAnchor: sidebarStore.setSidebarAgentSelectionAnchor,
     setPinnedSidebarAgentKeys: sidebarStore.setPinnedSidebarAgentKeys,
@@ -3029,7 +3080,7 @@ function useAppShellAgentWorkspaceView({
           return
         }
         clearComposerDraft()
-        openDeleteDialogForCurrentAgent()
+        archiveCurrentAgent()
         return
       }
       case "fork": {
@@ -3467,7 +3518,9 @@ function useAppShellAgentWorkspaceView({
         )}`,
         shortcut: formatShortcutLabel(appShortcut("X")),
         keywords: ["archive", "delete", "remove", "agent"],
-        onSelect: openDeleteDialogForCurrentAgent,
+        onSelect: () => {
+          archiveCurrentAgent()
+        },
       })
     }
 
@@ -3483,7 +3536,7 @@ function useAppShellAgentWorkspaceView({
         }`,
         keywords: ["archive", "delete", "selected", "sidebar", "agents"],
         onSelect: () => {
-          openDeleteDialog(commandPaletteStateRef.current.selectedSidebarAgents)
+          archiveAgents(commandPaletteStateRef.current.selectedSidebarAgents)
         },
       })
     }
@@ -3521,8 +3574,8 @@ function useAppShellAgentWorkspaceView({
     openAddProjectDialog,
     openCommandPalette,
     openCommitDialog,
-    openDeleteDialog,
-    openDeleteDialogForCurrentAgent,
+    archiveAgents,
+    archiveCurrentAgent,
     openForkDialog,
     openRenameDialog,
     openAgentsDialog,
@@ -3555,7 +3608,7 @@ function useAppShellAgentWorkspaceView({
 
   const agentHeaderActionsRef = useLatestRef<AppShellAgentHeaderActions>({
     createAgent,
-    onDeleteCurrentAgent: openDeleteDialogForCurrentAgent,
+    onDeleteCurrentAgent: archiveCurrentAgent,
     onForkAgent: openForkDialog,
     onOpenCommandPalette: openCommandPalette,
     onOpenModelDialog: focusModelSelector,
@@ -3594,7 +3647,7 @@ function useAppShellAgentWorkspaceView({
       createAgent,
       openAddProjectDialog,
       openCommandPalette,
-      openDeleteDialog,
+      archiveAgents,
       openDeleteOldProjectAgentsDialog,
       moveAgentToProject,
       openMoveAgentProjectDialogForEntry,
@@ -3611,7 +3664,7 @@ function useAppShellAgentWorkspaceView({
       openAddProjectDialog,
       openCommandPalette,
       moveAgentToProject,
-      openDeleteDialog,
+      archiveAgents,
       openDeleteOldProjectAgentsDialog,
       openMoveAgentProjectDialogForEntry,
       openRenameDialogForEntry,
@@ -3714,6 +3767,7 @@ function useAppShellAgentWorkspaceView({
         deleteDialogRef={deleteDialogRef}
         deleteOpenRef={deleteOpenRef}
         deleteAgents={deleteAgents}
+        archiveAgents={archiveAgents}
         deleteOldProjectAgentsDialogRef={deleteOldProjectAgentsDialogRef}
         deleteOldProjectAgentsOpenRef={deleteOldProjectAgentsOpenRef}
         notificationStore={notificationStore}
