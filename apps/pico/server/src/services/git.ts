@@ -833,12 +833,14 @@ export class GitWatcher {
   }
 }
 
+// One status call gives HEAD (`branch.oid`), the upstream and the ahead and
+// behind counts (`branch.ab`, which changes after a push or a fetch), and the
+// changed and untracked files.
 async function signatureOf(cwd: string) {
-  const fileStatus = await gitAllowFailure(
+  const status = await gitAllowFailure(
     cwd,
-    ["status", "--porcelain=v1", "-uno"],
+    ["status", "--porcelain=v2", "--branch", "-unormal"],
     5000
   )
-  const head = await gitAllowFailure(cwd, ["rev-parse", "HEAD"], 5000)
-  return `${head.stdout}\0${fileStatus.stdout}`
+  return status.stdout
 }

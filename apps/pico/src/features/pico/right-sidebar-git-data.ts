@@ -24,6 +24,7 @@ export type GitCommitMessageData = Extract<
 export type GitFileDiffData = Extract<GitFileDiffResponse, { ok: true }>
 export type GitFileReviewData = Extract<GitFileReviewResponse, { ok: true }>
 const GIT_QUERY_STALE_TIME_MS = 1000 * 30
+const GIT_STATUS_KEEP_WATCHING_MS = 1000 * 60
 const GIT_QUERY_GC_TIME_MS = 1000 * 60 * 10
 export const GIT_COMMITS_PAGE_SIZE = 50
 export const GIT_REVIEW_FULL_CONTEXT_SIZE_THRESHOLD_BYTES = 10_000
@@ -49,6 +50,10 @@ export function gitStatusQueryOptions({
       ),
     staleTime: GIT_QUERY_STALE_TIME_MS,
     gcTime: GIT_QUERY_GC_TIME_MS,
+    // The server stops watching a repository that no client asked about for
+    // ten minutes. Asking each minute keeps the live updates on while the
+    // status shows.
+    refetchInterval: GIT_STATUS_KEEP_WATCHING_MS,
   }
 }
 
