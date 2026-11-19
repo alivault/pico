@@ -268,21 +268,25 @@ function completionStateReducer(
       }
       if (filteredItems.length === 0) return current ? null : current
 
+      // Select the best file match by default; the upload item only when no
+      // file matches.
+      const defaultIndex =
+        filteredItems[0]?.action === "upload" && filteredItems.length > 1
+          ? 1
+          : 0
       const selectedItem =
         current && sameCompletionContext(current.query, action.query)
           ? current.items[current.selectedIndex] || current.items[0]
           : null
-      const selectedIndex = selectedItem
-        ? Math.max(
-            0,
-            filteredItems.findIndex((item) => item.value === selectedItem.value)
-          )
-        : 0
+      const selectedIndex =
+        selectedItem && selectedItem.action !== "upload"
+          ? filteredItems.findIndex((item) => item.value === selectedItem.value)
+          : -1
 
       return {
         query: action.query,
         items: filteredItems,
-        selectedIndex: selectedIndex >= 0 ? selectedIndex : 0,
+        selectedIndex: selectedIndex >= 0 ? selectedIndex : defaultIndex,
       }
     }
     case "move-selection": {
