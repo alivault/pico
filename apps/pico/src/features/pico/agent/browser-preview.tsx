@@ -5,9 +5,26 @@
  * selects, and reloads as in a browser tab, and hot reload works.
  */
 import * as React from "react"
-import { ExternalLinkIcon, MonitorIcon, RotateCwIcon } from "lucide-react"
+import {
+  ExternalLinkIcon,
+  MonitorIcon,
+  RotateCwIcon,
+  RotateCwSquareIcon,
+  RulerDimensionLineIcon,
+  SmartphoneIcon,
+  TabletIcon,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
@@ -88,6 +105,10 @@ function previewAddressKey(machineId: string, cwd: string) {
   return `pico-preview-address:${machineId}:${cwd}`
 }
 
+function previewViewportKey(machineId: string, cwd: string) {
+  return `pico-preview-viewport:${machineId}:${cwd}`
+}
+
 function browserModeKey(machineId: string) {
   return `pico-browser-mode:${machineId}`
 }
@@ -164,6 +185,177 @@ export function setBrowserMode(machineId: string, mode: BrowserMode) {
 
 type OpenedPreview = { src: string; address: string }
 
+type ViewportMode = "fit" | "mobile" | "tablet" | "custom"
+type ViewportSize = { width: number; height: number }
+
+/**
+ * The viewport of the Preview. "fit" fills the pane; the other modes give
+ * the iframe a fixed CSS size. `rotated` swaps the size of a preset; a
+ * custom size is swapped in `custom`.
+ */
+type ViewportSetting = {
+  mode: ViewportMode
+  rotated: boolean
+  custom: ViewportSize
+}
+
+const VIEWPORT_PRESETS = {
+  mobile: { width: 390, height: 844 },
+  tablet: { width: 820, height: 1180 },
+} satisfies Record<string, ViewportSize>
+
+const VIEWPORT_CHOICES: {
+  mode: ViewportMode
+  label: string
+  icon: typeof MonitorIcon
+}[] = [
+  { mode: "fit", label: "Fit", icon: MonitorIcon },
+  { mode: "mobile", label: "Mobile", icon: SmartphoneIcon },
+  { mode: "tablet", label: "Tablet", icon: TabletIcon },
+  { mode: "custom", label: "Custom", icon: RulerDimensionLineIcon },
+]
+
+const VIEWPORT_MIN = 200
+const VIEWPORT_MAX = 3000
+
+const DEFAULT_VIEWPORT: ViewportSetting = {
+  mode: "fit",
+  rotated: false,
+  custom: { width: 1280, height: 800 },
+}
+
+function clampViewportLength(value: number) {
+  return Math.min(VIEWPORT_MAX, Math.max(VIEWPORT_MIN, Math.round(value)))
+}
+
+function parseViewport(text: string): ViewportSetting {
+  if (!text) return DEFAULT_VIEWPORT
+  try {
+    const value = JSON.parse(text) as Partial<ViewportSetting> | null
+    const mode = VIEWPORT_CHOICES.some((choice) => choice.mode === value?.mode)
+      ? (value?.mode as ViewportMode)
+      : "fit"
+    const width = Number(value?.custom?.width)
+    const height = Number(value?.custom?.height)
+    return {
+      mode,
+      rotated: value?.rotated === true,
+      custom:
+        Number.isFinite(width) && Number.isFinite(height)
+          ? {
+              width: clampViewportLength(width),
+              height: clampViewportLength(height),
+            }
+          : DEFAULT_VIEWPORT.custom,
+    }
+  } catch {
+    return DEFAULT_VIEWPORT
+  }
+}
+
+/** The CSS size of the iframe, or undefined when it fills the pane. */
+function viewportSize(setting: ViewportSetting): ViewportSize | undefined {
+  if (setting.mode === "fit") return undefined
+  if (setting.mode === "custom") return setting.custom
+  const size = VIEWPORT_PRESETS[setting.mode]
+  return setting.rotated ? { width: size.height, height: size.width } : size
+}
+
+function rotateViewport(setting: ViewportSetting): ViewportSetting {
+  if (setting.mode === "custom")
+    return {
+      ...setting,
+      custom: { width: setting.custom.height, height: setting.custom.width },
+    }
+  return { ...setting, rotated: !setting.rotated }
+}
+
+/** The viewport of a project's Preview, saved per machine and cwd. */
+function usePreviewViewport(machineId: string, cwd: string) {
+  const key = previewViewportKey(machineId, cwd)
+  const stored = useStoredValue(key)
+  const setting = React.useMemo(() => parseViewport(stored), [stored])
+  const setSetting = React.useCallback(
+    (next: ViewportSetting) => storeValue(key, JSON.stringify(next)),
+    [key]
+  )
+  return [setting, setSetting] as const
+}
+
+/**
+ * The inner size of an element, kept current with a ResizeObserver. Give
+ * the returned callback ref to the element.
+ */
+function useElementSize() {
+  const [element, setElement] = React.useState<HTMLElement | null>(null)
+  const [size, setSize] = React.useState<ViewportSize>({ width: 0, height: 0 })
+  React.useEffect(() => {
+    if (!element) return
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return
+      const { width, height } = entry.contentRect
+      setSize((current) =>
+        current.width === width && current.height === height
+          ? current
+          : { width, height }
+      )
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [element])
+  return [setElement, size] as const
+}
+
+/** A number field of a custom viewport size. It saves on Enter and blur. */
+function ViewportLengthInput({
+  label,
+  value,
+  disabled,
+  onCommit,
+}: {
+  label: string
+  value: number
+  disabled?: boolean
+  onCommit: (value: number) => void
+}) {
+  const [draft, setDraft] = React.useState(String(value))
+  React.useEffect(() => setDraft(String(value)), [value])
+  const commit = () => {
+    const number = Number(draft)
+    if (draft.trim() === "" || !Number.isFinite(number)) {
+      setDraft(String(value))
+      return
+    }
+    const next = clampViewportLength(number)
+    setDraft(String(next))
+    if (next !== value) onCommit(next)
+  }
+  return (
+    <Input
+      aria-label={label}
+      type="number"
+      inputMode="numeric"
+      min={VIEWPORT_MIN}
+      max={VIEWPORT_MAX}
+      className="h-5 w-14 [appearance:textfield] px-1 py-0 text-center text-xs tabular-nums md:text-xs [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+      disabled={disabled}
+      value={draft}
+      onFocus={(event) => event.currentTarget.select()}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault()
+          commit()
+        } else if (event.key === "Escape") {
+          setDraft(String(value))
+          event.currentTarget.blur()
+        }
+      }}
+    />
+  )
+}
+
 export function PreviewPanel({ cwd }: { cwd: string }) {
   const machineId = useMachineId()
   const readOnly = useMachineReadOnly()
@@ -172,6 +364,23 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
   const [opened, setOpened] = React.useState<OpenedPreview | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState("")
+  const [viewport, setViewport] = usePreviewViewport(machineId, cwd)
+  const fixedSize = viewportSize(viewport)
+  const [stageRef, stage] = useElementSize()
+  // Scale a fixed size down so that the frame and its 1px border fit.
+  const scale =
+    fixedSize && stage.width > 0 && stage.height > 0
+      ? Math.min(
+          1,
+          (stage.width - 2) / fixedSize.width,
+          (stage.height - 2) / fixedSize.height
+        )
+      : 1
+  const scalePercent = Math.round(scale * 100)
+  const viewportChoice =
+    VIEWPORT_CHOICES.find((choice) => choice.mode === viewport.mode) ??
+    VIEWPORT_CHOICES[0]
+  const ViewportIcon = viewportChoice.icon
   // A new key loads the iframe again.
   const [reloads, setReloads] = React.useState(0)
   // The address that the iframe shows or loads.
@@ -260,6 +469,60 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
             onChange={(event) => setAddress(event.target.value)}
           />
         </form>
+        <DropdownMenu>
+          <TitleTooltip title={`Viewport: ${viewportChoice.label}`}>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label={`Viewport: ${viewportChoice.label}`}
+                />
+              }
+            >
+              <ViewportIcon />
+            </DropdownMenuTrigger>
+          </TitleTooltip>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuRadioGroup
+              value={viewport.mode}
+              onValueChange={(value) =>
+                setViewport({ ...viewport, mode: value as ViewportMode })
+              }
+            >
+              {VIEWPORT_CHOICES.map((choice) => {
+                const size =
+                  choice.mode === "fit"
+                    ? undefined
+                    : viewportSize({ ...viewport, mode: choice.mode })
+                return (
+                  <DropdownMenuRadioItem
+                    key={choice.mode}
+                    value={choice.mode}
+                    closeOnClick
+                  >
+                    <choice.icon />
+                    {choice.label}
+                    {size ? (
+                      <span className="ml-auto text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+                        {size.width} × {size.height}
+                      </span>
+                    ) : null}
+                  </DropdownMenuRadioItem>
+                )
+              })}
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              disabled={!fixedSize}
+              onClick={() => setViewport(rotateViewport(viewport))}
+            >
+              <RotateCwSquareIcon />
+              Rotate
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <TitleTooltip title="Open in a new tab">
           <Button
             size="icon-sm"
@@ -280,15 +543,102 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
           </Button>
         </TitleTooltip>
       </div>
+      {opened && fixedSize ? (
+        <div className="flex h-7 shrink-0 items-center justify-center gap-1 border-b border-border/70 px-2 text-xs text-muted-foreground tabular-nums">
+          {viewport.mode === "custom" ? (
+            <>
+              <ViewportLengthInput
+                label="Viewport width"
+                value={fixedSize.width}
+                disabled={readOnly}
+                onCommit={(width) =>
+                  setViewport({
+                    ...viewport,
+                    custom: { ...viewport.custom, width },
+                  })
+                }
+              />
+              <span>×</span>
+              <ViewportLengthInput
+                label="Viewport height"
+                value={fixedSize.height}
+                disabled={readOnly}
+                onCommit={(height) =>
+                  setViewport({
+                    ...viewport,
+                    custom: { ...viewport.custom, height },
+                  })
+                }
+              />
+            </>
+          ) : (
+            <span>
+              {fixedSize.width} × {fixedSize.height}
+            </span>
+          )}
+          {scalePercent < 100 ? <span>· {scalePercent}%</span> : null}
+          <TitleTooltip title="Rotate">
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              aria-label="Rotate"
+              onClick={() => setViewport(rotateViewport(viewport))}
+            >
+              <RotateCwSquareIcon />
+            </Button>
+          </TitleTooltip>
+        </div>
+      ) : null}
       <div className="relative flex min-h-0 flex-1 flex-col bg-muted/30">
         {opened ? (
-          <iframe
-            key={`${opened.src}:${reloads}`}
-            src={opened.src}
-            title={`Preview of ${opened.address}`}
-            className="min-h-0 w-full flex-1 border-0 bg-white"
-            allow="clipboard-read; clipboard-write; fullscreen"
-          />
+          // The same tree for all viewports, so that a change of the
+          // viewport does not load the page again.
+          <div
+            ref={stageRef}
+            className={
+              fixedSize
+                ? "flex min-h-0 flex-1 items-center justify-center overflow-hidden p-3"
+                : "flex min-h-0 flex-1 flex-col"
+            }
+          >
+            <div
+              className={
+                fixedSize
+                  ? "box-content shrink-0 overflow-hidden rounded-md border border-border bg-white shadow-sm"
+                  : "flex min-h-0 flex-1 flex-col"
+              }
+              style={
+                fixedSize
+                  ? {
+                      width: fixedSize.width * scale,
+                      height: fixedSize.height * scale,
+                    }
+                  : undefined
+              }
+            >
+              <iframe
+                key={`${opened.src}:${reloads}`}
+                src={opened.src}
+                title={`Preview of ${opened.address}`}
+                className={
+                  fixedSize
+                    ? "block origin-top-left border-0 bg-white"
+                    : "min-h-0 w-full flex-1 border-0 bg-white"
+                }
+                style={
+                  fixedSize
+                    ? {
+                        width: fixedSize.width,
+                        height: fixedSize.height,
+                        transform: scale < 1 ? `scale(${scale})` : undefined,
+                      }
+                    : undefined
+                }
+                allow="clipboard-read; clipboard-write; fullscreen"
+              />
+            </div>
+          </div>
         ) : loading ? (
           <div className="flex flex-1 items-center justify-center">
             <Spinner />
