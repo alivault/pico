@@ -300,3 +300,32 @@ void test("announcePreview tells the clients when the port listens", async () =>
     server.close()
   }
 })
+
+void test("announcePreview skips a Pico server", async () => {
+  const server = createServer((request, response) => {
+    if (request.url === "/api/system/health") {
+      response.setHeader("content-type", "application/json")
+      response.end(JSON.stringify({ ok: true, engine: "pi-durable" }))
+      return
+    }
+    response.end("pico")
+  })
+  const port = await listen(server)
+  const pushed: Array<unknown> = []
+  const services = {
+    agents: { current: () => undefined },
+    events: { push: (payload: unknown) => pushed.push(payload) },
+  } as unknown as Parameters<typeof announcePreview>[0]
+  try {
+    assert.equal(
+      await announcePreview(services, "7" as never, "/work/app", {
+        port,
+        path: "/",
+      }),
+      false
+    )
+    assert.equal(pushed.length, 0)
+  } finally {
+    server.close()
+  }
+})

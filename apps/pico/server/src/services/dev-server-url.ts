@@ -50,8 +50,26 @@ export function isListening(port: number, timeoutMs = 1000) {
 }
 
 /**
+ * Whether a Pico server listens on a local port: this one or another. An
+ * agent that opens Pico in its browser does not start a dev server, and
+ * Pico cannot show itself in the Preview.
+ */
+export async function isPicoServer(port: number, timeoutMs = 1000) {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/system/health`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (!response.ok) return false
+    const health = (await response.json()) as { engine?: unknown }
+    return health.engine === "pi-durable"
+  } catch {
+    return false
+  }
+}
+
+/**
  * Tell the clients of a dev server that an agent started or opened. True
- * when the port listens and the clients were told.
+ * when the port listens, is not a Pico server, and the clients were told.
  */
 export async function announcePreview(
   services: Pick<HostServices, "agents" | "events">,
@@ -65,7 +83,7 @@ export async function announcePreview(
     if (attempt > 0) await delay(1000)
     listening = await isListening(url.port)
   }
-  if (!listening) return false
+  if (!listening || (await isPicoServer(url.port))) return false
   const agentId =
     services.agents.current(agentIdOf(conversationId)) ??
     agentIdOf(conversationId)
