@@ -797,6 +797,7 @@ export function ContextUsageBars({
 }) {
   return (
     <span
+      data-usage-bars=""
       className={cn("flex items-center gap-3 text-xs", className)}
       aria-hidden="true"
     >

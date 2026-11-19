@@ -171,6 +171,12 @@ export const ComposerContextUsage = React.memo(function ComposerContextUsage({
             ? "Context usage"
             : `${view.displayPercent} of the context used`
         }
+        // The labeled bars say the same, so the tooltip shows only for the
+        // rings, where the row has no room for the bars.
+        openWhen={(trigger) => {
+          const bars = trigger.querySelector("[data-usage-bars]")
+          return !bars || getComputedStyle(bars).display === "none"
+        }}
       >
         <DropdownMenuTrigger
           render={

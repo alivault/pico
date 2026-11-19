@@ -91,6 +91,7 @@ function TitleTooltip({
   className,
   positionerClassName,
   onlyWhenTruncated = false,
+  openWhen,
 }: {
   title: React.ReactNode
   children: React.ReactElement
@@ -98,6 +99,8 @@ function TitleTooltip({
   rows?: Array<{ title: React.ReactNode; kbd?: React.ReactNode }>
   /** Open only when the text of the trigger does not fit, so it is cut off. */
   onlyWhenTruncated?: boolean
+  /** Open only when this returns true for the trigger element. */
+  openWhen?: (trigger: HTMLElement) => boolean
 } & Pick<
   React.ComponentProps<typeof TooltipContent>,
   "align" | "className" | "positionerClassName" | "side" | "sideOffset"
@@ -106,17 +109,24 @@ function TitleTooltip({
   const [open, setOpen] = React.useState(false)
   if (!title) return children
 
-  const truncatedProps = onlyWhenTruncated
-    ? {
-        open,
-        onOpenChange: (nextOpen: boolean) => {
-          const trigger = triggerRef.current
-          if (nextOpen && trigger && trigger.scrollWidth <= trigger.clientWidth)
-            return
-          setOpen(nextOpen)
-        },
-      }
-    : {}
+  const truncatedProps =
+    onlyWhenTruncated || openWhen
+      ? {
+          open,
+          onOpenChange: (nextOpen: boolean) => {
+            const trigger = triggerRef.current
+            if (nextOpen && trigger) {
+              if (
+                onlyWhenTruncated &&
+                trigger.scrollWidth <= trigger.clientWidth
+              )
+                return
+              if (openWhen && !openWhen(trigger)) return
+            }
+            setOpen(nextOpen)
+          },
+        }
+      : {}
 
   return (
     <Tooltip {...truncatedProps}>
