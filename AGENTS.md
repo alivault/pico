@@ -27,6 +27,7 @@
 - To load a new server build into a running Pico (`pnpm start`, or an installed `pico-app`), run `pico-app restart` (or `pnpm start restart`), or use Settings, Server. It waits for active turns; `--now` does not. A launcher (`bin/pico.mjs`, `build.mjs --watch`) starts the server again when it exits with code 75; a server without one starts itself in the background.
 - After each change to the web client (`apps/pico/src`), rebuild the production web with `pnpm build:web` from `apps/pico` in the main checkout. This updates the web on port 3141. Work in a worktree gets this rebuild after it is merged to `main`.
 - When Pico runs from `pnpm dev`, the server restarts after each successful rebuild. This includes changes to `apps/pico/server/src/**`, `apps/pico/server/package.json`, and dependency installs. A restart stops the current agent turn. Group these edits so the server rebuilds less often, and expect the turn to stop after them.
+- When a Pico of this checkout already runs on the data directory (for example from `pnpm start`), `pnpm dev` does not start a second server. After each server rebuild, it asks that Pico to restart, and the restart waits for active turns. Another Pico (as an installed `pico-app`) does not load the changes: `pnpm dev` prints a warning.
 
 ## Releases
 
