@@ -281,10 +281,13 @@ void test("announcePreview tells the clients when the port listens", async () =>
     },
   } as unknown as Parameters<typeof announcePreview>[0]
   try {
-    await announcePreview(services, "7" as never, "/work/app", {
-      port,
-      path: "/",
-    })
+    assert.equal(
+      await announcePreview(services, "7" as never, "/work/app", {
+        port,
+        path: "/",
+      }),
+      true
+    )
     assert.equal(pushed.length, 1)
     assert.deepEqual(pushed[0]!.payload, {
       type: "preview_available",

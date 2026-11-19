@@ -12,9 +12,10 @@ import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { fetchJson } from "@/features/pico/app-shell-utils"
+import { emitPicoEvent, type PicoEventMap } from "@/features/pico/agent/events"
 import { useMachineReadOnly } from "@/features/pico/machine-store"
 import { useMachineId } from "@/lib/pico/machine-context"
-import { hubUrl } from "@/lib/pico/machine"
+import { hubUrl, isRemoteMachine } from "@/lib/pico/machine"
 import {
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
@@ -100,6 +101,48 @@ export function setPreviewAddress(
   storeValue(previewAddressKey(machineId, cwd), formatAddress(address))
 }
 
+/**
+ * Save a dev server as the project's preview address and tell the shell of
+ * its machine. With `open`, the user asked for it: the shell shows the
+ * Preview always.
+ */
+export function showPreview(detail: PicoEventMap["pico:preview-available"]) {
+  setPreviewAddress(detail.machineId, detail.cwd, detail)
+  emitPicoEvent("pico:preview-available", detail)
+}
+
+/**
+ * The URL of a dev server of a machine for this browser. The hub shows it on
+ * its own port (`/api/preview/open`).
+ */
+export async function previewUrl(
+  machineId: string,
+  address: { port: number; path: string }
+) {
+  const response = await fetchJson<
+    { ok: true; port: number } | { ok: false; error: string }
+  >(hubUrl("/api/preview/open"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ machineId, port: address.port }),
+  })
+  if (!response.ok) throw new Error(response.error)
+  return `${window.location.protocol}//${window.location.hostname}:${response.port}${address.path}`
+}
+
+/**
+ * The direct URL of a dev server, when this browser runs on its machine:
+ * the local machine, with Pico open on a loopback address.
+ */
+export function directPreviewUrl(
+  machineId: string,
+  address: { port: number; path: string }
+) {
+  if (isRemoteMachine(machineId)) return undefined
+  if (!LOOPBACK_HOSTS.has(window.location.hostname)) return undefined
+  return `http://localhost:${address.port}${address.path}`
+}
+
 /** The saved preview address of a project, or "". */
 export function usePreviewAddress(machineId: string, cwd: string) {
   return useStoredValue(previewAddressKey(machineId, cwd))
@@ -144,20 +187,10 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
       setLoading(true)
       setError("")
       try {
-        const response = await fetchJson<
-          { ok: true; port: number } | { ok: false; error: string }
-        >(hubUrl("/api/preview/open"), {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ machineId, port: parsed.port }),
-        })
-        if (!response.ok) throw new Error(response.error)
+        const src = await previewUrl(machineId, parsed)
         setAddress(formatted)
         storeValue(previewAddressKey(machineId, cwd), formatted)
-        setOpened({
-          src: `${window.location.protocol}//${window.location.hostname}:${response.port}${parsed.path}`,
-          address: formatted,
-        })
+        setOpened({ src, address: formatted })
         setReloads((count) => count + 1)
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : String(caught))

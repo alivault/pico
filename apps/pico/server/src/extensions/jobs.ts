@@ -106,6 +106,11 @@ export type Job = {
   callId?: string
   /** An interactive shell (`terminal` open without a command). */
   shell?: boolean
+  /**
+   * The first local address in the output that listens, as a dev server's
+   * `http://localhost:5173/`. The client opens it in the Preview.
+   */
+  devServer?: { port: number; path: string }
 }
 
 /**
@@ -504,9 +509,21 @@ class JobRunner {
       episode: 0,
       outputListeners: new Set(),
       devServer: new DevServerScanner((url) => {
-        void announcePreview(services, conversationId, job.cwd, url).catch(
-          () => undefined
-        )
+        void announcePreview(services, conversationId, job.cwd, url)
+          .then(async (listening) => {
+            if (!listening || job.devServer) return
+            job.devServer = url
+            await editRunningJob(
+              services.harness,
+              conversationId,
+              job.id,
+              (draft) => {
+                draft.devServer ??= url
+              },
+              BACKGROUND_CONTEXT
+            )
+          })
+          .catch(() => undefined)
       }),
     }
     this.#live.set(job.id, live)

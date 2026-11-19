@@ -19,6 +19,8 @@ export type PicoEventMap = {
     cwd: string
     port: number
     path: string
+    /** The user asked for it, as with a click on a job: show it always. */
+    open?: boolean
   }
   /** Show a right sidebar tab. */
   "pico:open-sidebar-tab": { tab: "agent" | "review" | "browser" }
