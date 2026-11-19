@@ -55,6 +55,7 @@ import {
   getDataTransferFiles,
   hasDraggedFiles,
 } from "@/features/pico/app-shell-utils"
+import { useLatestRef } from "@/features/pico/app-shell-common"
 import { promptImageKey } from "@/features/pico/conversation-view"
 import {
   findExactSlashCommand,
@@ -74,6 +75,8 @@ export type ComposerPanelHandle = {
   editQueue: () => boolean
   /** Shift+Alt+Q: show or hide the queue. False when it cannot. */
   toggleQueue: () => boolean
+  /** Attach dropped files. False when the composer is disabled. */
+  attachFiles: (files: Array<File>) => boolean
 }
 
 type ImageFileSelection = FileList | Array<File> | null
@@ -334,6 +337,8 @@ export function ComposerPanel({
   ref?: React.Ref<ComposerPanelHandle>
 }) {
   const promptRef = React.useRef<HTMLTextAreaElement | null>(null)
+  const disabledRef = useLatestRef(disabled)
+  const onPickImagesRef = useLatestRef(onPickImages)
   const queueRef = React.useRef<ComposerPendingMessagesHandle | null>(null)
   const focusPrompt = () => {
     promptRef.current?.focus()
@@ -346,6 +351,12 @@ export function ComposerPanel({
       },
       editQueue: () => queueRef.current?.beginEditing() ?? false,
       toggleQueue: () => queueRef.current?.toggleCollapsed() ?? false,
+      attachFiles: (files) => {
+        if (disabledRef.current || files.length === 0) return false
+        onPickImagesRef.current(files)
+        promptRef.current?.focus()
+        return true
+      },
     }),
     []
   )

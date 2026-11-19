@@ -29,7 +29,12 @@ import type { AgentState } from "@/lib/pico"
 import { cn } from "@/lib/utils"
 import { toast } from "@/lib/pico/toast"
 import { useMachineId } from "@/lib/pico/machine-context"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import {
+  buildRequestUrl,
+  fetchJson,
+  getDataTransferFiles,
+  hasDraggedFiles,
+} from "@/features/pico/app-shell-utils"
 import {
   UserMessageActionsContext,
   type UserMessageActions,
@@ -140,12 +145,16 @@ export function AppShellAgentContent({
         }
       : undefined,
   }
+  const fileDrop = useConversationFileDrop(composerPanelRef)
   const showNewAgentComposer =
     agentState.draft && !hasMessages && !isAgentViewLoading
 
   if (showNewAgentComposer) {
     return (
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] items-end justify-items-center overflow-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:place-items-center">
+      <div
+        {...fileDrop.handlers}
+        className="relative grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] items-end justify-items-center overflow-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:place-items-center"
+      >
         <AppShellComposerController
           actionsRef={actionsRef}
           composerPanelRef={composerPanelRef}
@@ -168,54 +177,110 @@ export function AppShellAgentContent({
             />
           }
         />
+        {fileDrop.overlay}
       </div>
     )
   }
 
   return (
-    <ToolRenderContext.Provider value={toolRenderContext}>
-      <UserMessageActionsContext.Provider value={userMessageActions}>
-        <AppShellAgentConversation
-          awaitingFirstTurn={awaitingFirstTurn}
-          conversationFrameRef={conversationFrameRef}
-          conversationItemsStore={conversationItemsStore}
-          displaySettingsStore={displaySettingsStore}
-          isLoadingOlderHistory={isLoadingOlderHistory}
-          isAgentViewLoading={isAgentViewLoading}
-          isSubmitting={isSubmitting}
-          onCancelCompaction={onCancelCompaction}
-          onCreateAgent={onCreateAgent}
-          onLoadOlderHistory={onLoadOlderHistory}
-          agentStore={agentStore}
-          viewerContextId={viewerContextId}
-          workingStateStore={workingStateStore}
-        />
-      </UserMessageActionsContext.Provider>
-
-      {toolRenderContext.agentId ? (
-        <div
-          className={cn(
-            "flex shrink-0 flex-wrap justify-center gap-x-2 px-4",
-            // The chips are no wider than the messages and the composer.
-            centerMessages && "mx-auto w-full max-w-[calc(80ch+2rem)]"
-          )}
-        >
-          <WaitingCardChip
-            agentId={toolRenderContext.agentId}
+    <div
+      {...fileDrop.handlers}
+      className="relative flex min-h-0 flex-1 flex-col"
+    >
+      <ToolRenderContext.Provider value={toolRenderContext}>
+        <UserMessageActionsContext.Provider value={userMessageActions}>
+          <AppShellAgentConversation
+            awaitingFirstTurn={awaitingFirstTurn}
+            conversationFrameRef={conversationFrameRef}
+            conversationItemsStore={conversationItemsStore}
+            displaySettingsStore={displaySettingsStore}
+            isLoadingOlderHistory={isLoadingOlderHistory}
+            isAgentViewLoading={isAgentViewLoading}
+            isSubmitting={isSubmitting}
+            onCancelCompaction={onCancelCompaction}
+            onCreateAgent={onCreateAgent}
+            onLoadOlderHistory={onLoadOlderHistory}
+            agentStore={agentStore}
             viewerContextId={viewerContextId}
+            workingStateStore={workingStateStore}
           />
-        </div>
-      ) : null}
+        </UserMessageActionsContext.Provider>
 
-      <AppShellComposerController
-        actionsRef={actionsRef}
-        composerPanelRef={composerPanelRef}
-        contextUsageStore={contextUsageStore}
-        displaySettingsStore={displaySettingsStore}
-        fileInputRef={fileInputRef}
-        agentStore={agentStore}
-        store={store}
-      />
-    </ToolRenderContext.Provider>
+        {toolRenderContext.agentId ? (
+          <div
+            className={cn(
+              "flex shrink-0 flex-wrap justify-center gap-x-2 px-4",
+              // The chips are no wider than the messages and the composer.
+              centerMessages && "mx-auto w-full max-w-[calc(80ch+2rem)]"
+            )}
+          >
+            <WaitingCardChip
+              agentId={toolRenderContext.agentId}
+              viewerContextId={viewerContextId}
+            />
+          </div>
+        ) : null}
+
+        <AppShellComposerController
+          actionsRef={actionsRef}
+          composerPanelRef={composerPanelRef}
+          contextUsageStore={contextUsageStore}
+          displaySettingsStore={displaySettingsStore}
+          fileInputRef={fileInputRef}
+          agentStore={agentStore}
+          store={store}
+        />
+      </ToolRenderContext.Provider>
+      {fileDrop.overlay}
+    </div>
   )
+}
+
+/**
+ * Files dropped anywhere on the conversation go to the composer. The
+ * composer's own drop target handles a drop on it first.
+ */
+function useConversationFileDrop(
+  composerPanelRef: React.RefObject<ComposerPanelHandle | null>
+) {
+  // Counts nested dragenter and dragleave events, so the overlay does not
+  // flicker when the pointer moves over child elements.
+  const depthRef = React.useRef(0)
+  const [dragging, setDragging] = React.useState(false)
+  const reset = () => {
+    depthRef.current = 0
+    setDragging(false)
+  }
+  const handlers = {
+    onDragEnter: (event: React.DragEvent<HTMLDivElement>) => {
+      if (!hasDraggedFiles(event.dataTransfer)) return
+      event.preventDefault()
+      depthRef.current += 1
+      setDragging(true)
+    },
+    onDragOver: (event: React.DragEvent<HTMLDivElement>) => {
+      if (!hasDraggedFiles(event.dataTransfer)) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = "copy"
+    },
+    onDragLeave: () => {
+      if (depthRef.current === 0) return
+      depthRef.current -= 1
+      if (depthRef.current === 0) setDragging(false)
+    },
+    onDrop: (event: React.DragEvent<HTMLDivElement>) => {
+      reset()
+      if (event.defaultPrevented) return
+      const files = getDataTransferFiles(event.dataTransfer)
+      if (files.length === 0) return
+      event.preventDefault()
+      composerPanelRef.current?.attachFiles(files)
+    },
+  }
+  const overlay = dragging ? (
+    <div className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary/60 bg-background/60 text-sm font-medium text-foreground backdrop-blur-[1px]">
+      Drop files to attach them
+    </div>
+  ) : null
+  return { handlers, overlay }
 }
