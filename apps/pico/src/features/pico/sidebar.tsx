@@ -1820,9 +1820,7 @@ const ProjectAgentGroup = React.memo(function ProjectAgentGroup({
             size="icon"
             variant="ghost"
             aria-label={`Create an agent in ${project}`}
-            // Only the row under the pointer shows its button. It keeps
-            // its space, so the counts do not move.
-            className="shrink-0 text-sidebar-foreground/70 opacity-0 transition-opacity group-hover/project-row:opacity-100 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground focus-visible:opacity-100 data-popup-open:opacity-100"
+            className="shrink-0 text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
             onClick={() => onCreateAgentInProject(project)}
           >
             <SquarePenIcon className="size-4" />
@@ -2500,7 +2498,6 @@ export function ProjectActions({
   /** The machine headings have Group by in their context menu instead. */
   showGroupBy?: boolean
 }) {
-  const { isMobile } = useSidebar()
   return (
     <span className="flex items-center gap-1">
       {showGroupBy ? <SidebarViewMenu machineId={machineId} /> : null}
@@ -2511,13 +2508,7 @@ export function ProjectActions({
         <Button
           variant="ghost"
           size="icon"
-          // It shows only when the pointer is on its heading. A phone has
-          // no hover, so the button always shows there.
-          className={cn(
-            "hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-            !isMobile &&
-              "opacity-0 transition-opacity group-hover/heading:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100"
-          )}
+          className="hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
           onClick={onOpenAddProjectDialog}
           aria-label={title}
         >
@@ -3350,8 +3341,7 @@ function SplitProjectRow({
             size="icon"
             variant="ghost"
             aria-label={`Create an agent in ${project}`}
-            // Only the row under the pointer shows its button.
-            className="absolute top-0 right-0 hidden shrink-0 bg-sidebar-accent text-sidebar-foreground/70 group-hover/project-row:flex hover:text-sidebar-accent-foreground focus-visible:flex"
+            className="shrink-0 text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
             onClick={() => onCreateAgentInProject(project)}
           >
             <SquarePenIcon className="size-4" />
