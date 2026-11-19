@@ -70,6 +70,7 @@ import {
   type PicoStore,
 } from "@/features/pico/tanstack-store-utils"
 import type { AgentState } from "@/lib/pico"
+import { parseAgentNotice } from "@/lib/pico/agent-notice"
 
 export type AppShellConversationFrameHandle = {
   jumpToNextMessage: () => void
@@ -670,8 +671,13 @@ function ConversationUserGroupView({
   const item = useConversationItem(store, itemKey)
   if (!item || item.kind !== "user") return null
 
+  // The jumps between messages skip the notices of agents and jobs.
+  const notice = item.images.length === 0 && parseAgentNotice(item.text)
   return (
-    <div data-user-message-anchor="true" className={className}>
+    <div
+      data-user-message-anchor={notice ? undefined : "true"}
+      className={className}
+    >
       <UserMessageCard item={item} />
     </div>
   )

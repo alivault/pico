@@ -2,7 +2,14 @@
 
 import * as React from "react"
 import { PatchDiff } from "@pierre/diffs/react"
-import { CheckIcon, ChevronRightIcon, CopyIcon, PencilIcon } from "lucide-react"
+import {
+  BotIcon,
+  CheckIcon,
+  ChevronRightIcon,
+  CopyIcon,
+  PencilIcon,
+  SquareTerminalIcon,
+} from "lucide-react"
 
 import type {
   ConversationImage,
@@ -40,6 +47,13 @@ import { cn } from "@/lib/utils"
 import "@/features/pico/agent/register"
 import { toolRenderer } from "@/features/pico/tool-renderers/registry"
 import { useMachineId } from "@/lib/pico/machine-context"
+import {
+  isLocalAgentId,
+  parseAgentNotice,
+  type AgentNotice,
+  type AgentNoticeTone,
+} from "@/lib/pico/agent-notice"
+import { emitPicoEvent } from "@/features/pico/agent/events"
 
 export function promptImageKey(
   image: Pick<PromptImage, "previewUrl" | "data">
@@ -2457,7 +2471,148 @@ const CompactionBlockCard = React.memo(function CompactionBlockCard({
   )
 })
 
+/**
+ * A user message, or a notice from another agent or a job (see
+ * `lib/pico/agent-notice.ts`), which shows as a compact card.
+ */
 export const UserMessageCard = React.memo(function UserMessageCard({
+  item,
+}: {
+  item: Extract<ConversationItem, { kind: "user" }>
+}) {
+  const notice = React.useMemo(
+    () => (item.images.length > 0 ? null : parseAgentNotice(item.text)),
+    [item.images.length, item.text]
+  )
+  if (notice) return <AgentNoticeCard item={item} notice={notice} />
+  return <PromptMessageCard item={item} />
+})
+
+const NOTICE_TONE_CLASS: Record<AgentNoticeTone, string> = {
+  default: "text-foreground/80",
+  attention: "text-amber-600 dark:text-amber-400",
+  muted: "text-muted-foreground/70",
+  error: "text-destructive",
+}
+
+/**
+ * A notice as a collapsed row in the style of a tool card: the sender, its
+ * state, and a summary. Open, it shows the body, the output of a job, and
+ * the hint for the model.
+ */
+function AgentNoticeCard({
+  item,
+  notice,
+}: {
+  item: Extract<ConversationItem, { kind: "user" }>
+  notice: AgentNotice
+}) {
+  const [isOpen, setIsOpen] = useRememberedToolCollapsibleOpen(
+    `notice:${item.itemKey || item.forkEntryId || item.text.slice(0, 200)}`
+  )
+  const Icon = notice.kind === "job" ? SquareTerminalIcon : BotIcon
+  const agentId = notice.agentId
+
+  return (
+    <Collapsible
+      data-conversation-row="true"
+      data-agent-notice={notice.kind}
+      open={isOpen}
+      onOpenChange={setIsOpen}
+      className="text-sm"
+    >
+      <div className="flex max-w-full min-w-0 items-center gap-1 text-sm text-muted-foreground">
+        <CollapsibleTrigger
+          data-conversation-tool-collapsible-trigger="true"
+          className="group/tool-collapsible-trigger -ml-0.5 flex shrink-0 items-center gap-1 rounded-sm text-left transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          <ChevronRightIcon className="pointer-events-none size-3.5 shrink-0 transition-transform group-aria-expanded/tool-collapsible-trigger:rotate-90" />
+          <Icon className="size-3.5 shrink-0" />
+          <span className="font-medium whitespace-nowrap">{notice.label}</span>
+        </CollapsibleTrigger>
+        {agentId && isLocalAgentId(agentId) ? (
+          <TitleTooltip title={`Open agent ${agentId}`}>
+            <button
+              type="button"
+              className="shrink-0 rounded-sm font-medium whitespace-nowrap underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+              onClick={() => emitPicoEvent("pico:open-agent", { agentId })}
+            >
+              {agentId}
+            </button>
+          </TitleTooltip>
+        ) : agentId ? (
+          <span className="shrink-0 font-medium whitespace-nowrap">
+            {agentId}
+          </span>
+        ) : null}
+        {/* The rest of the row also opens the card. The trigger above is
+            the keyboard control. */}
+        <span
+          aria-hidden="true"
+          className="flex min-w-0 cursor-pointer items-center gap-1 hover:text-foreground"
+          onClick={() => setIsOpen(!isOpen)}
+        >
+          <span className="shrink-0">·</span>
+          <span
+            className={cn(
+              "shrink-0 font-medium whitespace-nowrap",
+              NOTICE_TONE_CLASS[notice.tone]
+            )}
+          >
+            {notice.state}
+          </span>
+          {notice.summary ? (
+            <span className="ml-1 min-w-0 truncate">{notice.summary}</span>
+          ) : null}
+        </span>
+      </div>
+
+      {isOpen ? (
+        <CollapsibleContent className="overflow-hidden text-sm data-open:animate-accordion-down data-closed:animate-accordion-up">
+          <div className="h-(--collapsible-panel-height) pt-2 data-ending-style:h-0 data-starting-style:h-0">
+            <AgentNoticeBody notice={notice} copyText={item.text} />
+          </div>
+        </CollapsibleContent>
+      ) : null}
+    </Collapsible>
+  )
+}
+
+function AgentNoticeBody({
+  copyText,
+  notice,
+}: {
+  copyText: string
+  notice: AgentNotice
+}) {
+  return (
+    <div>
+      <div className="max-h-96 space-y-3 overflow-auto rounded-lg border bg-background/80 p-3">
+        {notice.markdown ? (
+          notice.body.trim() ? (
+            <MarkdownBlock text={notice.body} />
+          ) : null
+        ) : notice.body ? (
+          <PlainToolOutput text={notice.body} />
+        ) : null}
+        {notice.command ? (
+          <ToolBlockSection label="Command" text={notice.command} />
+        ) : null}
+        {notice.output !== undefined ? (
+          <ToolBlockSection label="Last output" text={notice.output} />
+        ) : null}
+        {notice.hint ? (
+          <p className="text-xs text-muted-foreground">{notice.hint}</p>
+        ) : null}
+      </div>
+      <div className="mt-1 flex gap-1.5">
+        <MessageFooterCopyButton idleLabel="Copy message" text={copyText} />
+      </div>
+    </div>
+  )
+}
+
+function PromptMessageCard({
   item,
 }: {
   item: Extract<ConversationItem, { kind: "user" }>
@@ -2532,7 +2687,7 @@ export const UserMessageCard = React.memo(function UserMessageCard({
       ) : null}
     </div>
   )
-})
+}
 
 /** Height in px above which a user message folds behind Read more. */
 const USER_MESSAGE_COLLAPSED_HEIGHT = 320
