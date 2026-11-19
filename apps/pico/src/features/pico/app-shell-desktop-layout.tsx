@@ -306,6 +306,8 @@ const DESKTOP_DEFAULT_GIT_PANEL_WIDTH = 320
 const DESKTOP_DEFAULT_BROWSER_PANEL_WIDTH =
   DESKTOP_DEFAULT_FILE_VIEW_WIDTH + DESKTOP_DEFAULT_GIT_PANEL_WIDTH
 const DESKTOP_MIN_SIDE_PANEL_WIDTH = 260
+// The Browser tab can be narrow, so that a page shows its mobile layout.
+const DESKTOP_MIN_BROWSER_PANEL_WIDTH = SHELL_RIGHT_MIN_WIDTH
 const DESKTOP_MAX_STORED_SIDE_PANEL_WIDTH = 1600
 const DESKTOP_DEFAULT_TERMINAL_PANEL_HEIGHT = 280
 const DESKTOP_MIN_TERMINAL_PANEL_HEIGHT = 160
@@ -326,15 +328,16 @@ function defaultDesktopSidePanelWidths(): DesktopSidePanelWidths {
   }
 }
 
-function clampStoredDesktopPanelWidth(value: unknown, fallback: number) {
+function clampStoredDesktopPanelWidth(
+  value: unknown,
+  fallback: number,
+  min = DESKTOP_MIN_SIDE_PANEL_WIDTH
+) {
   const width = typeof value === "number" ? value : Number(value)
   if (!Number.isFinite(width)) return fallback
 
   return Math.round(
-    Math.min(
-      DESKTOP_MAX_STORED_SIDE_PANEL_WIDTH,
-      Math.max(DESKTOP_MIN_SIDE_PANEL_WIDTH, width)
-    )
+    Math.min(DESKTOP_MAX_STORED_SIDE_PANEL_WIDTH, Math.max(min, width))
   )
 }
 
@@ -356,7 +359,8 @@ function normalizeDesktopSidePanelWidths(
     ),
     browserPanelWidth: clampStoredDesktopPanelWidth(
       widths.browserPanelWidth,
-      DESKTOP_DEFAULT_BROWSER_PANEL_WIDTH
+      DESKTOP_DEFAULT_BROWSER_PANEL_WIDTH,
+      DESKTOP_MIN_BROWSER_PANEL_WIDTH
     ),
   }
 }
@@ -840,7 +844,8 @@ function useAppShellTabsControllerView({
       ...current,
       browserPanelWidth: clampStoredDesktopPanelWidth(
         width,
-        DESKTOP_DEFAULT_BROWSER_PANEL_WIDTH
+        DESKTOP_DEFAULT_BROWSER_PANEL_WIDTH,
+        DESKTOP_MIN_BROWSER_PANEL_WIDTH
       ),
     }))
   }
@@ -1031,10 +1036,9 @@ function useAppShellTabsControllerView({
         : desktopFileViewRequested
           ? desktopFileViewWidth + desktopGitPanelWidth
           : desktopGitPanelWidth,
-      rightMinWidth:
-        desktopBrowserRequested || desktopFileViewRequested
-          ? SHELL_RIGHT_MIN_WIDTH * 2
-          : SHELL_RIGHT_MIN_WIDTH,
+      rightMinWidth: desktopFileViewRequested
+        ? SHELL_RIGHT_MIN_WIDTH * 2
+        : SHELL_RIGHT_MIN_WIDTH,
     })
   }, [
     desktopBrowserPanelWidth,
@@ -1173,7 +1177,9 @@ function useAppShellTabsControllerView({
                       <AppShellDesktopResizeHandle
                         label="Resize right sidebar"
                         min={Math.min(
-                          DESKTOP_MIN_SIDE_PANEL_WIDTH,
+                          desktopBrowserRequested
+                            ? DESKTOP_MIN_BROWSER_PANEL_WIDTH
+                            : DESKTOP_MIN_SIDE_PANEL_WIDTH,
                           desktopSideWorkspaceMaxWidth
                         )}
                         max={desktopSideWorkspaceMaxWidth}

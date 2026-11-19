@@ -75,7 +75,9 @@ export function getSidebarResizeTargetMinimumSize() {
 export function installGlobalResizeCursor(cursor: GlobalResizeCursor) {
   const style = document.createElement("style")
   style.dataset.resizeCursor = "true"
-  style.textContent = `*, *:hover { cursor: ${cursor} !important; }`
+  // An iframe (for example the Preview) would take the pointer events while
+  // the pointer is over it, and the drag would stop following the pointer.
+  style.textContent = `*, *:hover { cursor: ${cursor} !important; } iframe { pointer-events: none !important; }`
   document.head.append(style)
 
   return () => style.remove()
