@@ -53,6 +53,7 @@ import {
 } from "@/features/pico/machine-store"
 import { shortModelLabel, thinkingLabel } from "@/features/pico/model-label"
 import { emitPicoEvent } from "@/features/pico/agent/events"
+import { copyAgentId } from "@/features/pico/copy-agent-id"
 import {
   ContextUsageQuotaDetails,
   ContextUsageWindowDetails,
@@ -381,6 +382,16 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
                   {formatShortcutLabel(appShortcut("E"))}
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
+              {agentHeaderState.agentId ? (
+                <DropdownMenuItem
+                  onClick={() => {
+                    if (agentHeaderState.agentId)
+                      void copyAgentId(agentHeaderState.agentId)
+                  }}
+                >
+                  <span>Copy agent ID</span>
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem
                 variant="destructive"
                 disabled={!agentHeaderState.agentHasFile}

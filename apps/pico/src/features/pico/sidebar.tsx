@@ -1,4 +1,5 @@
 import * as React from "react"
+import { copyAgentId } from "@/features/pico/copy-agent-id"
 import { createPortal } from "react-dom"
 
 import {
@@ -828,6 +829,7 @@ function SidebarAgentItem({
     Boolean(
       (!isOptimisticAgent && onTogglePinnedAgent) ||
       (entry.path && (onRenameAgent || onDeleteAgent || onSetAgentUnread)) ||
+      (entry.id && !isOptimisticAgent) ||
       hasMoveActions
     ) && !overlay
 
@@ -1049,6 +1051,15 @@ function SidebarAgentItem({
             {onRenameAgent && entry.path ? (
               <ContextMenuItem onClick={() => onRenameAgent(entry)}>
                 Rename
+              </ContextMenuItem>
+            ) : null}
+            {entry.id && !isOptimisticAgent ? (
+              <ContextMenuItem
+                onClick={() => {
+                  if (entry.id) void copyAgentId(entry.id)
+                }}
+              >
+                Copy agent ID
               </ContextMenuItem>
             ) : null}
             {onDeleteAgent && entry.path ? (
