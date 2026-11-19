@@ -53,7 +53,7 @@ export const ComposerModelControls = React.memo(function ComposerModelControls({
         <Button
           type="button"
           variant="ghost"
-          size="sm"
+          size="xs"
           className="max-w-40 min-w-0 cursor-pointer text-muted-foreground hover:text-foreground"
           aria-label={`Model: ${label}`}
           disabled={disabled}
@@ -75,7 +75,7 @@ export const ComposerModelControls = React.memo(function ComposerModelControls({
                 <Button
                   type="button"
                   variant="ghost"
-                  size="sm"
+                  size="xs"
                   className="shrink-0 cursor-pointer text-muted-foreground hover:text-foreground"
                   aria-label={`Reasoning: ${thinkingLabel(thinkingLevel)}`}
                   disabled={disabled}
@@ -86,7 +86,7 @@ export const ComposerModelControls = React.memo(function ComposerModelControls({
               <ChevronDownIcon data-icon="inline-end" />
             </DropdownMenuTrigger>
           </TitleTooltip>
-          <DropdownMenuContent side="top" align="end" className="w-48">
+          <DropdownMenuContent side="top" align="start" className="w-48">
             <DropdownMenuGroup>
               <DropdownMenuLabel>Reasoning</DropdownMenuLabel>
               <DropdownMenuRadioGroup
