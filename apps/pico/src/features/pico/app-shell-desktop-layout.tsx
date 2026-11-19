@@ -689,6 +689,7 @@ function useAppShellTabsControllerView({
   awaitingFirstTurn,
   diffLineComments,
   composerPanelRef,
+  contextUsageStore,
   conversationFrameRef,
   conversationItemsStore,
   defaultNewAgentProject,
@@ -901,6 +902,7 @@ function useAppShellTabsControllerView({
           actionsRef={actionsRef}
           awaitingFirstTurn={awaitingFirstTurn}
           composerPanelRef={composerPanelRef}
+          contextUsageStore={contextUsageStore}
           conversationFrameRef={conversationFrameRef}
           conversationItemsStore={conversationItemsStore}
           defaultNewAgentProject={defaultNewAgentProject}
