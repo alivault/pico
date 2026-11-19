@@ -1027,6 +1027,7 @@ export class Agents implements HostAgents {
     if (waiting) this.#needsInput.add(id)
     else this.#needsInput.delete(id)
     this.#scheduleAgentsBroadcast()
+    this.#parentSubagentsChanged(id)
     this.#hub.push(
       {
         type: "agent_status",
@@ -1065,6 +1066,7 @@ export class Agents implements HostAgents {
     if (waiting) this.#waiting.set(id, waiting)
     else this.#waiting.delete(id)
     this.#scheduleAgentsBroadcast()
+    this.#parentSubagentsChanged(id)
     this.#hub.push(
       {
         type: "agent_status",
@@ -1077,6 +1079,13 @@ export class Agents implements HostAgents {
       },
       { agentId: id }
     )
+  }
+
+  /** The parent shows this agent in its subagents list: update it. */
+  #parentSubagentsChanged(id: string) {
+    const parent = this.#metas.get(id)?.parent
+    if (parent && this.#metas.has(parent))
+      this.extensionStateChanged(parent, "subagents")
   }
 
   /** Keep `#jobs` current when the jobs of an agent change. */
@@ -1198,9 +1207,7 @@ export class Agents implements HostAgents {
       this.#clearJobFailures(id, turnStartedAt)
     }
     if (busy !== wasBusy) {
-      const parent = this.#metas.get(id)?.parent
-      if (parent && this.#metas.has(parent))
-        this.extensionStateChanged(parent, "subagents")
+      this.#parentSubagentsChanged(id)
       this.#hub.push(
         {
           type: "agent_status",

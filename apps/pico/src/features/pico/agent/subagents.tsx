@@ -1,6 +1,7 @@
 import type * as React from "react"
 import {
   GitForkIcon,
+  HourglassIcon,
   MessageCircleQuestionIcon,
   SquareIcon,
   UsersIcon,
@@ -49,6 +50,8 @@ export type Subagent = {
   cwd: string
   busy: boolean
   needsInput: boolean
+  /** Its turn ended on a job, and it goes on when the job ends. */
+  waiting?: string
   worktreeBranch?: string
   messageCount: number
   lastMessagePreview?: string
@@ -78,6 +81,14 @@ function SubagentStatus({ subagent }: { subagent: Subagent }) {
       />
     )
   if (subagent.busy) return <Spinner size="xs" aria-label="Working" />
+  // The same hourglass as the agent's row in the left sidebar.
+  if (subagent.waiting)
+    return (
+      <HourglassIcon
+        className="size-3.5 shrink-0 text-muted-foreground"
+        aria-label={`Waiting on ${subagent.waiting}`}
+      />
+    )
   // Done uses the blue dot of the left sidebar. Green is for jobs.
   const done = Boolean(subagent.lastMessageAt)
   return (
@@ -94,6 +105,7 @@ function SubagentStatus({ subagent }: { subagent: Subagent }) {
 function subagentStatusText(subagent: Subagent, now: number) {
   if (subagent.needsInput) return "Waiting for your answer"
   if (subagent.busy) return "Working"
+  if (subagent.waiting) return `Waiting on ${subagent.waiting}`
   return subagent.lastMessageAt
     ? `Done ${relativeTime(subagent.lastMessageAt, now)}`
     : "Idle"
@@ -212,13 +224,21 @@ registerAgentSection({
   summary(state) {
     const subagents = subagentsFrom(state)
     const working = subagents.filter((subagent) => subagent.busy).length
-    return working ? `${working} working` : undefined
+    const waiting = subagents.filter(
+      (subagent) => !subagent.busy && subagent.waiting
+    ).length
+    return (
+      [working ? `${working} working` : "", waiting ? `${waiting} waiting` : ""]
+        .filter(Boolean)
+        .join(", ") || undefined
+    )
   },
   visible: (state) =>
     Array.isArray(state.subagents) && state.subagents.length > 0,
   busy: (state) =>
     subagentsFrom(state).some(
-      (subagent) => subagent.busy || subagent.needsInput
+      (subagent) =>
+        subagent.busy || subagent.needsInput || Boolean(subagent.waiting)
     ),
   Actions: SubagentsActions,
   Component: SubagentsSection,
