@@ -39,7 +39,7 @@ pico-app serve --detach       # output goes to ~/.pico/server.log
 pico-app status               # is Pico running? --json for scripts
 pico-app stop --wait          # stop after active turns finish
 pico-app stop --pty-host      # also end terminals and jobs
-pico-app restart              # restart --now does not wait for turns
+pico-app restart              # restart at once; cut-off turns continue
 pico-app --port 3141 --no-open
 pico-app --data-dir PATH      # default: ~/.pico
 pico-app import-pi            # import Pi sessions as agents (stop Pico first)
@@ -55,7 +55,7 @@ pico-app update
 ```
 
 This installs the newest version where Pico is installed (the same npm
-prefix, for example `~/.local`), and restarts Pico when the agents finish.
+prefix, for example `~/.local`), and restarts Pico.
 `pico-app update --check` only looks, `--no-restart` leaves the restart to
 you, and `pico-app update 2.8.0` installs a given version.
 
@@ -80,7 +80,7 @@ pnpm start --no-open --port 3141
 pnpm start --data-dir PATH   # default: ~/.pico
 pnpm start status
 pnpm start stop --wait       # let active turns finish first
-pnpm start restart           # load a new build; restart --now does not wait
+pnpm start restart           # load a new build at once
 pnpm start import-pi         # import Pi sessions as agents (stop Pico first)
 ```
 

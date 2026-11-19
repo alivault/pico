@@ -76,8 +76,7 @@ if (!watch) {
   /**
    * Another Pico already serves the data directory, so the new server did
    * not start. When that Pico runs this checkout's build, ask it to restart
-   * (it waits for active turns), so it loads the new build. Else say that
-   * changes do not load.
+   * at once, so it loads the new build. Else say that changes do not load.
    */
   const restartRunning = async (pid, url) => {
     const command =
@@ -96,11 +95,12 @@ if (!watch) {
       const response = await fetch(`${url}/api/system/restart`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: "{}",
+        // An older server waits for active turns without `now`.
+        body: JSON.stringify({ now: true }),
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       console.log(
-        `[dev] Pico (pid ${pid}) at ${url} restarts with the new build when its active turns end.`
+        `[dev] Pico (pid ${pid}) at ${url} restarts with the new build.`
       )
     } catch (error) {
       console.warn(

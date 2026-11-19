@@ -15,9 +15,9 @@ if (!ownArgs && args.includes("--help")) {
 Usage: pico-app [serve|status|stop|restart|import-pi] [--port N] [--host H]
                  [--data-dir D] [--web-dir D] [--open|--no-open] [--wait]
                  [--source-dir D] [--detach] [--json] [--no-pty-host]
-                 [--pty-host] [--now]
+                 [--pty-host]
        pico-app update [version] [--check] [--channel stable|preview]
-                 [--no-restart] [--now]
+                 [--no-restart]
        pico-app channel [show | set stable|preview]
        pico-app machine add|list|status|reconnect|rename|enable|disable|remove
        pico-app agent list|start|send|show|wait|stop
@@ -25,9 +25,8 @@ Usage: pico-app [serve|status|stop|restart|import-pi] [--port N] [--host H]
 The default address is 127.0.0.1:3141. Data is stored in ~/.pico.
 Use a separate --data-dir for development.
 serve --detach starts Pico in the background (output in <data>/server.log).
-restart stops Pico after active turns finish and starts it again with the
-same options, for example after an update; restart --now does not wait.
-Turns that a restart cuts off continue.
+restart stops Pico at once and starts it again with the same options, for
+example after an update. Turns that a restart cuts off continue.
 update installs the newest version on the update channel (stable, or
 preview for prereleases) where Pico is installed, and restarts Pico;
 update --check only looks. Pico also looks in the background and shows a

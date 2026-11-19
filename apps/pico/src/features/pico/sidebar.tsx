@@ -126,7 +126,7 @@ import {
   OtherMachineRenameDialog,
 } from "@/features/pico/other-machine-agent-dialogs"
 import { startSidebarSync } from "@/features/pico/sidebar-sync"
-import { ServerRestartStatus } from "@/features/pico/server-restart"
+import { ServerUpdateStatus } from "@/features/pico/server-restart"
 import { ProjectIcon } from "@/features/pico/project-icon"
 import { useSidebarAgentNumber } from "@/features/pico/sidebar-agent-numbers"
 import { openMachine, openAgent as openMachineAgent } from "@/lib/pico/machine"
@@ -4479,7 +4479,7 @@ function useAppSidebarView({
         ? createPortal(
             <SidebarGroup className="pt-0">
               <SidebarMenu>
-                <ServerRestartStatus />
+                <ServerUpdateStatus />
                 {onOpenArchivedAgents ? (
                   <SidebarMenuItem>
                     <SidebarMenuButton

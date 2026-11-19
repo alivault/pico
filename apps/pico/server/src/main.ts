@@ -7,10 +7,10 @@
  *   pico-server status [--json]
  *   pico-server stop [--wait] [--pty-host]
  *     `--pty-host` also stops the pty-host, so terminals and jobs end too.
- *   pico-server restart [--now]
- *     Stop after active turns finish (or at once, with `--now`), and start
- *     again with the same options. Turns that a restart cuts off continue.
- *   pico-server update [version] [--check] [--channel stable|preview] [--no-restart] [--now]
+ *   pico-server restart
+ *     Stop at once and start again with the same options. Turns that the
+ *     restart cuts off continue. (`--now` is accepted and ignored.)
+ *   pico-server update [version] [--check] [--channel stable|preview] [--no-restart]
  *     Install the newest version on the update channel the way this copy
  *     was installed, and restart a running server (see services/self-update.ts).
  *   pico-server channel [show | set stable|preview]
@@ -252,7 +252,7 @@ async function listen(
   port: number,
   searchPorts: boolean,
   onShutdownRequest: () => void,
-  onRestartRequest: (now: boolean) => void,
+  onRestartRequest: () => void,
   ptyHost?: { script: string }
 ) {
   let lastError: unknown
@@ -348,7 +348,7 @@ async function serve(options: Map<string, string | boolean>) {
   const release = await acquireLock(paths)
   let server: PicoServer
   let requestStop: (drain: boolean) => void = () => undefined
-  let requestRestart: (now: boolean) => void = () => undefined
+  let requestRestart: () => void = () => undefined
   try {
     server = await listen(
       paths,
@@ -356,7 +356,7 @@ async function serve(options: Map<string, string | boolean>) {
       port,
       !requestedPort,
       () => requestStop(true),
-      (now) => requestRestart(now),
+      () => requestRestart(),
       ptyHostOption(options)
     )
   } catch (error) {
@@ -378,6 +378,7 @@ async function serve(options: Map<string, string | boolean>) {
 
   let stopping = false
   // What happens after the stop. A stop request during a restart wins.
+  // Only a stop drains (waits for active turns); a restart is at once.
   let restartAfter = false
   const stop = async (drain: boolean, restart = false) => {
     if (stopping) {
@@ -387,7 +388,6 @@ async function serve(options: Map<string, string | boolean>) {
     }
     stopping = true
     restartAfter = restart
-    if (restart) server.markRestarting()
     const waits = drain && server.agents.activeTurnCount() > 0
     console.log(
       `Pico is ${restart ? "restarting" : "stopping"}${waits ? " after active turns finish" : ""}…`
@@ -407,7 +407,7 @@ async function serve(options: Map<string, string | boolean>) {
     process.exit(0)
   }
   requestStop = (drain) => void stop(drain)
-  requestRestart = (now) => void stop(!now, true)
+  requestRestart = () => void stop(false, true)
   process.on("SIGINT", () => void stop(false))
   process.on("SIGTERM", () => void stop(false))
   process.on("SIGHUP", () => void stop(true))
@@ -475,8 +475,9 @@ async function stopCommand(options: Map<string, string | boolean>) {
 }
 
 /**
- * `pico-server restart [--now]`: ask the server to restart, and wait until
- * the new process answers.
+ * `pico-server restart`: ask the server to restart at once, and wait until
+ * the new process answers. `--now` is accepted and ignored: a restart
+ * never waits for active turns.
  */
 async function restartCommand(options: Map<string, string | boolean>) {
   const paths = serverPaths(dataDirOption(options))
@@ -488,28 +489,22 @@ async function restartCommand(options: Map<string, string | boolean>) {
   }
   const host =
     state.host === "0.0.0.0" || state.host === "::" ? "127.0.0.1" : state.host
-  const now = Boolean(options.get("now"))
   const response = await fetch(
     `http://${host}:${state.port}/api/system/restart`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ now }),
+      // An older server waits for active turns without `now`.
+      body: JSON.stringify({ now: true }),
     }
   )
   const result = (await response.json().catch(() => ({}))) as {
     error?: string
-    activeTurnCount?: number
   }
   if (!response.ok)
     throw new Error(result.error ?? `Restart failed: ${response.status}`)
-  const turns = result.activeTurnCount ?? 0
-  console.log(
-    !now && turns > 0
-      ? `Pico restarts when ${turns} active turn(s) finish (at most 10 minutes). Use --now to restart at once.`
-      : "Pico is restarting…"
-  )
-  const deadline = Date.now() + (now ? 60_000 : 12 * 60_000)
+  console.log("Pico is restarting…")
+  const deadline = Date.now() + 60_000
   while (Date.now() < deadline) {
     await new Promise((resolveWait) => setTimeout(resolveWait, 500))
     const next = readState(paths)
