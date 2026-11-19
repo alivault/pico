@@ -10,6 +10,7 @@ import type { ConversationId, Harness } from "@earendil-works/pi-durable"
 
 import type { AgentSearch } from "../core/agent-search.ts"
 import type { ToolLimits } from "../core/profiles.ts"
+import type { QueuedItem } from "../core/queue.ts"
 import type { PicoSettingsData } from "../core/settings.ts"
 import type { MachineManager } from "../machines/manager.ts"
 import type { BrowserManager } from "../services/browser.ts"
@@ -36,6 +37,8 @@ export type HostAgents = {
       images: Array<{ mimeType?: string; data?: string }>
       streamingBehavior?: "steer" | "followUp"
       requestId?: string
+      /** The agent that sends it, for the queue; default the user. */
+      from?: string
     }
   ): Promise<{ queued: boolean }>
   abort(id: string): Promise<void>
@@ -43,14 +46,27 @@ export type HostAgents = {
    * Put a message in the follow-up queue of an agent, after the queued
    * prompts of the user. It never steers: the agent gets it when its turn
    * answers, and an idle agent starts a turn. A paused queue keeps it.
+   * `from`: the agent that sends it, for the queue; default Pico.
    */
-  followUp(id: string, message: string, requestId: string): Promise<void>
+  followUp(
+    id: string,
+    message: string,
+    requestId: string,
+    from?: string
+  ): Promise<void>
   /**
    * Take back the follow-up with `requestId` while it is still queued or
    * held. True when it was withdrawn; false when it is not there, or the
    * agent already got it.
    */
   withdrawFollowUp(id: string, requestId: string): Promise<boolean>
+  /** The prompts that wait in an agent's queue, in order, with their senders. */
+  queue(id: string): Promise<QueuedItem[]>
+  /**
+   * Take one prompt out of an agent's queue. Returns it; throws when it is
+   * not in the queue now.
+   */
+  unqueue(id: string, itemId: string): Promise<QueuedItem>
   /** Give tools to an agent or take them away, and apply its profile again. */
   changeLimits(
     id: string,

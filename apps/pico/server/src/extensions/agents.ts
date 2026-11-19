@@ -6,7 +6,10 @@
  * outlives the call that made it. Without `wait`, a background
  * `pico.child-report` task waits for the subagent and puts its answer in the
  * parent's follow-up queue. The `agents` tool lists, reads, waits for, and
- * stops agents, and its `send` action sends a message to one.
+ * stops agents, and its `send` action sends a message to one. Its `queue`
+ * and `unsend` actions show and remove the messages that wait in an agent's
+ * follow-up queue: all of them for a subagent, only the caller's own for
+ * another agent.
  *
  * Messages from a subagent never steer: they go into the parent's follow-up
  * queue, in arrival order with the user's prompts. Each turn end of a
@@ -25,7 +28,7 @@
  * through the hub's SSH connection. An offline machine fails at once. A
  * remote agent cannot call back to the hub.
  */
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 
 import type { Context } from "@earendil-works/chord/context"
 import Type from "typebox"
@@ -39,6 +42,7 @@ import {
   type EntryId,
   type EntryRecord,
   type Harness,
+  type JsonObject,
   type ToolExecutionApi,
   type Tx,
 } from "@earendil-works/pi-durable"
@@ -50,6 +54,7 @@ import {
   type AroundResult,
 } from "../core/agent-search.ts"
 import { bashCalls, commandLine, formatDuration } from "../core/bash-calls.ts"
+import type { QueuedItem } from "../core/queue.ts"
 import { createWorktree } from "../services/worktree.ts"
 import {
   conversationOf,
@@ -240,7 +245,7 @@ async function sendReport(
     wasDelivered(harness, watcher, input.agent, input.key, context)
   if (!agents.has(input.parent) || (await seen())) return
   const request = reportRequest(input.agent, input.key ?? input.fallbackKey)
-  await agents.followUp(input.parent, input.message(), request)
+  await agents.followUp(input.parent, input.message(), request, input.agent)
   if (await seen()) await agents.withdrawFollowUp(input.parent, request)
 }
 
@@ -1249,6 +1254,7 @@ export function createAgentsExtension(host: HostBridge) {
     machine?: string | undefined
     query?: string | undefined
     entry?: number | undefined
+    item?: string | undefined
   }
 
   /** The send action: a message to another agent. */
@@ -1386,7 +1392,8 @@ export function createAgentsExtension(host: HostBridge) {
           needsInput: false,
           subagent: true,
         }),
-        `send:${api.callId}`
+        `send:${api.callId}`,
+        from
       )
       return textResult(
         `Sent to your parent agent ${target}. It gets the message in its follow-up queue. Keep working: its answer, if any, comes as a message.`,
@@ -1398,6 +1405,7 @@ export function createAgentsExtension(host: HostBridge) {
         images: [],
         streamingBehavior: args.mode ?? "followUp",
         requestId: `send:${api.callId}`,
+        from,
       })
     }
     const title =
@@ -2023,12 +2031,205 @@ export function createAgentsExtension(host: HostBridge) {
     )
   }
 
+  /** True when `id` is a subagent of `ancestor`, or a subagent of one of them. */
+  const isSubagentOf = (
+    services: HostServices,
+    id: string,
+    ancestor: string
+  ) => {
+    let current = id
+    for (let depth = 0; depth < 32; depth += 1) {
+      if (!services.agents.has(current)) return false
+      const parent = services.agents.meta(current).parent
+      if (!parent) return false
+      if (parent === ancestor) return true
+      current = parent
+    }
+    return false
+  }
+
+  /** Who queued an item, for the queue and unsend actions. */
+  const senderName = (
+    services: HostServices,
+    from: string | undefined,
+    self: string
+  ) => {
+    if (!from) return "an unknown sender"
+    if (from === "user") return "the user"
+    if (from === "external") return "the pico CLI, MCP, or a hub"
+    if (from === "pico") return "Pico (a notice)"
+    if (from === self) return `you (${from})`
+    const name = services.agents.has(from)
+      ? services.agents.meta(from).name
+      : undefined
+    return `agent ${from}${name ? ` (${name})` : ""}`
+  }
+
+  /** The text of a queued item on one line, cut to `limit` characters. */
+  const queuedText = (item: QueuedItem, limit: number) => {
+    const text = item.text.replace(/\s+/g, " ").trim()
+    const images = item.images
+      ? ` [${item.images} image${item.images === 1 ? "" : "s"}]`
+      : ""
+    if (!text) return `(no text)${images}`
+    return text.length > limit
+      ? `${text.slice(0, limit)}… (${text.length - limit} more characters)${images}`
+      : `${text}${images}`
+  }
+
+  /**
+   * The target of the queue and unsend actions, and whether the caller may
+   * see and remove all of its items: only for its own subagents.
+   */
+  const queueTarget = (
+    services: HostServices,
+    args: AgentsArgs,
+    api: ToolExecutionApi,
+    action: string
+  ) => {
+    const value = args.id ?? args.ids?.[0]
+    if (!value) return { error: errorResult(`${action} needs id.`) }
+    const remote = resolveRemote(services, args.machine, value)
+    if (remote.error) return { error: remote.error }
+    if (remote.target)
+      return {
+        error: errorResult(`${action} works only for agents on this machine.`),
+      }
+    let target: string
+    try {
+      target = requireAgent(services, value)
+    } catch (error) {
+      return {
+        error: errorResult(
+          error instanceof Error ? error.message : String(error)
+        ),
+      }
+    }
+    const self = agentIdOf(api.conversationId)
+    return { target, self, all: isSubagentOf(services, target, self) }
+  }
+
+  /** The queue action: the items that wait in an agent's follow-up queue. */
+  const showQueue = async (
+    args: AgentsArgs,
+    api: ToolExecutionApi,
+    context: Context
+  ) => {
+    const services = await host.ready(context.abortSignal)
+    const prepared = queueTarget(services, args, api, "queue")
+    if (prepared.error) return prepared.error
+    const { target, self, all } = prepared
+    const items = await services.agents.queue(target)
+    const visible = all ? items : items.filter((item) => item.from === self)
+    const hidden = items.length - visible.length
+    const lines = visible.map((item) =>
+      [
+        `${items.indexOf(item) + 1}. ${item.itemId} from ${senderName(services, item.from, self)}`,
+        item.at ? `, queued ${new Date(item.at).toISOString()}` : "",
+        item.mode === "steer" ? ", steer" : "",
+        item.held ? ", held (the queue is paused)" : "",
+        `\n   ${queuedText(item, 300)}`,
+      ].join("")
+    )
+    const head =
+      items.length === 0
+        ? `The queue of ${target} is empty.`
+        : all
+          ? `${items.length} item${items.length === 1 ? "" : "s"} wait in the queue of ${target}, in order:`
+          : visible.length === 0
+            ? `None of the ${items.length} items in the queue of ${target} is yours. ${target} is not your subagent, so you see only your own messages.`
+            : `Your messages in the queue of ${target}, in order (${hidden} other item${hidden === 1 ? "" : "s"} not shown: ${target} is not your subagent):`
+    return textResult([head, ...lines].join("\n"), {
+      details: {
+        agentId: target,
+        items: visible.map((item) => ({
+          itemId: item.itemId,
+          ...(item.from ? { from: item.from } : {}),
+          text: queuedText(item, 120),
+        })),
+        ...(hidden ? { hidden } : {}),
+      },
+    })
+  }
+
+  /** The unsend action: take one item out of an agent's follow-up queue. */
+  const unsendItem = async (
+    args: AgentsArgs,
+    api: ToolExecutionApi,
+    context: Context
+  ) => {
+    // A rerun after a restart gives the result of the first run.
+    const done = await api.memo<{ text: string; details: JsonObject }>(
+      "unsend",
+      context
+    )
+    if (done) return textResult(done.text, { details: done.details })
+    const services = await host.ready(context.abortSignal)
+    const prepared = queueTarget(services, args, api, "unsend")
+    if (prepared.error) return prepared.error
+    const { target, self, all } = prepared
+    const itemId = args.item?.trim()
+    if (!itemId)
+      return errorResult(
+        "unsend needs id and item: an item ID from the queue action."
+      )
+    const item = (await services.agents.queue(target)).find(
+      (entry) => entry.itemId === itemId
+    )
+    if (!item)
+      return errorResult(
+        `${itemId} is not in the queue of ${target} now: the agent already got it, or it was removed. Use the queue action to see what waits.`
+      )
+    const sender = senderName(services, item.from, self)
+    if (!all && item.from !== self)
+      return errorResult(
+        `You may not remove ${itemId}: it is from ${sender}, and ${target} is not your subagent. From the queue of another agent, you may remove only your own messages.`
+      )
+    try {
+      await services.agents.unqueue(target, itemId)
+    } catch (error) {
+      return errorResult(
+        `Could not remove ${itemId} from the queue of ${target}: ${error instanceof Error ? error.message : String(error)}. The agent probably got it already.`
+      )
+    }
+    const firstLine =
+      item.text
+        .split("\n")
+        .map((line) => line.trim())
+        .find(Boolean) ?? "(no text)"
+    // The user did not remove their own prompt: tell them in that agent.
+    if (item.from === "user")
+      services.events.push(
+        {
+          type: "extension_ui_request",
+          id: randomUUID(),
+          method: "notify",
+          notifyType: "warning",
+          message: `${self} removed your queued message: ${clip(firstLine, 120)}`,
+        },
+        { agentId: target }
+      )
+    const result = {
+      text: `Removed ${itemId} (from ${sender}) from the queue of ${target}. The agent does not get it. Its text:\n${clip(item.text || "(no text)", 2000)}`,
+      details: {
+        agentId: target,
+        itemId,
+        ...(item.from ? { from: item.from } : {}),
+        removed: queuedText(item, 200),
+      },
+    }
+    await api.memo("unsend", result, context)
+    return textResult(result.text, { details: result.details })
+  }
+
   const AGENT_ACTIONS = [
     "list",
     "search",
     "read",
     "wait",
     "send",
+    "queue",
+    "unsend",
     "stop",
     "archive",
     "restore",
@@ -2044,7 +2245,9 @@ export function createAgentsExtension(host: HostBridge) {
       "search (find past work: the messages of all agents, also archived ones, that match query; scope: project for this project only; use it before a task that may have been done or discussed before);",
       "read (the last messages of agent id; last, default 6; include_tools; with entry, the messages around that entry of a search hit);",
       "wait (until no agent of ids works, or with any: true until one of them has an answer you have not seen; timeout in seconds; returns their answers);",
-      "send (send message to agent id, for example your subagent, your parent, or an agent that builds what you review; mode: followUp (default; after its current work) or steer (into its current work); with wait: true the result is its answer, otherwise its answer comes to you as a message; add and remove change the tools of your subagent, for example add: ['ask_user'] answers a subagent that asked for a tool; a message to your parent always goes into its follow-up queue);",
+      "send (send message to agent id, for example your subagent, your parent, or an agent that builds what you review; mode: followUp (default; after its current work) or steer (into its current work at its next tool call; you cannot take a steer back); with wait: true the result is its answer, otherwise its answer comes to you as a message; add and remove change the tools of your subagent, for example add: ['ask_user'] answers a subagent that asked for a tool; a message to your parent always goes into its follow-up queue);",
+      "queue (the messages that still wait in the follow-up queue of agent id, in order, each with an item ID, its sender, and its time; for your subagents you see all items, also the user's prompts; for other agents only the messages that you sent);",
+      "unsend (take item, an item ID from queue, out of the queue of agent id before the agent gets it; from your subagents any item, from other agents only your own messages; it fails when the agent already got the message);",
       "stop (stop the current work of ids, like Esc);",
       "archive and restore (hide ids from the sidebar, or show them again; a busy agent cannot be archived);",
       "mark_read and mark_unread.",
@@ -2079,6 +2282,12 @@ export function createAgentsExtension(host: HostBridge) {
       entry: Type.Optional(
         Type.Number({ description: "read: an entry of a search hit" })
       ),
+      item: Type.Optional(
+        Type.String({
+          description:
+            "unsend: an item ID from the queue action, for example pending:12",
+        })
+      ),
       timeout: Type.Optional(
         Type.Number({ description: "wait, and send with wait: seconds" })
       ),
@@ -2109,6 +2318,12 @@ export function createAgentsExtension(host: HostBridge) {
       if (action === "search") return searchAgents(args, api, context)
       if (action === "read") return readAgent(args, api, context)
       if (action === "wait") return waitAgents(args, api, context)
+      if (action === "queue") return showQueue(args, api, context)
+      if (action === "unsend")
+        return (
+          deniedAction(host, api.conversationId, "agents.send") ??
+          unsendItem(args, api, context)
+        )
       if (action === "send")
         return (
           deniedAction(host, api.conversationId, "agents.send") ??

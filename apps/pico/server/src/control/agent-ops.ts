@@ -528,6 +528,7 @@ export class LocalAgentOps implements AgentBackend {
       images: [],
       streamingBehavior: input.mode === "steer" ? "steer" : "followUp",
       requestId: request,
+      from: "external",
     })
     return { ...this.info(id), request }
   }
