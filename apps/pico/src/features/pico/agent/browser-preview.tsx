@@ -529,15 +529,11 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
             variant="ghost"
             aria-label="Open in a new tab"
             disabled={!opened}
-            render={
-              opened ? (
-                <a
-                  href={opened.src}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                />
-              ) : undefined
-            }
+            // A button, not a link: the tooltip does not open on a link that
+            // the Button renders.
+            onClick={() => {
+              if (opened) window.open(opened.src, "_blank", "noopener")
+            }}
           >
             <ExternalLinkIcon />
           </Button>
