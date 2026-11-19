@@ -804,7 +804,7 @@ export function ContextUsageBars({
           <span className="text-muted-foreground">
             {contextUsageBarLabel(ring)}
           </span>
-          <span className="relative h-1 w-10 overflow-hidden rounded-full bg-muted">
+          <span className="relative h-1 w-10 overflow-hidden rounded-full bg-foreground/15">
             {ring.percent == null ? null : (
               <span
                 className="absolute inset-y-0 left-0 rounded-full"
