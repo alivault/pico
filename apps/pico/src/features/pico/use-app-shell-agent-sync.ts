@@ -305,6 +305,7 @@ function sameAgentListEntries(
     if (leftEntry.lastMessageAt !== rightEntry.lastMessageAt) {
       return false
     }
+    if (leftEntry.turnStartedAt !== rightEntry.turnStartedAt) return false
     if (leftEntry.lastMessagePreview !== rightEntry.lastMessagePreview) {
       return false
     }

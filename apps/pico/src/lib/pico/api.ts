@@ -443,6 +443,8 @@ export type AgentListEntry = {
   lastMessageAt?: string
   lastMessagePreview?: string
   messageCount?: number
+  /** While the agent works: when its current run started. */
+  turnStartedAt?: string
   contextUsage?: AgentState["contextUsage"]
   streaming?: boolean
   unread?: boolean

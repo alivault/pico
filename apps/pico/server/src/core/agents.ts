@@ -182,6 +182,8 @@ export type AgentListEntry = {
   lastMessagePreview?: string
   messageCount: number
   streaming: boolean
+  /** While the agent works: when its current run started. */
+  turnStartedAt?: string
   unread: boolean
   parent?: string
   worktreeBranch?: string
@@ -1402,6 +1404,10 @@ export class Agents implements HostAgents {
         : {}),
       messageCount: meta.messageCount,
       streaming: this.isBusy(id),
+      // While the agent works: when the run started (the sidebar counts up).
+      ...(this.isBusy(id) && meta.turnStartedAt
+        ? { turnStartedAt: iso(meta.turnStartedAt) }
+        : {}),
       unread: unread.has(id),
       ...(meta.parent ? { parent: meta.parent } : {}),
       ...(meta.worktree ? { worktreeBranch: meta.worktree.branch } : {}),

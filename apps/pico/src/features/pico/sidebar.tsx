@@ -795,8 +795,13 @@ function SidebarAgentItem({
     agentNumber > 0 ? formatShortcutLabel(agentNumberShortcut(agentNumber)) : ""
 
   if (!entry) return null
+  // While the agent works, the time counts up from the start of its run.
+  // Otherwise it is the time since the last message.
   const timestamp =
-    entry.lastMessageAt || entry.modified || entry.lastUserMessageAt
+    (entry.streaming && entry.turnStartedAt) ||
+    entry.lastMessageAt ||
+    entry.modified ||
+    entry.lastUserMessageAt
   const hasTimestamp = isValidSidebarTimestamp(timestamp)
   const lastMessagePreview = showAgentPreviews
     ? entry.lastMessagePreview?.trim() || ""
@@ -1111,6 +1116,7 @@ function sameProjectAgentEntry(
     left.modified === right.modified &&
     left.lastUserMessageAt === right.lastUserMessageAt &&
     left.lastMessageAt === right.lastMessageAt &&
+    left.turnStartedAt === right.turnStartedAt &&
     left.lastMessagePreview === right.lastMessagePreview &&
     left.messageCount === right.messageCount &&
     JSON.stringify(left.contextUsage ?? null) ===
