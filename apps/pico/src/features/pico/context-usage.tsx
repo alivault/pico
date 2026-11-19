@@ -807,7 +807,7 @@ export function ContextUsageBars({
           <span className="relative h-1 w-10 overflow-hidden rounded-full bg-foreground/15">
             {ring.percent == null ? null : (
               <span
-                className="absolute inset-y-0 left-0 rounded-full"
+                className="absolute inset-y-0 left-0"
                 style={{
                   width: `${ring.percent}%`,
                   backgroundColor: contextUsageStroke(
