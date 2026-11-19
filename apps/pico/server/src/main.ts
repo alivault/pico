@@ -226,13 +226,21 @@ function ptyHostOption(options: Map<string, string | boolean>) {
 const RESTART_EXIT_CODE = 75
 
 /**
+ * A launcher waits for this process (PICO_SUPERVISED=1). Read it one time
+ * and take it out of the environment: terminals, jobs, and the servers that
+ * they start have no launcher, so they must not exit to one.
+ */
+const SUPERVISED = process.env.PICO_SUPERVISED === "1"
+delete process.env.PICO_SUPERVISED
+
+/**
  * Start this server again, after it closed and released its lock. A
  * launcher (PICO_SUPERVISED=1) starts the new process, so that it stays in
  * the launcher's terminal. Without one, start it in the background like
  * `serve --detach`, with its output in `<data>/server.log`.
  */
 function relaunch(paths: ServerPaths) {
-  if (process.env.PICO_SUPERVISED === "1") process.exit(RESTART_EXIT_CODE)
+  if (SUPERVISED) process.exit(RESTART_EXIT_CODE)
   const log = openSync(paths.logFile, "a")
   const child = spawn(
     process.execPath,
@@ -392,11 +400,19 @@ async function serve(options: Map<string, string | boolean>) {
     console.log(
       `Pico is ${restart ? "restarting" : "stopping"}${waits ? " after active turns finish" : ""}…`
     )
-    const force = setTimeout(
-      () => process.exit(1),
-      drain ? 11 * 60_000 : 15_000
-    )
-    force.unref()
+    // This timer also keeps the process alive until the stop ends. Without
+    // it, a step below that waits only for an unref'd timer (or for nothing)
+    // lets Node exit with code 0 before the relaunch, and a launcher then
+    // does not start the server again.
+    const limit = drain ? 11 * 60_000 : 15_000
+    setTimeout(() => {
+      console.error(
+        `[pico] the ${restartAfter ? "restart" : "stop"} did not finish in ${limit / 1000} s: stopping at once`
+      )
+      release()
+      if (restartAfter) relaunch(paths)
+      process.exit(1)
+    }, limit)
     try {
       await server.shutdown({ drain })
     } catch (error) {
@@ -516,7 +532,15 @@ async function restartCommand(options: Map<string, string | boolean>) {
       return
     }
   }
-  throw new Error(`Pico did not start again in time. See ${paths.logFile}`)
+  // A launcher (`pico-app serve`, `pnpm start`) and a server in the
+  // background both write the server's output to the log file.
+  throw new Error(
+    `Pico did not start again in time. ${
+      alive(state.pid)
+        ? `The old server (pid ${state.pid}) still runs.`
+        : `The old server (pid ${state.pid}) stopped, and no new server answers.`
+    } See ${paths.logFile}`
+  )
 }
 
 /**

@@ -1387,9 +1387,13 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       return { error: error instanceof Error ? error.message : String(error) }
     }
     if (input.interactive) runner.markFocused(id)
-    const exit = input.interactive
-      ? await runner.waitForExit(id, 2_147_483_647, context.abortSignal)
-      : await runner.waitForExit(id, input.waitMs)
+    // A server stop aborts the call: it must not wait for a job that the
+    // stopping server no longer watches.
+    const exit = await runner.waitForExit(
+      id,
+      input.interactive ? 2_147_483_647 : input.waitMs,
+      context.abortSignal
+    )
     if (input.interactive && !exit && runner.running(id)) {
       // The turn stopped: the job goes on as a normal job, and no longer
       // calls the user from a tool call that is gone.

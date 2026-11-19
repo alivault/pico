@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process"
-import { readFileSync } from "node:fs"
+import { appendFileSync, mkdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -24,7 +24,8 @@ Usage: pico-app [serve|status|stop|restart|import-pi] [--port N] [--host H]
        pico-app mcp
 The default address is 127.0.0.1:3141. Data is stored in ~/.pico.
 Use a separate --data-dir for development.
-serve --detach starts Pico in the background (output in <data>/server.log).
+serve --detach starts Pico in the background. The server output also goes
+to <data>/server.log.
 restart stops Pico at once and starts it again with the same options, for
 example after an update. Turns that a restart cuts off continue.
 update installs the newest version on the update channel (stable, or
@@ -95,8 +96,36 @@ if (
 // starts it again (the same code is in server/src/main.ts).
 const RESTART_EXIT_CODE = 75
 const supervise = command === "serve" && !forwarded.includes("--detach")
+// The server's output also goes to this file, as for a server in the
+// background, so that `pico-app restart` can point to it when the server
+// does not come back.
+const logFile = join(dataDir, "server.log")
+function writeLog(text) {
+  try {
+    appendFileSync(logFile, text)
+  } catch {
+    /* The terminal still shows it. */
+  }
+}
+function note(text) {
+  console.error(`[pico] ${text}`)
+  writeLog(`[pico] ${new Date().toISOString()} ${text}\n`)
+}
+if (supervise) {
+  mkdirSync(dataDir, { recursive: true })
+  // A closed terminal must not stop the copy of the output.
+  process.stdout.on("error", () => undefined)
+  process.stderr.on("error", () => undefined)
+}
+// A server that fails at once after a restart (for example while a build
+// rewrites server/dist) starts again, a few times.
+const RETRY_MS = 10_000
+const MAX_RETRIES = 3
+let retries = 0
+let stopSignal
 let child
-function startChild() {
+function startChild(afterRestart = false) {
+  const startedAt = Date.now()
   child = spawn(
     process.execPath,
     [
@@ -106,25 +135,62 @@ function startChild() {
       ...forwarded,
     ],
     {
-      stdio: "inherit",
+      stdio: supervise ? ["inherit", "pipe", "pipe"] : "inherit",
       env: supervise ? { ...process.env, PICO_SUPERVISED: "1" } : process.env,
     }
   )
+  if (supervise) {
+    writeLog(
+      `[pico] ${new Date().toISOString()} ${afterRestart ? "restart" : "start"}: server pid ${child.pid}\n`
+    )
+    child.stdout.on("data", (chunk) => {
+      process.stdout.write(chunk)
+      writeLog(chunk)
+    })
+    child.stderr.on("data", (chunk) => {
+      process.stderr.write(chunk)
+      writeLog(chunk)
+    })
+  }
   child.on("error", (error) => {
-    console.error(error.message)
+    if (supervise) note(`could not start the server: ${error.message}`)
+    else console.error(error.message)
     process.exitCode = 1
   })
-  child.on("exit", (code) => {
-    if (supervise && code === RESTART_EXIT_CODE) {
-      startChild()
+  child.on("exit", (code, signal) => {
+    if (supervise && code === RESTART_EXIT_CODE && !stopSignal) {
+      retries = 0
+      startChild(true)
       return
     }
     process.exitCode = code ?? 1
+    if (!supervise || stopSignal || code === 0) return
+    const how = signal ? `signal ${signal}` : `exit code ${code}`
+    if (
+      afterRestart &&
+      Date.now() - startedAt < RETRY_MS &&
+      retries < MAX_RETRIES
+    ) {
+      retries += 1
+      note(
+        `the server stopped with ${how} after a restart; starting it again (${retries}/${MAX_RETRIES})`
+      )
+      setTimeout(() => {
+        if (!stopSignal) startChild(true)
+      }, 1000)
+      return
+    }
+    note(`the server stopped with ${how}. Output: ${logFile}`)
   })
 }
 startChild()
-for (const signal of ["SIGINT", "SIGTERM"])
-  process.on(signal, () => child.kill(signal))
+// The terminal sends these to the server too. Forward them, and wait for
+// the server: SIGHUP drains active turns first.
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"])
+  process.on(signal, () => {
+    stopSignal = signal
+    child.kill(signal)
+  })
 if (open) {
   const deadline = Date.now() + 30_000
   while (Date.now() < deadline) {
