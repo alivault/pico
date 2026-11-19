@@ -20,6 +20,9 @@ export type AgentJob = {
   focus?: { prompt: string; at: number; inline?: boolean }
   /** The tool call that started the job. */
   callId?: string
+  cwd?: string
+  /** The address of the job's dev server, when it prints one that listens. */
+  devServer?: { port: number; path: string }
 }
 
 /** The background jobs of an agent (the 20 newest), when they are loaded. */

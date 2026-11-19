@@ -197,6 +197,64 @@ void test("a job that exits during job_start's wait gets no exit message", async
   }
 })
 
+void test("a job keeps the address of its dev server in its record", async () => {
+  const dir = await tempDir()
+  const host = new HostBridge()
+  const jobs = createJobsExtension(host, dir)
+  const server = [
+    "const s = require('node:http').createServer((q, r) => r.end('ok'))",
+    "s.listen(0, '127.0.0.1', () => console.log('Local: http://localhost:' + s.address().port + '/app/'))",
+  ].join(";")
+  const harness = await openHarness(
+    join(dir, "db.sqlite"),
+    [jobs.extension],
+    (messages) => {
+      if (lastToolResult(messages)) return { text: "started" }
+      return {
+        tools: [
+          {
+            name: "job_start",
+            arguments: {
+              command: `node -e "${server}"`,
+              name: "dev",
+              wait_ms: 0,
+            },
+          },
+        ],
+      }
+    },
+    dir
+  )
+  const terminals = bindHost(host, harness, dir)
+  try {
+    const conversation = await harness.createConversation(
+      {
+        ownership: { kind: "ownerless" },
+        agent: { model: TEST_MODEL, cwd: dir },
+      },
+      ctx
+    )
+    await conversation.submit({ type: "input", content: "run" }, ctx)
+    const job = await eventually(async () => {
+      const state = await harness.snapshot(JobsDoc, conversation.id, ctx)
+      const item = Object.values(state?.items ?? {})[0]
+      return item?.devServer ? item : undefined
+    })
+    assert.equal(job.status, "running")
+    assert.equal(job.devServer!.path, "/app/")
+    assert.ok(job.devServer!.port > 0)
+    assert.match(await jobs.runner.log(job.id), /Local: http:\/\/localhost:/)
+    jobs.runner.stop(host.current as Pick<HostServices, "terminals">, job.id)
+    await eventually(async () => {
+      const state = await harness.snapshot(JobsDoc, conversation.id, ctx)
+      return state?.items[job.id]?.status === "stopped" ? true : undefined
+    })
+  } finally {
+    terminals.shutdown()
+    await harness.close(ctx)
+  }
+})
+
 void test("a job that asks for a password waits, takes focus, and goes on after input", async () => {
   const dir = await tempDir()
   const host = new HostBridge()

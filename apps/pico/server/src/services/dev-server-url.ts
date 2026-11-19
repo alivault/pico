@@ -49,7 +49,10 @@ export function isListening(port: number, timeoutMs = 1000) {
   })
 }
 
-/** Tell the clients of a dev server that an agent started or opened. */
+/**
+ * Tell the clients of a dev server that an agent started or opened. True
+ * when the port listens and the clients were told.
+ */
 export async function announcePreview(
   services: Pick<HostServices, "agents" | "events">,
   conversationId: ConversationId,
@@ -62,7 +65,7 @@ export async function announcePreview(
     if (attempt > 0) await delay(1000)
     listening = await isListening(url.port)
   }
-  if (!listening) return
+  if (!listening) return false
   const agentId =
     services.agents.current(agentIdOf(conversationId)) ??
     agentIdOf(conversationId)
@@ -74,6 +77,7 @@ export async function announcePreview(
     path: url.path,
   }
   services.events.push(event, { agentId })
+  return true
 }
 
 /** How much output of a job the search reads. Dev servers print early. */

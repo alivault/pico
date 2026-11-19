@@ -2,6 +2,7 @@ import * as React from "react"
 import {
   CheckIcon,
   CornerDownLeftIcon,
+  ExternalLinkIcon,
   FileTextIcon,
   KeyRoundIcon,
   SquareIcon,
@@ -23,6 +24,11 @@ import { Input } from "@/components/ui/input"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { FADE_UNDER_ACTIONS, REVEAL_ON_HOVER } from "@/features/pico/agent/todo"
 import { registerAgentSection } from "@/features/pico/agent/agent-panel"
+import {
+  directPreviewUrl,
+  previewUrl,
+  showPreview,
+} from "@/features/pico/agent/browser-preview"
 import { openJobTerminal } from "@/features/pico/agent/events"
 import {
   jobPrompt,
@@ -53,6 +59,8 @@ import {
   formatBytes,
   useMachineResources,
 } from "@/features/pico/resources-dialog"
+import { useMachineFeature } from "@/features/pico/machine-store"
+import { normalizeCwd } from "@/features/pico/right-sidebar-shared"
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
 
@@ -89,16 +97,44 @@ function statusText(job: Job, now: number) {
   }
 }
 
+/** Open a dev server in a new browser tab: direct, or through the hub. */
+async function openInNewTab(
+  machineId: string,
+  address: { port: number; path: string }
+) {
+  const direct = directPreviewUrl(machineId, address)
+  if (direct) {
+    window.open(direct, "_blank", "noopener,noreferrer")
+    return
+  }
+  // Open the tab in the click, so the browser does not block it.
+  const tab = window.open("", "_blank")
+  try {
+    const url = await previewUrl(machineId, address)
+    if (tab) {
+      tab.opener = null
+      tab.location.href = url
+    } else window.open(url, "_blank", "noopener,noreferrer")
+  } catch (error) {
+    tab?.close()
+    toast.error(errorText(error))
+  }
+}
+
 function JobsSection({
   agentId,
+  cwd,
   state,
   viewerContextId,
 }: {
   agentId: string
+  cwd?: string
   state: Record<string, unknown>
   viewerContextId: string
 }) {
   const machineId = useMachineId()
+  // The Preview is part of the Browser tab.
+  const previewAvailable = useMachineFeature("browser")
   const jobs = (state.jobs as Array<Job> | undefined) ?? []
   const now = useNow()
   // The memory of each running job, with every process it started.
@@ -122,11 +158,46 @@ function JobsSection({
   }
   const row = (job: Job) => {
     const running = job.status === "running"
+    const address = running && previewAvailable ? job.devServer : undefined
+    const openPreview = () => {
+      if (!address) return
+      showPreview({
+        machineId,
+        agentId,
+        cwd: cwd || normalizeCwd(job.cwd ?? ""),
+        port: address.port,
+        path: address.path,
+        open: true,
+      })
+    }
+    // Each action is 1.75rem wide, with a 0.125rem gap between.
+    const actions = (running ? 3 : 1) + (address ? 1 : 0)
     return (
       <Item
         key={job.id}
         size="sm"
-        className="group/row relative gap-2 px-1.5 py-1.5 hover:bg-muted/50"
+        className={cn(
+          "group/row relative gap-2 px-1.5 py-1.5 hover:bg-muted/50",
+          address && "cursor-pointer"
+        )}
+        {...(address
+          ? {
+              role: "button",
+              tabIndex: 0,
+              "aria-label": `Open preview of ${job.name}`,
+              onClick: (event: React.MouseEvent) => {
+                // The buttons of the row do their own work.
+                if ((event.target as Element).closest("button, a")) return
+                openPreview()
+              },
+              onKeyDown: (event: React.KeyboardEvent) => {
+                if (event.target !== event.currentTarget) return
+                if (event.key !== "Enter" && event.key !== " ") return
+                event.preventDefault()
+                openPreview()
+              },
+            }
+          : {})}
       >
         <ItemMedia>
           <span
@@ -138,8 +209,7 @@ function JobsSection({
           className={cn("min-w-0", FADE_UNDER_ACTIONS)}
           style={
             {
-              // Each action is 1.75rem wide, with a 0.125rem gap between.
-              "--actions-width": running ? "5.5rem" : "1.75rem",
+              "--actions-width": `${actions * 1.75 + (actions - 1) * 0.125}rem`,
             } as React.CSSProperties
           }
         >
@@ -159,6 +229,13 @@ function JobsSection({
             REVEAL_ON_HOVER
           )}
         >
+          {address ? (
+            <IconAction
+              label="Open in new tab"
+              icon={<ExternalLinkIcon />}
+              onClick={() => void openInNewTab(machineId, address)}
+            />
+          ) : null}
           {running ? (
             <IconAction
               label="Show in the terminal panel"
