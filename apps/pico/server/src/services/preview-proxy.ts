@@ -27,6 +27,7 @@ import type { Duplex } from "node:stream"
 
 import type { MachineManager } from "../machines/manager.ts"
 import type { Security } from "../security.ts"
+import { isPicoServer } from "./dev-server-url.ts"
 
 /** The hub sets it on requests to `/api/preview-proxy/`. */
 export const PREVIEW_PROXY_HEADER = "x-pico-preview-proxy"
@@ -289,6 +290,11 @@ export class PreviewProxy {
   async open(machineId: string, port: number) {
     if (machineId !== LOCAL_MACHINE_ID && !this.#machines.get(machineId))
       throw new Error(`Unknown machine: ${machineId}`)
+    // Pico cannot show itself: its page would load in a broken frame.
+    if (machineId === LOCAL_MACHINE_ID && (await isPicoServer(port)))
+      throw new Error(
+        `Port ${port} is a Pico server, not a dev server. Enter the address of your dev server.`
+      )
     const key = `${machineId}:${port}`
     let listener = this.#listeners.get(key)
     if (!listener) {
