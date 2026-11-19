@@ -264,8 +264,14 @@ void test("agents read a live terminal's screen and type into it", async () => {
       }
     )
     terminals.writeForAgent(terminalId, "ping\r")
-    await waitFor(() => false, 300).catch(() => undefined)
-    const recent = await terminals.readText(terminalId, "recent", 10)
+    // Wait for the echo of the terminal and the output of cat. A fixed
+    // wait was too short on a slow CI runner.
+    let recent = await terminals.readText(terminalId, "recent", 10)
+    const deadline = Date.now() + 5000
+    while (recent.lines.length < 2 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25))
+      recent = await terminals.readText(terminalId, "recent", 10)
+    }
     assert.deepEqual(recent.lines, ["ping", "ping"])
     const visible = await terminals.readText(terminalId, "visible", 0)
     assert.equal(visible.lines[0], "ping")
