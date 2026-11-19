@@ -154,7 +154,7 @@ function NewAgentWorktreeToggleView({
                   value={branch}
                   onChange={(event) => setBranch(event.target.value)}
                   placeholder="Made from the first prompt"
-                  className="h-8"
+                  className="h-7"
                 />
                 <Button
                   size="sm"
