@@ -61,6 +61,11 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           toast: "cn-toast",
+          // Sonner draws the action button in the inverse of the toast text,
+          // so it is light in dark mode. A tint of the toast's own color
+          // fits both themes and every toast type.
+          actionButton:
+            "!bg-current/15 !text-current !font-medium hover:!bg-current/25",
         },
       }}
       {...props}
