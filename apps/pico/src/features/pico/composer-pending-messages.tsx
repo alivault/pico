@@ -21,6 +21,7 @@ import { CSS } from "@dnd-kit/utilities"
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  BotIcon,
   ChevronRightIcon,
   GripVerticalIcon,
   ImageIcon,
@@ -28,6 +29,7 @@ import {
   ListXIcon,
   PlayIcon,
   PlusIcon,
+  SquareTerminalIcon,
   Trash2Icon,
   Undo2Icon,
   XIcon,
@@ -47,6 +49,7 @@ import {
   readFileAsPromptImage,
 } from "@/features/pico/app-shell-utils"
 import { promptImageKey } from "@/features/pico/conversation-view"
+import { parseAgentNotice } from "@/lib/pico/agent-notice"
 import {
   appendQueueRow,
   hasQueueChanges,
@@ -188,6 +191,28 @@ const LANE_DROP_PREFIX = "queue-lane:"
 
 /** One line of a row that is not edited. */
 function QueueRowSummary({ row }: { row: QueueEditRow }) {
+  const notice = row.images.length === 0 ? parseAgentNotice(row.text) : null
+  if (notice) {
+    const Icon = notice.kind === "job" ? SquareTerminalIcon : BotIcon
+    return (
+      <div
+        title={row.text}
+        className={cn(
+          "flex min-w-0 items-center gap-1 leading-6 text-muted-foreground",
+          row.removed && "line-through"
+        )}
+      >
+        <Icon className="size-3.5 shrink-0" />
+        <span className="shrink-0 font-medium whitespace-nowrap">
+          {[notice.label, notice.agentId].filter(Boolean).join(" ")} ·{" "}
+          {notice.state}
+        </span>
+        {notice.summary ? (
+          <span className="ml-1 min-w-0 truncate">{notice.summary}</span>
+        ) : null}
+      </div>
+    )
+  }
   return (
     <div
       title={row.text || undefined}

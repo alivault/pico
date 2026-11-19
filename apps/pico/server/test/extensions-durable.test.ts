@@ -24,6 +24,7 @@ import {
   plainText,
 } from "../src/extensions/jobs.ts"
 import { createScratchpadExtension } from "../src/extensions/scratchpad.ts"
+import { parseAgentNotice } from "../../src/lib/pico/agent-notice.ts"
 import { Terminals } from "../src/services/terminal.ts"
 import {
   ctx,
@@ -64,6 +65,11 @@ async function userEntries(conversation: Conversation) {
   return context.entries
     .filter((entry) => entry.kind === "pi.user")
     .map((entry) => JSON.stringify(entry.model))
+}
+
+/** The text of an entry of `userEntries`. */
+function entryText(entry: string) {
+  return userTexts(JSON.parse(entry) as Message[]).join("\n")
 }
 
 /** Bind a host with stub agents and real terminals. */
@@ -135,6 +141,16 @@ void test("a background job runs, logs, and reports its exit", async () => {
     assert.match(entries.join("\n"), /second/)
     const state = await harness.snapshot(JobsDoc, conversation.id, ctx)
     const job = Object.values(state!.items)[0]!
+    // The web client shows the notice as a job card.
+    const notice = parseAgentNotice(
+      entryText(entries.find((entry) => entry.includes("[Job finished]"))!)
+    )
+    assert.equal(notice?.kind, "job")
+    assert.equal(notice?.state, "finished")
+    assert.equal(notice?.jobId, job.id)
+    assert.equal(notice?.command, job.command)
+    assert.match(notice?.summary ?? "", / · exit 0 · /)
+    assert.match(notice?.output ?? "", /first\s+second/)
     assert.equal(job.status, "exited")
     assert.equal(job.exitCode, 0)
     assert.match(await jobs.runner.log(job.id), /first\s+second/)
@@ -772,6 +788,10 @@ void test("running jobs of an earlier process become lost at startup", async () 
       return entries.length > 0 ? entries : undefined
     })
     assert.match(users[0]!, /\[Job lost\] server/)
+    const notice = parseAgentNotice(entryText(users[0]!))
+    assert.equal(notice?.state, "lost")
+    assert.equal(notice?.jobId, "jold")
+    assert.equal(notice?.command, "npm run dev")
   } finally {
     terminals.shutdown()
     await harness.close(ctx)
