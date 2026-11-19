@@ -626,18 +626,13 @@ function ConversationGroupView({
 
   if (group.kind === "user") {
     return (
-      <MessageScrollerItem
+      <ConversationUserGroupRow
+        className={className}
+        itemKey={group.itemKey}
         messageId={messageId}
-        scrollAnchor
-        className={conversationItemClassName}
-      >
-        <ConversationUserGroupView
-          className={className}
-          itemKey={group.itemKey}
-          store={store}
-        />
-        {workingFooter}
-      </MessageScrollerItem>
+        store={store}
+        workingFooter={workingFooter}
+      />
     )
   }
 
@@ -659,27 +654,45 @@ function ConversationGroupView({
   )
 }
 
-function ConversationUserGroupView({
+/**
+ * A user message is a scroll anchor: when the user sends it, the view
+ * scrolls it to the top. A notice of an agent or a job is not, so it does
+ * not move the view. The jumps between messages skip notices too.
+ */
+function ConversationUserGroupRow({
   className,
   itemKey,
+  messageId,
   store,
+  workingFooter,
 }: {
   className: string
   itemKey: string
+  messageId: string
   store: ConversationItemsStore
+  workingFooter?: React.ReactNode
 }) {
   const item = useConversationItem(store, itemKey)
-  if (!item || item.kind !== "user") return null
-
-  // The jumps between messages skip the notices of agents and jobs.
-  const notice = item.images.length === 0 && parseAgentNotice(item.text)
+  const userItem = item?.kind === "user" ? item : undefined
+  const notice = Boolean(
+    userItem && userItem.images.length === 0 && parseAgentNotice(userItem.text)
+  )
   return (
-    <div
-      data-user-message-anchor={notice ? undefined : "true"}
-      className={className}
+    <MessageScrollerItem
+      messageId={messageId}
+      scrollAnchor={!notice}
+      className={conversationItemClassName}
     >
-      <UserMessageCard item={item} />
-    </div>
+      {userItem ? (
+        <div
+          data-user-message-anchor={notice ? undefined : "true"}
+          className={className}
+        >
+          <UserMessageCard item={userItem} />
+        </div>
+      ) : null}
+      {workingFooter}
+    </MessageScrollerItem>
   )
 }
 
