@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { postAgentJson } from "@/features/pico/agent/agent-extensions"
+import { CookieImportCard } from "@/features/pico/agent/browser-cookie-import"
 import { buildRequestUrl } from "@/features/pico/app-shell-utils"
 import {
   PreviewPanel,
@@ -686,6 +687,7 @@ function AgentBrowserView({
           onKeyDown={onKeyDown}
           onPaste={onPaste}
         />
+        <CookieImportCard />
         {!state ? (
           <Spinner />
         ) : !state.open ? (

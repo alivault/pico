@@ -1,6 +1,7 @@
 import * as React from "react"
 import "@/features/pico/agent/register"
 import { ResourcesDialogController } from "@/features/pico/resources-dialog"
+import { CookieImportDialogController } from "@/features/pico/agent/browser-cookie-import"
 import { usePicoEvent } from "@/features/pico/agent/events"
 import { toast } from "@/lib/pico/toast"
 
@@ -588,6 +589,7 @@ const AppShellSettingsDialogHost = React.memo(
     return (
       <>
         <ResourcesDialogController viewerContextId={viewerContextId} />
+        <CookieImportDialogController />
         <AppShellSettingsDialogController
           ref={settingsDialogRef}
           openStateRef={settingsOpenRef}

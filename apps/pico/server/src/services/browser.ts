@@ -14,6 +14,11 @@
  * first; a visible Chrome waits `HEADED_IDLE_MS`, as the user may use its
  * window, for example to log in), and Chrome closes when no context remains. The next tool call
  * opens them again.
+ *
+ * Cookies imported from the user's own browser
+ * (services/browser-cookie-import.ts) go to every context first, under the
+ * conversation's own cookies. A conversation saves only the cookies that
+ * are not the same as an imported cookie.
  */
 import { existsSync, statSync } from "node:fs"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
@@ -25,6 +30,18 @@ import type {
   FileChooser,
   Page,
 } from "playwright-core"
+
+import {
+  cookieKey,
+  mergeCookies,
+  readImportedCookies,
+  removeImportedCookieFile,
+  withoutImported,
+  writeImportedCookies,
+  type ImportedCookie,
+  type ImportedCookieStore,
+  type ImportSource,
+} from "./browser-cookie-import.ts"
 
 const CHROME_PATHS = [
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -77,6 +94,8 @@ const HEADED_IDLE_MS = 60 * 60 * 1000
 
 export type BrowserTab = { id: string; url: string; title: string }
 
+type StorageState = Awaited<ReturnType<BrowserContext["storageState"]>>
+
 /** A request of the agent for the user to use its browser. */
 export type BrowserHandoff = { questionId: string; reason: string }
 
@@ -90,6 +109,23 @@ type Session = {
    * the dialog does not show: the live view asks the user for the files.
    */
   fileChooser?: FileChooser
+}
+
+/**
+ * Add cookies to a context. Chrome refuses some cookies; one bad cookie must
+ * not stop the others.
+ */
+export async function addCookiesSafely(
+  context: BrowserContext,
+  cookies: ImportedCookie[]
+) {
+  if (cookies.length === 0) return
+  try {
+    await context.addCookies(cookies)
+  } catch {
+    for (const cookie of cookies)
+      await context.addCookies([cookie]).catch(() => undefined)
+  }
 }
 
 /** A file from the user, for a file dialog or a drop. */
@@ -158,6 +194,8 @@ export class BrowserManager {
   readonly #listeners = new Map<number, Set<() => void>>()
   /** Open handoffs: their contexts do not close when idle. */
   readonly #handoffs = new Map<number, BrowserHandoff>()
+  /** The imported cookies, read from their file on first use. */
+  #imported: Promise<ImportedCookieStore | undefined> | undefined
 
   constructor(
     dataDir: string,
@@ -415,12 +453,20 @@ export class BrowserManager {
         const browser = await this.#browserInstance()
         const statePath = this.#statePath(conversationId)
         const storageState = existsSync(statePath)
-          ? (JSON.parse(await readFile(statePath, "utf8")) as never)
+          ? (JSON.parse(await readFile(statePath, "utf8")) as StorageState)
           : undefined
+        const imported = (await this.#importedStore())?.cookies ?? []
         const context = await browser.newContext({
           viewport: { width: 1280, height: 800 },
-          ...(storageState ? { storageState } : {}),
+          ...(storageState
+            ? { storageState: { ...storageState, cookies: [] } }
+            : {}),
         })
+        // The imported cookies first; the conversation's own cookies win.
+        await addCookiesSafely(
+          context,
+          mergeCookies(imported, storageState?.cookies ?? [])
+        )
         const created: Session = { context, pages: new Map(), nextTab: 1 }
         for (const tab of tabs) {
           const page = await context.newPage()
@@ -552,7 +598,100 @@ export class BrowserManager {
   async #save(conversationId: number, session: Session) {
     await mkdir(join(this.#dataDir, "browser"), { recursive: true })
     const state = await session.context.storageState()
-    await writeFile(this.#statePath(conversationId), JSON.stringify(state))
+    const imported = (await this.#importedStore())?.cookies ?? []
+    await writeFile(
+      this.#statePath(conversationId),
+      JSON.stringify({
+        ...state,
+        cookies: withoutImported(state.cookies, imported),
+      })
+    )
+  }
+
+  #importedStore() {
+    this.#imported ??= readImportedCookies(this.#dataDir)
+    return this.#imported
+  }
+
+  /** Whether cookies are imported, how many, from where, and when. */
+  async importStatus() {
+    const store = await this.#importedStore()
+    return store
+      ? {
+          imported: store.cookies.length > 0,
+          count: store.cookies.length,
+          source: store.source,
+          importedAt: store.importedAt,
+        }
+      : { imported: false, count: 0 }
+  }
+
+  /** The open contexts. */
+  async #openSessions() {
+    const sessions = await Promise.all(
+      [...this.#sessions.values()].map((pending) =>
+        pending.catch(() => undefined)
+      )
+    )
+    return sessions.filter((session) => session !== undefined)
+  }
+
+  /**
+   * Save imported cookies for all contexts. They replace imported cookies
+   * with the same name, domain, and path. Open contexts get them now,
+   * except where a context has its own cookie.
+   */
+  async importCookies(cookies: ImportedCookie[], source: ImportSource) {
+    const previous = (await this.#importedStore())?.cookies ?? []
+    const store: ImportedCookieStore = {
+      version: 1,
+      importedAt: new Date().toISOString(),
+      source,
+      // The new cookies win.
+      cookies: mergeCookies(previous, cookies),
+    }
+    await writeImportedCookies(this.#dataDir, store)
+    this.#imported = Promise.resolve(store)
+    for (const session of await this.#openSessions()) {
+      const own = withoutImported(
+        await session.context.cookies().catch(() => []),
+        previous
+      )
+      const keys = new Set(own.map(cookieKey))
+      await addCookiesSafely(
+        session.context,
+        cookies.filter((cookie) => !keys.has(cookieKey(cookie)))
+      )
+    }
+    return store
+  }
+
+  /**
+   * Remove the imported cookies: the file, and the cookies in open contexts
+   * that are still the same as an imported cookie. The files of the
+   * conversations do not change: they do not hold imported cookies.
+   */
+  async removeImportedCookies() {
+    const previous = (await this.#importedStore())?.cookies ?? []
+    await removeImportedCookieFile(this.#dataDir)
+    this.#imported = Promise.resolve(undefined)
+    if (previous.length === 0) return
+    const values = new Map(
+      previous.map((cookie) => [cookieKey(cookie), cookie.value])
+    )
+    for (const session of await this.#openSessions()) {
+      const cookies = await session.context.cookies().catch(() => [])
+      for (const cookie of cookies) {
+        if (values.get(cookieKey(cookie)) !== cookie.value) continue
+        await session.context
+          .clearCookies({
+            name: cookie.name,
+            domain: cookie.domain,
+            path: cookie.path,
+          })
+          .catch(() => undefined)
+      }
+    }
   }
 
   async closeSession(conversationId: number) {

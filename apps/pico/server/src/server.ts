@@ -22,6 +22,10 @@ import { EventHub } from "./events.ts"
 import { HostBridge } from "./extensions/host.ts"
 import { BrowserManager } from "./services/browser.ts"
 import {
+  CookieImporter,
+  publicProfile,
+} from "./services/browser-cookie-import.ts"
+import {
   BrowserView,
   type BrowserViewEvent,
   type BrowserViewInput,
@@ -335,6 +339,65 @@ export async function startServer(options: {
           : message
       )
     }
+  })
+  // Cookies from the user's own browsers for the agent's browser
+  // (services/browser-cookie-import.ts). Cookie values never leave the server.
+  const cookieImporter = new CookieImporter()
+  const userError = (error: unknown) =>
+    new ApiError(400, error instanceof Error ? error.message : String(error))
+  const profileIdOf = (value: unknown) => {
+    if (typeof value !== "string" || !value)
+      throw new ApiError(400, "profileId is required")
+    return value
+  }
+  router.get("/api/browser/cookies", async () => ({
+    ok: true,
+    ...(await browser.importStatus()),
+  }))
+  router.get("/api/browser/cookies/profiles", () => ({
+    ok: true,
+    profiles: cookieImporter.profiles().map(publicProfile),
+  }))
+  router.post("/api/browser/cookies/sites", async (request) => {
+    const body = await request.body<{ profileId?: unknown }>()
+    const profileId = profileIdOf(body.profileId)
+    try {
+      return { ok: true, ...(await cookieImporter.sites(profileId)) }
+    } catch (error) {
+      throw userError(error)
+    }
+  })
+  router.post("/api/browser/cookies/import", async (request) => {
+    const body = await request.body<{
+      profileId?: unknown
+      domains?: unknown
+    }>()
+    const profileId = profileIdOf(body.profileId)
+    if (
+      !Array.isArray(body.domains) ||
+      !body.domains.every((domain) => typeof domain === "string")
+    )
+      throw new ApiError(400, "domains must be a list of sites")
+    let read: Awaited<ReturnType<CookieImporter["cookies"]>>
+    try {
+      read = await cookieImporter.cookies(profileId, body.domains as string[])
+    } catch (error) {
+      throw userError(error)
+    }
+    await browser.importCookies(read.cookies, {
+      browser: read.profile.browser,
+      browserName: read.profile.browserName,
+      profileName: read.profile.name,
+    })
+    return {
+      ok: true,
+      added: read.cookies.length,
+      ...(await browser.importStatus()),
+    }
+  })
+  router.delete("/api/browser/cookies", async () => {
+    await browser.removeImportedCookies()
+    return { ok: true, ...(await browser.importStatus()) }
   })
   router.post("/api/system/shutdown", (request) => {
     const remote = request.raw.socket.remoteAddress ?? ""
