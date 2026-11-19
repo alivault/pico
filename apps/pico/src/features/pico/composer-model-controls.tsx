@@ -28,6 +28,7 @@ import {
 } from "@/features/pico/tanstack-store-utils"
 import { emitPicoEvent } from "@/features/pico/agent/events"
 import {
+  ContextUsageBars,
   ContextUsageQuotaDetails,
   ContextUsageRings,
   ContextUsageWindowDetails,
@@ -176,13 +177,22 @@ export const ComposerContextUsage = React.memo(function ComposerContextUsage({
             <Button
               type="button"
               variant="ghost"
-              size="icon-sm"
-              className="shrink-0 cursor-pointer"
+              size="xs"
+              // Labeled bars when the row below the composer has room,
+              // rings when it does not (see its container in the composer).
+              className="h-7 shrink-0 cursor-pointer px-0 @[34rem]/composer-controls:px-2"
               aria-label={view.ariaLabel}
             />
           }
         >
-          <ContextUsageRings view={view} className="size-full" />
+          <ContextUsageRings
+            view={view}
+            className="size-7 @[34rem]/composer-controls:hidden"
+          />
+          <ContextUsageBars
+            view={view}
+            className="hidden @[34rem]/composer-controls:flex"
+          />
         </DropdownMenuTrigger>
       </TitleTooltip>
       <DropdownMenuContent side="top" align="start" className="w-64">

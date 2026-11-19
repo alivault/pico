@@ -775,6 +775,68 @@ export function ContextUsageRings({
   )
 }
 
+/** The short label of a usage bar. */
+function contextUsageBarLabel(ring: ContextUsageRing) {
+  if (ring.key === "context") return "Context"
+  if (ring.key === "five-hour") return "5h"
+  return "Week"
+}
+
+/**
+ * The usage as small labeled bars in one line: the context window, then
+ * the 5h and the weekly usage. The rings show the same where there is no
+ * room for this.
+ */
+export function ContextUsageBars({
+  view,
+  className,
+}: {
+  view: ContextUsageView
+  className?: string
+}) {
+  return (
+    <span
+      className={cn("flex items-center gap-3 text-xs", className)}
+      aria-hidden="true"
+    >
+      {view.rings.map((ring) => (
+        <span key={ring.key} className="flex items-center gap-1.5">
+          <span className="text-muted-foreground">
+            {contextUsageBarLabel(ring)}
+          </span>
+          <span className="relative h-1 w-10 overflow-hidden rounded-full bg-muted">
+            {ring.percent == null ? null : (
+              <span
+                className="absolute inset-y-0 left-0 rounded-full"
+                style={{
+                  width: `${ring.percent}%`,
+                  backgroundColor: contextUsageStroke(
+                    ring.percent,
+                    ring.pacePercent
+                  ),
+                }}
+              />
+            )}
+            {ring.key === "context" && view.compactAtPercent != null ? (
+              <span
+                className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-foreground/60"
+                style={{
+                  left: `${Math.max(0, Math.min(100, view.compactAtPercent))}%`,
+                }}
+              />
+            ) : null}
+          </span>
+          <span className="text-foreground/80 tabular-nums">
+            {ring.percent == null
+              ? "–"
+              : `${formatContextUsagePercent(ring.percent)}%`}
+          </span>
+        </span>
+      ))}
+    </span>
+  )
+}
+
 /** The context window line of the usage details. */
 export function ContextUsageWindowDetails({
   view,

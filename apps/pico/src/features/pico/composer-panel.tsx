@@ -448,7 +448,7 @@ export function ComposerPanel({
         {/* Below the card, so the prompt keeps the width of its row. The
             negative margin brings it near the card despite the column gap. */}
         <div
-          className={`flex min-w-0 items-center gap-0.5 px-2 ${
+          className={`@container/composer-controls flex min-w-0 items-center gap-0.5 px-2 ${
             centerMessages ? "-mt-0.5" : "-mt-2"
           }`}
         >
