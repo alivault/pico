@@ -2411,6 +2411,8 @@ function AppSidebarSearchButton({
         <SidebarMenuItem>
           <SidebarMenuButton
             type="button"
+            // Dim like a ghost button, with the same hover.
+            className="text-muted-foreground hover:bg-muted hover:text-foreground dark:hover:bg-muted/50"
             onClick={() => {
               // On mobile, the sidebar sheet covers the search dialog.
               if (isMobile) setOpenMobile(false)
