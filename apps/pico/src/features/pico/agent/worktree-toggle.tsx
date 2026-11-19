@@ -1,23 +1,16 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ChevronDownIcon, GitForkIcon } from "lucide-react"
+import { GitForkIcon, PencilIcon } from "lucide-react"
 import { toast } from "@/lib/pico/toast"
 
 import { Button } from "@/components/ui/button"
-import {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Switch } from "@/components/ui/switch"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { errorText } from "@/features/pico/agent/shared"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
@@ -33,7 +26,7 @@ type DraftWorktree = {
 }
 
 /**
- * The "New worktree" option of a new agent. The choice is part of the
+ * The "Worktree" toggle of a new agent. The choice is part of the
  * server's draft, so the first prompt creates the worktree with the agent.
  */
 function NewAgentWorktreeToggleView({
@@ -44,8 +37,7 @@ function NewAgentWorktreeToggleView({
   viewerContextId: string
 }) {
   const machineId = useMachineId()
-  // Each machine's app shell has a composer, so the IDs must be unique.
-  const worktreeFieldId = React.useId()
+  // Each machine's app shell has a composer, so the ID must be unique.
   const branchFieldId = React.useId()
   const queryClient = useQueryClient()
   const queryKey = ["pico", "draft-worktree", viewerContextId, cwd] as const
@@ -89,68 +81,69 @@ function NewAgentWorktreeToggleView({
   })
   if (!query.data?.gitRepository) return null
   const enabled = query.data.enabled
+  const savedBranch = query.data.branch ?? ""
+  const saveBranch = () =>
+    mutation.mutate({
+      enabled: true,
+      ...(branch.trim() ? { branch: branch.trim() } : {}),
+    })
   return (
-    <Popover>
+    <div className="flex min-w-0 items-center gap-1">
       <TitleTooltip
         title={
           enabled
-            ? "The new agent gets its own git worktree"
+            ? "The new agent gets its own git worktree and branch"
             : "The new agent works in the project directory"
         }
       >
-        <PopoverTrigger
-          render={
-            <Button
-              type="button"
-              variant="ghost"
-              aria-label="Worktree for the new agent"
-              className={cn(enabled && "text-foreground")}
-            />
+        <Button
+          type="button"
+          variant="ghost"
+          aria-pressed={enabled}
+          aria-label="New worktree"
+          disabled={mutation.isPending}
+          className={cn(enabled && "bg-muted text-foreground")}
+          onClick={() =>
+            mutation.mutate(
+              enabled
+                ? { enabled: false }
+                : {
+                    enabled: true,
+                    ...(branch.trim() ? { branch: branch.trim() } : {}),
+                  }
+            )
           }
         >
           <GitForkIcon className="size-4 shrink-0" aria-hidden="true" />
-          <span className="truncate">
-            {enabled
-              ? `New worktree${query.data.branch ? `: ${query.data.branch}` : ""}`
-              : "No worktree"}
-          </span>
-          <ChevronDownIcon className="size-5 shrink-0" aria-hidden="true" />
-        </PopoverTrigger>
+          <span>Worktree</span>
+        </Button>
       </TitleTooltip>
-      <PopoverContent align="start" className="w-80">
-        <FieldGroup className="gap-4">
-          <Field orientation="horizontal">
-            <FieldContent>
-              <FieldLabel htmlFor={worktreeFieldId}>New worktree</FieldLabel>
-              <FieldDescription>
-                The agent works in its own git worktree and branch, so it does
-                not change the files that other agents use.
-              </FieldDescription>
-            </FieldContent>
-            <Switch
-              id={worktreeFieldId}
-              checked={enabled}
-              disabled={mutation.isPending}
-              onCheckedChange={(checked) =>
-                mutation.mutate(
-                  checked
-                    ? { enabled: true, ...(branch.trim() ? { branch } : {}) }
-                    : { enabled: false }
-                )
+      {enabled ? (
+        // The branch name is optional: the first prompt names it.
+        <Popover>
+          <TitleTooltip title="Branch name">
+            <PopoverTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  aria-label="Branch name"
+                  className="min-w-0"
+                />
               }
-            />
-          </Field>
-          {enabled ? (
+            >
+              <span className="truncate">{savedBranch || "Auto branch"}</span>
+              <PencilIcon className="size-3.5 shrink-0" aria-hidden="true" />
+            </PopoverTrigger>
+          </TitleTooltip>
+          <PopoverContent align="start" className="w-80">
             <Field>
               <FieldLabel htmlFor={branchFieldId}>Branch name</FieldLabel>
               <form
                 className="flex gap-2"
                 onSubmit={(event) => {
                   event.preventDefault()
-                  mutation.mutate({
-                    enabled: true,
-                    ...(branch.trim() ? { branch: branch.trim() } : {}),
-                  })
+                  saveBranch()
                 }}
               >
                 <Input
@@ -164,16 +157,16 @@ function NewAgentWorktreeToggleView({
                   size="sm"
                   type="submit"
                   variant="outline"
-                  disabled={(query.data.branch ?? "") === branch.trim()}
+                  disabled={savedBranch === branch.trim()}
                 >
                   Save
                 </Button>
               </form>
             </Field>
-          ) : null}
-        </FieldGroup>
-      </PopoverContent>
-    </Popover>
+          </PopoverContent>
+        </Popover>
+      ) : null}
+    </div>
   )
 }
 
