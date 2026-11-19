@@ -1,10 +1,10 @@
 import * as React from "react"
-
-import type { CompletionItem } from "@/lib/pico/api"
+import { PaperclipIcon } from "lucide-react"
 
 import type { SlashCommandDescriptor } from "@/features/pico/composer-utils"
 import type {
   ComposerAssistSelectionStore,
+  ComposerCompletionItem,
   ComposerSlashMenuState,
   ComposerVisibleCompletion,
 } from "@/features/pico/use-composer-assist"
@@ -12,7 +12,7 @@ import type {
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 
-function visibleCompletionLabel(item: CompletionItem) {
+function visibleCompletionLabel(item: ComposerCompletionItem) {
   return item.label || item.value
 }
 
@@ -23,7 +23,7 @@ type ComposerAssistMenuProps = {
   pointerSelectionSuppressed: boolean
   onHoverCompletion: (index: number) => void
   onMoveCompletion: (index: number) => void
-  onApplyCompletion: (item: CompletionItem) => void
+  onApplyCompletion: (item: ComposerCompletionItem) => void
   onHoverSlashCommand: (index: number) => void
   onMoveSlashCommand: (index: number) => void
   onApplySlashSuggestion: (command: SlashCommandDescriptor) => void
@@ -94,6 +94,9 @@ export function ComposerAssistMenu({
                     onApplyCompletion(item)
                   }}
                 >
+                  {item.action === "upload" ? (
+                    <PaperclipIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                  ) : null}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">
                       {visibleCompletionLabel(item)}
