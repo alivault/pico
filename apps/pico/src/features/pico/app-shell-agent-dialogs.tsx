@@ -54,6 +54,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { ShortcutButton, ShortcutFooter } from "@/components/ui/shortcut-footer"
 import { Spinner } from "@/components/ui/spinner"
 import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { agentTitle } from "@/features/pico/archive-agents"
 import { picoQueryKeys } from "@/features/pico/query-keys"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useMachineId } from "@/lib/pico/machine-context"
@@ -366,6 +367,7 @@ type DeleteAgentsDialogProps = {
   title: string
   description: string
   targets: Array<AgentListEntry>
+  subagents: Array<AgentListEntry>
   onDeleteAgent: () => void
   removeWorktree: boolean
   onRemoveWorktreeChange: (remove: boolean) => void
@@ -377,6 +379,7 @@ function DeleteAgentsDialog({
   title,
   description,
   targets,
+  subagents,
   onDeleteAgent,
   removeWorktree,
   onRemoveWorktreeChange,
@@ -453,7 +456,18 @@ function DeleteAgentsDialog({
         </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
-        <p className="text-sm text-muted-foreground">This cannot be undone.</p>
+        {subagents.length > 0 ? (
+          <p className="text-sm">
+            {subagents.length === 1
+              ? `Subagent "${agentTitle(subagents[0]!)}" still works.`
+              : `${subagents.length} subagents still work.`}{" "}
+            An archived agent does not get the reports of its subagents, and a
+            restore does not bring them back.
+          </p>
+        ) : null}
+        <p className="text-sm text-muted-foreground">
+          You can restore archived agents from Archived agents in the sidebar.
+        </p>
         {worktreeTargets.length > 0 ? (
           <Field orientation="horizontal">
             <Checkbox
@@ -469,8 +483,8 @@ function DeleteAgentsDialog({
                   : `${worktreeTargets.length} worktrees`}
               </FieldLabel>
               <FieldDescription>
-                Pico removes a worktree only when it has no uncommitted changes.
-                The branch stays.
+                This cannot be undone. Pico removes a worktree only when it has
+                no uncommitted changes. The branch stays.
               </FieldDescription>
             </FieldContent>
           </Field>
@@ -542,7 +556,14 @@ function DeleteAgentsDialog({
 }
 
 export type DeleteAgentsDialogHandle = {
-  open: (targets: Array<AgentListEntry>) => void
+  open: (
+    targets: Array<AgentListEntry>,
+    options?: {
+      removeWorktree?: boolean
+      /** Working subagents of the targets: their reports will be lost. */
+      subagents?: Array<AgentListEntry>
+    }
+  ) => void
   close: () => void
   isOpen: () => boolean
 }
@@ -853,6 +874,7 @@ export function DeleteAgentsDialogController({
 }: DeleteAgentsDialogControllerProps) {
   const [open, setOpen] = React.useState(false)
   const [targets, setTargets] = React.useState<Array<AgentListEntry>>([])
+  const [subagents, setSubagents] = React.useState<Array<AgentListEntry>>([])
   const [removeWorktree, setRemoveWorktree] = React.useState(false)
   const openRef = React.useRef(open)
 
@@ -864,15 +886,21 @@ export function DeleteAgentsDialogController({
     setOpen(nextOpen)
     if (!nextOpen) {
       setTargets([])
+      setSubagents([])
       setRemoveWorktree(false)
     }
   }
 
-  const openTargets = (nextTargets: Array<AgentListEntry>) => {
+  const openTargets: DeleteAgentsDialogHandle["open"] = (
+    nextTargets,
+    options = {}
+  ) => {
     const normalizedTargets = normalizeDeleteTargets(nextTargets)
     if (normalizedTargets.length === 0) return
 
     setTargets(normalizedTargets)
+    setSubagents(options.subagents ?? [])
+    setRemoveWorktree(Boolean(options.removeWorktree))
     setOpenState(true)
   }
 
@@ -898,8 +926,8 @@ export function DeleteAgentsDialogController({
   const title = targets.length === 1 ? "Archive agent" : "Archive agents"
   const description =
     targets.length === 1
-      ? `Archive "${targets[0]?.title || "New agent"}"? (History is kept.)`
-      : `Archive ${targets.length} selected agents? (History is kept.)`
+      ? `Archive "${targets[0]?.title || "New agent"}"?`
+      : `Archive ${targets.length} selected agents?`
 
   return (
     <DeleteAgentsDialog
@@ -908,6 +936,7 @@ export function DeleteAgentsDialogController({
       title={title}
       description={description}
       targets={targets}
+      subagents={subagents}
       removeWorktree={removeWorktree}
       onRemoveWorktreeChange={setRemoveWorktree}
       onDeleteAgent={() => {

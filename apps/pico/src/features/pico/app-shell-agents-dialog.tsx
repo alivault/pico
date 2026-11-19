@@ -59,9 +59,10 @@ import { openAgent } from "@/lib/pico/machine"
 import { cn } from "@/lib/utils"
 import { useMachineId } from "@/lib/pico/machine-context"
 import { settle } from "@/lib/settle"
+import type { ArchiveAgentsResult } from "@/features/pico/archive-agents"
 
 type AgentsDialogScope = "current" | "all"
-type AgentsDialogStage = "browse" | "rename" | "delete"
+type AgentsDialogStage = "browse" | "rename"
 
 type GenerateAgentNameData = Extract<GenerateAgentNameResponse, { ok: true }>
 
@@ -87,9 +88,8 @@ type AppShellAgentsDialogProps = {
     path: string,
     name: string
   ) => Promise<boolean> | boolean | void
-  onDeleteAgent: (
-    targets: Array<AgentListEntry>
-  ) => Promise<boolean> | boolean | void
+  /** Archive at once, or open the archive dialog when it must ask first. */
+  onArchiveAgent: (targets: Array<AgentListEntry>) => ArchiveAgentsResult
   onError?: (error: unknown) => void
 }
 
@@ -368,8 +368,7 @@ type AgentsDialogAction =
   | { type: "renameRequested"; value: string }
   | { type: "renameValueChanged"; value: string }
   | { type: "renameSaved"; path: string; name: string }
-  | { type: "deleteRequested" }
-  | { type: "deleteSaved"; path: string }
+  | { type: "archived"; path: string }
   | { type: "projectsLoadingStarted"; projects: Array<string> }
   | {
       type: "projectsLoadingFinished"
@@ -446,9 +445,7 @@ function agentsDialogReducer(
         },
         stage: "browse",
       }
-    case "deleteRequested":
-      return state.stage === "delete" ? state : { ...state, stage: "delete" }
-    case "deleteSaved": {
+    case "archived": {
       const loadedAgentsByPath: Record<string, Array<AgentListEntry>> = {}
       let agentsChanged = false
 
@@ -559,7 +556,7 @@ function useAppShellAgentsDialogView({
   activeAgentPath,
   onSelectAgent,
   onRenameAgent,
-  onDeleteAgent,
+  onArchiveAgent,
   onError,
 }: AppShellAgentsDialogProps) {
   const machineId = useMachineId()
@@ -683,7 +680,6 @@ function useAppShellAgentsDialogView({
   )
   const loading = visibleGroups.some((group) => group.loading)
   const browseInputRef = React.useRef<HTMLInputElement | null>(null)
-  const deletePanelRef = React.useRef<HTMLDivElement | null>(null)
   const previousStageRef = React.useRef(stage)
 
   // Projects whose load failed while the dialog is open. The load effect
@@ -781,18 +777,6 @@ function useAppShellAgentsDialogView({
     }
   }, [open, stage])
 
-  React.useEffect(() => {
-    if (!open || stage !== "delete") return
-
-    const frame = window.requestAnimationFrame(() => {
-      deletePanelRef.current?.focus()
-    })
-
-    return () => {
-      window.cancelAnimationFrame(frame)
-    }
-  }, [open, stage])
-
   const toggleScope = () => {
     dispatch({ type: "scopeToggled" })
   }
@@ -872,45 +856,17 @@ function useAppShellAgentsDialogView({
     }
   }
 
-  const deleteSelectedAgent = () => {
-    if (!selectedAgent?.path) return
-    dispatch({ type: "deleteRequested" })
-  }
-
-  const confirmDeleteSelectedAgent = async () => {
+  const archiveSelectedAgent = () => {
     const targetPath = selectedAgent?.path
     if (!selectedAgent || !targetPath) return
 
-    const target: AgentListEntry = { ...selectedAgent, path: targetPath }
-    const success = await Promise.resolve(onDeleteAgent([target]))
-    if (success === false) return
-
-    dispatch({ type: "deleteSaved", path: targetPath })
+    const result = onArchiveAgent([{ ...selectedAgent, path: targetPath }])
+    if (result === "confirm") {
+      onOpenChange(false)
+      return
+    }
+    if (result) dispatch({ type: "archived", path: targetPath })
   }
-
-  React.useEffect(() => {
-    if (!open || stage !== "delete") return
-
-    const handleDeleteKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault()
-        event.stopPropagation()
-        dispatch({ type: "browseRequested" })
-        return
-      }
-
-      if (event.key !== "Enter" || event.isComposing) return
-      if (event.target instanceof HTMLButtonElement) return
-      event.preventDefault()
-      event.stopPropagation()
-      void confirmDeleteSelectedAgent()
-    }
-
-    window.addEventListener("keydown", handleDeleteKeyDown, true)
-    return () => {
-      window.removeEventListener("keydown", handleDeleteKeyDown, true)
-    }
-  }, [confirmDeleteSelectedAgent, open, stage])
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     const key = event.key.toLowerCase()
@@ -929,7 +885,7 @@ function useAppShellAgentsDialogView({
 
     if (matchesShortcutEvent(event.nativeEvent, appShortcut("D"))) {
       event.preventDefault()
-      deleteSelectedAgent()
+      archiveSelectedAgent()
     }
   }
 
@@ -1242,79 +1198,8 @@ function useAppShellAgentsDialogView({
     </div>
   )
 
-  const agentsDeleteBody = (
-    <div
-      ref={deletePanelRef}
-      role="presentation"
-      tabIndex={-1}
-      className="flex min-h-0 flex-1 flex-col outline-none"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.preventDefault()
-          event.stopPropagation()
-          dispatch({ type: "browseRequested" })
-          return
-        }
-        if (event.key !== "Enter" || event.nativeEvent.isComposing) return
-        if (event.target instanceof HTMLButtonElement) return
-        event.preventDefault()
-        event.stopPropagation()
-        void confirmDeleteSelectedAgent()
-      }}
-    >
-      <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onClick={() => {
-            dispatch({ type: "browseRequested" })
-          }}
-          aria-label="Back to agents"
-        >
-          <ArrowLeftIcon />
-        </Button>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">Archive agent</div>
-          <div className="truncate text-xs text-muted-foreground">
-            {selectedAgent?.title || "Selected agent"}
-          </div>
-        </div>
-      </div>
-      <div className="flex min-h-0 flex-1 items-center p-3">
-        <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
-          Archive "{selectedAgent?.title || "New agent"}"? (History is kept.)
-        </p>
-      </div>
-      {isMobile ? null : (
-        <ShortcutFooter>
-          <ShortcutButton
-            kbd="Enter"
-            onClick={() => {
-              void confirmDeleteSelectedAgent()
-            }}
-          >
-            Archive
-          </ShortcutButton>
-          <ShortcutButton
-            kbd="Esc"
-            onClick={() => {
-              dispatch({ type: "browseRequested" })
-            }}
-          >
-            Back
-          </ShortcutButton>
-        </ShortcutFooter>
-      )}
-    </div>
-  )
-
   const agentsCommandBody =
-    stage === "rename"
-      ? agentsRenameBody
-      : stage === "delete"
-        ? agentsDeleteBody
-        : agentsBrowseBody
+    stage === "rename" ? agentsRenameBody : agentsBrowseBody
 
   if (isMobile) {
     return (

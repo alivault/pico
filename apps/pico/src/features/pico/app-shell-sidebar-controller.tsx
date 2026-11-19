@@ -908,7 +908,7 @@ function useAppShellSidebarControllerView({
         onRenameAgent={(entry) => {
           agentWorkspaceRef.current?.openRenameDialogForEntry(entry)
         }}
-        onDeleteAgent={(entry) => {
+        onDeleteAgent={(entry, options) => {
           const key = agentListEntryKey(entry)
           const { selectedSidebarAgents } = sidebarStore.getWorkspaceSnapshot()
           const archiveSelection =
@@ -916,8 +916,9 @@ function useAppShellSidebarControllerView({
             selectedSidebarAgents.some(
               (selected) => agentListEntryKey(selected) === key
             )
-          agentWorkspaceRef.current?.openDeleteDialog(
-            archiveSelection ? selectedSidebarAgents : [entry]
+          agentWorkspaceRef.current?.archiveAgents(
+            archiveSelection ? selectedSidebarAgents : [entry],
+            options
           )
         }}
         onSetAgentUnread={(entry, unread) => {

@@ -122,9 +122,15 @@ import {
   type MachineAgentSummary,
 } from "@/features/pico/machine-store"
 import {
+  archiveOtherMachineAgent,
   OtherMachineArchiveDialog,
   OtherMachineRenameDialog,
 } from "@/features/pico/other-machine-agent-dialogs"
+import {
+  workingAgentsMessage,
+  workingSubagents,
+} from "@/features/pico/archive-agents"
+import { toast } from "@/lib/pico/toast"
 import { startSidebarSync } from "@/features/pico/sidebar-sync"
 import { ServerUpdateStatus } from "@/features/pico/server-restart"
 import { ProjectIcon } from "@/features/pico/project-icon"
@@ -531,7 +537,10 @@ type AppSidebarProps = {
   onOpenAddProjectDialog: () => void
   onAgentClick?: (entry: AgentListEntry, modifiers: AgentClickModifiers) => void
   onRenameAgent?: (entry: AgentListEntry) => void
-  onDeleteAgent?: (entry: AgentListEntry) => void
+  onDeleteAgent?: (
+    entry: AgentListEntry,
+    options?: { removeWorktree?: boolean }
+  ) => void
   onSetAgentUnread?: (entry: AgentListEntry, unread: boolean) => void
   onMoveAgent?: (entry: AgentListEntry, project: string) => void
   onMoveAgentAnyProject?: (entry: AgentListEntry) => void
@@ -717,7 +726,10 @@ type SidebarAgentItemProps = {
   setOpenMobile: (open: boolean) => void
   onAgentClick?: (entry: AgentListEntry, modifiers: AgentClickModifiers) => void
   onRenameAgent?: (entry: AgentListEntry) => void
-  onDeleteAgent?: (entry: AgentListEntry) => void
+  onDeleteAgent?: (
+    entry: AgentListEntry,
+    options?: { removeWorktree?: boolean }
+  ) => void
   onSetAgentUnread?: (entry: AgentListEntry, unread: boolean) => void
   onMoveAgent?: (entry: AgentListEntry, project: string) => void
   onMoveAgentAnyProject?: (entry: AgentListEntry) => void
@@ -1040,6 +1052,14 @@ function SidebarAgentItem({
                 onClick={() => onDeleteAgent(entry)}
               >
                 Archive
+              </ContextMenuItem>
+            ) : null}
+            {onDeleteAgent && entry.path && entry.worktreeBranch ? (
+              <ContextMenuItem
+                variant="destructive"
+                onClick={() => onDeleteAgent(entry, { removeWorktree: true })}
+              >
+                Archive and remove worktree…
               </ContextMenuItem>
             ) : null}
           </ContextMenuContent>
@@ -1473,7 +1493,10 @@ type ProjectAgentGroupProps = {
   listeners?: Record<string, unknown>
   onAgentClick?: (entry: AgentListEntry, modifiers: AgentClickModifiers) => void
   onRenameAgent?: (entry: AgentListEntry) => void
-  onDeleteAgent?: (entry: AgentListEntry) => void
+  onDeleteAgent?: (
+    entry: AgentListEntry,
+    options?: { removeWorktree?: boolean }
+  ) => void
   onSetAgentUnread?: (entry: AgentListEntry, unread: boolean) => void
   onMoveAgent?: (entry: AgentListEntry, project: string) => void
   onMoveAgentAnyProject?: (entry: AgentListEntry) => void
@@ -2050,7 +2073,10 @@ type PinnedAgentGroupProps = {
   agentsDraggable?: boolean
   onAgentClick?: (entry: AgentListEntry, modifiers: AgentClickModifiers) => void
   onRenameAgent?: (entry: AgentListEntry) => void
-  onDeleteAgent?: (entry: AgentListEntry) => void
+  onDeleteAgent?: (
+    entry: AgentListEntry,
+    options?: { removeWorktree?: boolean }
+  ) => void
   onSetAgentUnread?: (entry: AgentListEntry, unread: boolean) => void
   onMoveAgent?: (entry: AgentListEntry, project: string) => void
   onMoveAgentAnyProject?: (entry: AgentListEntry) => void
@@ -2218,7 +2244,10 @@ type StatusAgentGroupsProps = {
   setOpenMobile: (open: boolean) => void
   onAgentClick?: (entry: AgentListEntry, modifiers: AgentClickModifiers) => void
   onRenameAgent?: (entry: AgentListEntry) => void
-  onDeleteAgent?: (entry: AgentListEntry) => void
+  onDeleteAgent?: (
+    entry: AgentListEntry,
+    options?: { removeWorktree?: boolean }
+  ) => void
   onSetAgentUnread?: (entry: AgentListEntry, unread: boolean) => void
   onMoveAgent?: (entry: AgentListEntry, project: string) => void
   onMoveAgentAnyProject?: (entry: AgentListEntry) => void
@@ -2750,7 +2779,27 @@ function useOtherMachineSidebar(machine: MachineInfo) {
     knownAgentKeys.has(key)
   )
   const [renameEntry, setRenameEntry] = React.useState<AgentListEntry>()
-  const [archiveEntry, setArchiveEntry] = React.useState<AgentListEntry>()
+  const [archiveRequest, setArchiveRequest] = React.useState<{
+    entry: AgentListEntry
+    subagents: Array<AgentListEntry>
+  }>()
+  // Archive at once, like the agents of this machine; ask only when the
+  // agent's working subagents would lose their reports.
+  const archiveAgent = (entry: AgentListEntry) => {
+    if (entry.streaming) {
+      toast.error(workingAgentsMessage([entry]))
+      return
+    }
+    const subagents = workingSubagents(
+      [entry],
+      Object.values(grouped.agentsByProject).flat()
+    )
+    if (subagents.length > 0) {
+      setArchiveRequest({ entry, subagents })
+      return
+    }
+    void archiveOtherMachineAgent(machine.id, entry)
+  }
   const openAgent = (entry: AgentListEntry) => {
     if (entry.id) openMachineAgent({ machineId: machine.id, agentId: entry.id })
   }
@@ -2758,7 +2807,7 @@ function useOtherMachineSidebar(machine: MachineInfo) {
     ? {
         onAgentClick: openAgent,
         onRenameAgent: setRenameEntry,
-        onDeleteAgent: setArchiveEntry,
+        onDeleteAgent: archiveAgent,
         onTogglePinnedAgent: (entry: AgentListEntry) =>
           togglePinnedKey(agentListEntryKey(entry)),
       }
@@ -2808,9 +2857,10 @@ function useOtherMachineSidebar(machine: MachineInfo) {
       <OtherMachineArchiveDialog
         machineId={machine.id}
         machineLabel={machine.label}
-        entry={archiveEntry}
+        entry={archiveRequest?.entry}
+        subagents={archiveRequest?.subagents ?? []}
         onOpenChange={(open) => {
-          if (!open) setArchiveEntry(undefined)
+          if (!open) setArchiveRequest(undefined)
         }}
       />
     </>

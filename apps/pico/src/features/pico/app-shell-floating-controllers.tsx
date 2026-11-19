@@ -64,9 +64,11 @@ import {
 import type { AgentState, ThemeColorMode, ThemeFamily } from "@/lib/pico"
 import { isApiErrorResponse } from "@/lib/pico/api"
 import type {
+  AgentListEntry,
   DirectorySearchResponse,
   PathCompletionsResponse,
 } from "@/lib/pico/api"
+import type { ArchiveAgentsResult } from "@/features/pico/archive-agents"
 import { useMachineId } from "@/lib/pico/machine-context"
 
 type AppShellFloatingControllersProps = {
@@ -90,6 +92,8 @@ type AppShellFloatingControllersProps = {
   deleteAgents: React.ComponentProps<
     typeof DeleteAgentsDialogController
   >["onDeleteAgent"]
+  /** Archive at once, or open the archive dialog when it must ask first. */
+  archiveAgents: (targets: Array<AgentListEntry>) => ArchiveAgentsResult
   deleteOldProjectAgentsDialogRef: React.RefObject<DeleteOldProjectAgentsDialogHandle | null>
   deleteOldProjectAgentsOpenRef: React.RefObject<boolean>
   notificationStore: PicoStore<AppShellNotificationState>
@@ -171,7 +175,7 @@ const AppShellAgentsDialogHost = React.memo(function AppShellAgentsDialogHost({
   agentsOpenRef,
   sidebarStore,
   viewerContextId,
-  deleteAgents,
+  archiveAgents,
   onAgentDialogSelect,
   renameAgentPath,
 }: Pick<
@@ -183,7 +187,7 @@ const AppShellAgentsDialogHost = React.memo(function AppShellAgentsDialogHost({
   | "agentsOpenRef"
   | "sidebarStore"
   | "viewerContextId"
-  | "deleteAgents"
+  | "archiveAgents"
   | "onAgentDialogSelect"
   | "renameAgentPath"
 >) {
@@ -210,7 +214,7 @@ const AppShellAgentsDialogHost = React.memo(function AppShellAgentsDialogHost({
       activeAgentPath={agentsDialogSnapshot.activeAgentPath}
       onSelectAgent={onAgentDialogSelect}
       onRenameAgent={renameAgentPath}
-      onDeleteAgent={deleteAgents}
+      onArchiveAgent={archiveAgents}
       onError={(error) => {
         toast.error(
           error instanceof Error ? error.message : "Failed to load agents"
@@ -664,6 +668,7 @@ export const AppShellFloatingControllers = React.memo(
     deleteDialogRef,
     deleteOpenRef,
     deleteAgents,
+    archiveAgents,
     deleteOldProjectAgentsDialogRef,
     deleteOldProjectAgentsOpenRef,
     notificationStore,
@@ -735,7 +740,7 @@ export const AppShellFloatingControllers = React.memo(
           agentsOpenRef={agentsOpenRef}
           sidebarStore={sidebarStore}
           viewerContextId={viewerContextId}
-          deleteAgents={deleteAgents}
+          archiveAgents={archiveAgents}
           onAgentDialogSelect={onAgentDialogSelect}
           renameAgentPath={renameAgentPath}
         />

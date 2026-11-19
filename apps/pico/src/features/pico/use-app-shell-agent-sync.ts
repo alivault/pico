@@ -555,6 +555,7 @@ function shouldIgnoreOptimisticDraftStateSync(options: {
   ownerKey: string | null
   payload: StateSyncPayload
   previousState: AgentState
+  routeAgentId?: string
 }) {
   const previousAgentKey = options.previousState.agentKey || ""
   const payloadAgentKey =
@@ -562,6 +563,15 @@ function shouldIgnoreOptimisticDraftStateSync(options: {
 
   if (!previousAgentKey.startsWith("optimistic:")) return false
   if (!payloadAgentKey || payloadAgentKey === previousAgentKey) {
+    return false
+  }
+  // The state of the agent that the route opens, for example an archived
+  // agent that Undo opens again before the server confirmed the draft.
+  if (
+    options.routeAgentId &&
+    !options.payload.draft &&
+    options.payload.agentId === options.routeAgentId
+  ) {
     return false
   }
 
@@ -878,6 +888,7 @@ export function useAppShellAgentSync({
           ownerKey: draftAgentLoadingOwnerKeyRef.current,
           payload,
           previousState,
+          routeAgentId: currentAgentIdRef.current,
         })
       ) {
         return
