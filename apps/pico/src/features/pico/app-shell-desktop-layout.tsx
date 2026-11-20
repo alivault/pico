@@ -308,7 +308,8 @@ const DESKTOP_DEFAULT_BROWSER_PANEL_WIDTH =
 const DESKTOP_MIN_SIDE_PANEL_WIDTH = 260
 // The Browser tab can be narrow, so that a page shows its mobile layout.
 const DESKTOP_MIN_BROWSER_PANEL_WIDTH = SHELL_RIGHT_MIN_WIDTH
-const DESKTOP_MAX_STORED_SIDE_PANEL_WIDTH = 1600
+// Only a guard against bad stored values: the window limits the width.
+const DESKTOP_MAX_STORED_SIDE_PANEL_WIDTH = 8000
 const DESKTOP_DEFAULT_TERMINAL_PANEL_HEIGHT = 280
 const DESKTOP_MIN_TERMINAL_PANEL_HEIGHT = 160
 const DESKTOP_MIN_TOP_PANEL_HEIGHT = 220

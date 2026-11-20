@@ -95,10 +95,19 @@ export function solveShellLayout(input: ShellLayoutInput): ShellLayout {
       ...layout,
       leftShown,
       leftWidth: Math.round(leftWidth),
-      leftMaxWidth: Math.max(leftMin, space - rightWidth),
+      // The sidebar with priority can grow until the other one is at its
+      // minimum: a drag makes the other sidebar narrower. The other one can
+      // grow only into the free space.
+      leftMaxWidth:
+        input.priority === "left"
+          ? Math.max(leftMin, space - rightMin)
+          : Math.max(leftMin, space - rightWidth),
       rightShown,
       rightWidth: Math.round(rightWidth),
-      rightMaxWidth: Math.max(rightMin, space - leftWidth),
+      rightMaxWidth:
+        input.priority === "right"
+          ? Math.max(rightMin, space - leftMin)
+          : Math.max(rightMin, space - leftWidth),
     }
   }
 
