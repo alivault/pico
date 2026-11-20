@@ -6,6 +6,8 @@
  */
 import * as React from "react"
 import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
   ExternalLinkIcon,
   MonitorIcon,
   RotateCwIcon,
@@ -186,7 +188,110 @@ export function setBrowserMode(machineId: string, mode: BrowserMode) {
   storeValue(browserModeKey(machineId), mode)
 }
 
-type OpenedPreview = { src: string; address: string }
+type OpenedPreview = { src: string; address: string; port: number }
+
+/**
+ * The toolbar row of a Browser view. It is one row when the panel is wide
+ * enough; in a narrow panel, the address field goes to a second row. The
+ * panel (`BrowserPanel`) is the `browser` container.
+ */
+export const BROWSER_TOOLBAR_CLASS =
+  "flex shrink-0 flex-wrap items-center gap-1 border-b border-border/70 p-1.5"
+
+/** The address form in a toolbar row. */
+export const BROWSER_ADDRESS_CLASS =
+  "order-last min-w-0 basis-full @min-[400px]/browser:order-none @min-[400px]/browser:basis-0 @min-[400px]/browser:flex-1"
+
+/** The message type of a new address of the previewed page. */
+const LOCATION_MESSAGE = "smith-preview-location"
+/** The message type of a command to the previewed page. */
+const COMMAND_MESSAGE = "smith-preview-command"
+
+type LocationKind = "load" | "push" | "replace" | "pop"
+type PreviewLocation = { href: string; kind: LocationKind }
+
+const LOCATION_KINDS = new Set<unknown>(["load", "push", "replace", "pop"])
+
+/**
+ * The address from a location message of the page, or undefined when the
+ * message is not one. The address must be on the origin of the preview.
+ * The proxy puts a script in the page that sends it
+ * (server/src/services/preview-background.ts).
+ */
+export function pageLocation(
+  data: unknown,
+  origin: string
+): PreviewLocation | undefined {
+  if (typeof data !== "object" || data === null) return undefined
+  const { type, href, kind } = data as Record<string, unknown>
+  if (type !== LOCATION_MESSAGE) return undefined
+  if (typeof href !== "string" || href.length > 8192) return undefined
+  let url: URL
+  try {
+    url = new URL(href)
+  } catch {
+    return undefined
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return undefined
+  if (url.origin !== origin) return undefined
+  return {
+    href: url.href,
+    kind: LOCATION_KINDS.has(kind) ? (kind as LocationKind) : "push",
+  }
+}
+
+/**
+ * The history of the iframe as Smith knows it: the addresses that the page
+ * told, and the one it shows. `key` is the frame key: a new iframe starts a
+ * new history.
+ */
+type FrameHistory = { key: string; entries: string[]; index: number }
+
+const EMPTY_HISTORY: FrameHistory = { key: "", entries: [], index: -1 }
+
+/**
+ * The history after a location message. `pending` is the step of a Back
+ * (-1) or Forward (1) that Smith asked for, or 0. A move to the address
+ * next to the current one in that direction is that step. A "pop" without
+ * a step (the page went back itself) is a step when it shows the address
+ * next to the current one. A replace changes the current entry. Any other
+ * new address removes the entries after the current one and adds it.
+ */
+function nextFrameHistory(
+  history: FrameHistory,
+  { href, kind }: PreviewLocation,
+  pending: -1 | 0 | 1
+): FrameHistory {
+  const { entries, index } = history
+  if (index < 0) return { ...history, entries: [href], index: 0 }
+  if (entries[index] === href) return history
+  if (kind === "replace") {
+    const next = [...entries]
+    next[index] = href
+    return { ...history, entries: next }
+  }
+  const steps = pending ? [pending] : kind === "pop" ? [-1, 1] : []
+  for (const step of steps)
+    if (entries[index + step] === href)
+      return { ...history, index: index + step }
+  return {
+    ...history,
+    entries: [...entries.slice(0, index + 1), href],
+    index: index + 1,
+  }
+}
+
+/** How long a Back or Forward waits for the page to move. */
+const PENDING_STEP_MS = 5000
+
+/** The field text for a page address, as "localhost:5173/settings". */
+function locationAddress(href: string, port: number) {
+  const url = new URL(href)
+  return formatAddress({
+    port,
+    path: `${url.pathname}${url.search}${url.hash}`,
+  })
+}
 
 /** The iframe background before the page tells its own. */
 const DEFAULT_PAGE_BACKGROUND = "#ffffff"
@@ -402,11 +507,19 @@ function ViewportLengthInput({
   )
 }
 
-export function PreviewPanel({ cwd }: { cwd: string }) {
+export function PreviewPanel({
+  cwd,
+  modeSwitch,
+}: {
+  cwd: string
+  /** The switch between the Preview and the agent's browser. */
+  modeSwitch?: React.ReactNode
+}) {
   const machineId = useMachineId()
   const readOnly = useMachineReadOnly()
   const savedAddress = usePreviewAddress(machineId, cwd)
   const [address, setAddress] = React.useState(savedAddress)
+  const [editingAddress, setEditingAddress] = React.useState(false)
   const [opened, setOpened] = React.useState<OpenedPreview | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState("")
@@ -438,17 +551,78 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
     pageColor.key === frameKey && pageColor.color
       ? pageColor.color
       : DEFAULT_PAGE_BACKGROUND
+  // The history of the iframe that has the key. A new address or a reload
+  // starts a new one.
+  const [storedHistory, setFrameHistory] = React.useState(EMPTY_HISTORY)
+  const frameHistory =
+    storedHistory.key === frameKey ? storedHistory : EMPTY_HISTORY
+  const currentHref = frameHistory.entries[frameHistory.index]
+  const canGoBack = frameHistory.index > 0
+  const canGoForward =
+    frameHistory.index >= 0 &&
+    frameHistory.index < frameHistory.entries.length - 1
+  // A Back or Forward that waits for the page to move.
+  const pendingStepRef = React.useRef<{
+    key: string
+    step: -1 | 1
+    until: number
+  } | null>(null)
+  const frameOrigin = React.useMemo(() => {
+    if (!opened) return ""
+    try {
+      return new URL(opened.src).origin
+    } catch {
+      return ""
+    }
+  }, [opened])
   React.useEffect(() => {
     if (!frameKey) return
     const onMessage = (event: MessageEvent) => {
       const frame = frameRef.current?.contentWindow
       if (!frame || event.source !== frame) return
       const color = pageBackground(event.data)
-      if (color) setPageColor({ key: frameKey, color })
+      if (color) {
+        setPageColor({ key: frameKey, color })
+        return
+      }
+      const location = frameOrigin
+        ? pageLocation(event.data, frameOrigin)
+        : undefined
+      if (!location) return
+      const pending = pendingStepRef.current
+      pendingStepRef.current = null
+      const step =
+        pending && pending.key === frameKey && Date.now() < pending.until
+          ? pending.step
+          : 0
+      setFrameHistory((current) =>
+        nextFrameHistory(
+          current.key === frameKey
+            ? current
+            : { ...EMPTY_HISTORY, key: frameKey },
+          location,
+          step
+        )
+      )
     }
     window.addEventListener("message", onMessage)
     return () => window.removeEventListener("message", onMessage)
-  }, [frameKey])
+  }, [frameKey, frameOrigin])
+
+  /** Ask the page to go back (-1) or forward (1) in its history. */
+  const step = (direction: -1 | 1) => {
+    const frame = frameRef.current?.contentWindow
+    if (!frame || !frameOrigin) return
+    pendingStepRef.current = {
+      key: frameKey,
+      step: direction,
+      until: Date.now() + PENDING_STEP_MS,
+    }
+    frame.postMessage(
+      { type: COMMAND_MESSAGE, action: direction < 0 ? "back" : "forward" },
+      frameOrigin
+    )
+  }
   // The address that the iframe shows or loads.
   const loadedAddressRef = React.useRef("")
 
@@ -469,7 +643,7 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
         const src = await previewUrl(machineId, parsed)
         setAddress(formatted)
         storeValue(previewAddressKey(machineId, cwd), formatted)
-        setOpened({ src, address: formatted })
+        setOpened({ src, address: formatted, port: parsed.port })
         setReloads((count) => count + 1)
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : String(caught))
@@ -501,22 +675,60 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
     window.location.protocol === "https:" &&
     !window.location.hostname.endsWith(".ts.net")
 
+  // The field shows the page's address, as the page tells it, while the
+  // user does not edit it. After an error, it keeps what the user typed.
+  const pageAddress =
+    opened && currentHref && !error
+      ? locationAddress(currentHref, opened.port)
+      : undefined
+  const shownAddress = editingAddress ? address : (pageAddress ?? address)
+  // The page that the iframe shows now, for Reload and a new tab.
+  const shownSrc = currentHref ?? opened?.src
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-1 border-b border-border/70 p-1.5">
+      <div className={BROWSER_TOOLBAR_CLASS}>
+        {modeSwitch}
+        <TitleTooltip title="Back">
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Back"
+            disabled={!opened || !canGoBack || readOnly}
+            onClick={() => step(-1)}
+          >
+            <ArrowLeftIcon />
+          </Button>
+        </TitleTooltip>
+        <TitleTooltip title="Forward">
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Forward"
+            disabled={!opened || !canGoForward || readOnly}
+            onClick={() => step(1)}
+          >
+            <ArrowRightIcon />
+          </Button>
+        </TitleTooltip>
         <TitleTooltip title="Reload">
           <Button
             size="icon-sm"
             variant="ghost"
             aria-label="Reload"
             disabled={!opened || readOnly}
-            onClick={() => setReloads((count) => count + 1)}
+            onClick={() => {
+              // Load the page that the iframe shows now, in a new iframe.
+              if (opened && shownSrc && shownSrc !== opened.src)
+                setOpened({ ...opened, src: shownSrc })
+              setReloads((count) => count + 1)
+            }}
           >
             <RotateCwIcon />
           </Button>
         </TitleTooltip>
         <form
-          className="min-w-0 flex-1"
+          className={BROWSER_ADDRESS_CLASS}
           onSubmit={(event) => {
             event.preventDefault()
             void open(address)
@@ -530,9 +742,17 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
             placeholder="Port of a dev server, as 5173"
             className="h-7 text-xs"
             disabled={readOnly}
-            value={address}
-            onFocus={(event) => event.currentTarget.select()}
+            value={shownAddress}
+            onFocus={(event) => {
+              setAddress(shownAddress)
+              setEditingAddress(true)
+              event.currentTarget.select()
+            }}
+            onBlur={() => setEditingAddress(false)}
             onChange={(event) => setAddress(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") event.currentTarget.blur()
+            }}
           />
         </form>
         <DropdownMenu>
@@ -543,6 +763,7 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
                   type="button"
                   size="icon-sm"
                   variant="ghost"
+                  className="ml-auto"
                   aria-label={`Viewport: ${viewportChoice.label}`}
                 />
               }
@@ -598,7 +819,7 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
             // A button, not a link: the tooltip does not open on a link that
             // the Button renders.
             onClick={() => {
-              if (opened) window.open(opened.src, "_blank", "noopener")
+              if (shownSrc) window.open(shownSrc, "_blank", "noopener")
             }}
           >
             <ExternalLinkIcon />

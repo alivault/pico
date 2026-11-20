@@ -32,6 +32,8 @@ import { postAgentJson } from "@/features/smith/agent/agent-extensions"
 import { CookieImportCard } from "@/features/smith/agent/browser-cookie-import"
 import { buildRequestUrl } from "@/features/smith/app-shell-utils"
 import {
+  BROWSER_ADDRESS_CLASS,
+  BROWSER_TOOLBAR_CLASS,
   PreviewPanel,
   setBrowserMode,
   useBrowserMode,
@@ -246,10 +248,13 @@ function AgentBrowserView({
   agentId,
   viewerContextId,
   active,
+  modeSwitch,
 }: {
   agentId: string | undefined
   viewerContextId: string
   active: boolean
+  /** The switch between the Preview and the agent's browser. */
+  modeSwitch?: React.ReactNode
 }) {
   const { state, frame, error, send } = useBrowserSocket({
     agentId,
@@ -466,13 +471,141 @@ function AgentBrowserView({
 
   if (!agentId)
     return (
-      <div className="p-4 text-sm text-muted-foreground">
-        Select an agent to see its browser.
+      <div className="flex h-full min-h-0 flex-col">
+        {modeSwitch ? (
+          <div className={BROWSER_TOOLBAR_CLASS}>{modeSwitch}</div>
+        ) : null}
+        <div className="p-4 text-sm text-muted-foreground">
+          Select an agent to see its browser.
+        </div>
       </div>
     )
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      <div className={BROWSER_TOOLBAR_CLASS}>
+        {modeSwitch}
+        <TitleTooltip title="Back">
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Back"
+            disabled={!activeTab || readOnly}
+            onClick={() => send({ type: "back" })}
+          >
+            <ArrowLeftIcon />
+          </Button>
+        </TitleTooltip>
+        <TitleTooltip title="Forward">
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Forward"
+            disabled={!activeTab || readOnly}
+            onClick={() => send({ type: "forward" })}
+          >
+            <ArrowRightIcon />
+          </Button>
+        </TitleTooltip>
+        <TitleTooltip title="Reload">
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Reload"
+            disabled={!activeTab || readOnly}
+            onClick={() => send({ type: "reload" })}
+          >
+            <RotateCwIcon />
+          </Button>
+        </TitleTooltip>
+        <form
+          className={BROWSER_ADDRESS_CLASS}
+          onSubmit={(event) => {
+            event.preventDefault()
+            navigate(address)
+            // The field shows the tab's address again.
+            const field = event.currentTarget.elements.namedItem("address")
+            if (field instanceof HTMLInputElement) field.blur()
+          }}
+        >
+          <Input
+            aria-label="Address"
+            name="address"
+            placeholder="Go to an address"
+            className="h-7 text-xs"
+            disabled={readOnly}
+            value={shownAddress}
+            onFocus={(event) => {
+              setAddress(activeTab?.url ?? "")
+              setEditingAddress(true)
+              event.currentTarget.select()
+            }}
+            onBlur={() => setEditingAddress(false)}
+            onChange={(event) => setAddress(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") event.currentTarget.blur()
+            }}
+          />
+        </form>
+        {isMobile && state?.open ? (
+          <TitleTooltip title="Keyboard">
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              className="ml-auto"
+              aria-label="Show the keyboard"
+              disabled={readOnly}
+              onClick={() => keysRef.current?.focus()}
+            >
+              <KeyboardIcon />
+            </Button>
+          </TitleTooltip>
+        ) : null}
+        {state && state.tabs.length > 1 ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className={cn(
+                    "gap-1 px-1.5",
+                    !(isMobile && state.open) && "ml-auto"
+                  )}
+                />
+              }
+            >
+              {state.tabs.length} tabs
+              <ChevronDownIcon className="size-3.5" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              {state.tabs.map((tab) => (
+                <DropdownMenuItem
+                  key={tab.id}
+                  className={cn(tab.id === state.active && "font-medium")}
+                  onClick={() => send({ type: "switch_tab", id: tab.id })}
+                >
+                  <GlobeIcon className="text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate">
+                    {tab.title || tab.url}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Close ${tab.title || tab.url}`}
+                    className="rounded-sm p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      send({ type: "close_tab", id: tab.id })
+                    }}
+                  >
+                    <XIcon className="size-3.5" />
+                  </button>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
+      </div>
       {state?.handoff ? (
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-primary/30 bg-primary/5 px-3 py-2 text-sm">
           <span className="min-w-0 flex-1">
@@ -537,120 +670,6 @@ function AgentBrowserView({
           />
         </div>
       ) : null}
-      <div className="flex shrink-0 items-center gap-1 border-b border-border/70 p-1.5">
-        <TitleTooltip title="Back">
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label="Back"
-            disabled={!activeTab || readOnly}
-            onClick={() => send({ type: "back" })}
-          >
-            <ArrowLeftIcon />
-          </Button>
-        </TitleTooltip>
-        <TitleTooltip title="Forward">
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label="Forward"
-            disabled={!activeTab || readOnly}
-            onClick={() => send({ type: "forward" })}
-          >
-            <ArrowRightIcon />
-          </Button>
-        </TitleTooltip>
-        <TitleTooltip title="Reload">
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label="Reload"
-            disabled={!activeTab || readOnly}
-            onClick={() => send({ type: "reload" })}
-          >
-            <RotateCwIcon />
-          </Button>
-        </TitleTooltip>
-        <form
-          className="min-w-0 flex-1"
-          onSubmit={(event) => {
-            event.preventDefault()
-            navigate(address)
-            // The field shows the tab's address again.
-            const field = event.currentTarget.elements.namedItem("address")
-            if (field instanceof HTMLInputElement) field.blur()
-          }}
-        >
-          <Input
-            aria-label="Address"
-            name="address"
-            placeholder="Go to an address"
-            className="h-7 text-xs"
-            disabled={readOnly}
-            value={shownAddress}
-            onFocus={(event) => {
-              setAddress(activeTab?.url ?? "")
-              setEditingAddress(true)
-              event.currentTarget.select()
-            }}
-            onBlur={() => setEditingAddress(false)}
-            onChange={(event) => setAddress(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") event.currentTarget.blur()
-            }}
-          />
-        </form>
-        {isMobile && state?.open ? (
-          <TitleTooltip title="Keyboard">
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              aria-label="Show the keyboard"
-              disabled={readOnly}
-              onClick={() => keysRef.current?.focus()}
-            >
-              <KeyboardIcon />
-            </Button>
-          </TitleTooltip>
-        ) : null}
-        {state && state.tabs.length > 1 ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button size="sm" variant="ghost" className="gap-1 px-1.5" />
-              }
-            >
-              {state.tabs.length} tabs
-              <ChevronDownIcon className="size-3.5" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
-              {state.tabs.map((tab) => (
-                <DropdownMenuItem
-                  key={tab.id}
-                  className={cn(tab.id === state.active && "font-medium")}
-                  onClick={() => send({ type: "switch_tab", id: tab.id })}
-                >
-                  <GlobeIcon className="text-muted-foreground" />
-                  <span className="min-w-0 flex-1 truncate">
-                    {tab.title || tab.url}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={`Close ${tab.title || tab.url}`}
-                    className="rounded-sm p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      send({ type: "close_tab", id: tab.id })
-                    }}
-                  >
-                    <XIcon className="size-3.5" />
-                  </button>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
-      </div>
       <div
         className={cn(
           "relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-muted/30 p-2",
@@ -767,34 +786,44 @@ export function BrowserPanel({
   const mode: BrowserMode = handoff
     ? "agent"
     : (storedMode ?? (previewAddress ? "preview" : "agent"))
+  // The switch goes into the toolbar row of the view, so there is one row.
+  const modeSwitch = (
+    <ToggleGroup
+      variant="outline"
+      size="sm"
+      className="mr-0.5 shrink-0"
+      value={[mode]}
+      onValueChange={(values) => {
+        const value = values[0]
+        if (value === "preview" || value === "agent")
+          setBrowserMode(machineId, value)
+      }}
+    >
+      <ToggleGroupItem value="preview" className="h-7 px-2 text-xs">
+        Preview
+      </ToggleGroupItem>
+      <ToggleGroupItem
+        value="agent"
+        aria-label="Agent's browser"
+        className="h-7 px-2 text-xs"
+      >
+        Agent
+      </ToggleGroupItem>
+    </ToggleGroup>
+  )
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center border-b border-border/70 px-1.5 py-1">
-        <ToggleGroup
-          variant="outline"
-          size="sm"
-          value={[mode]}
-          onValueChange={(values) => {
-            const value = values[0]
-            if (value === "preview" || value === "agent")
-              setBrowserMode(machineId, value)
-          }}
-        >
-          <ToggleGroupItem value="preview">Preview</ToggleGroupItem>
-          <ToggleGroupItem value="agent">Agent's browser</ToggleGroupItem>
-        </ToggleGroup>
-      </div>
-      <div className="min-h-0 flex-1">
-        {mode === "preview" ? (
-          <PreviewPanel cwd={cwd} />
-        ) : (
-          <AgentBrowserView
-            agentId={agentId}
-            viewerContextId={viewerContextId}
-            active={active}
-          />
-        )}
-      </div>
+    // The container of the toolbar rows (BROWSER_ADDRESS_CLASS).
+    <div className="@container/browser flex h-full min-h-0 flex-col">
+      {mode === "preview" ? (
+        <PreviewPanel cwd={cwd} modeSwitch={modeSwitch} />
+      ) : (
+        <AgentBrowserView
+          agentId={agentId}
+          viewerContextId={viewerContextId}
+          active={active}
+          modeSwitch={modeSwitch}
+        />
+      )}
     </div>
   )
 }

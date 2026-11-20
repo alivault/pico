@@ -1,9 +1,11 @@
 /**
- * The background of a previewed page. The Preview iframe shows its own
- * background color in the overscroll gap (rubberband scroll on macOS), so
- * the preview listener puts a small script into each HTML page. The script
- * tells the parent (Smith) the page's background color and color scheme,
- * and Smith gives the iframe that color.
+ * The background and the location of a previewed page. The Preview iframe
+ * shows its own background color in the overscroll gap (rubberband scroll on
+ * macOS), so the preview listener puts a small script into each HTML page.
+ * The script tells the parent (Smith) the page's background color and color
+ * scheme, and Smith gives the iframe that color. It also tells the page's
+ * address when it changes, so Smith can show it and keep a history for the
+ * Back and Forward buttons, and it goes back or forward when Smith asks.
  *
  * The script goes in as the page streams: the proxy keeps the first bytes
  * until it finds `<head>`, puts the script after it, and sends the rest as
@@ -23,12 +25,28 @@ import * as zlib from "node:zlib"
 /** The message type that the script posts to the parent window. */
 export const PREVIEW_BACKGROUND_MESSAGE = "smith-preview-background"
 
+/** The message type of a new address of the page. */
+export const PREVIEW_LOCATION_MESSAGE = "smith-preview-location"
+
+/** The message type of a command from the parent window. */
+export const PREVIEW_COMMAND_MESSAGE = "smith-preview-command"
+
 /**
  * Posts `{ type, color, colorScheme }` to the parent window. `color` is the
  * computed background color of `html`, else of `body`, else "transparent".
  * `colorScheme` is the used color scheme: "light" or "dark". It sends when
  * the value changes: on DOMContentLoaded, load, attribute changes of html
  * and body, new styles, and a change of the system color scheme.
+ *
+ * Posts `{ type: "smith-preview-location", href, kind }` when the address
+ * changes: at the start, after `history.pushState` and `replaceState`, and
+ * on popstate, hashchange and pageshow. `kind` is "load", "push",
+ * "replace" or "pop".
+ *
+ * Takes `{ type: "smith-preview-command", action: "back" | "forward" }`
+ * from the parent window only. It uses the Navigation API when the browser
+ * has it, because it moves only in this frame's own history; else
+ * `history.back()` and `history.forward()`.
  */
 export const PREVIEW_BACKGROUND_SCRIPT = `(function(){try{
 if(window.parent===window)return;
@@ -58,6 +76,26 @@ window.addEventListener("pageshow",send);
 d.addEventListener("load",later,true);
 d.addEventListener("transitionend",later,true);
 if(mq){if(mq.addEventListener)mq.addEventListener("change",later);else if(mq.addListener)mq.addListener(later)}
+var H=history,N=window.navigation,href="";
+function loc(kind){try{var h=location.href;if(h===href)return;href=h;
+window.parent.postMessage({type:"${PREVIEW_LOCATION_MESSAGE}",href:h,kind:kind},"*")}catch(e){}}
+function wrap(name,kind){var f=H[name];if(typeof f!=="function")return;
+H[name]=function(){var v=f.apply(this,arguments);loc(kind);return v}}
+wrap("pushState","push");wrap("replaceState","replace");
+function pop(){loc("pop")}
+window.addEventListener("popstate",pop);
+window.addEventListener("hashchange",pop);
+window.addEventListener("pageshow",pop);
+function none(){}
+function go(back){if(N&&N.back){if(back?!N.canGoBack:!N.canGoForward)return;
+var r=back?N.back():N.forward();if(r){if(r.committed)r.committed.catch(none);if(r.finished)r.finished.catch(none)}}
+else if(back)H.back();else H.forward()}
+window.addEventListener("message",function(e){try{
+if(e.source!==window.parent)return;var m=e.data;
+if(!m||m.type!=="${PREVIEW_COMMAND_MESSAGE}")return;
+if(m.action==="back")go(true);else if(m.action==="forward")go(false)
+}catch(x){}});
+loc("load")
 }catch(e){}})();`
 
 const SCRIPT_HASH = `'sha256-${createHash("sha256")

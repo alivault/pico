@@ -260,3 +260,119 @@ void test("the background script parses", () => {
   // Compiles the script without running it.
   assert.doesNotThrow(() => new Script(PREVIEW_BACKGROUND_SCRIPT))
 })
+
+void test("the CSP hash is the hash of the current script", () => {
+  const policy = allowPreviewScript("script-src 'self'")
+  const hash = createHash("sha256")
+    .update(PREVIEW_BACKGROUND_SCRIPT, "utf8")
+    .digest("base64")
+  assert.equal(policy, `script-src 'self' 'sha256-${hash}'`)
+  assert.match(PREVIEW_BACKGROUND_SCRIPT, /smith-preview-location/)
+  assert.match(PREVIEW_BACKGROUND_SCRIPT, /smith-preview-command/)
+})
+
+/** Run the script in a fake frame. */
+function runInFakeFrame(options: { navigation?: boolean } = {}) {
+  type Listener = (event: Record<string, unknown>) => void
+  const listeners = new Map<string, Listener[]>()
+  const posted: Array<Record<string, unknown>> = []
+  const calls: string[] = []
+  const parent = {
+    postMessage: (message: Record<string, unknown>) => posted.push(message),
+  }
+  const location = { href: "http://127.0.0.1:4000/" }
+  const history = {
+    pushState: (_: unknown, __: string, url: string) => {
+      location.href = new URL(url, location.href).href
+    },
+    replaceState: (_: unknown, __: string, url: string) => {
+      location.href = new URL(url, location.href).href
+    },
+    back: () => calls.push("history.back"),
+    forward: () => calls.push("history.forward"),
+  }
+  const settled = { committed: Promise.resolve(), finished: Promise.resolve() }
+  const navigation = {
+    canGoBack: true,
+    canGoForward: false,
+    back: () => (calls.push("navigation.back"), settled),
+    forward: () => (calls.push("navigation.forward"), settled),
+  }
+  const element = { style: {} }
+  const window: Record<string, unknown> = {
+    parent,
+    location,
+    history,
+    ...(options.navigation ? { navigation } : {}),
+    addEventListener: (type: string, listener: Listener) =>
+      listeners.set(type, [...(listeners.get(type) ?? []), listener]),
+  }
+  const context = {
+    window,
+    location,
+    history,
+    document: {
+      documentElement: element,
+      head: element,
+      body: element,
+      addEventListener: () => {},
+      querySelector: () => null,
+    },
+    getComputedStyle: () => ({ backgroundColor: "", colorScheme: "" }),
+    MutationObserver: class {
+      observe() {}
+    },
+    setTimeout,
+  }
+  new Script(PREVIEW_BACKGROUND_SCRIPT).runInNewContext(context)
+  const fire = (type: string, event: Record<string, unknown> = {}) => {
+    for (const listener of listeners.get(type) ?? []) listener(event)
+  }
+  return { posted, calls, history, location, parent, navigation, fire }
+}
+
+void test("the script reports the location and takes commands", () => {
+  const frame = runInFakeFrame()
+  const locations = () =>
+    frame.posted
+      .filter((message) => message.type === "smith-preview-location")
+      .map((message) => `${String(message.kind)} ${String(message.href)}`)
+  assert.deepEqual(locations(), ["load http://127.0.0.1:4000/"])
+  frame.history.pushState(null, "", "/settings")
+  frame.history.replaceState(null, "", "/settings?tab=a")
+  // The same address again: no message.
+  frame.history.replaceState(null, "", "/settings?tab=a")
+  frame.location.href = "http://127.0.0.1:4000/#top"
+  frame.fire("hashchange")
+  assert.deepEqual(locations(), [
+    "load http://127.0.0.1:4000/",
+    "push http://127.0.0.1:4000/settings",
+    "replace http://127.0.0.1:4000/settings?tab=a",
+    "pop http://127.0.0.1:4000/#top",
+  ])
+
+  const command = (action: string, source: unknown = frame.parent) =>
+    frame.fire("message", {
+      source,
+      data: { type: "smith-preview-command", action },
+    })
+  command("back")
+  command("forward")
+  command("back", {})
+  command("reload")
+  frame.fire("message", { source: frame.parent, data: null })
+  assert.deepEqual(frame.calls, ["history.back", "history.forward"])
+})
+
+void test("the script uses the Navigation API when there is one", () => {
+  const frame = runInFakeFrame({ navigation: true })
+  const command = (action: string) =>
+    frame.fire("message", {
+      source: frame.parent,
+      data: { type: "smith-preview-command", action },
+    })
+  command("back")
+  // Nothing to go forward to.
+  command("forward")
+  assert.deepEqual(frame.calls, ["navigation.back"])
+})
