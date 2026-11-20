@@ -24,6 +24,7 @@ import { AppShellSidebarController } from "@/features/smith/app-shell-sidebar-co
 import { AppShellWindowEffectsHost } from "@/features/smith/app-shell-window-effects"
 import { setBrowserMode } from "@/features/smith/agent/browser-preview"
 import { requestFileReveal } from "@/features/smith/file-reveal"
+import { useRememberedFileTabs } from "@/features/smith/app-shell-file-tabs-memory"
 import { formatFileReference } from "@/lib/smith/file-references"
 import type { AppShellAddProjectDialogHandle } from "@/features/smith/app-shell-add-project-dialog"
 import type { AppShellAuthDialogHandle } from "@/features/smith/app-shell-auth-dialog"
@@ -103,7 +104,6 @@ import {
   openRightSidebarFile,
   pinRightSidebarFile,
   reorderRightSidebarFiles,
-  resetRightSidebarFiles,
   selectRightSidebarVisibleFileTabs,
   setRightSidebarActiveTab,
   type AppShellRightSidebarState,
@@ -1168,14 +1168,13 @@ function useAppShellAgentWorkspaceView({
     toggleRightSidebarPane("review")
   }
 
-  React.useEffect(() => {
-    resetRightSidebarFiles(rightSidebarStore)
-  }, [rightSidebarStore, agentState.cwd])
-
-  React.useEffect(() => {
-    if (!agentState.draft) return
-    resetRightSidebarFiles(rightSidebarStore)
-  }, [rightSidebarStore, agentState.draft])
+  // Each folder keeps its own file tabs; the sidebar layout stays.
+  useRememberedFileTabs({
+    store: rightSidebarStore,
+    machineId,
+    viewerContextId,
+    cwd: normalizeCwd(agentState.cwd),
+  })
 
   const sidebarWorkspaceVersion = useAppShellSidebarValue(
     sidebarStore,
