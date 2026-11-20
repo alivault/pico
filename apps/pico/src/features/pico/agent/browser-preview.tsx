@@ -185,6 +185,49 @@ export function setBrowserMode(machineId: string, mode: BrowserMode) {
 
 type OpenedPreview = { src: string; address: string }
 
+/** The iframe background before the page tells its own. */
+const DEFAULT_PAGE_BACKGROUND = "#ffffff"
+/** For a transparent page with a dark color scheme. */
+const DARK_PAGE_BACKGROUND = "#121212"
+
+// Numbers, units and separators, one character or word at a time, so the
+// match takes linear time.
+const COLOR_ARGUMENTS = String.raw`(?:[\d\s.,/%+\-e]|deg|none)+`
+const PAGE_COLOR = new RegExp(
+  [
+    String.raw`transparent`,
+    String.raw`#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})`,
+    String.raw`(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(${COLOR_ARGUMENTS}\)`,
+    String.raw`color\(\s*(?:srgb|srgb-linear|display-p3|a98-rgb|prophoto-rgb|rec2020|xyz|xyz-d50|xyz-d65)${COLOR_ARGUMENTS}\)`,
+  ]
+    .map((form) => `^${form}$`)
+    .join("|"),
+  "i"
+)
+
+/**
+ * The background for the iframe from a message of the page, or undefined
+ * when the message is not one. The proxy puts a script in the page that
+ * sends it (server/src/services/preview-background.ts). Only plain color
+ * values: rgb, hsl, hex, the CSS color functions that browsers give as a
+ * computed color, and transparent.
+ */
+export function pageBackground(data: unknown) {
+  if (typeof data !== "object" || data === null) return undefined
+  const { type, color, colorScheme } = data as Record<string, unknown>
+  if (type !== "pico-preview-background") return undefined
+  if (typeof color !== "string" || color.length > 120) return undefined
+  const value = color.trim()
+  if (!PAGE_COLOR.test(value)) return undefined
+  if (typeof CSS !== "undefined" && !CSS.supports("background-color", value))
+    return undefined
+  if (value.toLowerCase() === "transparent")
+    return colorScheme === "dark"
+      ? DARK_PAGE_BACKGROUND
+      : DEFAULT_PAGE_BACKGROUND
+  return value
+}
+
 type ViewportMode = "fit" | "mobile" | "tablet" | "custom"
 type ViewportSize = { width: number; height: number }
 
@@ -383,6 +426,26 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
   const ViewportIcon = viewportChoice.icon
   // A new key loads the iframe again.
   const [reloads, setReloads] = React.useState(0)
+  const frameKey = opened ? `${opened.src}:${reloads}` : ""
+  // The background color that the page tells, for the iframe that has the
+  // key. A new address or a reload starts with white again.
+  const frameRef = React.useRef<HTMLIFrameElement>(null)
+  const [pageColor, setPageColor] = React.useState({ key: "", color: "" })
+  const background =
+    pageColor.key === frameKey && pageColor.color
+      ? pageColor.color
+      : DEFAULT_PAGE_BACKGROUND
+  React.useEffect(() => {
+    if (!frameKey) return
+    const onMessage = (event: MessageEvent) => {
+      const frame = frameRef.current?.contentWindow
+      if (!frame || event.source !== frame) return
+      const color = pageBackground(event.data)
+      if (color) setPageColor({ key: frameKey, color })
+    }
+    window.addEventListener("message", onMessage)
+    return () => window.removeEventListener("message", onMessage)
+  }, [frameKey])
   // The address that the iframe shows or loads.
   const loadedAddressRef = React.useRef("")
 
@@ -601,7 +664,7 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
             <div
               className={
                 fixedSize
-                  ? "box-content shrink-0 overflow-hidden rounded-md border border-border bg-white shadow-sm"
+                  ? "box-content shrink-0 overflow-hidden rounded-md border border-border shadow-sm"
                   : "flex min-h-0 flex-1 flex-col"
               }
               style={
@@ -609,18 +672,20 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
                   ? {
                       width: fixedSize.width * scale,
                       height: fixedSize.height * scale,
+                      backgroundColor: background,
                     }
                   : undefined
               }
             >
               <iframe
-                key={`${opened.src}:${reloads}`}
+                key={frameKey}
+                ref={frameRef}
                 src={opened.src}
                 title={`Preview of ${opened.address}`}
                 className={
                   fixedSize
-                    ? "block origin-top-left border-0 bg-white"
-                    : "min-h-0 w-full flex-1 border-0 bg-white"
+                    ? "block origin-top-left border-0"
+                    : "min-h-0 w-full flex-1 border-0"
                 }
                 style={
                   fixedSize
@@ -628,8 +693,9 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
                         width: fixedSize.width,
                         height: fixedSize.height,
                         transform: scale < 1 ? `scale(${scale})` : undefined,
+                        backgroundColor: background,
                       }
-                    : undefined
+                    : { backgroundColor: background }
                 }
                 allow="clipboard-read; clipboard-write; fullscreen"
               />

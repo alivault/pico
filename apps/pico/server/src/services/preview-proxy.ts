@@ -15,6 +15,9 @@
  * When the user opens Pico over HTTPS through Tailscale Serve, the listener
  * also gets a Serve entry on the same port (services/tailscale-serve.ts),
  * so the iframe loads `https://<machine>.ts.net:<listener>/<path>`.
+ *
+ * The listener puts a small script into HTML pages, which tells Pico the
+ * page's background color (services/preview-background.ts).
  */
 import {
   createServer,
@@ -32,6 +35,7 @@ import type { Duplex } from "node:stream"
 import type { MachineManager } from "../machines/manager.ts"
 import type { Security } from "../security.ts"
 import { isPicoServer } from "./dev-server-url.ts"
+import { previewPage } from "./preview-background.ts"
 import { serveTarget, type TailscaleServe } from "./tailscale-serve.ts"
 
 /** The hub sets it on requests to `/api/preview-proxy/`. */
@@ -154,7 +158,8 @@ function forwardHttp(
   response: ServerResponse,
   target: Target,
   port: number,
-  label: string
+  label: string,
+  inject = false
 ) {
   const upstream = httpRequest(
     {
@@ -165,10 +170,15 @@ function forwardHttp(
       headers: target.headers,
     },
     (reply) => {
-      response.writeHead(
-        reply.statusCode ?? 502,
-        previewResponseHeaders(reply.headers, port)
-      )
+      const headers = previewResponseHeaders(reply.headers, port)
+      const page = inject ? previewPage(request, reply, headers) : undefined
+      if (page) {
+        response.writeHead(200, page.headers)
+        page.body.once("error", () => response.destroy())
+        page.body.pipe(response)
+        return
+      }
+      response.writeHead(reply.statusCode ?? 502, headers)
       reply.pipe(response)
     }
   )
@@ -459,7 +469,8 @@ export class PreviewProxy {
         sendText(response, 503, target)
         return
       }
-      forwardHttp(request, response, target, port, this.#label(machineId))
+      // Only the hub puts in the background script, so it goes in one time.
+      forwardHttp(request, response, target, port, this.#label(machineId), true)
     })
     server.on("upgrade", (request: IncomingMessage, socket: Duplex, head) => {
       try {
