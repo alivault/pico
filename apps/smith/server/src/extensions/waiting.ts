@@ -1,18 +1,37 @@
 /**
- * What an agent waits on when its turn ended: running jobs that it waits on
- * (`waitOnExit`). The agent goes on when one of them ends, so the agent is not
- * done. A job that only reports its exit (for example a dev server) does not
- * keep its agent waiting.
+ * What an agent waits on when its turn ended: pending timers and watches
+ * (`timers.ts`), and running jobs that it waits on (`waitOnExit`). The agent
+ * goes on when one of them fires, so the agent is not done. A job that only
+ * reports its exit (for example a dev server) does not keep its agent
+ * waiting.
  */
 import type { JobsState } from "./jobs.ts"
+import type { TimersState } from "./timers.ts"
 
-/** A label such as `2 jobs (build, test)`, or undefined. */
-export function waitingLabel(jobs: JobsState | undefined) {
+/** A label such as `a timer (deploy) and 2 jobs (build, test)`, or undefined. */
+export function waitingLabel(
+  jobs: JobsState | undefined,
+  timers?: TimersState
+) {
+  const parts: string[] = []
+  const pending = Object.values(timers?.items ?? {}).filter(
+    (item) => item.status === "pending"
+  )
+  for (const kind of ["timer", "watch"] as const) {
+    const items = pending.filter((item) => item.kind === kind)
+    if (items.length > 0)
+      parts.push(
+        `${items.length === 1 ? `a ${kind}` : `${items.length} ${kind === "watch" ? "watches" : "timers"}`} (${items.map((item) => item.label).join(", ")})`
+      )
+  }
   const running = Object.values(jobs?.items ?? {}).filter(
     (job) => job.status === "running" && job.notifyOnExit && job.waitOnExit
   )
-  if (running.length === 0) return undefined
-  return `${running.length === 1 ? "a job" : `${running.length} jobs`} (${running.map((job) => job.name).join(", ")})`
+  if (running.length > 0)
+    parts.push(
+      `${running.length === 1 ? "a job" : `${running.length} jobs`} (${running.map((job) => job.name).join(", ")})`
+    )
+  return parts.length > 0 ? parts.join(" and ") : undefined
 }
 
 /**

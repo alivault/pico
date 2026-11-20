@@ -61,6 +61,11 @@ import type {
 import { updateTodo, type TodoChange } from "../extensions/todo.ts"
 import { JobsDoc, jobNeedingUser, type JobsState } from "../extensions/jobs.ts"
 import {
+  cancelConversationTimers,
+  TimersDoc,
+  type TimersState,
+} from "../extensions/timers.ts"
+import {
   agentJobs,
   agentJobsSignature,
   waitingLabel,
@@ -499,6 +504,11 @@ export class Agents implements HostAgents {
   >()
   /** What each agent waits on (see `waitingLabel`). */
   readonly #waiting = new Map<string, string>()
+  /** The jobs and timers of each agent, for `#waiting`. */
+  readonly #waitSources = new Map<
+    string,
+    { jobs?: JobsState | undefined; timers?: TimersState | undefined }
+  >()
   /** The jobs of each agent that the sidebar shows (see `agentJobs`). */
   readonly #jobs = new Map<string, AgentJob[]>()
   readonly #held = new Map<string, HeldItem[]>()
@@ -570,8 +580,12 @@ export class Agents implements HostAgents {
             this.#needsInput.add(id)
           }
         }
-        const jobs = await this.#harness.snapshot(JobsDoc, conversationId, ctx)
-        const waiting = waitingLabel(jobs)
+        const [jobs, timers] = await Promise.all([
+          this.#harness.snapshot(JobsDoc, conversationId, ctx),
+          this.#harness.snapshot(TimersDoc, conversationId, ctx),
+        ])
+        this.#waitSources.set(id, { jobs, timers })
+        const waiting = waitingLabel(jobs, timers)
         if (waiting) this.#waiting.set(id, waiting)
         const shown = agentJobs(jobs, meta.turnStartedAt)
         if (shown) this.#jobs.set(id, shown)
@@ -862,8 +876,12 @@ export class Agents implements HostAgents {
             if (job) this.#jobWaits.set(id, job)
             else this.#jobWaits.delete(id)
             this.#updateNeedsInput(id)
-            this.#updateWaiting(id, value as JobsState | undefined)
+            this.#updateWaiting(id, { jobs: value as JobsState | undefined })
             this.#updateJobs(id, value as JobsState | undefined)
+          } else if (kind === "smith.timers") {
+            this.#updateWaiting(id, {
+              timers: value as TimersState | undefined,
+            })
           }
           this.#markDirty(id, { extensions: true })
         }
@@ -1062,14 +1080,19 @@ export class Agents implements HostAgents {
     return this.#needsInput.has(id)
   }
 
-  /** What an agent waits on: jobs that report their exit. */
+  /** What an agent waits on: timers, watches, and jobs that it waits on. */
   waiting(id: string) {
     return this.#waiting.get(id)
   }
 
-  /** Keep `#waiting` current when the jobs of an agent change. */
-  #updateWaiting(id: string, jobs: JobsState | undefined) {
-    const waiting = waitingLabel(jobs)
+  /** Keep `#waiting` current when the jobs or timers of an agent change. */
+  #updateWaiting(
+    id: string,
+    change: { jobs?: JobsState | undefined; timers?: TimersState | undefined }
+  ) {
+    const sources = { ...this.#waitSources.get(id), ...change }
+    this.#waitSources.set(id, sources)
+    const waiting = waitingLabel(sources.jobs, sources.timers)
     if (waiting === this.#waiting.get(id)) return
     if (waiting) this.#waiting.set(id, waiting)
     else this.#waiting.delete(id)
@@ -2606,6 +2629,15 @@ export class Agents implements HostAgents {
     this.#updateMeta(id, { archived: true, archivedAt: Date.now() })
     this.#viewers.forget(id)
     this.#scheduleAgentsBroadcast()
+    // Nobody works in an archived agent: its timers and watches stop. Its
+    // jobs keep running (see `archivedJobAgentCounts`).
+    void cancelConversationTimers(
+      this.#harness,
+      conversationIdOf(id),
+      ctx
+    ).catch((error: unknown) =>
+      console.warn("[smith] could not cancel the timers of", id, error)
+    )
   }
 
   /** Make an archived agent visible again. */

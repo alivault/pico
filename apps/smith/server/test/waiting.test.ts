@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 
 import type { JobsState } from "../src/extensions/jobs.ts"
+import type { TimerItem, TimersState } from "../src/extensions/timers.ts"
 import { agentJobs, waitingLabel } from "../src/extensions/waiting.ts"
 
 void test("waitingLabel names running jobs that the agent waits on", () => {
@@ -31,6 +32,47 @@ void test("waitingLabel names running jobs that the agent waits on", () => {
     },
   } as unknown as JobsState
   assert.equal(waitingLabel(jobs), "2 jobs (build, lint)")
+})
+
+function timer(
+  label: string,
+  kind: TimerItem["kind"],
+  status: TimerItem["status"]
+): TimerItem {
+  return { id: label, kind, label, message: "", status, createdAt: 0, runs: 0 }
+}
+
+void test("waitingLabel names pending timers and watches before jobs", () => {
+  const timers: TimersState = {
+    byCall: {},
+    items: {
+      a: timer("deploy", "watch", "pending"),
+      b: timer("old", "watch", "done"),
+      c: timer("ci", "timer", "pending"),
+      d: timer("npm", "watch", "pending"),
+    },
+  }
+  const jobs = {
+    items: {
+      j1: {
+        status: "running",
+        notifyOnExit: true,
+        waitOnExit: true,
+        name: "build",
+      },
+    },
+  } as unknown as JobsState
+  assert.equal(
+    waitingLabel(jobs, timers),
+    "a timer (ci) and 2 watches (deploy, npm) and a job (build)"
+  )
+  assert.equal(
+    waitingLabel(undefined, {
+      byCall: {},
+      items: { a: timer("x", "watch", "cancelled") },
+    }),
+    undefined
+  )
 })
 
 void test("waitingLabel is undefined when nothing is pending", () => {

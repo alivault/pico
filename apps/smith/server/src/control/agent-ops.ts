@@ -384,7 +384,7 @@ export class LocalAgentOps implements AgentBackend {
     }
   }
 
-  /** What an idle agent waits on: a job. */
+  /** What an idle agent waits on: a timer, a watch, or a job. */
   #waitingOf(id: string) {
     return waitingOn(
       this.#runtime.harness,

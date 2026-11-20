@@ -125,12 +125,31 @@ export async function tempDir(prefix = "smith-ext-test-") {
   return dir
 }
 
+/**
+ * A test clock for the Harness: real time plus an offset that `advance`
+ * moves. Its timers fire at least every 25 ms, so a Harness sees the clock
+ * jump soon (callers check the clock again when a timer fires).
+ */
+export class TestClock {
+  offset = 0
+  now = () => Date.now() + this.offset
+  advance(ms: number) {
+    this.offset += ms
+  }
+  setTimer = (callback: () => void, delayMs: number) => {
+    const timer = setTimeout(callback, Math.max(0, Math.min(delayMs, 25)))
+    timer.unref()
+    return () => clearTimeout(timer)
+  }
+}
+
 /** Open a Harness with `extensions` on `database`; reopen it with the same arguments. */
 export async function openHarness(
   database: string,
   extensions: Extension[],
   script: Script,
-  cwd?: string
+  cwd?: string,
+  clock?: TestClock
 ) {
   const registry = createRegistry()
   for (const extension of extensions) registry.install(extension)
@@ -143,6 +162,7 @@ export async function openHarness(
       registry,
       env: ({ cwd: agentCwd }) =>
         new NodeExecutionEnv({ cwd: agentCwd ?? cwd ?? tmpdir() }),
+      ...(clock ? { now: clock.now, setTimer: clock.setTimer } : {}),
     },
     ctx
   )

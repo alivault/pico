@@ -28,6 +28,7 @@ import {
 import type { Viewers } from "./core/viewers.ts"
 import type { HostBridge } from "./extensions/host.ts"
 import { JobsDoc, stopJob } from "./extensions/jobs.ts"
+import { cancelConversationTimers } from "./extensions/timers.ts"
 import type { TodoChange } from "./extensions/todo.ts"
 import { eventMatches, type EventHub, type ServerEvent } from "./events.ts"
 import {
@@ -243,6 +244,8 @@ export function createApi(api: ApiContext) {
         "todo",
         "ask-user",
         "background-jobs",
+        "timers",
+        "watches",
         "scratchpad",
         "subagents",
         "worktrees",
@@ -1501,6 +1504,20 @@ export function createApi(api: ApiContext) {
       throw badRequest("op must be add, update, remove, or clear")
     }
     return { ok: true, items: await agents.changeTodo(id, change) }
+  })
+
+  router.post("/api/agent/timer/cancel", async (request) => {
+    const id = requireAgent(request)
+    const body = await request.body<{ id?: unknown }>()
+    const timerId = stringField(body.id)
+    if (!timerId) throw badRequest("id is required")
+    await cancelConversationTimers(
+      runtime.harness,
+      conversationIdOf(id),
+      BACKGROUND_CONTEXT,
+      timerId
+    )
+    return { ok: true }
   })
 
   router.post("/api/agent/job/stop", async (request) => {

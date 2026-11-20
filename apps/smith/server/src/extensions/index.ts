@@ -9,9 +9,11 @@ import { createAskExtension } from "./ask.ts"
 import { createBrowserExtension } from "./browser.ts"
 import type { HostBridge } from "./host.ts"
 import { createJobsExtension, type JobsExtension } from "./jobs.ts"
+import { createScheduleExtension } from "./schedule.ts"
 import { createScratchpadExtension, type Scratchpad } from "./scratchpad.ts"
 import { createAgentsExtension } from "./agents.ts"
 import { createTodoExtension } from "./todo.ts"
+import { createWatchExtension } from "./watch.ts"
 
 export type SmithExtensionOptions = {
   host: HostBridge
@@ -34,6 +36,8 @@ export function createSmithExtensions(options: SmithExtensionOptions): {
   return {
     extensions: [
       createAskExtension(),
+      createScheduleExtension(host),
+      createWatchExtension(host),
       jobs.extension,
       scratchpad.extension,
       createAgentsExtension(host),
