@@ -96,6 +96,7 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
       "ask",
       "scratchpad",
       "browser",
+      "open-file",
       "todo",
       "schedule",
       "watch",

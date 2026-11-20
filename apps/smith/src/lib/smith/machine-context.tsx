@@ -26,6 +26,11 @@ export function useMachineId() {
   return machineId
 }
 
+/** The machine of this subtree, or null outside a `MachineProvider`. */
+export function useOptionalMachineId() {
+  return React.useContext(MachineIdContext)
+}
+
 /**
  * Whether an element is in the app shell that shows. The page keeps the
  * shells of other machines in a hidden `Activity`, which sets

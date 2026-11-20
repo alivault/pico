@@ -73,6 +73,7 @@ import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
 import { formatShortcutLabel } from "@/features/smith/keyboard-shortcuts"
 import { MarkdownBlock } from "@/features/smith/markdown-renderer"
 import { useFileLineComments } from "@/features/smith/file-line-comments"
+import { takeFileReveal, useFileReveal } from "@/features/smith/file-reveal"
 import { useProjectFileEditing } from "@/features/smith/project-file-editing"
 import {
   ProjectFileImage,
@@ -759,6 +760,7 @@ export function ProjectFileContent({
     refetch: fileQuery.refetch,
   })
   const { edit } = editing
+  const reveal = useFileReveal(machineId, normalizedCwd, path)
   const fileComments = useFileLineComments()
   const commentsForFile =
     fileComments?.comments.filter(
@@ -779,6 +781,13 @@ export function ProjectFileContent({
   const [imageSize, setImageSize] = React.useState<
     { width: number; height: number } | undefined
   >()
+  // Lines to show need the source view of a Markdown or SVG file.
+  React.useEffect(() => {
+    if (!reveal || !hasPreview) return
+    setMarkdownViewModes((current) =>
+      current[path] === "source" ? current : { ...current, [path]: "source" }
+    )
+  }, [hasPreview, path, reveal])
   const markdownViewMode: MarkdownFileViewMode = hasPreview
     ? markdownViewModes[path] || "preview"
     : "source"
@@ -973,6 +982,10 @@ export function ProjectFileContent({
                   : undefined
               }
               onRemoveComment={fileComments?.remove}
+              reveal={reveal}
+              onRevealShown={(nonce) =>
+                takeFileReveal(machineId, normalizedCwd, path, nonce)
+              }
               onChange={editing.setDraft}
               onSave={() => {
                 void editing.save()

@@ -9,6 +9,7 @@ import { createAskExtension } from "./ask.ts"
 import { createBrowserExtension } from "./browser.ts"
 import type { HostBridge } from "./host.ts"
 import { createJobsExtension, type JobsExtension } from "./jobs.ts"
+import { createOpenFileExtension } from "./open-file.ts"
 import { createScheduleExtension } from "./schedule.ts"
 import { createScratchpadExtension, type Scratchpad } from "./scratchpad.ts"
 import { createAgentsExtension } from "./agents.ts"
@@ -42,6 +43,7 @@ export function createSmithExtensions(options: SmithExtensionOptions): {
       scratchpad.extension,
       createAgentsExtension(host),
       createBrowserExtension(host),
+      createOpenFileExtension(host),
       createTodoExtension(),
     ],
     services: {

@@ -60,6 +60,11 @@ import {
   type AgentNoticeTone,
 } from "@/lib/smith/agent-notice"
 import { emitSmithEvent } from "@/features/smith/agent/events"
+import { FileLinkText, LinkifiedOutput } from "@/features/smith/file-links"
+import {
+  formatFileReference,
+  type FileReference,
+} from "@/lib/smith/file-references"
 
 export function promptImageKey(
   image: Pick<PromptImage, "previewUrl" | "data">
@@ -194,6 +199,75 @@ function toolReadLocation(
     return `${filePath} limit=${limit}`.trim()
   }
   return filePath
+}
+
+/** The first new line of an edit: from its details, or its first hunk. */
+function editFirstLine(
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
+) {
+  if (block.type !== "tool" || block.name !== "edit") return undefined
+  const details =
+    block.details && typeof block.details === "object"
+      ? (block.details as Record<string, unknown>)
+      : {}
+  if (
+    typeof details.firstChangedLine === "number" &&
+    details.firstChangedLine > 0
+  )
+    return details.firstChangedLine
+  const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)/m.exec(toolPatchText(block))
+  const line = hunk ? Number(hunk[1]) : 0
+  return line > 0 ? line : undefined
+}
+
+/** The file of a read, write, or edit call, with the lines it read or changed. */
+function toolFileTarget(
+  block: Extract<ConversationItem, { kind: "assistant" }>["blocks"][number]
+): FileReference | null {
+  if (block.type !== "tool") return null
+  if (block.name !== "read" && block.name !== "write" && block.name !== "edit")
+    return null
+  const args = normalizeToolArgs(block.args)
+  const path =
+    getToolArgText(args, "path") ||
+    getToolArgText(args, "filePath") ||
+    getToolArgText(args, "file_path")
+  if (!path) return null
+  if (block.name === "edit") {
+    const line = editFirstLine(block)
+    return line ? { path, line } : { path }
+  }
+  if (block.name !== "read") return { path }
+  const offset = getToolArgNumber(args, "offset")
+  const limit = getToolArgNumber(args, "limit")
+  if (!offset || offset < 1) return { path }
+  return limit && limit > 1
+    ? { path, line: offset, endLine: offset + limit - 1 }
+    : { path, line: offset }
+}
+
+/**
+ * A tool summary that starts with the tool's file: the file part is a link
+ * to the file viewer when the file exists.
+ */
+function ToolSummaryText({
+  summary,
+  file,
+}: {
+  summary: string
+  file: FileReference | null
+}) {
+  if (!file || !summary.startsWith(file.path)) return summary
+  const space = summary.indexOf(" ", file.path.length)
+  const end = space < 0 ? summary.length : space
+  return (
+    <>
+      <FileLinkText reference={file} stopPropagation>
+        {summary.slice(0, end)}
+      </FileLinkText>
+      {summary.slice(end)}
+    </>
+  )
 }
 
 function collapseToolPreview(text: string) {
@@ -570,6 +644,7 @@ function exploreToolLine(
     case "read":
       return {
         label: "Read",
+        file: toolFileTarget(block),
         details: [
           pathBaseName(path) || path,
           formatExploreArg("offset", getToolArgNumber(args, "offset")),
@@ -1193,6 +1268,8 @@ type ToolBlockHeaderSnapshot = {
   running: boolean
   isError: boolean
   summary: string
+  /** The file of a read, write, or edit, for a link in the summary. */
+  file: FileReference | null
   editStats: EditDiffStatCounts | null
   images: ConversationImage[]
   openStateKey: string
@@ -1241,6 +1318,7 @@ function buildToolBlockHeaderSnapshot(
     running: block.running,
     isError: block.isError,
     summary: toolRenderer(block.name)?.summary?.(block) ?? toolSummary(block),
+    file: block.running ? null : toolFileTarget(block),
     editStats:
       block.name === "edit" && !block.running
         ? getEditDiffStats(toolPatchText(block))
@@ -1267,6 +1345,8 @@ function sameToolBlockHeaderSnapshot(
     left.running === right.running &&
     left.isError === right.isError &&
     left.summary === right.summary &&
+    (left.file ? formatFileReference(left.file) : "") ===
+      (right.file ? formatFileReference(right.file) : "") &&
     sameEditDiffStatCounts(left.editStats, right.editStats) &&
     sameConversationImages(left.images, right.images) &&
     left.openStateKey === right.openStateKey
@@ -1880,9 +1960,12 @@ function EditDiffBlock({
 
 function PlainToolOutput({
   isError = false,
+  linkBase,
   text,
 }: {
   isError?: boolean
+  /** Link the paths of the lines, relative to this folder ("" for cwd). */
+  linkBase?: string
   text: string
 }) {
   return (
@@ -1892,10 +1975,32 @@ function PlainToolOutput({
         isError && "text-destructive"
       )}
     >
-      {text}
+      {linkBase !== undefined ? (
+        <LinkifiedOutput text={text} base={linkBase} />
+      ) : (
+        text
+      )}
     </pre>
   )
 }
+
+/** Tools whose output has paths: grep (`path:line:`) and file lists. */
+const PATH_OUTPUT_TOOLS = new Set(["grep", "rg", "find", "glob", "ls", "list"])
+
+/**
+ * The folder that the paths in a tool's output are relative to, or
+ * undefined when the output has no paths to link.
+ */
+function toolOutputLinkBase(block: AssistantToolBlock) {
+  if (block.running || block.isError) return undefined
+  if (block.name === "bash") return ""
+  if (!block.name || !PATH_OUTPUT_TOOLS.has(block.name)) return undefined
+  const path = getToolArgText(normalizeToolArgs(block.args), "path")
+  return path === "." || path === "./" ? "" : path
+}
+
+// Colors in the output (ESC [ … m) keep their own renderer, without links.
+const ANSI_ESCAPE = "\u001b"
 
 function scrollDistanceFromBottom(element: HTMLElement) {
   return element.scrollHeight - element.clientHeight - element.scrollTop
@@ -1943,10 +2048,12 @@ function useRunningToolAutoScroll<
 const ToolBlockSection = React.memo(function ToolBlockSection({
   isError = false,
   label,
+  linkBase,
   text,
 }: {
   isError?: boolean
   label: string
+  linkBase?: string
   text: string
 }) {
   return (
@@ -1954,7 +2061,7 @@ const ToolBlockSection = React.memo(function ToolBlockSection({
       <div className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
         {label}
       </div>
-      <PlainToolOutput isError={isError} text={text} />
+      <PlainToolOutput isError={isError} linkBase={linkBase} text={text} />
     </section>
   )
 })
@@ -2130,6 +2237,7 @@ function DefaultToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
     contentKey: shellBodyText,
     enabled: block.name === "bash" && block.running,
   })
+  const linkBase = toolOutputLinkBase(block)
   const isSuccessfulEditTool =
     block.name === "edit" && !block.running && !block.isError
   const isSelfContainedWriteTool =
@@ -2162,7 +2270,11 @@ function DefaultToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
               block.isError && "text-destructive"
             )}
           >
-            <AnsiText text={shellBodyText} />
+            {linkBase !== undefined && !shellBodyText.includes(ANSI_ESCAPE) ? (
+              <LinkifiedOutput text={shellBodyText} />
+            ) : (
+              <AnsiText text={shellBodyText} />
+            )}
           </pre>
         ) : block.name === "write" ? (
           <WriteToolOutput block={block} />
@@ -2176,6 +2288,7 @@ function DefaultToolBlockCardBody({ block }: { block: AssistantToolBlock }) {
             <ToolBlockSection
               isError={block.isError}
               label={block.running ? "Output (streaming)" : "Output"}
+              linkBase={linkBase}
               text={outputText}
             />
           </div>
@@ -2305,7 +2418,9 @@ function ToolBlockCardContent({
         isError={header.isError}
         label={toolDisplayName(header.name)}
         running={header.running}
-        summary={header.summary}
+        summary={
+          <ToolSummaryText summary={header.summary} file={header.file} />
+        }
         summaryClassName={header.name === "write" ? "tabular-nums" : undefined}
       >
         {header.editStats ? (
@@ -2398,7 +2513,13 @@ function ExploreToolGroupCardBody({
                     block.isError && "text-destructive"
                   )}
                 >
-                  {lineText}
+                  {"file" in line && line.file ? (
+                    <FileLinkText reference={line.file}>
+                      {lineText}
+                    </FileLinkText>
+                  ) : (
+                    lineText
+                  )}
                 </span>
               </div>
             )

@@ -301,6 +301,55 @@ async function resolveProjectFile(cwd: string, path: string) {
   return { normalized, resolved, info }
 }
 
+/** The most paths that one `projectFilesExist` call checks. */
+export const EXISTS_LIMIT = 200
+
+/**
+ * The file of the project that `path` names, as a path from `cwd`, or
+ * undefined when it is not a file inside `cwd`. A relative path cannot leave
+ * `cwd`; an absolute path (or one from `~`) must point into it. Symbolic
+ * links resolve first, so a link out of the project does not count.
+ */
+export async function projectFileInside(cwd: string, path: string) {
+  const normalized = path.trim().replace(/^\.\//, "")
+  if (!normalized || normalized.includes("\0")) return undefined
+  const expanded = expandHome(normalized)
+  if (!isAbsolute(expanded) && normalized.split(/[/\\]/).includes(".."))
+    return undefined
+  let root: string
+  let resolved: string
+  try {
+    root = await realpath(cwd)
+    resolved = await realpath(
+      isAbsolute(expanded) ? expanded : join(root, expanded)
+    )
+    if (resolved === root || !resolved.startsWith(`${root}${sep}`))
+      return undefined
+    if (!(await stat(resolved)).isFile()) return undefined
+  } catch {
+    return undefined
+  }
+  return display(relative(root, resolved))
+}
+
+/**
+ * Which of `paths` are files inside `cwd`, for links in the conversation:
+ * each path maps to its path from `cwd`, or null. At most `EXISTS_LIMIT`
+ * paths.
+ */
+export async function projectFilesExist(cwd: string, paths: string[]) {
+  if (paths.length > EXISTS_LIMIT)
+    throw badRequest(`At most ${EXISTS_LIMIT} paths in one request`)
+  const root = await realpath(cwd)
+  const unique = [...new Set(paths)]
+  const results = await Promise.all(
+    unique.map(async (path) => [path, await projectFileInside(root, path)])
+  )
+  const files: Record<string, string | null> = {}
+  for (const [path, file] of results) files[path!] = file ?? null
+  return files
+}
+
 export async function readProjectFile(cwd: string, path: string) {
   const { normalized, resolved, info } = await resolveProjectFile(cwd, path)
   const mimeType = imageType(normalized)

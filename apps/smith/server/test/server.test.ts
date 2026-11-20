@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
-import { readFile } from "node:fs/promises"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { test } from "node:test"
 import { tempDir } from "./support.ts"
@@ -95,6 +95,42 @@ void test("server needs no token, refuses a second owner, and stops cleanly", as
       "s1",
     ])
     assert.ok(JSON.parse(await readFile(join(data, "sidebar.json"), "utf8")))
+    // Which paths are files inside a folder: a batch, with a limit.
+    const workspace = join(data, "workspace")
+    await mkdir(join(workspace, "src"), { recursive: true })
+    await writeFile(join(workspace, "src", "a.ts"), "a")
+    await writeFile(join(data, "secret.txt"), "outside")
+    const exists = (paths: unknown) =>
+      fetch(`${url}/api/files/exists`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ cwd: workspace, paths }),
+      })
+    const found = (await (
+      await exists([
+        "src/a.ts",
+        "./src/a.ts",
+        join(workspace, "src", "a.ts"),
+        "src",
+        "missing.ts",
+        "../secret.txt",
+        join(data, "secret.txt"),
+      ])
+    ).json()) as { files: Record<string, string | null> }
+    assert.deepEqual(found.files, {
+      "src/a.ts": "src/a.ts",
+      "./src/a.ts": "src/a.ts",
+      [join(workspace, "src", "a.ts")]: "src/a.ts",
+      src: null,
+      "missing.ts": null,
+      "../secret.txt": null,
+      [join(data, "secret.txt")]: null,
+    })
+    assert.equal(
+      (await exists(Array.from({ length: 201 }, (_, i) => `f${i}`))).status,
+      400
+    )
+    assert.equal((await exists("src/a.ts")).status, 400)
     // A second owner reports the running server and exits with code 0, so a
     // supervisor with Restart=on-failure does not start it again.
     const duplicate = spawn(process.execPath, args, {

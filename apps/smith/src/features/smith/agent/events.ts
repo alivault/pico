@@ -22,6 +22,35 @@ export type SmithEventMap = {
     /** The user asked for it, as with a click on a job: show it always. */
     open?: boolean
   }
+  /**
+   * The user opens a file of an agent, as with a click on a path in the
+   * conversation. `path` is relative to the agent's folder. The shell that
+   * shows the agent opens it in the file viewer and shows the lines.
+   */
+  "smith:open-file": {
+    machineId: string
+    agentId: string
+    path: string
+    line?: number
+    endLine?: number
+    /** A pinned tab, not the preview tab. */
+    pin?: boolean
+  }
+  /**
+   * An agent called `open_file` (server event `open_file`). The shell that
+   * shows the agent opens the file, or shows a notice when the user looks
+   * at something else.
+   */
+  "smith:agent-open-file": {
+    machineId: string
+    agentId: string
+    cwd: string
+    path: string
+    line?: number
+    endLine?: number
+    note?: string
+    callId: string
+  }
   /** Show a right sidebar tab. */
   "smith:open-sidebar-tab": { tab: "agent" | "review" | "browser" }
   /** Show a background job in the terminal panel. */
