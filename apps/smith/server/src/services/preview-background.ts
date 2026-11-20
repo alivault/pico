@@ -43,10 +43,13 @@ export const PREVIEW_COMMAND_MESSAGE = "smith-preview-command"
  * on popstate, hashchange and pageshow. `kind` is "load", "push",
  * "replace" or "pop".
  *
- * Takes `{ type: "smith-preview-command", action: "back" | "forward" }`
- * from the parent window only. It uses the Navigation API when the browser
- * has it, because it moves only in this frame's own history; else
- * `history.back()` and `history.forward()`.
+ * Takes `{ type: "smith-preview-command", action: "back" | "forward",
+ * href }` from the parent window only. `href` is the address that Smith
+ * expects. With the Navigation API, it goes back or forward: that moves
+ * only in this frame's own history. Without it, it loads `href` in place
+ * with `location.replace` when `href` is on the page's origin. It never
+ * calls `history.back()` or `forward()`: they move in the history that the
+ * frame shares with Smith's page, so they can undo a route change of Smith.
  */
 export const PREVIEW_BACKGROUND_SCRIPT = `(function(){try{
 if(window.parent===window)return;
@@ -87,13 +90,14 @@ window.addEventListener("popstate",pop);
 window.addEventListener("hashchange",pop);
 window.addEventListener("pageshow",pop);
 function none(){}
-function go(back){if(N&&N.back){if(back?!N.canGoBack:!N.canGoForward)return;
-var r=back?N.back():N.forward();if(r){if(r.committed)r.committed.catch(none);if(r.finished)r.finished.catch(none)}}
-else if(back)H.back();else H.forward()}
+function go(back,to){if(N&&N.back){if(back?!N.canGoBack:!N.canGoForward)return;
+var r=back?N.back():N.forward();if(r){if(r.committed)r.committed.catch(none);if(r.finished)r.finished.catch(none)}return}
+if(typeof to!=="string")return;var u=new URL(to,location.href);
+if(u.origin===location.origin&&u.href!==location.href)location.replace(u.href)}
 window.addEventListener("message",function(e){try{
 if(e.source!==window.parent)return;var m=e.data;
 if(!m||m.type!=="${PREVIEW_COMMAND_MESSAGE}")return;
-if(m.action==="back")go(true);else if(m.action==="forward")go(false)
+if(m.action==="back")go(true,m.href);else if(m.action==="forward")go(false,m.href)
 }catch(x){}});
 loc("load")
 }catch(e){}})();`

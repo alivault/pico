@@ -280,7 +280,11 @@ function runInFakeFrame(options: { navigation?: boolean } = {}) {
   const parent = {
     postMessage: (message: Record<string, unknown>) => posted.push(message),
   }
-  const location = { href: "http://127.0.0.1:4000/" }
+  const location = {
+    href: "http://127.0.0.1:4000/",
+    origin: "http://127.0.0.1:4000",
+    replace: (url: string) => calls.push(`location.replace ${url}`),
+  }
   const history = {
     pushState: (_: unknown, __: string, url: string) => {
       location.href = new URL(url, location.href).href
@@ -323,6 +327,7 @@ function runInFakeFrame(options: { navigation?: boolean } = {}) {
       observe() {}
     },
     setTimeout,
+    URL,
   }
   new Script(PREVIEW_BACKGROUND_SCRIPT).runInNewContext(context)
   const fire = (type: string, event: Record<string, unknown> = {}) => {
@@ -351,17 +356,30 @@ void test("the script reports the location and takes commands", () => {
     "pop http://127.0.0.1:4000/#top",
   ])
 
-  const command = (action: string, source: unknown = frame.parent) =>
+  const command = (
+    action: string,
+    href: unknown,
+    source: unknown = frame.parent
+  ) =>
     frame.fire("message", {
       source,
-      data: { type: "smith-preview-command", action },
+      data: { type: "smith-preview-command", action, href },
     })
-  command("back")
-  command("forward")
-  command("back", {})
-  command("reload")
+  // Without the Navigation API, the page loads the address in place.
+  command("back", "http://127.0.0.1:4000/settings")
+  command("forward", "/about")
+  // Not from the parent, another origin, no address, the page's own
+  // address, or another action: nothing.
+  command("back", "http://127.0.0.1:4000/x", {})
+  command("back", "http://evil.example/")
+  command("back", undefined)
+  command("back", "http://127.0.0.1:4000/#top")
+  command("reload", "http://127.0.0.1:4000/x")
   frame.fire("message", { source: frame.parent, data: null })
-  assert.deepEqual(frame.calls, ["history.back", "history.forward"])
+  assert.deepEqual(frame.calls, [
+    "location.replace http://127.0.0.1:4000/settings",
+    "location.replace http://127.0.0.1:4000/about",
+  ])
 })
 
 void test("the script uses the Navigation API when there is one", () => {
@@ -369,7 +387,11 @@ void test("the script uses the Navigation API when there is one", () => {
   const command = (action: string) =>
     frame.fire("message", {
       source: frame.parent,
-      data: { type: "smith-preview-command", action },
+      data: {
+        type: "smith-preview-command",
+        action,
+        href: "http://127.0.0.1:4000/a",
+      },
     })
   command("back")
   // Nothing to go forward to.

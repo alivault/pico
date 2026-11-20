@@ -612,14 +612,20 @@ export function PreviewPanel({
   /** Ask the page to go back (-1) or forward (1) in its history. */
   const step = (direction: -1 | 1) => {
     const frame = frameRef.current?.contentWindow
-    if (!frame || !frameOrigin) return
+    // The page loads this address when its browser has no Navigation API.
+    const href = frameHistory.entries[frameHistory.index + direction]
+    if (!frame || !frameOrigin || !href) return
     pendingStepRef.current = {
       key: frameKey,
       step: direction,
       until: Date.now() + PENDING_STEP_MS,
     }
     frame.postMessage(
-      { type: COMMAND_MESSAGE, action: direction < 0 ? "back" : "forward" },
+      {
+        type: COMMAND_MESSAGE,
+        action: direction < 0 ? "back" : "forward",
+        href,
+      },
       frameOrigin
     )
   }
