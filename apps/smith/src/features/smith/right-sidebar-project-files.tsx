@@ -219,6 +219,12 @@ const GIT_FILE_TREE_UNSAFE_CSS = `
   [data-file-tree-search-input] {
     font-size: 16px;
   }
+
+  /* The tree clips its content, so the input's 3px focus outline needs room
+     inside the container. */
+  [data-file-tree-search-container] {
+    padding: 3px;
+  }
 `
 
 function isFileTreeDirectoryHandle(
