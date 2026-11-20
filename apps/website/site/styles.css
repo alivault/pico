@@ -78,6 +78,12 @@ footer {
   text-decoration: none;
 }
 
+.brand .mark {
+  display: block;
+  width: 28px;
+  height: 16px;
+}
+
 .nav nav {
   display: flex;
   gap: 20px;

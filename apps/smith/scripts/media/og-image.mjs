@@ -63,12 +63,11 @@ const html = `<!doctype html>
     font-weight: 600;
     letter-spacing: -0.01em;
   }
-  .brand img {
+  .brand svg {
     width: 44px;
     height: 44px;
-    border-radius: 10px;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
   }
+  .brand svg path { fill: #f5f5f5; }
   h1 {
     margin-top: 56px;
     font-size: 52px;
@@ -105,7 +104,7 @@ const html = `<!doctype html>
 </head>
 <body>
   <div class="text">
-    <div class="brand"><img src="${dataUrl("favicon.svg", "image/svg+xml")}" alt="">Smith</div>
+    <div class="brand">${readFileSync(join(siteDir, "favicon.svg"), "utf8")}Smith</div>
     <h1>A web workspace for your Pi coding agents.</h1>
     <p>Durable agents, subagents in Git worktrees, and terminals, on your own machine.</p>
   </div>

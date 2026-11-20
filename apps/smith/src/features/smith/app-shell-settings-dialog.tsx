@@ -51,6 +51,7 @@ import {
   type ThemeFamily,
 } from "@/lib/smith"
 
+import { SmithMark } from "@/components/smith-mark"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -867,7 +868,8 @@ function SettingsBrowseBody({
         <span className="hidden min-w-0 flex-1 md:block">
           Use ↑/↓ to select, Return to open or toggle, and Esc to close.
         </span>
-        <span className="ml-auto shrink-0 tabular-nums">
+        <span className="ml-auto flex shrink-0 items-center gap-1.5 tabular-nums">
+          <SmithMark className="h-2.5 w-auto" />
           Smith v{__SMITH_VERSION__}
         </span>
       </div>

@@ -8,6 +8,7 @@ import {
   OctagonXIcon,
 } from "lucide-react"
 
+import { SmithMark } from "@/components/smith-mark"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -16,6 +17,7 @@ import {
   EmptyContent,
   EmptyDescription,
   EmptyHeader,
+  EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Kbd } from "@/components/ui/kbd"
@@ -893,6 +895,9 @@ function AppShellConversationEmptyState({
   return (
     <Empty className="absolute inset-0">
       <EmptyHeader>
+        <EmptyMedia className="text-muted-foreground">
+          <SmithMark className="h-6 w-auto" />
+        </EmptyMedia>
         <EmptyTitle>
           {draft ? "New agent" : "Start a new conversation"}
         </EmptyTitle>

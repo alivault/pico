@@ -12,6 +12,7 @@
     "release": "pnpm --filter @alivault/smith release",
     "media": "pnpm --filter @alivault/smith media",
     "og-image": "pnpm --filter @alivault/smith og-image",
+    "icons": "pnpm --filter @alivault/smith icons",
     "website:dev": "pnpm --filter @smith/website run dev",
     "website:deploy": "pnpm --filter @smith/website run deploy"
   },
