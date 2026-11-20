@@ -239,13 +239,14 @@ function firefoxProfiles(root: string) {
 
 /**
  * The browser profiles with cookies. `home` is the home folder; tests set
- * `PICO_BROWSER_PROFILES_DIR` to a fake one.
+ * `SMITH_BROWSER_PROFILES_DIR` to a fake one.
  */
 export function findBrowserProfiles(
   options: { home?: string; platform?: NodeJS.Platform } = {}
 ) {
   const home =
-    options.home ?? (process.env.PICO_BROWSER_PROFILES_DIR?.trim() || homedir())
+    options.home ??
+    (process.env.SMITH_BROWSER_PROFILES_DIR?.trim() || homedir())
   const platform = options.platform ?? process.platform
   const profiles: BrowserProfile[] = []
   if (platform === "darwin") {
@@ -609,7 +610,7 @@ async function loadSqlite(): Promise<SqliteModule> {
 /** Read a copy of a database: the browser locks the file. */
 async function readCopy<T>(path: string, read: (db: Database) => T) {
   const sqlite = await loadSqlite()
-  const dir = await mkdtemp(join(tmpdir(), "pico-cookies-"))
+  const dir = await mkdtemp(join(tmpdir(), "smith-cookies-"))
   try {
     const copy = join(dir, "cookies.db")
     await copyFile(path, copy)

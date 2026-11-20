@@ -1,15 +1,15 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeftIcon } from "lucide-react"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
-import type { TreeNavigateOptions } from "@/features/pico/app-shell-dialog-types"
-import type { FlatTreeNode, TreeNode } from "@/lib/pico"
+import type { TreeNavigateOptions } from "@/features/smith/app-shell-dialog-types"
+import type { FlatTreeNode, TreeNode } from "@/lib/smith"
 import type {
   NavigateAgentTreeResponse,
   AgentTreeResponse,
   SimpleOkResponse,
-} from "@/lib/pico/api"
+} from "@/lib/smith/api"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -30,17 +30,17 @@ import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
 import {
   appShortcut,
   formatShortcutLabel,
   matchesShortcutEvent,
-} from "@/features/pico/keyboard-shortcuts"
-import { picoQueryKeys } from "@/features/pico/query-keys"
+} from "@/features/smith/keyboard-shortcuts"
+import { smithQueryKeys } from "@/features/smith/query-keys"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { buildTree, flattenTree } from "@/lib/pico"
+import { buildTree, flattenTree } from "@/lib/smith"
 import { cn } from "@/lib/utils"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 import { settle } from "@/lib/settle"
 
 type AgentTreeWireData = Extract<AgentTreeResponse, { ok: true }>
@@ -2325,7 +2325,7 @@ export function AppShellTreeDialogController({
   const [selectedTreeNodeLabel, setSelectedTreeNodeLabel] = React.useState("")
   const openRef = React.useRef(open)
   const queryClient = useQueryClient()
-  const queryKey = picoQueryKeys.agentTree(viewerContextId, agentScopeKey)
+  const queryKey = smithQueryKeys.agentTree(viewerContextId, agentScopeKey)
 
   const setOpenState = (nextOpen: boolean) => {
     openRef.current = nextOpen

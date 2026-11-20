@@ -25,8 +25,8 @@ function mtime(path: string) {
 }
 
 /**
- * The bundle of this program (`server/dist/pico-server.mjs`) and the package
- * root above it: `apps/pico` in the repository, the package in an install.
+ * The bundle of this program (`server/dist/smith-server.mjs`) and the package
+ * root above it: `apps/smith` in the repository, the package in an install.
  */
 const script = fileURLToPath(import.meta.url)
 const packageFile = resolve(dirname(script), "..", "..", "package.json")

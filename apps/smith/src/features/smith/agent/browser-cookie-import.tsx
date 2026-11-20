@@ -28,24 +28,24 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
-import { emitPicoEvent, usePicoEvent } from "@/features/pico/agent/events"
-import { errorText } from "@/features/pico/agent/shared"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { emitSmithEvent, useSmithEvent } from "@/features/smith/agent/events"
+import { errorText } from "@/features/smith/agent/shared"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
 import {
   useMachineFeature,
   useMachineReadOnly,
-} from "@/features/pico/machine-store"
+} from "@/features/smith/machine-store"
 import {
   registerSettingsPage,
   SettingsListPage,
   type SettingsPageProps,
-} from "@/features/pico/settings-pages"
-import { useMachineId } from "@/lib/pico/machine-context"
+} from "@/features/smith/settings-pages"
+import { useMachineId } from "@/lib/smith/machine-context"
 import {
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
-} from "@/lib/pico/storage"
-import { toast } from "@/lib/pico/toast"
+} from "@/lib/smith/storage"
+import { toast } from "@/lib/smith/toast"
 import { cn } from "@/lib/utils"
 
 export const COOKIE_IMPORT_FEATURE = "browser-cookie-import"
@@ -78,7 +78,7 @@ type ImportStatus = {
   importedAt?: string
 }
 
-const statusKey = (machineId: string) => ["pico", "browser-cookies", machineId]
+const statusKey = (machineId: string) => ["smith", "browser-cookies", machineId]
 
 function cookiesUrl(machineId: string, path = "") {
   return buildRequestUrl(`/api/browser/cookies${path}`, {
@@ -109,7 +109,7 @@ export function useCookieImportStatus(enabled = true) {
 
 /** Open the import dialog of a machine (its shell mounts the dialog). */
 export function openCookieImport(machineId: string) {
-  emitPicoEvent("pico:open-cookie-import", { machineId })
+  emitSmithEvent("smith:open-cookie-import", { machineId })
 }
 
 // --- Browser icons ----------------------------------------------------------
@@ -444,7 +444,7 @@ function CookieImportDialog({
   const [selected, setSelected] = React.useState<Set<string>>(new Set())
 
   const profiles = useQuery({
-    queryKey: ["pico", "browser-cookie-profiles", machineId],
+    queryKey: ["smith", "browser-cookie-profiles", machineId],
     queryFn: () =>
       fetchJson<{ ok: true; profiles: Array<BrowserProfile> }>(
         cookiesUrl(machineId, "/profiles")
@@ -523,13 +523,13 @@ function CookieImportDialog({
 }
 
 /**
- * Mounted once in each machine's shell; opens on `pico:open-cookie-import`
+ * Mounted once in each machine's shell; opens on `smith:open-cookie-import`
  * for its machine.
  */
 export function CookieImportDialogController() {
   const machineId = useMachineId()
   const [open, setOpen] = React.useState(false)
-  usePicoEvent("pico:open-cookie-import", (detail) => {
+  useSmithEvent("smith:open-cookie-import", (detail) => {
     if (detail.machineId === machineId) setOpen(true)
   })
   return open ? <CookieImportDialog onOpenChange={setOpen} /> : null
@@ -538,7 +538,7 @@ export function CookieImportDialogController() {
 // --- The card -----------------------------------------------------------------
 
 function dismissedKey(machineId: string) {
-  return `pico-cookie-import-dismissed:${machineId}`
+  return `smith-cookie-import-dismissed:${machineId}`
 }
 
 /** Machines where the user chose "Not now" in this page. */

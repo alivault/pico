@@ -18,7 +18,7 @@ import {
 import { PreviewProxy } from "../src/services/preview-proxy.ts"
 
 const noMachines = { get: () => undefined } as unknown as MachineManager
-const TAG = `<script data-pico-preview>${PREVIEW_BACKGROUND_SCRIPT}</script>`
+const TAG = `<script data-smith-preview>${PREVIEW_BACKGROUND_SCRIPT}</script>`
 const HASH = `'sha256-${createHash("sha256").update(PREVIEW_BACKGROUND_SCRIPT).digest("base64")}'`
 
 async function listen(server: Server) {
@@ -217,7 +217,7 @@ void test("the preview adds the script hash to the page's policy", async () => {
       response.headers.get("content-security-policy"),
       `default-src 'self'; script-src 'self' 'nonce-abc' ${HASH}`
     )
-    assert.match(await response.text(), /data-pico-preview/)
+    assert.match(await response.text(), /data-smith-preview/)
   })
 })
 
@@ -237,11 +237,11 @@ void test("the preview sends other replies as they are", async () => {
     const fragment = await fetch(`${origin}/plain`, {
       headers: { "sec-fetch-dest": "empty" },
     })
-    assert.doesNotMatch(await fragment.text(), /data-pico-preview/)
+    assert.doesNotMatch(await fragment.text(), /data-smith-preview/)
     const frame = await fetch(`${origin}/plain`, {
       headers: { "sec-fetch-dest": "iframe" },
     })
-    assert.match(await frame.text(), /data-pico-preview/)
+    assert.match(await frame.text(), /data-smith-preview/)
 
     // Hot reload sockets still go through.
     const message = await new Promise<string>((resolve, reject) => {

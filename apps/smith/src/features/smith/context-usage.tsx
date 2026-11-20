@@ -1,15 +1,15 @@
 import { useQuery } from "@tanstack/react-query"
 
-import type { AgentState } from "@/lib/pico"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { picoQueryKeys } from "@/features/pico/query-keys"
+import type { AgentState } from "@/lib/smith"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { smithQueryKeys } from "@/features/smith/query-keys"
 import {
-  createPicoStore,
+  createSmithStore,
   useSelector,
-  type PicoStore,
-} from "@/features/pico/tanstack-store-utils"
+  type SmithStore,
+} from "@/features/smith/tanstack-store-utils"
 
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 import { cn } from "@/lib/utils"
 
 const contextUsageNumberFormatter = new Intl.NumberFormat("en-US")
@@ -99,10 +99,10 @@ const GENERIC_CONTEXT_USAGE_QUOTA_KEYS = new Set([
   "expiresAt",
 ])
 
-export type ComposerContextUsageStore = PicoStore<AgentState["contextUsage"]>
+export type ComposerContextUsageStore = SmithStore<AgentState["contextUsage"]>
 
 const emptyContextUsageStore: ComposerContextUsageStore =
-  createPicoStore<AgentState["contextUsage"]>(undefined)
+  createSmithStore<AgentState["contextUsage"]>(undefined)
 
 type ProviderUsageWindow = {
   label: string
@@ -672,7 +672,7 @@ export function useContextUsageView({
   const contextUsage = useComposerContextUsageSnapshot(contextUsageStore)
   const providerUsageQuery = useQuery({
     enabled: Boolean(modelProvider && viewerContextId),
-    queryKey: picoQueryKeys.providerUsage(
+    queryKey: smithQueryKeys.providerUsage(
       viewerContextId,
       activeAgentId || "",
       modelProvider || ""

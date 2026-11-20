@@ -25,7 +25,7 @@ import {
 
 /** How long a connect waits for a host to start (tests make it short). */
 function connectTimeout() {
-  return Number(process.env.PICO_PTY_HOST_CONNECT_MS) || 8000
+  return Number(process.env.SMITH_PTY_HOST_CONNECT_MS) || 8000
 }
 
 /**
@@ -64,7 +64,7 @@ export function startPtyHost(dataDir: string, script: string) {
   const node = [process.execPath, script, "--data-dir", dataDir]
   const run = systemdRun()
   const useScope =
-    process.env.PICO_PTY_HOST_SYSTEMD !== "0" &&
+    process.env.SMITH_PTY_HOST_SYSTEMD !== "0" &&
     run !== undefined &&
     inServiceCgroup()
   const hash = createHash("sha256").update(dataDir).digest("hex").slice(0, 8)
@@ -74,7 +74,7 @@ export function startPtyHost(dataDir: string, script: string) {
         "--user",
         "--scope",
         "--quiet",
-        `--unit=pico-pty-host-${hash}-${Date.now().toString(36)}`,
+        `--unit=smith-pty-host-${hash}-${Date.now().toString(36)}`,
         "--",
         ...node,
       ]
@@ -277,7 +277,7 @@ export class PtyHostClient {
   send(request: HostRequest) {
     void this.request(request).catch((error: unknown) => {
       if (!this.#closing)
-        console.warn(`[pico] pty-host ${request.type} failed:`, error)
+        console.warn(`[smith] pty-host ${request.type} failed:`, error)
     })
   }
 

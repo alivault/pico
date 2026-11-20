@@ -1,6 +1,6 @@
 import * as React from "react"
 
-import { ImageLightbox } from "@/features/pico/image-lightbox"
+import { ImageLightbox } from "@/features/smith/image-lightbox"
 import { cn } from "@/lib/utils"
 
 /** Images that the file viewer shows as images. */

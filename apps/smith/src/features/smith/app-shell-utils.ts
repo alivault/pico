@@ -7,21 +7,21 @@ import {
   type ConversationItem,
   type PromptImage,
   type AgentState,
-} from "@/lib/pico"
-import { isApiErrorResponse } from "@/lib/pico/api"
+} from "@/lib/smith"
+import { isApiErrorResponse } from "@/lib/smith/api"
 import {
   assertMachineWritable,
   hubUrl,
   isUnaddressedServerPath,
   MachineOfflineError,
   machineApiUrl,
-} from "@/lib/pico/machine"
+} from "@/lib/smith/machine"
 import {
   checkServerConnection,
   isGatewayFailure,
   markServerOnline,
   ServerUnreachableError,
-} from "@/lib/pico/server-connection"
+} from "@/lib/smith/server-connection"
 
 /** The hub's answer when a machine is not online and has no offline copy. */
 function offlineMachineLabel(status: number, data: unknown) {

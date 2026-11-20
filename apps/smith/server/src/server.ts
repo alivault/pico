@@ -1,5 +1,5 @@
 /**
- * The Pico server: the durable runtime, the API, the web client, and the
+ * The Smith server: the durable runtime, the API, the web client, and the
  * terminal WebSocket, on one HTTP port.
  */
 import { createServer, type IncomingMessage, type Server } from "node:http"
@@ -66,7 +66,7 @@ import { SearchIndex } from "./services/search-index.ts"
 import { addMcpRoutes } from "./control/mcp.ts"
 import { isUpdateChannel, Updater } from "./services/self-update.ts"
 
-export type PicoServer = {
+export type SmithServer = {
   readonly server: Server
   readonly runtime: Runtime
   readonly agents: Agents
@@ -82,7 +82,7 @@ export async function startServer(options: {
   paths: ServerPaths
   host: string
   port: number
-  /** `pico-server stop` asked this server to drain and stop. */
+  /** `smith-server stop` asked this server to drain and stop. */
   onShutdownRequest?: () => void
   /**
    * A client asked for a restart: stop at once (without a wait for active
@@ -96,7 +96,7 @@ export async function startServer(options: {
    * survive a restart. Without it, they run in this process.
    */
   ptyHost?: { script: string }
-}): Promise<PicoServer> {
+}): Promise<SmithServer> {
   const security = new Security(options.host)
   const host = new HostBridge()
   const runtime = await openRuntime(options.paths, host)
@@ -123,7 +123,7 @@ export async function startServer(options: {
       )
       return 0
     })
-    if (kept) console.log(`[pico] the pty-host kept ${kept} terminal(s)`)
+    if (kept) console.log(`[smith] the pty-host kept ${kept} terminal(s)`)
   }
   const notifier = new Notifier(
     options.paths.dataDir,
@@ -174,8 +174,8 @@ export async function startServer(options: {
         {
           title:
             payload.outcome === "error"
-              ? `Pico (${machine.label}): turn failed`
-              : `Pico (${machine.label}): turn finished`,
+              ? `Smith (${machine.label}): turn failed`
+              : `Smith (${machine.label}): turn finished`,
           body: title,
           url: agentLink(id || undefined, machine.id),
           tag: `done-${machine.id}-${id}`,
@@ -189,8 +189,8 @@ export async function startServer(options: {
       void notifier.send(
         {
           title: job
-            ? `Pico (${machine.label}): ${job.title}`
-            : `Pico (${machine.label}): the agent asks a question`,
+            ? `Smith (${machine.label}): ${job.title}`
+            : `Smith (${machine.label}): the agent asks a question`,
           body: job ? `${job.body} · ${title}` : title,
           url: agentLink(id || undefined, machine.id),
           tag: `ask-${machine.id}-${id}`,
@@ -212,8 +212,8 @@ export async function startServer(options: {
       void notifier.send({
         title:
           payload.outcome === "error"
-            ? "Pico: turn failed"
-            : "Pico: turn finished",
+            ? "Smith: turn failed"
+            : "Smith: turn finished",
         body: typeof payload.title === "string" ? payload.title : "Agent",
         url: agentLink(payload.agentId),
         tag: `done-${String(payload.agentId)}`,
@@ -227,7 +227,7 @@ export async function startServer(options: {
         : "Agent"
       const job = jobNotice(payload)
       void notifier.send({
-        title: job ? `Pico: ${job.title}` : "Pico: the agent asks a question",
+        title: job ? `Smith: ${job.title}` : "Smith: the agent asks a question",
         body: job ? `${job.body} · ${title}` : title,
         url: agentLink(payload.agentId),
         tag: `ask-${id}`,
@@ -335,7 +335,7 @@ export async function startServer(options: {
       throw new ApiError(
         400,
         error instanceof TailscalePreviewError
-          ? `${message} Open Pico over plain HTTP, as http://localhost:${listeningPort} on this machine, to use the Preview.`
+          ? `${message} Open Smith over plain HTTP, as http://localhost:${listeningPort} on this machine, to use the Preview.`
           : message
       )
     }
@@ -402,7 +402,7 @@ export async function startServer(options: {
   router.post("/api/system/shutdown", (request) => {
     const remote = request.raw.socket.remoteAddress ?? ""
     if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(remote)) {
-      throw new ApiError(403, "Only a local client may stop Pico")
+      throw new ApiError(403, "Only a local client may stop Smith")
     }
     setImmediate(() => options.onShutdownRequest?.())
     return { ok: true }
@@ -410,7 +410,7 @@ export async function startServer(options: {
   router.post("/api/system/restart", () => {
     const onRestart = options.onRestartRequest
     if (!onRestart)
-      throw new ApiError(501, "This Pico server cannot restart itself")
+      throw new ApiError(501, "This Smith server cannot restart itself")
     if (updater.status().installing)
       throw new ApiError(
         409,
@@ -422,7 +422,7 @@ export async function startServer(options: {
     setImmediate(() => onRestart())
     return { ok: true }
   })
-  // Updates of Pico itself (services/self-update.ts).
+  // Updates of Smith itself (services/self-update.ts).
   router.get("/api/system/update", () => ({ ok: true, ...updater.status() }))
   router.post("/api/system/update/check", async () => {
     await updater.check().catch(() => undefined)

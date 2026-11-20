@@ -1,18 +1,18 @@
 /**
  * Registers the tool renderers, Agent panel sections, and agent settings
- * sections of Pico's own extensions. Import it once where they render.
+ * sections of Smith's own extensions. Import it once where they render.
  */
-import "@/features/pico/agent/agent-settings"
-import "@/features/pico/agent/ask"
-import "@/features/pico/agent/browser"
-import "@/features/pico/agent/browser-cookie-import"
-import "@/features/pico/agent/subagents"
-import "@/features/pico/agent/dev-tools"
-import "@/features/pico/agent/instructions"
-import "@/features/pico/agent/jobs"
-import "@/features/pico/agent/mcp-settings"
-import "@/features/pico/agent/profiles"
-import "@/features/pico/agent/scratch"
-import "@/features/pico/agent/timers"
-import "@/features/pico/agent/todo"
-import "@/features/pico/tool-renderers/show"
+import "@/features/smith/agent/agent-settings"
+import "@/features/smith/agent/ask"
+import "@/features/smith/agent/browser"
+import "@/features/smith/agent/browser-cookie-import"
+import "@/features/smith/agent/subagents"
+import "@/features/smith/agent/dev-tools"
+import "@/features/smith/agent/instructions"
+import "@/features/smith/agent/jobs"
+import "@/features/smith/agent/mcp-settings"
+import "@/features/smith/agent/profiles"
+import "@/features/smith/agent/scratch"
+import "@/features/smith/agent/timers"
+import "@/features/smith/agent/todo"
+import "@/features/smith/tool-renderers/show"

@@ -1,9 +1,9 @@
 import * as React from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { toast } from "@/lib/pico/toast"
-import { thinkingLabel } from "@/features/pico/model-label"
+import { toast } from "@/lib/smith/toast"
+import { thinkingLabel } from "@/features/smith/model-label"
 
-import type { AgentState } from "@/lib/pico"
+import type { AgentState } from "@/lib/smith"
 import type {
   CloneAgentResponse,
   DeleteAgentsResponse,
@@ -15,21 +15,21 @@ import type {
   AgentListEntry,
   AgentsEvent,
   ThinkingResponse,
-} from "@/lib/pico/api"
+} from "@/lib/smith/api"
 
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
 import {
   PINNED_AGENTS_STORAGE_KEY,
   machineLocalStorageSetItem,
   agentListEntryKey,
-} from "@/lib/pico"
-import { useMachineId } from "@/lib/pico/machine-context"
-import { sortSidebarAgents } from "@/features/pico/agent-order"
+} from "@/lib/smith"
+import { useMachineId } from "@/lib/smith/machine-context"
+import { sortSidebarAgents } from "@/features/smith/agent-order"
 import {
   archivedAgentsMessage,
   restoredAgentsMessage,
-} from "@/features/pico/archive-agents"
-import { picoQueryKeys } from "@/features/pico/query-keys"
+} from "@/features/smith/archive-agents"
+import { smithQueryKeys } from "@/features/smith/query-keys"
 import { settle } from "@/lib/settle"
 
 type RestoreAgentData = Extract<RestoreAgentResponse, { ok: true }>
@@ -665,7 +665,7 @@ export function useAppShellAgentMutations({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: ["pico", "project-agents-index", viewerContextId],
+        queryKey: ["smith", "project-agents-index", viewerContextId],
         refetchType: "active",
       })
     },
@@ -800,7 +800,7 @@ export function useAppShellAgentMutations({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: ["pico", "project-agents-index", viewerContextId],
+        queryKey: ["smith", "project-agents-index", viewerContextId],
         refetchType: "active",
       })
     },
@@ -985,7 +985,7 @@ export function useAppShellAgentMutations({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: ["pico", "project-agents-index", viewerContextId],
+        queryKey: ["smith", "project-agents-index", viewerContextId],
         refetchType: "active",
       })
     },
@@ -1025,11 +1025,11 @@ export function useAppShellAgentMutations({
     )
     await Promise.all([
       queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.archivedAgents(viewerContextId),
+        queryKey: smithQueryKeys.archivedAgents(viewerContextId),
       }),
       ...[...projects].map((project) =>
         queryClient.invalidateQueries({
-          queryKey: picoQueryKeys.projectAgentsIndex(viewerContextId, project),
+          queryKey: smithQueryKeys.projectAgentsIndex(viewerContextId, project),
         })
       ),
     ])

@@ -5,8 +5,8 @@ import { TitleTooltip } from "@/components/ui/tooltip"
 import {
   registerAgentSection,
   type AgentSectionProps,
-} from "@/features/pico/agent/agent-panel"
-import { TextDialog } from "@/features/pico/agent/shared"
+} from "@/features/smith/agent/agent-panel"
+import { TextDialog } from "@/features/smith/agent/shared"
 
 /** The context files (AGENTS.md) that the agent loads. */
 type Instructions = { cwd: string; files: Array<{ path: string }> }

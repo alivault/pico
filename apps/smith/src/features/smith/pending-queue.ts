@@ -1,4 +1,4 @@
-import type { PromptImage } from "@/lib/pico"
+import type { PromptImage } from "@/lib/smith"
 
 export type QueueLane = "steer" | "followUp"
 

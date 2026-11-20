@@ -4,16 +4,16 @@ import * as React from "react"
  * Small window events that connect parts of the client that do not share
  * state: the event stream, tool cards, the Agent panel, and the app shell.
  */
-export type PicoEventMap = {
+export type SmithEventMap = {
   /** An agent's Agent panel state changed on the server. */
-  "pico:agent-extensions": { agentId: string; kind?: string }
+  "smith:agent-extensions": { agentId: string; kind?: string }
   /** Select an agent, for example a subagent. */
-  "pico:open-agent": { agentId: string }
+  "smith:open-agent": { agentId: string }
   /**
    * An agent started or opened a dev server: the Preview can show it. The
    * address is saved already; the shell of the machine may open the tab.
    */
-  "pico:preview-available": {
+  "smith:preview-available": {
     machineId: string
     agentId: string
     cwd: string
@@ -23,36 +23,36 @@ export type PicoEventMap = {
     open?: boolean
   }
   /** Show a right sidebar tab. */
-  "pico:open-sidebar-tab": { tab: "agent" | "review" | "browser" }
+  "smith:open-sidebar-tab": { tab: "agent" | "review" | "browser" }
   /** Show a background job in the terminal panel. */
-  "pico:open-job-terminal": { jobId: string }
+  "smith:open-job-terminal": { jobId: string }
   /** Another device changed the shared sidebar layout in local storage. */
-  "pico:sidebar-state": {
+  "smith:sidebar-state": {
     machineId: string
     changed: Array<"projects" | "pinnedAgentKeys" | "collapsedProjects">
   }
   /** Open a page of agent settings in the settings dialog. */
-  "pico:open-agent-settings": { page?: string }
+  "smith:open-agent-settings": { page?: string }
   /** Collapse or expand all project groups of a machine in the sidebar. */
-  "pico:collapse-projects": { machineId: string; collapsed: boolean }
+  "smith:collapse-projects": { machineId: string; collapsed: boolean }
   /** Open the machines dialog. */
-  "pico:open-machines": Record<string, never>
+  "smith:open-machines": Record<string, never>
   /** Ask to remove a machine from the hub. */
-  "pico:remove-machine": { machineId: string }
+  "smith:remove-machine": { machineId: string }
   /** Open the dialog that imports cookies from the user's browser. */
-  "pico:open-cookie-import": { machineId: string }
+  "smith:open-cookie-import": { machineId: string }
   /** Open the resources dialog of the shown machine. */
-  "pico:open-resources": Record<string, never>
+  "smith:open-resources": Record<string, never>
   /**
    * Open the archived agents dialog of the shown machine. With `jobs`, it
    * shows only agents with running jobs; with `project`, only that project.
    */
-  "pico:open-archived-agents": { project?: string; jobs?: boolean }
+  "smith:open-archived-agents": { project?: string; jobs?: boolean }
 }
 
-export function emitPicoEvent<K extends keyof PicoEventMap>(
+export function emitSmithEvent<K extends keyof SmithEventMap>(
   name: K,
-  detail: PicoEventMap[K]
+  detail: SmithEventMap[K]
 ) {
   if (typeof window === "undefined") return
   window.dispatchEvent(new CustomEvent(name, { detail }))
@@ -70,7 +70,7 @@ const pendingJobTerminals: Array<{ jobId: string; agentId?: string }> = []
 export function openJobTerminal(jobId: string, agentId?: string) {
   if (!pendingJobTerminals.some((entry) => entry.jobId === jobId))
     pendingJobTerminals.push({ jobId, ...(agentId ? { agentId } : {}) })
-  emitPicoEvent("pico:open-job-terminal", { jobId })
+  emitSmithEvent("smith:open-job-terminal", { jobId })
 }
 
 /** The queued jobs for the panel of an agent. Others stay in the queue. */
@@ -85,14 +85,14 @@ export function takePendingJobTerminals(agentId: string | undefined) {
   return taken
 }
 
-export function usePicoEvent<K extends keyof PicoEventMap>(
+export function useSmithEvent<K extends keyof SmithEventMap>(
   name: K,
-  handler: (detail: PicoEventMap[K]) => void
+  handler: (detail: SmithEventMap[K]) => void
 ) {
   const onEvent = React.useEffectEvent(handler)
   React.useEffect(() => {
     const listener = (event: Event) => {
-      onEvent((event as CustomEvent<PicoEventMap[K]>).detail)
+      onEvent((event as CustomEvent<SmithEventMap[K]>).detail)
     }
     window.addEventListener(name, listener)
     return () => window.removeEventListener(name, listener)

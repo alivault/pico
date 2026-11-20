@@ -1,5 +1,5 @@
-// Types of the pi-web-access modules Pico uses. The package ships TypeScript
-// sources that do not type-check under Pico's settings; esbuild bundles them.
+// Types of the pi-web-access modules Smith uses. The package ships TypeScript
+// sources that do not type-check under Smith's settings; esbuild bundles them.
 export type WebToolContent =
   | { type: "text"; text: string }
   | { type: "image"; data: string; mimeType: string }

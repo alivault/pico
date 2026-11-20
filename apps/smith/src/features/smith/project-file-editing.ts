@@ -5,7 +5,7 @@
 import * as React from "react"
 import { useQueryClient } from "@tanstack/react-query"
 
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
 import {
   endProjectFileEdit,
   getProjectFileEdit,
@@ -14,14 +14,14 @@ import {
   setProjectFileDraft,
   startProjectFileEdit,
   useProjectFileEdit,
-} from "@/features/pico/project-file-edits"
-import { picoQueryKeys } from "@/features/pico/query-keys"
-import { getErrorMessage } from "@/features/pico/right-sidebar-shared"
+} from "@/features/smith/project-file-edits"
+import { smithQueryKeys } from "@/features/smith/query-keys"
+import { getErrorMessage } from "@/features/smith/right-sidebar-shared"
 import type {
   ProjectFileReadResponse,
   ProjectFileWriteResponse,
-} from "@/lib/pico/api"
-import { toast } from "@/lib/pico/toast"
+} from "@/lib/smith/api"
+import { toast } from "@/lib/smith/toast"
 import { settle } from "@/lib/settle"
 
 type ProjectFileReadData = Extract<ProjectFileReadResponse, { ok: true }>
@@ -140,7 +140,7 @@ export function useProjectFileEditing({
       false
     )
     queryClient.setQueryData<ProjectFileReadData>(
-      picoQueryKeys.projectFileRead(viewerContextId, cwd, path),
+      smithQueryKeys.projectFileRead(viewerContextId, cwd, path),
       (old) => (old ? { ...old, content, version: result.version } : old)
     )
   }

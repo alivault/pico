@@ -8,21 +8,21 @@ import {
 } from "@/components/ui/field"
 import { WandSparklesIcon } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import {
   appShortcut,
   formatShortcutLabel,
   matchesShortcutEvent,
-} from "@/features/pico/keyboard-shortcuts"
-import type { ForkMessage } from "@/features/pico/app-shell-dialog-types"
+} from "@/features/smith/keyboard-shortcuts"
+import type { ForkMessage } from "@/features/smith/app-shell-dialog-types"
 import type {
   DeleteOldProjectAgentsResponse,
   ForkAgentResponse,
   ForkableMessagesResponse,
   GenerateAgentNameResponse,
   AgentListEntry,
-} from "@/lib/pico/api"
+} from "@/lib/smith/api"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -53,11 +53,11 @@ import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
 import { ShortcutButton, ShortcutFooter } from "@/components/ui/shortcut-footer"
 import { Spinner } from "@/components/ui/spinner"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { agentTitle } from "@/features/pico/archive-agents"
-import { picoQueryKeys } from "@/features/pico/query-keys"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { agentTitle } from "@/features/smith/archive-agents"
+import { smithQueryKeys } from "@/features/smith/query-keys"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 import { settle } from "@/lib/settle"
 
 type ForkableMessagesData = Extract<ForkableMessagesResponse, { ok: true }>
@@ -483,7 +483,7 @@ function DeleteAgentsDialog({
                   : `${worktreeTargets.length} worktrees`}
               </FieldLabel>
               <FieldDescription>
-                This cannot be undone. Pico removes a worktree only when it has
+                This cannot be undone. Smith removes a worktree only when it has
                 no uncommitted changes. The branch stays.
               </FieldDescription>
             </FieldContent>
@@ -759,7 +759,7 @@ export function DeleteOldProjectAgentsDialogController({
     onSuccess: async (_response, dryRun) => {
       if (dryRun) return
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.projectAgentsIndex(viewerContextId, project),
+        queryKey: smithQueryKeys.projectAgentsIndex(viewerContextId, project),
       })
     },
   })
@@ -789,7 +789,7 @@ export function DeleteOldProjectAgentsDialogController({
     const result = settled.value
     setPreview(result)
     await queryClient.invalidateQueries({
-      queryKey: picoQueryKeys.projectAgentsIndex(viewerContextId, project),
+      queryKey: smithQueryKeys.projectAgentsIndex(viewerContextId, project),
     })
     toast.success(
       `Archived ${result.deletedAgentIds.length} old agent${
@@ -1084,7 +1084,7 @@ export function ForkAgentDialogController({
   const [open, setOpen] = React.useState(false)
   const openRef = React.useRef(open)
   const queryClient = useQueryClient()
-  const queryKey = picoQueryKeys.forkableMessages(
+  const queryKey = smithQueryKeys.forkableMessages(
     viewerContextId,
     agentScopeKey
   )

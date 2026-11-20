@@ -3,7 +3,7 @@
  * each conversation.
  *
  * Cookies and local storage go to `<data>/browser/<conversation>.json` after
- * each action, and the open tabs to the conversation's `pico.browser`
+ * each action, and the open tabs to the conversation's `smith.browser`
  * document (see the browser extension). After a restart, a context is made
  * again from that file and the tabs open again at their URLs.
  *
@@ -73,7 +73,7 @@ function isFile(path: string) {
 }
 
 export function findChrome() {
-  const explicit = process.env.PICO_BROWSER_PATH?.trim()
+  const explicit = process.env.SMITH_BROWSER_PATH?.trim()
   if (explicit) return explicit
   const found = CHROME_PATHS.find(isFile)
   if (found) return found
@@ -149,13 +149,13 @@ const SNAPSHOT_SCRIPT = `(() => {
     }
     return (element.innerText || element.value || "").toString()
   }
-  document.querySelectorAll("[data-pico-ref]").forEach((element) => element.removeAttribute("data-pico-ref"))
+  document.querySelectorAll("[data-smith-ref]").forEach((element) => element.removeAttribute("data-smith-ref"))
   const lines = []
   let ref = 0
   for (const element of document.querySelectorAll(selector)) {
     if (!visible(element) || lines.length >= 300) continue
     ref += 1
-    element.setAttribute("data-pico-ref", String(ref))
+    element.setAttribute("data-smith-ref", String(ref))
     const tag = element.tagName.toLowerCase()
     const role = element.getAttribute("role") || (tag === "a" ? "link" : tag === "input" ? "input:" + (element.type || "text") : tag)
     const text = name(element).replace(/\\s+/g, " ").trim().slice(0, 80)
@@ -412,7 +412,7 @@ export class BrowserManager {
     const executablePath = findChrome()
     if (!executablePath)
       throw new Error(
-        "No Chrome, Chromium, Brave, or Edge found. Install Chrome, or set PICO_BROWSER_PATH."
+        "No Chrome, Chromium, Brave, or Edge found. Install Chrome, or set SMITH_BROWSER_PATH."
       )
     const { chromium } = await import("playwright-core")
     const headless = this.#headless()
@@ -482,7 +482,7 @@ export class BrowserManager {
         }
         created.active = tabs.at(-1)?.id
         // A page that a page opens (a popup, a link to a new window) gets a
-        // tab, and becomes the active tab. A tab that Pico opens is in the
+        // tab, and becomes the active tab. A tab that Smith opens is in the
         // map before this runs.
         context.on("page", (page) => {
           setTimeout(() => {

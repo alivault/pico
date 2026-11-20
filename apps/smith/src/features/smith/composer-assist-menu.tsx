@@ -1,14 +1,14 @@
 import * as React from "react"
 import { PaperclipIcon } from "lucide-react"
 
-import type { SlashCommandDescriptor } from "@/features/pico/composer-utils"
+import type { SlashCommandDescriptor } from "@/features/smith/composer-utils"
 import type {
   ComposerAssistSelectionStore,
   ComposerCompletionItem,
   ComposerSlashMenuState,
   ComposerVisibleCompletion,
-} from "@/features/pico/use-composer-assist"
-import { isBareFileReferenceQuery } from "@/features/pico/use-composer-assist"
+} from "@/features/smith/use-composer-assist"
+import { isBareFileReferenceQuery } from "@/features/smith/use-composer-assist"
 
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"

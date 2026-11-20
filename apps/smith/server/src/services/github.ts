@@ -1,7 +1,7 @@
 /**
  * GitHub issues of a project, through the `gh` command on this machine. `gh`
  * finds the repository from the git remote of `cwd` and uses its own login,
- * so Pico keeps no token.
+ * so Smith keeps no token.
  */
 import { execFile } from "node:child_process"
 

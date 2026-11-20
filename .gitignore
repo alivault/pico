@@ -5,7 +5,7 @@ dist-ssr
 *.local
 count.txt
 .env
-.pico-dev
+.smith-dev
 .tanstack
 .wrangler
 .output
@@ -20,9 +20,9 @@ todos.json
 xcuserdata/
 
 # Server build output
-apps/pico/server/dist
+apps/smith/server/dist
 
 # Copied into the npm package by prepack
-apps/pico/README.md
-apps/pico/LICENSE
+apps/smith/README.md
+apps/smith/LICENSE
 .vite

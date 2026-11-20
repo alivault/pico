@@ -1,22 +1,22 @@
 import * as React from "react"
 
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
 import {
   applyStoreAction,
-  createPicoStore,
+  createSmithStore,
   useSelector,
-  type PicoStore,
-} from "@/features/pico/tanstack-store-utils"
-import type { ProjectState } from "@/lib/pico"
-import { normalizeStoredProjectList, agentListEntryKey } from "@/lib/pico"
+  type SmithStore,
+} from "@/features/smith/tanstack-store-utils"
+import type { ProjectState } from "@/lib/smith"
+import { normalizeStoredProjectList, agentListEntryKey } from "@/lib/smith"
 import type {
   ProjectAgentsIndexSnapshot,
   ProjectAgentsIndexesResponse,
   AgentListEntry,
   AgentStatusEvent,
   AgentsEvent,
-} from "@/lib/pico/api"
-import { isInShownMachineShell } from "@/lib/pico/machine-context"
+} from "@/lib/smith/api"
+import { isInShownMachineShell } from "@/lib/smith/machine-context"
 
 export type ProjectAgentsIndexData = ProjectAgentsIndexSnapshot
 type ProjectAgentsIndexesData = Extract<
@@ -75,7 +75,7 @@ type AppShellSidebarStateUpdate =
       current: AppShellSidebarState
     ) => Partial<AppShellSidebarState> | AppShellSidebarState)
 
-export type AppShellSidebarStore = PicoStore<AppShellSidebarStoreSnapshot> & {
+export type AppShellSidebarStore = SmithStore<AppShellSidebarStoreSnapshot> & {
   getWorkspaceSnapshot: () => AppShellSidebarSnapshot
   getWorkspaceVersion: () => string
   setSidebarState: (update: AppShellSidebarStateUpdate) => void
@@ -867,7 +867,7 @@ function computeAppShellSidebarDerived(
 
 export function createAppShellSidebarStore(): AppShellSidebarStore {
   const initialState = createInitialSidebarState()
-  const store = createPicoStore<AppShellSidebarStoreSnapshot>({
+  const store = createSmithStore<AppShellSidebarStoreSnapshot>({
     state: initialState,
     derived: computeAppShellSidebarDerived(initialState),
     revision: 0,
@@ -1008,7 +1008,7 @@ export function createAppShellSidebarStore(): AppShellSidebarStore {
     },
   } satisfies Omit<
     AppShellSidebarStore,
-    keyof PicoStore<AppShellSidebarStoreSnapshot>
+    keyof SmithStore<AppShellSidebarStoreSnapshot>
   >)
 
   return store

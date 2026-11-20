@@ -1,4 +1,4 @@
-import type { FlatTreeNode, TreeNode } from "@/lib/pico"
+import type { FlatTreeNode, TreeNode } from "@/lib/smith"
 
 /**
  * Link the flat nodes of `/api/agent/tree` into a tree. The server sends a

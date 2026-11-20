@@ -7,10 +7,10 @@ import { spawn, spawnSync } from "node:child_process"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
-const host = process.env.PICO_DEV_HOST ?? "127.0.0.1"
-const port = process.env.PICO_DEV_PORT ?? "3141"
-const webPort = process.env.PICO_DEV_WEB_PORT ?? "3142"
-const dataDir = process.env.PICO_DEV_DATA_DIR ?? join(homedir(), ".pico")
+const host = process.env.SMITH_DEV_HOST ?? "127.0.0.1"
+const port = process.env.SMITH_DEV_PORT ?? "3141"
+const webPort = process.env.SMITH_DEV_WEB_PORT ?? "3142"
+const dataDir = process.env.SMITH_DEV_DATA_DIR ?? join(homedir(), ".smith")
 const webDir = join(process.cwd(), ".output/public")
 const localHost = ["0.0.0.0", "::"].includes(host) ? "127.0.0.1" : host
 const backendUrl = `http://${localHost}:${port}`
@@ -84,12 +84,12 @@ while (!stopping && Date.now() < deadline) {
   await new Promise((done) => setTimeout(done, 200))
 }
 if (!ready) {
-  if (!stopping) console.error("Pico backend did not become ready")
+  if (!stopping) console.error("Smith backend did not become ready")
   stop(1)
 } else {
   start("vp", ["dev", "--host", host, "--port", webPort], {
     detached: process.platform !== "win32",
     shell: process.platform === "win32",
-    env: { ...process.env, PICO_DEV_BACKEND_URL: backendUrl },
+    env: { ...process.env, SMITH_DEV_BACKEND_URL: backendUrl },
   })
 }

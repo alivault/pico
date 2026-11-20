@@ -2,9 +2,9 @@ import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
 import { FolderIcon } from "lucide-react"
 
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { viewerContextIdForSummaries } from "@/features/pico/machine-store"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { viewerContextIdForSummaries } from "@/features/smith/machine-store"
+import { useMachineId } from "@/lib/smith/machine-context"
 import { cn } from "@/lib/utils"
 
 type ProjectFaviconResponse = {
@@ -31,7 +31,7 @@ export function ProjectIcon({
   const contextId = viewerContextIdForSummaries()
   const [failedSrc, setFailedSrc] = React.useState("")
   const { data } = useQuery({
-    queryKey: ["pico", "project-favicon", machineId, project] as const,
+    queryKey: ["smith", "project-favicon", machineId, project] as const,
     queryFn: () =>
       fetchJson<ProjectFaviconResponse>(
         buildRequestUrl("/api/files/favicon", {

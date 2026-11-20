@@ -3,7 +3,7 @@ import * as React from "react"
 import { useMessageScroller } from "@/components/ui/message-scroller"
 
 // Scroll behavior comes from the shadcn MessageScroller primitive. This module
-// adds the Pico extras on top of it: jumps to the previous or next user message and extra
+// adds the Smith extras on top of it: jumps to the previous or next user message and extra
 // "the reader is busy here" signals that stop follow-output.
 
 export type MessageJumpStateSnapshot = {

@@ -8,7 +8,7 @@ import {
 } from "lucide-react"
 
 import { Spinner } from "@/components/ui/spinner"
-import { appliedThemeClassColorMode } from "@/lib/pico"
+import { appliedThemeClassColorMode } from "@/lib/smith"
 
 function sonnerThemeFromAppliedTheme(theme?: string): ToasterProps["theme"] {
   if (theme === "system") return "system"

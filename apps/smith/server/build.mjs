@@ -1,4 +1,4 @@
-// Bundles the Pico server into dist/pico-server.mjs, and its pty-host into
+// Bundles the Smith server into dist/smith-server.mjs, and its pty-host into
 // dist/pty-host.mjs.
 //
 // Direct dependencies stay external and load from node_modules at run time.
@@ -23,7 +23,7 @@ const options = {
   // The pty-host is a second program: it owns the terminals, so they
   // survive a server restart (see src/pty-host/main.ts).
   entryPoints: {
-    "pico-server": "src/main.ts",
+    "smith-server": "src/main.ts",
     "pty-host": "src/pty-host/main.ts",
   },
   outdir: "dist",
@@ -35,11 +35,11 @@ const options = {
   sourcemap: "linked",
   logLevel: "warning",
   external: [...external, ...external.map((name) => `${name}/*`)],
-  define: { PICO_VERSION: JSON.stringify(pkg.version) },
+  define: { SMITH_VERSION: JSON.stringify(pkg.version) },
   banner: {
     js: [
-      'import { createRequire as __picoCreateRequire } from "node:module";',
-      "const require = __picoCreateRequire(import.meta.url);",
+      'import { createRequire as __smithCreateRequire } from "node:module";',
+      "const require = __smithCreateRequire(import.meta.url);",
     ].join("\n"),
   },
 }
@@ -52,7 +52,7 @@ if (!watch) {
   const serverArgs = process.argv.includes("--")
     ? process.argv.slice(process.argv.indexOf("--") + 1)
     : ["serve"]
-  const serverFile = join(root, "dist/pico-server.mjs")
+  const serverFile = join(root, "dist/smith-server.mjs")
   /** The working directory of a process, or "" when it is not known. */
   const processCwd = (pid) => {
     try {
@@ -68,14 +68,14 @@ if (!watch) {
       return ""
     }
   }
-  /** Whether a Pico process runs this checkout's server build. */
+  /** Whether a Smith process runs this checkout's server build. */
   const runsThisBuild = (pid, command) =>
     command.includes(serverFile) ||
-    (/(^|\s)(\.\/)?dist\/pico-server\.mjs(\s|$)/.test(command) &&
+    (/(^|\s)(\.\/)?dist\/smith-server\.mjs(\s|$)/.test(command) &&
       processCwd(pid) === realpathSync(root))
   /**
-   * Another Pico already serves the data directory, so the new server did
-   * not start. When that Pico runs this checkout's build, ask it to restart
+   * Another Smith already serves the data directory, so the new server did
+   * not start. When that Smith runs this checkout's build, ask it to restart
    * at once, so it loads the new build. Else say that changes do not load.
    */
   const restartRunning = async (pid, url) => {
@@ -87,7 +87,7 @@ if (!watch) {
           }).stdout.trim()
     if (!runsThisBuild(pid, command)) {
       console.warn(
-        `[dev] Another Pico (pid ${pid}) runs at ${url} with other code${command ? `: ${command}` : ""}. Server changes do not load. Stop it (pico-app stop), then start pnpm dev again.`
+        `[dev] Another Smith (pid ${pid}) runs at ${url} with other code${command ? `: ${command}` : ""}. Server changes do not load. Stop it (smith stop), then start pnpm dev again.`
       )
       return
     }
@@ -100,11 +100,11 @@ if (!watch) {
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       console.log(
-        `[dev] Pico (pid ${pid}) at ${url} restarts with the new build.`
+        `[dev] Smith (pid ${pid}) at ${url} restarts with the new build.`
       )
     } catch (error) {
       console.warn(
-        `[dev] Could not restart Pico (pid ${pid}) at ${url}: ${error instanceof Error ? error.message : String(error)}. Run pico-app restart.`
+        `[dev] Could not restart Smith (pid ${pid}) at ${url}: ${error instanceof Error ? error.message : String(error)}. Run smith restart.`
       )
     }
   }
@@ -119,14 +119,14 @@ if (!watch) {
       }
       child = spawn(
         process.execPath,
-        ["--enable-source-maps", "dist/pico-server.mjs", ...serverArgs],
+        ["--enable-source-maps", "dist/smith-server.mjs", ...serverArgs],
         {
           cwd: root,
           stdio: ["inherit", "pipe", "inherit"],
-          env: { ...process.env, PICO_SUPERVISED: "1" },
+          env: { ...process.env, SMITH_SUPERVISED: "1" },
         }
       )
-      // The first output tells when another Pico already runs.
+      // The first output tells when another Smith already runs.
       let output = ""
       let scanning = true
       child.stdout.on("data", (chunk) => {
@@ -134,7 +134,9 @@ if (!watch) {
         if (!scanning) return
         output += chunk.toString()
         const running =
-          /Pico is already running \(pid (\d+)\) at (http:\/\/\S+)/.exec(output)
+          /Smith is already running \(pid (\d+)\) at (http:\/\/\S+)/.exec(
+            output
+          )
         if (running) void restartRunning(running[1], running[2])
         if (running || output.length > 4096) scanning = false
       })

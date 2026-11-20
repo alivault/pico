@@ -7,9 +7,9 @@ import {
   getGitChangedFileCount,
   gitStatusQueryOptions,
   selectGitStatusSummary,
-} from "@/features/pico/right-sidebar-git-data"
-import { normalizeCwd } from "@/features/pico/right-sidebar-shared"
-import { useMachineId } from "@/lib/pico/machine-context"
+} from "@/features/smith/right-sidebar-git-data"
+import { normalizeCwd } from "@/features/smith/right-sidebar-shared"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 function useGitChangedFileCount(viewerContextId: string, cwd?: string) {
   const machineId = useMachineId()

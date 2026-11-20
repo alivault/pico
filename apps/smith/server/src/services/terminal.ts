@@ -139,7 +139,7 @@ function clamp(
 }
 
 export function loginShell() {
-  const explicit = process.env.PICO_TERMINAL_SHELL?.trim()
+  const explicit = process.env.SMITH_TERMINAL_SHELL?.trim()
   if (explicit) return explicit
   try {
     const shell = userInfo().shell
@@ -170,7 +170,7 @@ function shellEnvironment() {
   }
   env.TERM = "xterm-256color"
   env.COLORTERM = "truecolor"
-  env.TERM_PROGRAM = "Pico"
+  env.TERM_PROGRAM = "Smith"
   return env
 }
 
@@ -214,7 +214,7 @@ export class Terminals {
   useLocalBackend(reason: string) {
     if (this.#backend.kind === "local") return
     console.warn(
-      `[pico] terminals run in the server and stop with it: ${reason}`
+      `[smith] terminals run in the server and stop with it: ${reason}`
     )
     this.#fallback = reason
     this.#backend.close()
@@ -651,7 +651,7 @@ export class Terminals {
       try {
         listener(event)
       } catch (error) {
-        console.error("[pico] terminal listener failed:", error)
+        console.error("[smith] terminal listener failed:", error)
       }
     }
   }

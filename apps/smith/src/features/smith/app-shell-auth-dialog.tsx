@@ -1,13 +1,13 @@
 import * as React from "react"
 import { ArrowLeftIcon } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import type {
   AuthMutationResponse,
   AuthProviderOption,
   AuthProvidersResponse,
-} from "@/lib/pico/api"
+} from "@/lib/smith/api"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -32,8 +32,8 @@ import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { ShortcutButton, ShortcutFooter } from "@/components/ui/shortcut-footer"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 export type AppShellAuthDialogHandle = {
   open: (
@@ -270,7 +270,7 @@ function useAppShellAuthDialogControllerView({
   }
 
   const providersQuery = useQuery({
-    queryKey: ["pico", "auth", "providers", viewerContextId, agentId],
+    queryKey: ["smith", "auth", "providers", viewerContextId, agentId],
     enabled: authDialogOpen && Boolean(viewerContextId),
     queryFn: async () => {
       return await fetchJson<AuthProvidersResponse>(
@@ -307,7 +307,7 @@ function useAppShellAuthDialogControllerView({
     onSuccess: async (_response, variables) => {
       toast.success(`Saved API key for ${variables.provider}`)
       await queryClient.invalidateQueries({
-        queryKey: ["pico", "auth", "providers", viewerContextId, agentId],
+        queryKey: ["smith", "auth", "providers", viewerContextId, agentId],
       })
       closeAllDialogs()
     },
@@ -339,7 +339,7 @@ function useAppShellAuthDialogControllerView({
         id: `auth:${variables.provider}`,
       })
       await queryClient.invalidateQueries({
-        queryKey: ["pico", "auth", "providers", viewerContextId, agentId],
+        queryKey: ["smith", "auth", "providers", viewerContextId, agentId],
       })
       closeAllDialogs()
     },
@@ -372,7 +372,7 @@ function useAppShellAuthDialogControllerView({
     onSuccess: async (_response, variables) => {
       toast.success(`Logged out of ${variables.provider}`)
       await queryClient.invalidateQueries({
-        queryKey: ["pico", "auth", "providers", viewerContextId, agentId],
+        queryKey: ["smith", "auth", "providers", viewerContextId, agentId],
       })
       closeAllDialogs()
     },

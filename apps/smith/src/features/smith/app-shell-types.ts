@@ -1,6 +1,6 @@
-import type { DesktopNotificationPermission } from "@/features/pico/agent-done-notifications"
-import type { AgentDoneEvent, AgentListEntry } from "@/lib/pico/api"
-import type { ArchiveAgentsResult } from "@/features/pico/archive-agents"
+import type { DesktopNotificationPermission } from "@/features/smith/agent-done-notifications"
+import type { AgentDoneEvent, AgentListEntry } from "@/lib/smith/api"
+import type { ArchiveAgentsResult } from "@/features/smith/archive-agents"
 
 export type SelectAgentNavigationOptions = {
   replace?: boolean

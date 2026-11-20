@@ -1,5 +1,5 @@
 /**
- * Updates of Pico itself: find the newest release on the chosen channel,
+ * Updates of Smith itself: find the newest release on the chosen channel,
  * and install it the way this copy was installed. The running server keeps
  * its code until a restart loads the new files (see build-info.ts).
  *
@@ -22,7 +22,7 @@ import { fileURLToPath } from "node:url"
 
 import { VERSION } from "../config.ts"
 
-export const PACKAGE_NAME = "@alivault/pico"
+export const PACKAGE_NAME = "@alivault/smith"
 export const UPDATE_CHANNELS = ["stable", "preview"] as const
 export type UpdateChannel = (typeof UPDATE_CHANNELS)[number]
 
@@ -78,19 +78,19 @@ export function compareVersions(left: string, right: string) {
 // The install of this copy
 
 /**
- * How this copy of Pico was installed:
+ * How this copy of Smith was installed:
  * - `npm`: `npm install --global` (with or without `--prefix`); an update
  *   installs into the same prefix.
  * - `source`: a checkout of the repository; update it with git.
  * - `other`: anything else, such as pnpm, npx, or a project dependency;
- *   Pico does not know how to update it, and shows a command instead.
+ *   Smith does not know how to update it, and shows a command instead.
  */
 export type Install =
   | { kind: "npm"; root: string; prefix: string }
   | { kind: "source"; root: string }
   | { kind: "other"; root: string }
 
-/** The package root: `apps/pico` in the repository, the package in an install. */
+/** The package root: `apps/smith` in the repository, the package in an install. */
 export function packageRoot() {
   const script = fileURLToPath(import.meta.url)
   return resolve(dirname(script), "..", "..")
@@ -111,7 +111,7 @@ export function detectInstall(
   const scope = dirname(real)
   const modules = dirname(scope)
   if (
-    basename(real) !== "pico" ||
+    basename(real) !== "smith" ||
     basename(scope) !== "@alivault" ||
     basename(modules) !== "node_modules" ||
     real.split(/[\\/]/).some((part) => part === ".pnpm" || part === "_npx")
@@ -163,7 +163,7 @@ export async function installVersion(
 ) {
   if (install.kind !== "npm")
     throw new Error(
-      `Pico cannot update this install by itself. Run: ${installCommand(install, version)}`
+      `Smith cannot update this install by itself. Run: ${installCommand(install, version)}`
     )
   const npm = npmCommand()
   const args = [
@@ -181,7 +181,7 @@ export async function installVersion(
       stdio: ["ignore", "pipe", "pipe"],
       // npm.cmd needs a shell on Windows.
       shell: process.platform === "win32",
-      // npm finds its own node next to it; keep the one that runs Pico first.
+      // npm finds its own node next to it; keep the one that runs Smith first.
       env: {
         ...process.env,
         PATH: `${dirname(process.execPath)}${process.platform === "win32" ? ";" : ":"}${process.env.PATH ?? ""}`,
@@ -274,7 +274,7 @@ export function writeUpdateConfig(
 
 function registry() {
   const value =
-    process.env.PICO_NPM_REGISTRY ??
+    process.env.SMITH_NPM_REGISTRY ??
     process.env.npm_config_registry ??
     "https://registry.npmjs.org"
   return value.replace(/\/+$/, "")
@@ -311,7 +311,7 @@ export function latestOnChannel(
     (value): value is string => Boolean(value && parse(value))
   )
   if (!candidates.length)
-    throw new Error(`The npm registry has no ${channel} version of Pico`)
+    throw new Error(`The npm registry has no ${channel} version of Smith`)
   return candidates.reduce((best, value) =>
     compareVersions(value, best) > 0 ? value : best
   )
@@ -332,7 +332,7 @@ export type UpdateStatus = {
   latest?: string
   /** `latest` is newer than the installed version. */
   available: boolean
-  /** A command that installs `latest`, for installs Pico cannot update. */
+  /** A command that installs `latest`, for installs Smith cannot update. */
   command?: string
   checkedAt?: string
   checking: boolean
@@ -363,11 +363,11 @@ export class Updater {
   /**
    * Check in the background: soon after the start, then every six hours.
    * A source checkout does not check (development and tests); neither does
-   * `PICO_UPDATE_CHECK=0`.
+   * `SMITH_UPDATE_CHECK=0`.
    */
   start() {
     if (this.#install.kind === "source") return
-    if (process.env.PICO_UPDATE_CHECK === "0") return
+    if (process.env.SMITH_UPDATE_CHECK === "0") return
     const tick = (delay: number) => {
       this.#timer = setTimeout(() => {
         if (readUpdateConfig(this.#dataDir).check)
@@ -452,8 +452,8 @@ export class Updater {
     if (this.#install.kind !== "npm")
       throw new Error(
         this.#install.kind === "source"
-          ? "This Pico runs from a source checkout. Update it with git."
-          : `Pico cannot update this install by itself. Run: ${installCommand(this.#install, this.#latest ?? "latest")}`
+          ? "This Smith runs from a source checkout. Update it with git."
+          : `Smith cannot update this install by itself. Run: ${installCommand(this.#install, this.#latest ?? "latest")}`
       )
     if (this.#installing) return
     this.#error = undefined

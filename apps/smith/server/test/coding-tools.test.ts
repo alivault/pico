@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { test } from "node:test"
 
-import { createPicoCodingTools } from "../src/core/coding-tools.ts"
+import { createSmithCodingTools } from "../src/core/coding-tools.ts"
 import { sandboxAvailable } from "../src/core/sandbox.ts"
 import type { HostBridge } from "../src/extensions/host.ts"
 import {
@@ -41,7 +41,7 @@ async function runBash(
   const harness = await openHarness(
     join(dir, `db-${Math.random()}.sqlite`),
     [
-      createPicoCodingTools({
+      createSmithCodingTools({
         shellPrefix: () => prefix,
         ...(host ? { host } : {}),
         ...(options.defaultTimeout === undefined

@@ -15,7 +15,7 @@ import {
   themeFamilyFixedMode,
   type ThemeColorMode,
   type ThemeFamily,
-} from "@/lib/pico"
+} from "@/lib/smith"
 
 type ThemeState = { themeFamily: ThemeFamily; colorMode: ThemeColorMode }
 
@@ -75,7 +75,7 @@ function subscribeTheme(listener: () => void) {
   }
 }
 
-export function usePicoTheme() {
+export function useSmithTheme() {
   const { setTheme, systemTheme } = useTheme()
   const { themeFamily, colorMode } = React.useSyncExternalStore(
     subscribeTheme,
@@ -90,7 +90,7 @@ export function usePicoTheme() {
 
     const appliedThemeMode = appliedThemeClassColorMode(appliedTheme)
     if (appliedThemeMode) {
-      document.documentElement.dataset.picoThemeMode = appliedThemeMode
+      document.documentElement.dataset.smithThemeMode = appliedThemeMode
     }
   }, [appliedTheme, setTheme])
 

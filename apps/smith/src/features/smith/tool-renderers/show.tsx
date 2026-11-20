@@ -4,24 +4,24 @@ import { FileDiff } from "@pierre/diffs/react"
 import { ExternalLinkIcon } from "lucide-react"
 
 import { Spinner } from "@/components/ui/spinner"
-import { ImageLightbox } from "@/features/pico/image-lightbox"
-import { MarkdownBlock } from "@/features/pico/markdown-renderer"
-import { usePicoDiffThemeOptions } from "@/features/pico/pico-diff-theme"
+import { ImageLightbox } from "@/features/smith/image-lightbox"
+import { MarkdownBlock } from "@/features/smith/markdown-renderer"
+import { useSmithDiffThemeOptions } from "@/features/smith/smith-diff-theme"
 import {
   registerToolRenderer,
   toolArgs,
   toolDetails,
   type ToolRendererProps,
-} from "@/features/pico/tool-renderers/registry"
-import { machineApiUrl } from "@/lib/pico/machine"
-import { useMachineId } from "@/lib/pico/machine-context"
+} from "@/features/smith/tool-renderers/registry"
+import { machineApiUrl } from "@/lib/smith/machine"
+import { useMachineId } from "@/lib/smith/machine-context"
 import { cn } from "@/lib/utils"
 
 const MermaidView = React.lazy(
-  () => import("@/features/pico/tool-renderers/mermaid-view")
+  () => import("@/features/smith/tool-renderers/mermaid-view")
 )
 const VegaView = React.lazy(
-  () => import("@/features/pico/tool-renderers/vega-view")
+  () => import("@/features/smith/tool-renderers/vega-view")
 )
 
 type ShowDetails = {
@@ -117,7 +117,7 @@ function HtmlView({ html, title }: { html: string; title?: string }) {
     <div className="space-y-1">
       <iframe
         title={title ?? "HTML preview"}
-        // Scripts run, but without the Pico origin: no same-origin access.
+        // Scripts run, but without the Smith origin: no same-origin access.
         sandbox="allow-scripts allow-forms allow-popups"
         srcDoc={html}
         className="h-96 w-full resize-y rounded-md border bg-white"
@@ -143,7 +143,7 @@ function parsePatchFileDiffs(patch: string) {
 }
 
 export function DiffView({ patch }: { patch: string }) {
-  const themeOptions = usePicoDiffThemeOptions()
+  const themeOptions = useSmithDiffThemeOptions()
   // An agent can send a patch with more than one file, or text that is not a
   // patch. PatchDiff throws on both, so parse here and show each file.
   const fileDiffs = parsePatchFileDiffs(patch)

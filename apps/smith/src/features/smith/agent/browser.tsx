@@ -6,21 +6,21 @@ import * as React from "react"
 import { GlobeIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { QuestionCardView } from "@/features/pico/agent/ask"
-import { emitPicoEvent } from "@/features/pico/agent/events"
+import { QuestionCardView } from "@/features/smith/agent/ask"
+import { emitSmithEvent } from "@/features/smith/agent/events"
 import {
   registerToolRenderer,
   toolArgs,
   toolDetails,
   type ToolRendererProps,
-} from "@/features/pico/tool-renderers/registry"
-import { ShowContent } from "@/features/pico/tool-renderers/show"
+} from "@/features/smith/tool-renderers/registry"
+import { ShowContent } from "@/features/smith/tool-renderers/show"
 
 /** The handoffs that opened the Browser tab, so each opens it one time. */
 const openedHandoffs = new Set<string>()
 
 function openBrowserTab() {
-  emitPicoEvent("pico:open-sidebar-tab", { tab: "browser" })
+  emitSmithEvent("smith:open-sidebar-tab", { tab: "browser" })
 }
 
 /**

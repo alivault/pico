@@ -176,7 +176,7 @@ void test(
   { skip: process.platform !== "linux" },
   async () => {
     const child = spawn("sleep", ["30"], {
-      env: { ...process.env, PICO_TOOL_CALL: "test-marker" },
+      env: { ...process.env, SMITH_TOOL_CALL: "test-marker" },
       stdio: "ignore",
     })
     try {

@@ -9,11 +9,11 @@ import { Terminals } from "../src/services/terminal.ts"
 void test("PTY runs a shell, scopes access, and replays output", async () => {
   const terminals = new Terminals()
   try {
-    const previousShell = process.env.PICO_TERMINAL_SHELL
-    process.env.PICO_TERMINAL_SHELL = "/bin/sh"
+    const previousShell = process.env.SMITH_TERMINAL_SHELL
+    process.env.SMITH_TERMINAL_SHELL = "/bin/sh"
     const terminal = await terminals.create("scope", tmpdir(), "test", 80, 24)
-    if (previousShell === undefined) delete process.env.PICO_TERMINAL_SHELL
-    else process.env.PICO_TERMINAL_SHELL = previousShell
+    if (previousShell === undefined) delete process.env.SMITH_TERMINAL_SHELL
+    else process.env.SMITH_TERMINAL_SHELL = previousShell
     assert.equal(
       (await terminals.create("scope", tmpdir(), "test")).id,
       terminal.id
@@ -34,11 +34,11 @@ void test("PTY runs a shell, scopes access, and replays output", async () => {
       (event) => {
         if (event.type === "output") {
           output += event.data
-          if (output.includes("pico-pty-ok")) done()
+          if (output.includes("smith-pty-ok")) done()
         }
       }
     )
-    terminals.write("scope", terminal.id, "printf 'pico-pty-%s\\n' ok\r", 1)
+    terminals.write("scope", terminal.id, "printf 'smith-pty-%s\\n' ok\r", 1)
     await Promise.race([
       received,
       new Promise<void>((_, reject) => {
@@ -49,7 +49,7 @@ void test("PTY runs a shell, scopes access, and replays output", async () => {
         timer.unref()
       }),
     ])
-    assert.ok(output.includes("pico-pty-ok"))
+    assert.ok(output.includes("smith-pty-ok"))
     assert.equal(
       terminals.write("scope", terminal.id, "echo duplicate\r", 1),
       1

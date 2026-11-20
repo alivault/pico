@@ -36,7 +36,7 @@ export type TodoState = {
 }
 
 export const TodoDoc = defineDoc<TodoState>({
-  kind: "pico.todo",
+  kind: "smith.todo",
   checkpointWhen: () => false,
   version: 1,
   scope: "conversation",
@@ -281,7 +281,7 @@ function toChange(args: Record<string, unknown>): TodoChange | undefined {
 
 registerState({
   key: "todo",
-  kinds: ["pico.todo"],
+  kinds: ["smith.todo"],
   async read(reader, conversationId, context) {
     const state = await reader.snapshot(TodoDoc, conversationId, context)
     return state && state.items.length > 0

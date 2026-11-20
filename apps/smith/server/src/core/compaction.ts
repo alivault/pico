@@ -3,7 +3,7 @@
  *
  * pi-durable starts a blocking compaction above `contextWindow - reserveTokens`,
  * and a background compaction `backgroundTokens` before that. It has no fixed
- * level, so Pico sets `reserveTokens` for each model to put the blocking
+ * level, so Smith sets `reserveTokens` for each model to put the blocking
  * threshold at `compactAtTokens`. Pi's own `compaction.modelOverrides` apply
  * first; a model whose window is smaller than the level keeps its own reserve.
  */

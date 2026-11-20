@@ -151,7 +151,7 @@ function parseStall(text: string): AgentNotice | null {
 }
 
 const JOB_EXIT_HEAD =
-  /^\[Job (finished|failed)\] (.+) exited with code (\S+) after (.+?)(, while the Pico server restarted)?\.$/
+  /^\[Job (finished|failed)\] (.+) exited with code (\S+) after (.+?)(, while the Smith server restarted)?\.$/
 const JOB_LINE = /^\(job (\S+): ([\s\S]*)\)$/
 const JOB_LOST_HEAD =
   /^\[Job lost\] (.+) stopped because (.+)\. Read its output with terminal output \(id (\S+)\)\.$/

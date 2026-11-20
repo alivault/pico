@@ -20,10 +20,10 @@ import { Terminals } from "../src/services/terminal.ts"
 import { ctx, openHarness, tempDir, TEST_MODEL } from "./support.ts"
 
 // Tests start real pty-host processes, one for each temp data directory.
-process.env.PICO_PTY_HOST_SYSTEMD = "0"
+process.env.SMITH_PTY_HOST_SYSTEMD = "0"
 // A plain shell, not the login shell of the user: fish 4, for example,
 // queries the terminal at start and waits for answers that no test sends.
-process.env.PICO_TERMINAL_SHELL ??= "/bin/sh"
+process.env.SMITH_TERMINAL_SHELL ??= "/bin/sh"
 const script = join(
   dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -442,8 +442,8 @@ void test("events that come with the spawn reply or before the attach backlog ar
 
 void test("with no server for long, the host ends idle shells, and then itself", async () => {
   const dataDir = await tempDir()
-  process.env.PICO_PTY_HOST_IDLE_MS = "1500"
-  process.env.PICO_PTY_HOST_IDLE_SHELL_MS = "1000"
+  process.env.SMITH_PTY_HOST_IDLE_MS = "1500"
+  process.env.SMITH_PTY_HOST_IDLE_SHELL_MS = "1000"
   const terminals = server(dataDir)
   try {
     await terminals.start()
@@ -454,8 +454,8 @@ void test("with no server for long, the host ends idle shells, and then itself",
     // No server: the shell ran nothing, so it ends, and the host goes.
     await eventually(() => !alive(pid), 15_000)
   } finally {
-    delete process.env.PICO_PTY_HOST_IDLE_MS
-    delete process.env.PICO_PTY_HOST_IDLE_SHELL_MS
+    delete process.env.SMITH_PTY_HOST_IDLE_MS
+    delete process.env.SMITH_PTY_HOST_IDLE_SHELL_MS
     terminals.shutdown()
     await stopHost(dataDir)
   }
@@ -463,7 +463,7 @@ void test("with no server for long, the host ends idle shells, and then itself",
 
 void test("when the host cannot start, terminals run in the server", async () => {
   const dataDir = await tempDir()
-  process.env.PICO_PTY_HOST_CONNECT_MS = "800"
+  process.env.SMITH_PTY_HOST_CONNECT_MS = "800"
   const terminals = new Terminals({
     dataDir,
     backend: new HostPtyBackend({
@@ -481,7 +481,7 @@ void test("when the host cannot start, terminals run in the server", async () =>
     assert.equal(stats.backend, "local")
     assert.equal(stats.fallback, "test")
   } finally {
-    delete process.env.PICO_PTY_HOST_CONNECT_MS
+    delete process.env.SMITH_PTY_HOST_CONNECT_MS
     terminals.shutdown()
   }
 })

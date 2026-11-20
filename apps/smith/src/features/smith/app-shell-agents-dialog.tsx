@@ -4,7 +4,7 @@ import {
   MessageCircleQuestionIcon,
   WandSparklesIcon,
 } from "lucide-react"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import type {
   ProjectAgentsIndexesResponse,
@@ -12,7 +12,7 @@ import type {
   GenerateAgentNameResponse,
   AgentListEntry,
   AgentStatusEvent,
-} from "@/lib/pico/api"
+} from "@/lib/smith/api"
 
 import {
   Command,
@@ -36,30 +36,33 @@ import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
 import { ShortcutButton, ShortcutFooter } from "@/components/ui/shortcut-footer"
 import { Spinner } from "@/components/ui/spinner"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
 import {
   appShortcut,
   formatShortcutLabel,
   matchesShortcutEvent,
-} from "@/features/pico/keyboard-shortcuts"
+} from "@/features/smith/keyboard-shortcuts"
 import {
   useMachines,
   type MachineInfo,
   type MachineAgentSummary,
-} from "@/features/pico/machine-store"
+} from "@/features/smith/machine-store"
 import {
   AgentMessageSearchGroup,
   useAgentMessageSearch,
   type MessageSearchItem,
-} from "@/features/pico/agent-message-search"
-import { isMachineAgentUnread, MachineStateDot } from "@/features/pico/machines"
+} from "@/features/smith/agent-message-search"
+import {
+  isMachineAgentUnread,
+  MachineStateDot,
+} from "@/features/smith/machines"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { agentListEntryKey } from "@/lib/pico"
-import { openAgent } from "@/lib/pico/machine"
+import { agentListEntryKey } from "@/lib/smith"
+import { openAgent } from "@/lib/smith/machine"
 import { cn } from "@/lib/utils"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 import { settle } from "@/lib/settle"
-import type { ArchiveAgentsResult } from "@/features/pico/archive-agents"
+import type { ArchiveAgentsResult } from "@/features/smith/archive-agents"
 
 type AgentsDialogScope = "current" | "all"
 type AgentsDialogStage = "browse" | "rename"
@@ -792,7 +795,7 @@ function useAppShellAgentsDialogView({
     onOpenChange(false)
     if (item.machineId === activeId)
       onSelectAgent(item.match.agentId, {
-        agentPath: `pico:${item.match.agentId}`,
+        agentPath: `smith:${item.match.agentId}`,
       })
     else openAgent({ machineId: item.machineId, agentId: item.match.agentId })
   }

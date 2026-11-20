@@ -1,6 +1,6 @@
 /**
- * `pico-app agent …` and `pico-app mcp`: control the agents of a running
- * Pico from a shell or a script.
+ * `smith agent …` and `smith mcp`: control the agents of a running
+ * Smith from a shell or a script.
  *
  *   agent list [--project DIR] [--machine M] [--json]
  *   agent start [DIR] GOAL [--name N] [--model M] [--thinking L] [--profile P]
@@ -14,7 +14,7 @@
  *   mcp      print the MCP URL and how to add it to Claude Code and Codex
  *
  * A GOAL or MESSAGE of `-` comes from stdin. The command finds the server in
- * `<data>/server.json`; `--url` (or `PICO_URL`) names another one, for
+ * `<data>/server.json`; `--url` (or `SMITH_URL`) names another one, for
  * example a hub on the tailnet. An ID such as `workbox:s12`, or `--machine`,
  * names an agent on another machine of the hub.
  *
@@ -49,7 +49,7 @@ const BOOLEAN_FLAGS = new Set([
   "help",
 ])
 
-const USAGE = `Usage: pico-app agent <command> [options]
+const USAGE = `Usage: smith agent <command> [options]
 
   list [--project DIR] [--machine M]       List agents, the most recently active first
   start [DIR] GOAL [options]               Start an agent in DIR (default: this directory)
@@ -66,12 +66,12 @@ const USAGE = `Usage: pico-app agent <command> [options]
   stop ID                                  Stop the current turn
 
   start and send take --wait and --timeout S. GOAL or MESSAGE "-" reads stdin.
-  --json prints JSON. --url URL (or PICO_URL) talks to another Pico server.
+  --json prints JSON. --url URL (or SMITH_URL) talks to another Smith server.
 
 Exit codes with --wait and wait: 0 done, 1 failed, stopped, or an error,
 2 the agent waits for the user, 3 it still works after --timeout.
 
-Add Pico to an MCP client with: pico-app mcp`
+Add Smith to an MCP client with: smith mcp`
 
 export const EXIT_CODES: Record<RunState, number> = {
   done: 0,
@@ -114,14 +114,14 @@ export function parseCommandArgs(argv: string[]) {
 }
 
 function readServerUrl(dataDir: string) {
-  const fromEnv = process.env.PICO_URL?.trim()
+  const fromEnv = process.env.SMITH_URL?.trim()
   if (fromEnv) return fromEnv.replace(/\/+$/, "")
   let state: { host?: string; port?: number }
   try {
     state = JSON.parse(readFileSync(serverPaths(dataDir).stateFile, "utf8"))
   } catch {
     throw new Error(
-      "Pico is not running. Start it with `pico-app serve --detach`."
+      "Smith is not running. Start it with `smith serve --detach`."
     )
   }
   const host =
@@ -139,7 +139,7 @@ async function readStdin() {
   return Buffer.concat(chunks).toString("utf8")
 }
 
-/** A JSON request to the Pico server at `base`. */
+/** A JSON request to the Smith server at `base`. */
 function requester(base: string) {
   return async (
     method: "GET" | "POST",
@@ -171,7 +171,7 @@ function requester(base: string) {
           : error instanceof Error
             ? error.message
             : String(error)
-      throw new Error(`Could not reach Pico at ${base}: ${reason}`)
+      throw new Error(`Could not reach Smith at ${base}: ${reason}`)
     }
     const data = (await response.json().catch(() => ({}))) as {
       ok?: boolean
@@ -195,7 +195,7 @@ async function resolveTarget(
   id?: string
 ) {
   const prefixed = id ? /^([^:\s]+):(.+)$/.exec(id) : null
-  const prefix = prefixed && prefixed[1] !== "pico" ? prefixed[1] : undefined
+  const prefix = prefixed && prefixed[1] !== "smith" ? prefixed[1] : undefined
   const wanted = machine ?? prefix
   let found: MachineEntry | undefined
   if (wanted && wanted !== LOCAL_MACHINE_ID) {
@@ -243,7 +243,7 @@ function print(json: boolean, value: unknown, text: string) {
   console.log(json ? JSON.stringify(value, null, 2) : text)
 }
 
-/** `pico-app agent …`. Returns the exit code. */
+/** `smith agent …`. Returns the exit code. */
 export async function agentCommand(
   argv: string[],
   dataDir: string
@@ -264,7 +264,7 @@ export async function agentCommand(
   const json = options.get("json") === true
   try {
     const urlOption = stringOption(options, "url")
-    const explicitUrl = Boolean(urlOption || process.env.PICO_URL?.trim())
+    const explicitUrl = Boolean(urlOption || process.env.SMITH_URL?.trim())
     const request = requester(
       urlOption?.replace(/\/+$/, "") ?? readServerUrl(dataDir)
     )
@@ -501,7 +501,7 @@ export async function agentCommand(
   }
 }
 
-/** `pico-app mcp`: the MCP URL, and how to add it to MCP clients. */
+/** `smith mcp`: the MCP URL, and how to add it to MCP clients. */
 export function mcpCommand(argv: string[], dataDir: string) {
   const { options } = parseCommandArgs(argv)
   let base: string
@@ -516,13 +516,13 @@ export function mcpCommand(argv: string[], dataDir: string) {
     console.log(JSON.stringify({ url }))
     return 0
   }
-  console.log(`Pico's MCP server: ${url}
+  console.log(`Smith's MCP server: ${url}
 
-Claude Code:  claude mcp add --transport http pico ${url}
-Codex:        codex mcp add pico --url ${url}
+Claude Code:  claude mcp add --transport http smith ${url}
+Codex:        codex mcp add smith --url ${url}
 Other clients: add a remote MCP server (Streamable HTTP) with this URL.
 
-The server has no sign-in, like the rest of Pico: anyone who can reach
-this address can use it. Keep Pico on loopback or on your tailnet.`)
+The server has no sign-in, like the rest of Smith: anyone who can reach
+this address can use it. Keep Smith on loopback or on your tailnet.`)
   return 0
 }

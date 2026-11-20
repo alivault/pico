@@ -1,5 +1,5 @@
 import * as React from "react"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import {
   AlertDialog,
@@ -21,15 +21,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { errorText } from "@/features/pico/agent/shared"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { errorText } from "@/features/smith/agent/shared"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
 import {
   agentTitle,
   archivedAgentsMessage,
   restoredAgentsMessage,
-} from "@/features/pico/archive-agents"
-import { viewerContextIdForSummaries } from "@/features/pico/machine-store"
-import type { AgentListEntry } from "@/lib/pico/api"
+} from "@/features/smith/archive-agents"
+import { viewerContextIdForSummaries } from "@/features/smith/machine-store"
+import type { AgentListEntry } from "@/lib/smith/api"
 import { settle } from "@/lib/settle"
 
 /**

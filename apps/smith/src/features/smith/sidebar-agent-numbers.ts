@@ -1,6 +1,6 @@
 import * as React from "react"
 
-import { isInShownMachineShell } from "@/lib/pico/machine-context"
+import { isInShownMachineShell } from "@/lib/smith/machine-context"
 
 import { agentNumberModifier } from "./keyboard-shortcuts"
 

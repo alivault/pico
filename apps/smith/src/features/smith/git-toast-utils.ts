@@ -1,6 +1,6 @@
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
-import type { GitActionResponse } from "@/lib/pico/api"
+import type { GitActionResponse } from "@/lib/smith/api"
 
 function formatPushedCommitMessages(messages: Array<string> | undefined) {
   const commitMessages = Array.isArray(messages)

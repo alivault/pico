@@ -1,9 +1,9 @@
 import * as React from "react"
 
-import type { AgentState } from "@/lib/pico"
-import type { AgentDoneEvent, AgentListEntry } from "@/lib/pico/api"
-import { getAgentTitle, agentListEntryKey } from "@/lib/pico"
-import { picoAgentScopeKey } from "@/features/pico/query-keys"
+import type { AgentState } from "@/lib/smith"
+import type { AgentDoneEvent, AgentListEntry } from "@/lib/smith/api"
+import { getAgentTitle, agentListEntryKey } from "@/lib/smith"
+import { smithAgentScopeKey } from "@/features/smith/query-keys"
 
 export function agentNotificationKey(agentLike: {
   agentFile?: string | undefined
@@ -69,7 +69,7 @@ export function agentScrollKey(agentState: {
   agentId?: string
   cwd?: string
 }) {
-  return picoAgentScopeKey(agentState)
+  return smithAgentScopeKey(agentState)
 }
 
 export function resolveNewAgentCwd(options: {

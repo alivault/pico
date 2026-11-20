@@ -8,18 +8,18 @@ import {
 } from "@pierre/diffs"
 
 import {
-  PICO_DIFF_SHIKI_THEMES,
-  PICO_SHIKI_VARIABLE_DEFAULTS,
+  SMITH_DIFF_SHIKI_THEMES,
+  SMITH_SHIKI_VARIABLE_DEFAULTS,
   appliedThemeClassColorMode,
   type ResolvedThemeMode,
-} from "@/lib/pico"
+} from "@/lib/smith"
 
-const PICO_DIFF_THEME_PAIR = {
-  light: PICO_DIFF_SHIKI_THEMES.light,
-  dark: PICO_DIFF_SHIKI_THEMES.dark,
+const SMITH_DIFF_THEME_PAIR = {
+  light: SMITH_DIFF_SHIKI_THEMES.light,
+  dark: SMITH_DIFF_SHIKI_THEMES.dark,
 } satisfies ThemesType
 
-const PICO_DIFF_COLOR_CSS = `
+const SMITH_DIFF_COLOR_CSS = `
 :host {
   --diffs-addition-color-override: var(--success);
   --diffs-deletion-color-override: var(--danger);
@@ -54,31 +54,31 @@ const PICO_DIFF_COLOR_CSS = `
 }
 `
 
-type PicoDiffThemeOptions = {
+type SmithDiffThemeOptions = {
   theme: ThemesType
   themeType: Exclude<ThemeTypes, "system">
   unsafeCSS: string
 }
 
-function registerPicoDiffTheme(name: string, type: ResolvedThemeMode) {
+function registerSmithDiffTheme(name: string, type: ResolvedThemeMode) {
   if (RegisteredCustomThemes.has(name)) return
 
   const theme = createCSSVariablesTheme({
     name,
     variablePrefix: "--diffs-",
-    variableDefaults: { ...PICO_SHIKI_VARIABLE_DEFAULTS },
+    variableDefaults: { ...SMITH_SHIKI_VARIABLE_DEFAULTS },
     fontStyle: false,
   })
 
   registerCustomTheme(name, () => Promise.resolve({ ...theme, type }))
 }
 
-function ensurePicoDiffThemes() {
-  registerPicoDiffTheme(PICO_DIFF_SHIKI_THEMES.light, "light")
-  registerPicoDiffTheme(PICO_DIFF_SHIKI_THEMES.dark, "dark")
+function ensureSmithDiffThemes() {
+  registerSmithDiffTheme(SMITH_DIFF_SHIKI_THEMES.light, "light")
+  registerSmithDiffTheme(SMITH_DIFF_SHIKI_THEMES.dark, "dark")
 }
 
-function resolvePicoDiffThemeType({
+function resolveSmithDiffThemeType({
   resolvedTheme,
   systemTheme,
   theme,
@@ -94,14 +94,14 @@ function resolvePicoDiffThemeType({
   )
 }
 
-ensurePicoDiffThemes()
+ensureSmithDiffThemes()
 
-export function usePicoDiffThemeOptions(): PicoDiffThemeOptions {
+export function useSmithDiffThemeOptions(): SmithDiffThemeOptions {
   const { resolvedTheme, systemTheme, theme } = useTheme()
 
   return {
-    theme: PICO_DIFF_THEME_PAIR,
-    themeType: resolvePicoDiffThemeType({ resolvedTheme, systemTheme, theme }),
-    unsafeCSS: PICO_DIFF_COLOR_CSS,
+    theme: SMITH_DIFF_THEME_PAIR,
+    themeType: resolveSmithDiffThemeType({ resolvedTheme, systemTheme, theme }),
+    unsafeCSS: SMITH_DIFF_COLOR_CSS,
   }
 }

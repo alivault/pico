@@ -7,7 +7,7 @@ import { SidebarState } from "../src/core/sidebar-state.ts"
 import { tempDir } from "./support.ts"
 
 void test("sidebar state saves changes and reloads them", async () => {
-  const file = join(await tempDir("pico-sidebar-"), "sidebar.json")
+  const file = join(await tempDir("smith-sidebar-"), "sidebar.json")
   const state = new SidebarState(file)
   assert.deepEqual(state.snapshot(), {
     projects: [],
@@ -40,7 +40,7 @@ void test("sidebar state saves changes and reloads them", async () => {
 })
 
 void test("sidebar merge keeps the shared order first", async () => {
-  const file = join(await tempDir("pico-sidebar-"), "sidebar.json")
+  const file = join(await tempDir("smith-sidebar-"), "sidebar.json")
   const state = new SidebarState(file)
   state.update({
     projects: ["/b", "/a"],
@@ -59,7 +59,7 @@ void test("sidebar merge keeps the shared order first", async () => {
 })
 
 void test("sidebar state keeps the stored field names in its file", async () => {
-  const file = join(await tempDir("pico-sidebar-"), "sidebar.json")
+  const file = join(await tempDir("smith-sidebar-"), "sidebar.json")
   writeFileSync(
     file,
     JSON.stringify({

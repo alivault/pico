@@ -1,5 +1,5 @@
 /**
- * Text for the MCP server and the `pico-app agent` command: agent lists and
+ * Text for the MCP server and the `smith agent` command: agent lists and
  * the results of runs.
  */
 import type {
@@ -71,7 +71,7 @@ export function formatWaitResult(
     case "failed":
       return `${head} failed.\n\n${result.answer ?? ""}`.trim()
     case "needs_input":
-      return `${head} waits for an answer from the user. Answer it in Pico, or send the answer as a steer message.`
+      return `${head} waits for an answer from the user. Answer it in Smith, or send the answer as a steer message.`
     case "waiting":
       return `${head} waits on ${result.waiting ?? "a job"}. It goes on when that ends.`
     case "working":

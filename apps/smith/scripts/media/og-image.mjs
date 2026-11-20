@@ -105,12 +105,12 @@ const html = `<!doctype html>
 </head>
 <body>
   <div class="text">
-    <div class="brand"><img src="${dataUrl("favicon.svg", "image/svg+xml")}" alt="">Pico</div>
+    <div class="brand"><img src="${dataUrl("favicon.svg", "image/svg+xml")}" alt="">Smith</div>
     <h1>A web workspace for your Pi coding agents.</h1>
     <p>Durable agents, subagents in Git worktrees, and terminals, on your own machine.</p>
   </div>
-  <div class="url">pico.aliabbas.net</div>
-  <div class="shot"><img src="${dataUrl("screenshots/pico-workspace.png", "image/png")}" alt=""></div>
+  <div class="url">smith.aliabbas.net</div>
+  <div class="shot"><img src="${dataUrl("screenshots/smith-workspace.png", "image/png")}" alt=""></div>
 </body>
 </html>`
 

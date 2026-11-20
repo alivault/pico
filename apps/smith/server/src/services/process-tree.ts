@@ -73,7 +73,7 @@ export function treeRss(table: Map<number, ProcessRow>, root: number) {
 }
 
 /**
- * The memory of the systemd scope of a process, when it is in one of Pico's
+ * The memory of the systemd scope of a process, when it is in one of Smith's
  * job scopes (Linux, cgroup v2); undefined otherwise.
  */
 export async function scopeMemory(pid: number) {
@@ -84,7 +84,7 @@ export async function scopeMemory(pid: number) {
       .split("\n")
       .find((line) => line.startsWith("0::"))
       ?.slice(3)
-    if (!cgroup || !/\/pico-job-[^/]+\.scope$/.test(cgroup)) return undefined
+    if (!cgroup || !/\/smith-job-[^/]+\.scope$/.test(cgroup)) return undefined
     const value = await readFile(
       `/sys/fs/cgroup${cgroup}/memory.current`,
       "utf8"

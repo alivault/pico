@@ -7,7 +7,7 @@ import { AppProviders } from "@/components/app-providers"
 
 const TANSTACK_DEVTOOLS_SETTINGS_KEY = "tanstack_devtools_settings"
 const TANSTACK_DEVTOOLS_DEFAULTS_STORAGE_KEY =
-  "pico-tanstack-devtools-defaults-v2"
+  "smith-tanstack-devtools-defaults-v2"
 const TANSTACK_DEVTOOLS_CONFIG = {
   position: "bottom-right",
   openHotkey: ["Control", "Shift", "`"],

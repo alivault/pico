@@ -143,7 +143,7 @@ export function bashSandboxed(
   return findProfile(name, current.settings().profiles)?.bash === "sandbox"
 }
 
-export function createPicoCodingTools(options: {
+export function createSmithCodingTools(options: {
   images?: ReadToolOptions["images"]
   shellPrefix: () => string | undefined
   host?: HostBridge
@@ -175,7 +175,7 @@ export function createPicoCodingTools(options: {
         await sandboxExecution(execution)
       }
       const marker = markers.get(api)
-      if (marker) execution.env.PICO_TOOL_CALL = marker
+      if (marker) execution.env.SMITH_TOOL_CALL = marker
     },
   })
   return defineExtension({

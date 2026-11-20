@@ -24,7 +24,7 @@ import {
   plainText,
 } from "../src/extensions/jobs.ts"
 import { createScratchpadExtension } from "../src/extensions/scratchpad.ts"
-import { parseAgentNotice } from "../../src/lib/pico/agent-notice.ts"
+import { parseAgentNotice } from "../../src/lib/smith/agent-notice.ts"
 import { Terminals } from "../src/services/terminal.ts"
 import {
   ctx,

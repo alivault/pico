@@ -51,13 +51,13 @@ export {
   machineLocalStorageGetItem,
   machineLocalStorageSetItem,
   agentListEntryKey,
-} from "@/lib/pico/storage"
-export type { StoredTerminalTabsState } from "@/lib/pico/storage"
+} from "@/lib/smith/storage"
+export type { StoredTerminalTabsState } from "@/lib/smith/storage"
 export {
   APPLIED_THEME_CLASSES,
-  PICO_CODE_SHIKI_THEME,
-  PICO_DIFF_SHIKI_THEMES,
-  PICO_SHIKI_VARIABLE_DEFAULTS,
+  SMITH_CODE_SHIKI_THEME,
+  SMITH_DIFF_SHIKI_THEMES,
+  SMITH_SHIKI_VARIABLE_DEFAULTS,
   THEME_COLOR_MODES,
   THEME_DEFINITIONS,
   THEME_FAMILIES,
@@ -71,13 +71,13 @@ export {
   themeFamilyKeywords,
   themeFamilyLabel,
   themeFamilySupportsColorMode,
-} from "@/lib/pico/themes"
+} from "@/lib/smith/themes"
 export type {
   AppliedThemeClass,
   ResolvedThemeMode,
   ThemeColorMode,
   ThemeFamily,
-} from "@/lib/pico/themes"
+} from "@/lib/smith/themes"
 export {
   buildItemsFromSync,
   createCompactionSummaryItem,
@@ -85,8 +85,8 @@ export {
   normalizePromptImage,
   previewUrlForImage,
   sameContextUsage,
-} from "@/lib/pico/sync"
-export { buildTree, flattenTree } from "@/lib/pico/tree"
+} from "@/lib/smith/sync"
+export { buildTree, flattenTree } from "@/lib/smith/tree"
 
 export const INITIAL_PROJECT_AGENT_RENDER_COUNT = 3
 export const PROJECT_AGENT_LOAD_MORE_COUNT = 3

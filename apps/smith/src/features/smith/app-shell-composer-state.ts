@@ -4,9 +4,9 @@ import {
   type PromptImage,
   type AgentState,
   type StreamingBehavior,
-} from "@/lib/pico"
-import type { GitCommitDiffMode } from "@/lib/pico/api"
-import type { PendingQueueSaveRow } from "@/features/pico/pending-queue"
+} from "@/lib/smith"
+import type { GitCommitDiffMode } from "@/lib/smith/api"
+import type { PendingQueueSaveRow } from "@/features/smith/pending-queue"
 
 export type PendingComposerMessage = {
   pendingId: string

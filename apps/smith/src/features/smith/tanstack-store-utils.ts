@@ -3,15 +3,15 @@ import type { Store } from "@tanstack/store"
 import { batch, createStore, shallow } from "@tanstack/store"
 import { useSelector } from "@tanstack/react-store"
 
-export type PicoStore<T> = Store<T>
+export type SmithStore<T> = Store<T>
 export type StoreCompare<T> = (left: T, right: T) => boolean
 
 const storeComparators = new WeakMap<object, StoreCompare<unknown>>()
 
-export function createPicoStore<T>(
+export function createSmithStore<T>(
   initialState: T,
   compare: StoreCompare<T> = Object.is
-): PicoStore<T> {
+): SmithStore<T> {
   const store = createStore(initialState)
   storeComparators.set(store, compare as StoreCompare<unknown>)
   return store
@@ -27,7 +27,7 @@ export function applyStoreAction<T>(
 }
 
 export function setStoreState<T>(
-  store: PicoStore<T>,
+  store: SmithStore<T>,
   action: React.SetStateAction<T>,
   compare?: StoreCompare<T>
 ) {
@@ -42,7 +42,7 @@ export function setStoreState<T>(
 }
 
 export function setStoreField<T extends object, K extends keyof T>(
-  store: PicoStore<T>,
+  store: SmithStore<T>,
   key: K,
   action: React.SetStateAction<T[K]>,
   compare: StoreCompare<T[K]> = Object.is

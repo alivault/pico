@@ -10,7 +10,7 @@ import {
   PlusIcon,
   XIcon,
 } from "lucide-react"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -24,20 +24,20 @@ import { TitleTooltip } from "@/components/ui/tooltip"
 import {
   registerAgentSection,
   type AgentSectionProps,
-} from "@/features/pico/agent/agent-panel"
+} from "@/features/smith/agent/agent-panel"
 import {
   agentExtensionsQueryKey,
   postAgentJson,
   useAgentExtensions,
   type AgentExtensionState,
-} from "@/features/pico/agent/agent-extensions"
-import { errorText, IconAction } from "@/features/pico/agent/shared"
+} from "@/features/smith/agent/agent-extensions"
+import { errorText, IconAction } from "@/features/smith/agent/shared"
 import {
   registerToolRenderer,
   toolDetails,
-} from "@/features/pico/tool-renderers/registry"
+} from "@/features/smith/tool-renderers/registry"
 import { cn } from "@/lib/utils"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 export type TodoStatus = "pending" | "active" | "done" | "blocked"
 export type TodoItem = {

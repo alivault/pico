@@ -1,11 +1,11 @@
 /**
- * Pico's MCP server, at `/mcp`: agents outside Pico (Claude Code, Codex, and
- * others) list, start, message, read, wait for, and stop Pico agents.
+ * Smith's MCP server, at `/mcp`: agents outside Smith (Claude Code, Codex, and
+ * others) list, start, message, read, wait for, and stop Smith agents.
  *
  * It speaks the Streamable HTTP transport without sessions: each POST
  * carries JSON-RPC messages and gets one JSON answer. There is no server
  * event stream, so GET is refused. Access is the same as for the rest of
- * Pico's API: the server checks the host and the origin (`security.ts`),
+ * Smith's API: the server checks the host and the origin (`security.ts`),
  * and the network (loopback or Tailscale) decides who can reach it.
  *
  * On a hub, the tools take a `machine`, or an ID such as `workbox:s12`, and
@@ -49,7 +49,7 @@ const DEFAULT_WAIT_SECONDS = 50
 const MAX_WAIT_SECONDS = 3600
 
 const INSTRUCTIONS = [
-  "Pico runs coding agents that keep working in the background, also when no client is open.",
+  "Smith runs coding agents that keep working in the background, also when no client is open.",
   "Start an agent with start_agent and a complete brief: it does not see your conversation. Each agent has an ID such as s12; an agent on another machine of the hub has an ID such as workbox:s12.",
   "send_message never interrupts: a busy agent gets the message after its current turn, unless steer is true.",
   "search_agents finds past work in the messages of all agents.",
@@ -74,7 +74,7 @@ class ToolError extends Error {}
 const MACHINE = {
   type: "string",
   description:
-    "Another machine of this Pico hub (label or ID). Without it, the tool works on the hub. An ID such as workbox:s12 also names the machine.",
+    "Another machine of this Smith hub (label or ID). Without it, the tool works on the hub. An ID such as workbox:s12 also names the machine.",
 }
 const ID = {
   type: "string",
@@ -93,7 +93,7 @@ const TOOLS = [
   {
     name: "list_machines",
     title: "List machines",
-    description: "List the machines of this Pico hub and their states.",
+    description: "List the machines of this Smith hub and their states.",
     inputSchema: { type: "object", properties: {} },
     annotations: { readOnlyHint: true },
   },
@@ -118,7 +118,7 @@ const TOOLS = [
     name: "start_agent",
     title: "Start an agent",
     description:
-      "Start a Pico agent that works on goal. It works in the background; the user can open it in Pico. Write goal as a complete brief.",
+      "Start a Smith agent that works on goal. It works in the background; the user can open it in Smith. Write goal as a complete brief.",
     inputSchema: {
       type: "object",
       properties: {
@@ -126,12 +126,12 @@ const TOOLS = [
         cwd: {
           type: "string",
           description:
-            "The directory to work in (absolute, or with ~). Default: the first project of Pico.",
+            "The directory to work in (absolute, or with ~). Default: the first project of Smith.",
         },
         name: { type: "string", description: "A short name" },
         model: {
           type: "string",
-          description: "provider/modelId, or a model ID. Default: Pico's.",
+          description: "provider/modelId, or a model ID. Default: Smith's.",
         },
         thinking: {
           type: "string",
@@ -188,7 +188,7 @@ const TOOLS = [
     name: "search_agents",
     title: "Search agents",
     description:
-      "Find past work: search the messages of all Pico agents, also archived ones. Returns the best agents, each with matching excerpts and their entry IDs. Read the messages around a hit with read_agent and entry.",
+      "Find past work: search the messages of all Smith agents, also archived ones. Returns the best agents, each with matching excerpts and their entry IDs. Read the messages around a hit with read_agent and entry.",
     inputSchema: {
       type: "object",
       properties: {
@@ -312,7 +312,8 @@ export function addMcpRoutes(
   const target = (args: Record<string, unknown>, id?: string) => {
     const machine = stringArg(args, "machine")
     const prefixed = id ? /^([^:\s]+):(.+)$/.exec(id) : null
-    const prefix = prefixed && prefixed[1] !== "pico" ? prefixed[1]! : undefined
+    const prefix =
+      prefixed && prefixed[1] !== "smith" ? prefixed[1]! : undefined
     const wanted = machine ?? prefix
     const local =
       !wanted ||
@@ -599,7 +600,7 @@ export function addMcpRoutes(
                 ? requested
                 : PROTOCOL_VERSIONS[0],
             capabilities: { tools: { listChanged: false } },
-            serverInfo: { name: "pico", title: "Pico", version: VERSION },
+            serverInfo: { name: "smith", title: "Smith", version: VERSION },
             instructions: INSTRUCTIONS,
           })
         }

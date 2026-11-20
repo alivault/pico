@@ -51,7 +51,7 @@ async function withFakeGh(
     log: () => Promise<Array<{ args: Array<string>; input: string }>>
   ) => Promise<void>
 ) {
-  const dir = await tempDir("pico-gh-")
+  const dir = await tempDir("smith-gh-")
   const bin = join(dir, "gh")
   const logPath = join(dir, "log.jsonl")
   await writeFile(bin, FAKE_GH)

@@ -1,6 +1,6 @@
 import * as React from "react"
 import { CheckIcon, MessageCircleQuestionIcon, XIcon } from "lucide-react"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -23,27 +23,27 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { postAgentJson } from "@/features/pico/agent/agent-extensions"
+import { postAgentJson } from "@/features/smith/agent/agent-extensions"
 import {
   getClipboardImageFiles,
   readFileAsPromptImage,
-} from "@/features/pico/app-shell-utils"
-import { ToolResultImages } from "@/features/pico/tool-result-images"
+} from "@/features/smith/app-shell-utils"
+import { ToolResultImages } from "@/features/smith/tool-result-images"
 import {
   useTrackWaitingCard,
   waitingCardKey,
-} from "@/features/pico/agent/waiting-cards"
-import { MarkdownBlock } from "@/features/pico/markdown-renderer"
+} from "@/features/smith/agent/waiting-cards"
+import { MarkdownBlock } from "@/features/smith/markdown-renderer"
 import {
   registerToolRenderer,
   toolArgs,
   toolDetails,
   useToolRenderContext,
   type ToolRendererProps,
-} from "@/features/pico/tool-renderers/registry"
+} from "@/features/smith/tool-renderers/registry"
 import { cn } from "@/lib/utils"
-import type { PromptImage } from "@/lib/pico"
-import { useMachineId } from "@/lib/pico/machine-context"
+import type { PromptImage } from "@/lib/smith"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 type QuestionOption = { label: string; description?: string }
 type QuestionField = {

@@ -12,9 +12,9 @@ import { AgentMetaDoc, publicId } from "../src/core/agents.ts"
 import { tempDir } from "./support.ts"
 
 void test("an archived agent is listed and can be restored", async () => {
-  const data = await tempDir("pico-archive-test-")
+  const data = await tempDir("smith-archive-test-")
   const harness = await Harness.open(
-    await openNodeSqliteStorage(join(data, "pico.sqlite")),
+    await openNodeSqliteStorage(join(data, "smith.sqlite")),
     { models: createModels(), registry: createRegistry() },
     ctx
   )
@@ -44,7 +44,7 @@ void test("an archived agent is listed and can be restored", async () => {
   const child = spawn(
     process.execPath,
     [
-      "dist/pico-server.mjs",
+      "dist/smith-server.mjs",
       "serve",
       "--port",
       "0",
@@ -111,7 +111,7 @@ void test("an archived agent is listed and can be restored", async () => {
     assert.deepEqual(await archived(), [])
 
     assert.equal(
-      (await post("/api/agents/delete", { paths: [`pico:${id}`] })).status,
+      (await post("/api/agents/delete", { paths: [`smith:${id}`] })).status,
       200
     )
     assert.equal(await visibleCount(), 0)
@@ -121,11 +121,11 @@ void test("an archived agent is listed and can be restored", async () => {
     assert.equal(list[0]!.project, data)
     assert.ok(list[0]!.archivedAt)
 
-    const restored = await post("/api/agent/restore", { path: `pico:${id}` })
+    const restored = await post("/api/agent/restore", { path: `smith:${id}` })
     assert.equal(restored.status, 200)
     assert.deepEqual(await restored.json(), {
       ok: true,
-      path: `pico:${id}`,
+      path: `smith:${id}`,
       project: data,
     })
     assert.equal(await visibleCount(), 1)

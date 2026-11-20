@@ -1,39 +1,39 @@
 import * as React from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
-import type { PromptImage, AgentState, StreamingBehavior } from "@/lib/pico"
+import type { PromptImage, AgentState, StreamingBehavior } from "@/lib/smith"
 import type {
   DirectoryResolveResponse,
   PendingMessagesResponse,
   PromptResponse,
   AgentNewResponse,
   SimpleOkResponse,
-} from "@/lib/pico/api"
+} from "@/lib/smith/api"
 
-import { resolveNewAgentCwd } from "@/features/pico/app-shell-common"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { resolveNewAgentCwd } from "@/features/smith/app-shell-common"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
 import {
   enqueueOfflinePrompt,
   readOfflinePrompts,
   removeOfflinePrompt,
   type OfflinePromptQueueItem,
-} from "@/features/pico/offline-prompt-queue"
-import { picoQueryKeys, picoAgentScopeKey } from "@/features/pico/query-keys"
+} from "@/features/smith/offline-prompt-queue"
+import { smithQueryKeys, smithAgentScopeKey } from "@/features/smith/query-keys"
 import {
   useSelector,
-  type PicoStore,
-} from "@/features/pico/tanstack-store-utils"
+  type SmithStore,
+} from "@/features/smith/tanstack-store-utils"
 import {
   buildComposerPromptMessage,
   serializeComposerDraft,
-} from "@/features/pico/composer-utils"
-import type { ComposerLineComment } from "@/features/pico/app-shell-composer-state"
+} from "@/features/smith/composer-utils"
+import type { ComposerLineComment } from "@/features/smith/app-shell-composer-state"
 import {
   isHeldPendingId,
   type PendingQueueSaveRow,
-} from "@/features/pico/pending-queue"
-import { MachineOfflineError } from "@/lib/pico/machine"
+} from "@/features/smith/pending-queue"
+import { MachineOfflineError } from "@/lib/smith/machine"
 import {
   DRAFT_PROJECT_STORAGE_KEY,
   SIDEBAR_PROJECTS_STORAGE_KEY,
@@ -42,8 +42,8 @@ import {
   promptDraftKey,
   promptDraftKeyMatchesOwner,
   machineLocalStorageSetItem,
-} from "@/lib/pico"
-import { useMachineId } from "@/lib/pico/machine-context"
+} from "@/lib/smith"
+import { useMachineId } from "@/lib/smith/machine-context"
 import { settle } from "@/lib/settle"
 
 type DirectoryResolveData = Extract<DirectoryResolveResponse, { ok: true }>
@@ -83,7 +83,7 @@ type PendingComposerMessage = {
   streamingBehavior: "steer" | "followUp"
 }
 
-type AgentStateStore = PicoStore<AgentState>
+type AgentStateStore = SmithStore<AgentState>
 
 function pendingMessagesFromResponse(
   response: PendingMessagesResponse
@@ -531,7 +531,7 @@ export function useAppShellPromptMutations({
     },
     onSuccess: async (response) => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.projectAgentsIndex(
+        queryKey: smithQueryKeys.projectAgentsIndex(
           viewerContextId,
           response.path
         ),
@@ -815,9 +815,9 @@ export function useAppShellPromptMutations({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.agentTree(
+        queryKey: smithQueryKeys.agentTree(
           viewerContextId,
-          picoAgentScopeKey(agentStateRef.current)
+          smithAgentScopeKey(agentStateRef.current)
         ),
         refetchType: "active",
       })
@@ -1348,9 +1348,9 @@ export function useAppShellPromptMutations({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.agentTree(
+        queryKey: smithQueryKeys.agentTree(
           viewerContextId,
-          picoAgentScopeKey(agentStateRef.current)
+          smithAgentScopeKey(agentStateRef.current)
         ),
         refetchType: "active",
       })
@@ -1423,9 +1423,9 @@ export function useAppShellPromptMutations({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.agentTree(
+        queryKey: smithQueryKeys.agentTree(
           viewerContextId,
-          picoAgentScopeKey(agentStateRef.current)
+          smithAgentScopeKey(agentStateRef.current)
         ),
         refetchType: "active",
       })
@@ -1564,9 +1564,9 @@ export function useAppShellPromptMutations({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.agentTree(
+        queryKey: smithQueryKeys.agentTree(
           viewerContextId,
-          picoAgentScopeKey(agentStateRef.current)
+          smithAgentScopeKey(agentStateRef.current)
         ),
         refetchType: "active",
       })

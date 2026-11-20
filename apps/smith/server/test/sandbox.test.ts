@@ -73,7 +73,7 @@ void test(
       command: [
         "echo changed > file.txt && cat file.txt",
         "echo new > created.txt && echo created",
-        "echo x > /etc/pico-sandbox-test 2>/dev/null || echo outside-refused",
+        "echo x > /etc/smith-sandbox-test 2>/dev/null || echo outside-refused",
         "curl -s -m 3 http://example.com >/dev/null 2>&1 || echo no-network",
       ].join("\n"),
       cwd: dir,

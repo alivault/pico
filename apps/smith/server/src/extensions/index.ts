@@ -1,6 +1,6 @@
 /**
- * Pico's own extensions, in install order. Their prompt sections render after
- * the `pico` prompt extension, so sections that change often come last and
+ * Smith's own extensions, in install order. Their prompt sections render after
+ * the `smith` prompt extension, so sections that change often come last and
  * keep the provider prompt cache warm.
  */
 import type { Extension } from "@earendil-works/pi-durable"
@@ -13,20 +13,20 @@ import { createScratchpadExtension, type Scratchpad } from "./scratchpad.ts"
 import { createAgentsExtension } from "./agents.ts"
 import { createTodoExtension } from "./todo.ts"
 
-export type PicoExtensionOptions = {
+export type SmithExtensionOptions = {
   host: HostBridge
   dataDir: string
 }
 
-/** Services of Pico extensions that the HTTP API uses. */
-export type PicoExtensionServices = {
+/** Services of Smith extensions that the HTTP API uses. */
+export type SmithExtensionServices = {
   jobs: JobsExtension["runner"]
   scratch: Scratchpad
 }
 
-export function createPicoExtensions(options: PicoExtensionOptions): {
+export function createSmithExtensions(options: SmithExtensionOptions): {
   extensions: Extension[]
-  services: PicoExtensionServices
+  services: SmithExtensionServices
 } {
   const { host, dataDir } = options
   const jobs = createJobsExtension(host, dataDir)

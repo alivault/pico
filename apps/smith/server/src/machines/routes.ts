@@ -1,7 +1,7 @@
 /**
  * Machine routes.
  *
- * Every Pico server has the `/api/machine/*` routes. A hub uses them on a
+ * Every Smith server has the `/api/machine/*` routes. A hub uses them on a
  * remote server through SSH: a summary of the agents, a stream of summary
  * events, and the agent operations of the agent tools.
  *

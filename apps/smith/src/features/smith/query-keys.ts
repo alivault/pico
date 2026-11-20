@@ -1,4 +1,4 @@
-export function picoAgentScopeKey(agentLike: {
+export function smithAgentScopeKey(agentLike: {
   draft?: boolean
   agentFile?: string
   agentId?: string
@@ -11,25 +11,25 @@ export function picoAgentScopeKey(agentLike: {
   return agentLike.agentFile || agentLike.agentId || ""
 }
 
-export const picoQueryKeys = {
+export const smithQueryKeys = {
   piPerformance: (viewerContextId: string) =>
-    ["pico", "pi-performance", viewerContextId] as const,
+    ["smith", "pi-performance", viewerContextId] as const,
   archivedAgents: (viewerContextId: string) =>
-    ["pico", "archived-agents", viewerContextId] as const,
+    ["smith", "archived-agents", viewerContextId] as const,
   projectAgentsIndex: (viewerContextId: string, project: string) =>
-    ["pico", "project-agents-index", viewerContextId, project] as const,
+    ["smith", "project-agents-index", viewerContextId, project] as const,
   gitStatus: (viewerContextId: string, cwd: string) =>
-    ["pico", "git-status", viewerContextId, cwd] as const,
+    ["smith", "git-status", viewerContextId, cwd] as const,
   gitChanges: (viewerContextId: string, cwd: string) =>
-    ["pico", "git-changes", viewerContextId, cwd] as const,
+    ["smith", "git-changes", viewerContextId, cwd] as const,
   gitFiles: (viewerContextId: string, cwd: string) =>
-    ["pico", "git-files", viewerContextId, cwd] as const,
+    ["smith", "git-files", viewerContextId, cwd] as const,
   gitFileDiffs: (viewerContextId: string, cwd: string) =>
-    ["pico", "git-file-diffs", viewerContextId, cwd] as const,
+    ["smith", "git-file-diffs", viewerContextId, cwd] as const,
   gitFileDiff: (viewerContextId: string, cwd: string, path: string) =>
-    ["pico", "git-file-diffs", viewerContextId, cwd, path] as const,
+    ["smith", "git-file-diffs", viewerContextId, cwd, path] as const,
   gitFileReviews: (viewerContextId: string, cwd: string) =>
-    ["pico", "git-file-reviews", viewerContextId, cwd] as const,
+    ["smith", "git-file-reviews", viewerContextId, cwd] as const,
   gitFileReview: (
     viewerContextId: string,
     cwd: string,
@@ -37,7 +37,7 @@ export const picoQueryKeys = {
     previousPath = ""
   ) =>
     [
-      "pico",
+      "smith",
       "git-file-reviews",
       viewerContextId,
       cwd,
@@ -45,9 +45,9 @@ export const picoQueryKeys = {
       previousPath,
     ] as const,
   gitBranches: (viewerContextId: string, cwd: string) =>
-    ["pico", "git-branches", viewerContextId, cwd] as const,
+    ["smith", "git-branches", viewerContextId, cwd] as const,
   gitCommits: (viewerContextId: string, cwd: string) =>
-    ["pico", "git-commits", viewerContextId, cwd] as const,
+    ["smith", "git-commits", viewerContextId, cwd] as const,
   gitCommitDiff: (
     viewerContextId: string,
     cwd: string,
@@ -57,7 +57,7 @@ export const picoQueryKeys = {
     previousPath = ""
   ) =>
     [
-      "pico",
+      "smith",
       "git-commit-diff",
       viewerContextId,
       cwd,
@@ -67,11 +67,11 @@ export const picoQueryKeys = {
       previousPath,
     ] as const,
   ghRepo: (viewerContextId: string, cwd: string) =>
-    ["pico", "gh-repo", viewerContextId, cwd] as const,
+    ["smith", "gh-repo", viewerContextId, cwd] as const,
   ghLabels: (viewerContextId: string, cwd: string) =>
-    ["pico", "gh-labels", viewerContextId, cwd] as const,
+    ["smith", "gh-labels", viewerContextId, cwd] as const,
   ghIssues: (viewerContextId: string, cwd: string) =>
-    ["pico", "gh-issues", viewerContextId, cwd] as const,
+    ["smith", "gh-issues", viewerContextId, cwd] as const,
   ghIssueList: (
     viewerContextId: string,
     cwd: string,
@@ -80,7 +80,7 @@ export const picoQueryKeys = {
     search: string
   ) =>
     [
-      "pico",
+      "smith",
       "gh-issues",
       viewerContextId,
       cwd,
@@ -90,23 +90,23 @@ export const picoQueryKeys = {
       search,
     ] as const,
   ghIssue: (viewerContextId: string, cwd: string, number: number) =>
-    ["pico", "gh-issues", viewerContextId, cwd, "issue", number] as const,
+    ["smith", "gh-issues", viewerContextId, cwd, "issue", number] as const,
   gitCommitFiles: (viewerContextId: string, cwd: string, commit: string) =>
-    ["pico", "git-commit-files", viewerContextId, cwd, commit] as const,
+    ["smith", "git-commit-files", viewerContextId, cwd, commit] as const,
   gitAction: (
     viewerContextId: string,
     cwd: string,
     action: "push" | "force-push" | "pull"
-  ) => ["pico", "git-action", viewerContextId, cwd, action] as const,
+  ) => ["smith", "git-action", viewerContextId, cwd, action] as const,
   projectFileTree: (viewerContextId: string, cwd: string) =>
-    ["pico", "project-file-tree", viewerContextId, cwd] as const,
+    ["smith", "project-file-tree", viewerContextId, cwd] as const,
   projectFileRead: (viewerContextId: string, cwd: string, path: string) =>
-    ["pico", "project-file-read", viewerContextId, cwd, path] as const,
+    ["smith", "project-file-read", viewerContextId, cwd, path] as const,
   agentTree: (viewerContextId: string, agentScopeKey: string) =>
-    ["pico", "agent-tree", viewerContextId, agentScopeKey] as const,
+    ["smith", "agent-tree", viewerContextId, agentScopeKey] as const,
   forkableMessages: (viewerContextId: string, agentScopeKey: string) =>
-    ["pico", "forkable-messages", viewerContextId, agentScopeKey] as const,
-  providerUsageAll: () => ["pico", "provider-usage"] as const,
+    ["smith", "forkable-messages", viewerContextId, agentScopeKey] as const,
+  providerUsageAll: () => ["smith", "provider-usage"] as const,
   providerUsage: (viewerContextId: string, agentId: string, provider: string) =>
-    ["pico", "provider-usage", viewerContextId, agentId, provider] as const,
+    ["smith", "provider-usage", viewerContextId, agentId, provider] as const,
 } as const

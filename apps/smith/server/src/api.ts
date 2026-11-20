@@ -172,7 +172,7 @@ export function createApi(api: ApiContext) {
 
   const ensureAcceptingWork = () => {
     if (api.draining())
-      throw unavailable("Pico is restarting; try again in a moment.")
+      throw unavailable("Smith is restarting; try again in a moment.")
   }
 
   // ---------------------------------------------------------------------------
@@ -180,9 +180,9 @@ export function createApi(api: ApiContext) {
 
   router.get("/api/client/manifest", () => ({
     ok: true,
-    name: "@alivault/pico",
+    name: "@alivault/smith",
     version: VERSION,
-    displayName: "Pico",
+    displayName: "Smith",
     serverProtocolVersion: SERVER_PROTOCOL_VERSION,
     apiContractVersion: API_CONTRACT_VERSION,
     pairingRequired: false,
@@ -1602,7 +1602,7 @@ export function createApi(api: ApiContext) {
 
   router.post("/api/push/test", async () => {
     const delivered = await api.notifier.send({
-      title: "Pico",
+      title: "Smith",
       body: "Notifications work on this device.",
       url: "/",
       tag: "test",
@@ -1766,7 +1766,7 @@ export function createApi(api: ApiContext) {
           stringField(request.query.get("iss"))
         )
         title = "Signed in"
-        message = `Pico is signed in to the MCP server ${name}. You can close this tab.`
+        message = `Smith is signed in to the MCP server ${name}. You can close this tab.`
       } catch (error) {
         title = "Sign-in failed"
         message = error instanceof Error ? error.message : String(error)
@@ -2288,7 +2288,7 @@ function streamEvents(
     await stream.closed
   })()
     .catch((error: unknown) => {
-      console.error("[pico] event stream failed:", error)
+      console.error("[smith] event stream failed:", error)
       if (!response.headersSent) {
         response.writeHead(500, { "content-type": "application/json" })
         response.end(

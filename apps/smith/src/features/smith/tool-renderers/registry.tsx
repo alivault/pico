@@ -1,6 +1,6 @@
 import * as React from "react"
 
-import type { ToolBlock } from "@/lib/pico"
+import type { ToolBlock } from "@/lib/smith"
 
 /**
  * Renderers for tool results, by tool name.

@@ -12,7 +12,7 @@ import {
   TagIcon,
 } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import {
   Accordion,
@@ -67,12 +67,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { picoQueryKeys } from "@/features/pico/query-keys"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { smithQueryKeys } from "@/features/smith/query-keys"
 import {
   ScrollGradientOverlays,
   useScrollGradients,
-} from "@/features/pico/scroll-gradient-utils"
+} from "@/features/smith/scroll-gradient-utils"
 import {
   GIT_COMMITS_PAGE_SIZE,
   copyGitCommitValue,
@@ -85,26 +85,26 @@ import {
   gitCommitsSummaryText,
   invalidateGitQueries,
   parseGitCommitGraphLine,
-} from "@/features/pico/right-sidebar-git-data"
-import { GitSection } from "@/features/pico/right-sidebar-git-section"
-import { GitSectionNote } from "@/features/pico/right-sidebar-section-note"
+} from "@/features/smith/right-sidebar-git-data"
+import { GitSection } from "@/features/smith/right-sidebar-git-section"
+import { GitSectionNote } from "@/features/smith/right-sidebar-section-note"
 import {
   getErrorMessage,
   normalizeCwd,
-} from "@/features/pico/right-sidebar-shared"
+} from "@/features/smith/right-sidebar-shared"
 import type {
   GitCommitDiffTabRequest,
   GitScopedProps,
-} from "@/features/pico/right-sidebar-types"
+} from "@/features/smith/right-sidebar-types"
 import type {
   GitActionResponse,
   GitCommitDiffMode,
   GitCommitFile,
   GitCommitFilesResponse,
   GitCommitRemoteUrlResponse,
-} from "@/lib/pico/api"
+} from "@/lib/smith/api"
 import { cn } from "@/lib/utils"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 type GitCommitRemoteUrlData = Extract<GitCommitRemoteUrlResponse, { ok: true }>
 type GitCommitFilesData = Extract<GitCommitFilesResponse, { ok: true }>
@@ -1087,8 +1087,8 @@ function useGitCommitFilesQuery({
   const machineId = useMachineId()
   return useQuery({
     queryKey: commit
-      ? picoQueryKeys.gitCommitFiles(viewerContextId, cwd, commit)
-      : ["pico", "git-commit-files", viewerContextId, cwd, ""],
+      ? smithQueryKeys.gitCommitFiles(viewerContextId, cwd, commit)
+      : ["smith", "git-commit-files", viewerContextId, cwd, ""],
     queryFn: () =>
       fetchJson<GitCommitFilesData>(
         buildRequestUrl(
@@ -1318,7 +1318,7 @@ function useGitCommitRowView({
     },
     onSuccess: async (_response, request) => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitStatus(viewerContextId, cwd),
+        queryKey: smithQueryKeys.gitStatus(viewerContextId, cwd),
         exact: true,
         refetchType: "active",
       })
@@ -1351,7 +1351,7 @@ function useGitCommitRowView({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitStatus(viewerContextId, cwd),
+        queryKey: smithQueryKeys.gitStatus(viewerContextId, cwd),
         exact: true,
         refetchType: "active",
       })
@@ -1470,7 +1470,7 @@ function useGitCommitRowView({
       title: `Reset branch to ${shortHash}?`,
       description:
         resetMode === "hard"
-          ? "Hard reset moves the current branch and discards working tree and staged changes. This cannot be undone from Pico."
+          ? "Hard reset moves the current branch and discards working tree and staged changes. This cannot be undone from Smith."
           : resetMode === "soft"
             ? "Soft reset moves the current branch and keeps changes staged."
             : "Mixed reset moves the current branch and keeps changes in the working tree.",
@@ -1972,7 +1972,7 @@ export function GitCommitsSection({
   React.useEffect(() => {
     setCommitsLimit(GIT_COMMITS_PAGE_SIZE)
   }, [normalizedCwd])
-  const commitsScopeQueryKey = picoQueryKeys.gitCommits(
+  const commitsScopeQueryKey = smithQueryKeys.gitCommits(
     viewerContextId,
     normalizedCwd
   )

@@ -10,10 +10,10 @@ import {
   useQueryClient,
 } from "@tanstack/react-query"
 
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { copyRightSidebarTextToClipboard } from "@/features/pico/right-sidebar-git-data"
-import { picoQueryKeys } from "@/features/pico/query-keys"
-import { getErrorMessage } from "@/features/pico/right-sidebar-shared"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { copyRightSidebarTextToClipboard } from "@/features/smith/right-sidebar-git-data"
+import { smithQueryKeys } from "@/features/smith/query-keys"
+import { getErrorMessage } from "@/features/smith/right-sidebar-shared"
 import type {
   GhIssue,
   GhIssueComment,
@@ -28,10 +28,10 @@ import type {
   GhLabelsResponse,
   GhRepo,
   GhRepoResponse,
-} from "@/lib/pico/api"
-import { useMachineId } from "@/lib/pico/machine-context"
-import { queueMachineAction } from "@/lib/pico/machine"
-import { toast } from "@/lib/pico/toast"
+} from "@/lib/smith/api"
+import { useMachineId } from "@/lib/smith/machine-context"
+import { queueMachineAction } from "@/lib/smith/machine"
+import { toast } from "@/lib/smith/toast"
 
 export type IssueState = "open" | "closed" | "all"
 export type GhRepoData = Extract<GhRepoResponse, { ok: true }>
@@ -59,7 +59,7 @@ export function useGitHubRepo({
 }) {
   const machineId = useMachineId()
   return useQuery({
-    queryKey: picoQueryKeys.ghRepo(viewerContextId, cwd),
+    queryKey: smithQueryKeys.ghRepo(viewerContextId, cwd),
     queryFn: async () =>
       (
         await fetchJson<GhRepoData>(
@@ -189,13 +189,13 @@ function placeInList(
  */
 export function useIssueCache(viewerContextId: string, cwd: string) {
   const queryClient = useQueryClient()
-  const prefix = picoQueryKeys.ghIssues(viewerContextId, cwd)
+  const prefix = smithQueryKeys.ghIssues(viewerContextId, cwd)
   const queries = () =>
     queryClient.getQueryCache().findAll({ queryKey: prefix })
 
   const find = (number: number): GhIssueSummary | undefined => {
     const detail = queryClient.getQueryData<CachedIssue>(
-      picoQueryKeys.ghIssue(viewerContextId, cwd, number)
+      smithQueryKeys.ghIssue(viewerContextId, cwd, number)
     )
     if (detail) return detail
     for (const query of queries()) {
@@ -214,7 +214,7 @@ export function useIssueCache(viewerContextId: string, cwd: string) {
     issue: GhIssueSummary & Partial<Omit<CachedIssue, keyof GhIssueSummary>>
   ) => {
     queryClient.setQueryData<CachedIssue>(
-      picoQueryKeys.ghIssue(viewerContextId, cwd, issue.number),
+      smithQueryKeys.ghIssue(viewerContextId, cwd, issue.number),
       (current) =>
         current
           ? {
@@ -248,7 +248,7 @@ export function useIssueCache(viewerContextId: string, cwd: string) {
     change: (comments: Array<ShownComment>) => Array<ShownComment>
   ) => {
     queryClient.setQueryData<CachedIssue>(
-      picoQueryKeys.ghIssue(viewerContextId, cwd, number),
+      smithQueryKeys.ghIssue(viewerContextId, cwd, number),
       (current) =>
         current ? { ...current, comments: change(current.comments) } : current
     )
@@ -281,8 +281,8 @@ export function useIssueMutations({
   const machineId = useMachineId()
   const queryClient = useQueryClient()
   const cache = useIssueCache(viewerContextId, cwd)
-  const prefix = picoQueryKeys.ghIssues(viewerContextId, cwd)
-  const mutationKey = ["pico", "gh-issue-write", viewerContextId, cwd]
+  const prefix = smithQueryKeys.ghIssues(viewerContextId, cwd)
+  const mutationKey = ["smith", "gh-issue-write", viewerContextId, cwd]
   // Writes of a project run one after the other, in the order of the
   // clicks: two writes at the same time can reach GitHub in the other order
   // (add, then remove, a label). The panel shows each change at once.
@@ -460,7 +460,7 @@ export function useGitHubLabels(
 ) {
   const machineId = useMachineId()
   return useQuery({
-    queryKey: picoQueryKeys.ghLabels(viewerContextId, cwd),
+    queryKey: smithQueryKeys.ghLabels(viewerContextId, cwd),
     queryFn: async () =>
       (
         await fetchJson<GhLabelsData>(
@@ -487,7 +487,7 @@ export function issueQueryOptions({
   number: number
 }) {
   return {
-    queryKey: picoQueryKeys.ghIssue(viewerContextId, cwd, number),
+    queryKey: smithQueryKeys.ghIssue(viewerContextId, cwd, number),
     queryFn: async (): Promise<CachedIssue> => {
       const { issue } = await fetchJson<GhIssueData>(
         buildRequestUrl(
@@ -608,7 +608,7 @@ export function useIssueList({
 }) {
   const machineId = useMachineId()
   return useQuery({
-    queryKey: picoQueryKeys.ghIssueList(
+    queryKey: smithQueryKeys.ghIssueList(
       viewerContextId,
       cwd,
       state,
@@ -670,7 +670,7 @@ export function useIssue({
 export function useIssueSaving(viewerContextId: string, cwd: string) {
   return (
     useIsMutating({
-      mutationKey: ["pico", "gh-issue-write", viewerContextId, cwd],
+      mutationKey: ["smith", "gh-issue-write", viewerContextId, cwd],
     }) > 0
   )
 }

@@ -2,7 +2,7 @@
 /**
  * Write the system prompt and the tools of one conversation as a Markdown
  * file. The prompt sections and tool changes are stored as `pi.system`
- * entries in Pico's database; this script merges them in order.
+ * entries in Smith's database; this script merges them in order.
  *
  * Usage: node scripts/dump-system-prompt.mjs [conversationId] [out.md]
  * Without a conversation ID, it uses the newest conversation with a prompt.
@@ -13,8 +13,8 @@ import { join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 
 const database = join(
-  process.env.PICO_DATA_DIR ?? join(homedir(), ".pico"),
-  "pico.sqlite"
+  process.env.SMITH_DATA_DIR ?? join(homedir(), ".smith"),
+  "smith.sqlite"
 )
 const db = new DatabaseSync(database, { readOnly: true })
 
@@ -29,7 +29,7 @@ if (conversation === undefined) {
   console.error("No system prompt found.")
   process.exit(1)
 }
-const out = process.argv[3] ?? `/tmp/pico-system-prompt-${conversation}.md`
+const out = process.argv[3] ?? `/tmp/smith-system-prompt-${conversation}.md`
 
 const rows = db
   .prepare(

@@ -1,5 +1,5 @@
 /**
- * The agent runtime: one durable Harness on Pico's SQLite database, with Pi's
+ * The agent runtime: one durable Harness on Smith's SQLite database, with Pi's
  * model catalog and credentials, and the extensions every agent runs with.
  */
 import { mkdirSync } from "node:fs"
@@ -29,16 +29,16 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import type { ServerPaths } from "../config.ts"
 import type { HostBridge } from "../extensions/host.ts"
 import {
-  createPicoExtensions,
-  type PicoExtensionServices,
+  createSmithExtensions,
+  type SmithExtensionServices,
 } from "../extensions/index.ts"
 import { createMcpExtension, type McpExtension } from "../extensions/mcp.ts"
 import { createPromptExtension } from "../extensions/prompt.ts"
 import { createWebAccessExtension } from "../extensions/web-access.ts"
-import { createPicoCodingTools } from "./coding-tools.ts"
+import { createSmithCodingTools } from "./coding-tools.ts"
 import { compactionSettings, modelCompactionPolicy } from "./compaction.ts"
 import { ResourceCache } from "./resources.ts"
-import { PicoSettings } from "./settings.ts"
+import { SmithSettings } from "./settings.ts"
 import { SidebarState } from "./sidebar-state.ts"
 
 /**
@@ -53,12 +53,12 @@ export type Runtime = {
   readonly models: ModelRuntime
   readonly registry: Registry
   readonly resources: ResourceCache
-  readonly settings: PicoSettings
+  readonly settings: SmithSettings
   /** The sidebar layout that all devices share. */
   readonly sidebar: SidebarState
   readonly agentDir: string
   readonly mcp: McpExtension
-  readonly extensions: PicoExtensionServices
+  readonly extensions: SmithExtensionServices
   /** Pi's global settings: default model, thinking level, compaction, retry. */
   piSettings(): SettingsManager
   /** The compaction policy that the harness uses for a model. */
@@ -75,13 +75,13 @@ export async function openRuntime(
 ): Promise<Runtime> {
   mkdirSync(paths.dataDir, { recursive: true })
   const agentDir = getAgentDir()
-  const settings = new PicoSettings(paths.settingsFile)
+  const settings = new SmithSettings(paths.settingsFile)
   const sidebar = new SidebarState(paths.sidebarFile)
 
   let piSettings = SettingsManager.create(homedir(), agentDir)
   let piSettingsLoadedAt = Date.now()
   const currentPiSettings = () => {
-    // Pi's settings file may change while Pico runs; reread it now and then.
+    // Pi's settings file may change while Smith runs; reread it now and then.
     if (Date.now() - piSettingsLoadedAt > 10_000) {
       piSettings = SettingsManager.create(homedir(), agentDir)
       piSettingsLoadedAt = Date.now()
@@ -99,11 +99,11 @@ export async function openRuntime(
   const resources = new ResourceCache(agentDir)
   const registry = createRegistry()
   const images = await createNodePhotonImages().catch((error: unknown) => {
-    console.warn("[pico] image processing is unavailable:", error)
+    console.warn("[smith] image processing is unavailable:", error)
     return undefined
   })
   registry.install(
-    createPicoCodingTools({
+    createSmithCodingTools({
       ...(images ? { images } : {}),
       shellPrefix: () => currentPiSettings().getShellCommandPrefix(),
       host,
@@ -122,8 +122,8 @@ export async function openRuntime(
       inlineBudget: CODEMODE_INLINE_BUDGET,
     })
   )
-  const pico = createPicoExtensions({ host, dataDir: paths.dataDir })
-  for (const extension of pico.extensions) registry.install(extension)
+  const smith = createSmithExtensions({ host, dataDir: paths.dataDir })
+  for (const extension of smith.extensions) registry.install(extension)
   mcp.onChange(() => {
     registry.install(mcp.extension)
     registry.install(
@@ -164,7 +164,7 @@ export async function openRuntime(
       return currentPiSettings().getFollowUpMode()
     },
     toolExecution: "parallel",
-    // Pico follows live answers and tool output through `observeCommits()`,
+    // Smith follows live answers and tool output through `observeCommits()`,
     // which sees a commit only once it is stored. Store progress at once, as
     // before pi-durable 1.5, so streaming stays live in the client.
     progress: { persistWithinMs: 0 },
@@ -210,7 +210,7 @@ export async function openRuntime(
       registry,
       settings: harnessSettings,
       env: ({ cwd }) => new NodeExecutionEnv({ cwd: cwd ?? homedir() }),
-      onReport: (error) => console.warn("[pico] durable report:", error),
+      onReport: (error) => console.warn("[smith] durable report:", error),
     },
     BACKGROUND_CONTEXT
   )
@@ -224,7 +224,7 @@ export async function openRuntime(
     sidebar,
     agentDir,
     mcp,
-    extensions: pico.services,
+    extensions: smith.services,
     piSettings: currentPiSettings,
     compactionPolicy: (model) =>
       modelCompactionPolicy(currentCompaction(), model),

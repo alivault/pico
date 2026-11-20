@@ -171,7 +171,7 @@ void test("the machine side of the preview proxy needs the hub header", async ()
   }
 })
 
-void test("a preview of a remote machine goes through its Pico server", async () => {
+void test("a preview of a remote machine goes through its Smith server", async () => {
   const dev = await devServer()
   const remote = createServer((request, response) => {
     if (!handlePreviewProxy(request, response)) {
@@ -302,14 +302,14 @@ void test("announcePreview tells the clients when the port listens", async () =>
   }
 })
 
-void test("announcePreview skips a Pico server", async () => {
+void test("announcePreview skips a Smith server", async () => {
   const server = createServer((request, response) => {
     if (request.url === "/api/system/health") {
       response.setHeader("content-type", "application/json")
       response.end(JSON.stringify({ ok: true, engine: "pi-durable" }))
       return
     }
-    response.end("pico")
+    response.end("smith")
   })
   const port = await listen(server)
   const pushed: Array<unknown> = []

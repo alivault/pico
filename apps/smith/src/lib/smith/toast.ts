@@ -3,18 +3,18 @@
  * - Toasts about an offline machine merge into one toast. Each change to an
  *   offline machine fails with the same message, so without this a page that
  *   sends many changes shows many equal toasts.
- * - Toasts about an unreachable Pico server merge into one toast, and the
+ * - Toasts about an unreachable Smith server merge into one toast, and the
  *   page shows no such toast while it shows the "server unreachable" view.
  * Import `toast` from here, not from "sonner".
  */
 import { toast as sonnerToast, type ExternalToast } from "sonner"
 
-import { findMachineOfflineMessage } from "@/lib/pico/machine"
+import { findMachineOfflineMessage } from "@/lib/smith/machine"
 import {
   onServerConnectionChange,
   SERVER_UNREACHABLE_MESSAGE,
   serverConnectionState,
-} from "@/lib/pico/server-connection"
+} from "@/lib/smith/server-connection"
 
 const SERVER_UNREACHABLE_TOAST_ID = "server-unreachable"
 

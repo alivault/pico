@@ -4,14 +4,14 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { SidebarMachineGroups } from "@/features/pico/machines"
-import type { MachineInfo } from "@/features/pico/machine-store"
-import { ProjectActions, OtherMachineProjects } from "@/features/pico/sidebar"
-import { useSidebarLayout } from "@/features/pico/sidebar-display-settings"
-import { SplitSidebarBody } from "@/features/pico/sidebar-split-layout"
-import { sidebarSlotRef } from "@/features/pico/sidebar-slots"
-import { openMachine, queueMachineAction } from "@/lib/pico/machine"
-import { MachineProvider } from "@/lib/pico/machine-context"
+import { SidebarMachineGroups } from "@/features/smith/machines"
+import type { MachineInfo } from "@/features/smith/machine-store"
+import { ProjectActions, OtherMachineProjects } from "@/features/smith/sidebar"
+import { useSidebarLayout } from "@/features/smith/sidebar-display-settings"
+import { SplitSidebarBody } from "@/features/smith/sidebar-split-layout"
+import { sidebarSlotRef } from "@/features/smith/sidebar-slots"
+import { openMachine, queueMachineAction } from "@/lib/smith/machine"
+import { MachineProvider } from "@/lib/smith/machine-context"
 
 /**
  * The left sidebar of the window. The page draws it one time, above the app

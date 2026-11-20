@@ -4,7 +4,7 @@
  */
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import {
   browserLabel,
@@ -15,13 +15,13 @@ import {
   pushEnabled,
   pushSupported,
   removePushDevice,
-} from "@/features/pico/agent/push"
-import { errorText } from "@/features/pico/agent/shared"
+} from "@/features/smith/agent/push"
+import { errorText } from "@/features/smith/agent/shared"
 import {
   buildHubRequestUrl,
   buildRequestUrl,
   fetchJson,
-} from "@/features/pico/app-shell-utils"
+} from "@/features/smith/app-shell-utils"
 import {
   registerSettingsPage,
   SettingsEditPage,
@@ -29,8 +29,8 @@ import {
   useCloseSettingsPage,
   useOpenSettingsPage,
   type SettingsPageProps,
-} from "@/features/pico/settings-pages"
-import { useMachineId } from "@/lib/pico/machine-context"
+} from "@/features/smith/settings-pages"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 export type AgentSettings = {
   notifyTurnDone: boolean
@@ -67,7 +67,7 @@ function formatTokenCount(value: number) {
 function useAgentSettings(viewerContextId: string) {
   const machineId = useMachineId()
   const queryClient = useQueryClient()
-  const queryKey = ["pico", "agent-settings", machineId, viewerContextId]
+  const queryKey = ["smith", "agent-settings", machineId, viewerContextId]
   const url = buildRequestUrl("/api/settings/agent", {
     machineId,
     contextId: viewerContextId,
@@ -127,7 +127,7 @@ const TEXT_FIELDS: Record<string, TextField> = {
     parse: (value) => ({ ntfyUrl: value.trim() }),
   },
   publicUrl: {
-    title: "Pico address for links",
+    title: "Smith address for links",
     description:
       "A notification opens this address, for example your Tailscale URL.",
     placeholder: "https://…",
@@ -247,11 +247,11 @@ function EditFieldPage({ viewerContextId, params }: SettingsPageProps) {
 function usePushState(viewerContextId: string) {
   const queryClient = useQueryClient()
   const status = useQuery({
-    queryKey: ["pico", "push-enabled", viewerContextId],
+    queryKey: ["smith", "push-enabled", viewerContextId],
     queryFn: () => pushEnabled(viewerContextId),
   })
   const devices = useQuery({
-    queryKey: ["pico", "push-devices", viewerContextId],
+    queryKey: ["smith", "push-devices", viewerContextId],
     queryFn: async () => ({
       devices: await listPushDevices(viewerContextId),
       current: await currentPushEndpoint(),
@@ -260,10 +260,10 @@ function usePushState(viewerContextId: string) {
   const refresh = () =>
     Promise.all([
       queryClient.invalidateQueries({
-        queryKey: ["pico", "push-enabled", viewerContextId],
+        queryKey: ["smith", "push-enabled", viewerContextId],
       }),
       queryClient.invalidateQueries({
-        queryKey: ["pico", "push-devices", viewerContextId],
+        queryKey: ["smith", "push-devices", viewerContextId],
       }),
     ])
   return { status, devices, refresh }
@@ -304,7 +304,7 @@ function NotificationsPage({ viewerContextId }: SettingsPageProps) {
   return (
     <SettingsListPage
       title="Notifications"
-      subtitle="Tell you when an agent stops, also when Pico is closed."
+      subtitle="Tell you when an agent stops, also when Smith is closed."
       loading={!settings}
       groups={
         settings
@@ -317,7 +317,7 @@ function NotificationsPage({ viewerContextId }: SettingsPageProps) {
                     title: "Push notifications",
                     description: supported
                       ? "Show notifications on this device."
-                      : "Needs HTTPS (for example Tailscale Serve) or localhost. On iOS, add Pico to the home screen first.",
+                      : "Needs HTTPS (for example Tailscale Serve) or localhost. On iOS, add Smith to the home screen first.",
                     checked: enabled,
                     disabled: !supported || status.isPending,
                     busy: busy === "push",

@@ -1,11 +1,11 @@
-import type { CompletionItem } from "@/lib/pico/api"
+import type { CompletionItem } from "@/lib/smith/api"
 import {
   isComposerDiffLineComment,
   isComposerFileLineComment,
   type ComposerDiffLineComment,
   type ComposerFileLineComment,
   type ComposerLineComment,
-} from "@/features/pico/app-shell-composer-state"
+} from "@/features/smith/app-shell-composer-state"
 
 export type SlashCommandInput = {
   rawValue: string

@@ -3,7 +3,7 @@
  *
  * The bash tool (see `coding-tools.ts`) registers each call here with its
  * command, its start time, and the time of its last output. Each call runs
- * with `PICO_TOOL_CALL=<marker>` in its environment, so the watchdog can find
+ * with `SMITH_TOOL_CALL=<marker>` in its environment, so the watchdog can find
  * its processes (Linux: `/proc/<pid>/environ`) and read their CPU time and
  * I/O.
  *
@@ -145,7 +145,7 @@ export async function sampleProcesses(
   if (process.platform !== "linux") return undefined
   const result = new Map<string, ProcessSample>()
   const wanted = new Map(
-    markers.map((marker) => [`PICO_TOOL_CALL=${marker}`, marker])
+    markers.map((marker) => [`SMITH_TOOL_CALL=${marker}`, marker])
   )
   for (const marker of markers)
     result.set(marker, { at: Date.now(), processes: new Map() })
@@ -206,7 +206,7 @@ export function stallMessage(input: {
 }) {
   const pids =
     input.pids === undefined
-      ? "unknown (Pico reads processes only on Linux)"
+      ? "unknown (Smith reads processes only on Linux)"
       : input.pids.length === 0
         ? "none found"
         : input.pids.map((item) => `${item.pid} (${item.command})`).join(", ")
@@ -277,7 +277,7 @@ export async function checkBashCalls(
         `stall:${call.agentId}:${call.callId}`
       )
       .catch((error: unknown) => {
-        console.warn("[pico] could not report a stalled bash call:", error)
+        console.warn("[smith] could not report a stalled bash call:", error)
       })
   }
   return reported

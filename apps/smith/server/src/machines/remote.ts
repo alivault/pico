@@ -1,7 +1,7 @@
 /**
  * Commands that a hub runs on a remote machine through its transport: find
- * `node` and `pico-app`, read the server status, start the server, and
- * install Pico. A non-interactive SSH shell often has a short `PATH`, so the
+ * `node` and `smith`, read the server status, start the server, and
+ * install Smith. A non-interactive SSH shell often has a short `PATH`, so the
  * search also looks in common places.
  */
 import type { MachineCache, MachineProfile } from "./profiles.ts"
@@ -19,7 +19,7 @@ export const HUB_FEATURE = "machine-hub"
 
 /** No single quotes: the script goes to the remote shell in single quotes. */
 const DISCOVER_SCRIPT = [
-  // Pico installs into ~/.local, so its pico-app comes first.
+  // Smith installs into ~/.local, so its smith comes first.
   'P="$HOME/.local/bin:$PATH"',
   'for d in "$HOME/.volta/bin" "$HOME/.local/share/mise/shims" "$HOME/.local/share/pnpm" "$HOME/Library/pnpm" "$HOME/.bun/bin" /opt/homebrew/bin /usr/local/bin "$HOME"/.nvm/versions/node/*/bin "$HOME"/.local/share/mise/installs/node/*/bin "$HOME"/.local/share/fnm/node-versions/*/installation/bin; do P="$P:$d"; done',
   'echo "os=$(uname -s)"',
@@ -28,7 +28,7 @@ const DISCOVER_SCRIPT = [
   "for d in $P; do",
   '  [ -n "$d" ] || continue',
   '  [ -x "$d/node" ] && echo "node=$d $("$d/node" -v 2>/dev/null)"',
-  '  [ -x "$d/pico-app" ] && echo "pico=$d/pico-app"',
+  '  [ -x "$d/smith" ] && echo "smith=$d/smith"',
   "done",
   "exit 0",
 ].join("\n")
@@ -38,11 +38,11 @@ export type Discovery = {
   home?: string
   /** Directories with a `node`, and the version of each, in PATH order. */
   nodes: Array<{ dir: string; version: string }>
-  picos: string[]
+  smiths: string[]
 }
 
 export function parseDiscovery(stdout: string): Discovery {
-  const result: Discovery = { nodes: [], picos: [] }
+  const result: Discovery = { nodes: [], smiths: [] }
   for (const line of stdout.split(/\r?\n/)) {
     const index = line.indexOf("=")
     if (index < 0) continue
@@ -56,8 +56,8 @@ export function parseDiscovery(stdout: string): Discovery {
       const version = space > 0 ? value.slice(space + 1) : ""
       if (!result.nodes.some((node) => node.dir === dir))
         result.nodes.push({ dir, version })
-    } else if (key === "pico" && !result.picos.includes(value))
-      result.picos.push(value)
+    } else if (key === "smith" && !result.smiths.includes(value))
+      result.smiths.push(value)
   }
   return result
 }
@@ -113,29 +113,29 @@ export function cacheFromDiscovery(
   const cache: MachineCache = { ...previous }
   delete cache.nodeDir
   delete cache.nodeVersion
-  delete cache.picoPath
+  delete cache.smithPath
   if (discovery.os) cache.os = discovery.os
   if (node) {
     cache.nodeDir = node.dir
     cache.nodeVersion = node.version
   }
-  if (discovery.picos[0]) cache.picoPath = discovery.picos[0]
+  if (discovery.smiths[0]) cache.smithPath = discovery.smiths[0]
   return cache
 }
 
-/** A `pico-app` command with the found `node` in `PATH`. */
-export function picoCommand(
+/** A `smith` command with the found `node` in `PATH`. */
+export function smithCommand(
   cache: MachineCache,
   profile: Pick<MachineProfile, "dataDir">,
   args: string[]
 ) {
-  if (!cache.picoPath || !cache.nodeDir)
-    throw new Error("pico-app or node was not found on the remote machine")
+  if (!cache.smithPath || !cache.nodeDir)
+    throw new Error("smith or node was not found on the remote machine")
   return [
     "env",
     `PATH=${cache.nodeDir}:/usr/local/bin:/usr/bin:/bin`,
-    "PICO_OPEN=0",
-    cache.picoPath,
+    "SMITH_OPEN=0",
+    cache.smithPath,
     ...args,
     ...(profile.dataDir ? ["--data-dir", profile.dataDir] : []),
   ]
@@ -159,7 +159,7 @@ export async function remoteStatus(
   signal?: AbortSignal
 ): Promise<RemoteStatus | undefined> {
   const result = await transport.exec(
-    picoCommand(cache, profile, ["status", "--json"]),
+    smithCommand(cache, profile, ["status", "--json"]),
     { timeoutMs: 20_000, ...(signal ? { signal } : {}) }
   )
   if (
@@ -170,7 +170,7 @@ export async function remoteStatus(
   if (result.code !== 0)
     throw new TransportError(
       lastLines(result.stderr, 1) ||
-        `pico-app status failed with exit code ${result.code}`,
+        `smith status failed with exit code ${result.code}`,
       result.code,
       lastLines(result.stderr)
     )
@@ -179,13 +179,13 @@ export async function remoteStatus(
     data = JSON.parse(result.stdout) as Partial<RemoteStatus>
   } catch {
     throw new TransportError(
-      "pico-app status --json did not return JSON. Update Pico on the remote machine.",
+      "smith status --json did not return JSON. Update Smith on the remote machine.",
       result.code,
       lastLines(result.stdout)
     )
   }
   if (typeof data.port !== "number" || typeof data.pid !== "number")
-    throw new TransportError("pico-app status has no port", 0, "")
+    throw new TransportError("smith status has no port", 0, "")
   return {
     pid: data.pid,
     port: data.port,
@@ -199,19 +199,19 @@ export async function remoteVersion(
   cache: MachineCache
 ) {
   const result = await transport.exec(
-    picoCommand(cache, { dataDir: null }, ["--version"]),
+    smithCommand(cache, { dataDir: null }, ["--version"]),
     { timeoutMs: 20_000 }
   )
   return result.code === 0 ? result.stdout.trim() : undefined
 }
 
-/** Whether the remote `pico-app` can work with a hub (`serve --detach`). */
+/** Whether the remote `smith` can work with a hub (`serve --detach`). */
 export async function remoteSupportsHub(
   transport: MachineTransport,
   cache: MachineCache
 ) {
   const result = await transport.exec(
-    picoCommand(cache, { dataDir: null }, ["--help"]),
+    smithCommand(cache, { dataDir: null }, ["--help"]),
     { timeoutMs: 20_000 }
   )
   return result.code === 0 && result.stdout.includes("--detach")
@@ -224,7 +224,7 @@ export async function startRemote(
   profile: Pick<MachineProfile, "dataDir">
 ) {
   const result = await transport.exec(
-    picoCommand(cache, profile, [
+    smithCommand(cache, profile, [
       "serve",
       "--detach",
       "--no-open",
@@ -237,14 +237,14 @@ export async function startRemote(
     throw new TransportError(
       lastLines(result.stderr, 1) ||
         lastLines(result.stdout, 1) ||
-        `pico-app serve failed with exit code ${result.code}`,
+        `smith serve failed with exit code ${result.code}`,
       result.code,
       lastLines(`${result.stdout}\n${result.stderr}`)
     )
 }
 
 /**
- * Install Pico with npm into `~/.local` on the remote host. This needs no
+ * Install Smith with npm into `~/.local` on the remote host. This needs no
  * root and does not change the global packages of the remote `node`.
  */
 export async function installRemote(
@@ -256,7 +256,7 @@ export async function installRemote(
     [
       "sh",
       "-c",
-      `PATH="${nodeDir}:/usr/local/bin:/usr/bin:/bin"; exec npm install --global --prefix "$HOME/.local" @alivault/pico@${version}`,
+      `PATH="${nodeDir}:/usr/local/bin:/usr/bin:/bin"; exec npm install --global --prefix "$HOME/.local" @alivault/smith@${version}`,
     ],
     { timeoutMs: 10 * 60_000 }
   )

@@ -123,7 +123,7 @@ export function sendJson(
 export function sendError(response: ServerResponse, error: unknown) {
   const status = error instanceof ApiError ? error.status : 500
   const message = error instanceof Error ? error.message : String(error)
-  if (status >= 500) console.error("[pico] request failed:", error)
+  if (status >= 500) console.error("[smith] request failed:", error)
   if (response.headersSent) {
     response.end()
     return

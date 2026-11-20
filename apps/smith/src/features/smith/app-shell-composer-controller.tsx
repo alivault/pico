@@ -8,7 +8,7 @@ import {
   ServerIcon,
 } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -35,34 +35,34 @@ import {
   formatFolderName,
   useLatestRef,
   useStableEvent,
-} from "@/features/pico/app-shell-common"
-import type { AppShellDisplaySettingsState } from "@/features/pico/app-shell-types"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import type { PendingQueueSaveRow } from "@/features/pico/pending-queue"
+} from "@/features/smith/app-shell-common"
+import type { AppShellDisplaySettingsState } from "@/features/smith/app-shell-types"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import type { PendingQueueSaveRow } from "@/features/smith/pending-queue"
 import {
   useMachineReadOnly,
   useMachines,
   type MachineInfo,
-} from "@/features/pico/machine-store"
-import { useHasMachineGroups } from "@/features/pico/machines"
-import { openMachine } from "@/lib/pico/machine"
-import { NewAgentWorktreeToggle } from "@/features/pico/agent/worktree-toggle"
+} from "@/features/smith/machine-store"
+import { useHasMachineGroups } from "@/features/smith/machines"
+import { openMachine } from "@/lib/smith/machine"
+import { NewAgentWorktreeToggle } from "@/features/smith/agent/worktree-toggle"
 import {
   ComposerPanel,
   type ComposerPanelHandle,
-} from "@/features/pico/composer-panel"
-import type { ComposerContextUsageStore } from "@/features/pico/context-usage"
-import { picoQueryKeys } from "@/features/pico/query-keys"
+} from "@/features/smith/composer-panel"
+import type { ComposerContextUsageStore } from "@/features/smith/context-usage"
+import { smithQueryKeys } from "@/features/smith/query-keys"
 import {
   useSelector,
-  type PicoStore,
-} from "@/features/pico/tanstack-store-utils"
+  type SmithStore,
+} from "@/features/smith/tanstack-store-utils"
 import type {
   AppShellComposerActions,
   AppShellComposerSnapshot,
-} from "@/features/pico/app-shell-composer-state"
-import type { AgentState, StreamingBehavior } from "@/lib/pico"
-import { isApiErrorResponse } from "@/lib/pico/api"
+} from "@/features/smith/app-shell-composer-state"
+import type { AgentState, StreamingBehavior } from "@/lib/smith"
+import { isApiErrorResponse } from "@/lib/smith/api"
 import type {
   FileCompletionsResponse,
   GitActionResponse,
@@ -70,14 +70,14 @@ import type {
   GitLocalBranch,
   GitStatusResponse,
   PathCompletionsResponse,
-} from "@/lib/pico/api"
-import { useMachineId } from "@/lib/pico/machine-context"
+} from "@/lib/smith/api"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 type GitStatusData = Extract<GitStatusResponse, { ok: true }>
 type GitChangesData = Extract<GitChangesResponse, { ok: true }>
 
 function useAppShellComposerSnapshot(
-  store: PicoStore<AppShellComposerSnapshot>
+  store: SmithStore<AppShellComposerSnapshot>
 ) {
   return useSelector(store)
 }
@@ -92,7 +92,7 @@ function gitStatusQueryOptions({
   viewerContextId: string
 }) {
   return {
-    queryKey: picoQueryKeys.gitStatus(viewerContextId, cwd),
+    queryKey: smithQueryKeys.gitStatus(viewerContextId, cwd),
     queryFn: () =>
       fetchJson<GitStatusData>(
         buildRequestUrl(`/api/git-status?cwd=${encodeURIComponent(cwd)}`, {
@@ -115,7 +115,7 @@ function gitBranchesQueryOptions({
   viewerContextId: string
 }) {
   return {
-    queryKey: picoQueryKeys.gitBranches(viewerContextId, cwd),
+    queryKey: smithQueryKeys.gitBranches(viewerContextId, cwd),
     queryFn: () =>
       fetchJson<GitChangesData>(
         buildRequestUrl(
@@ -282,25 +282,25 @@ export function NewAgentComposerSelectors({
       ),
     onSuccess: (_result, payload) => {
       void queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitStatus(viewerContextId, selectedProject),
+        queryKey: smithQueryKeys.gitStatus(viewerContextId, selectedProject),
       })
       void queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitBranches(viewerContextId, selectedProject),
+        queryKey: smithQueryKeys.gitBranches(viewerContextId, selectedProject),
       })
       void queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitFiles(viewerContextId, selectedProject),
+        queryKey: smithQueryKeys.gitFiles(viewerContextId, selectedProject),
       })
       void queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitCommits(viewerContextId, selectedProject),
+        queryKey: smithQueryKeys.gitCommits(viewerContextId, selectedProject),
       })
       void queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.projectFileTree(
+        queryKey: smithQueryKeys.projectFileTree(
           viewerContextId,
           selectedProject
         ),
       })
       void queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitFileReviews(
+        queryKey: smithQueryKeys.gitFileReviews(
           viewerContextId,
           selectedProject
         ),
@@ -533,10 +533,10 @@ export const AppShellComposerController = React.memo(
     actionsRef: React.RefObject<AppShellComposerActions>
     composerPanelRef: React.RefObject<ComposerPanelHandle | null>
     contextUsageStore: ComposerContextUsageStore
-    displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
+    displaySettingsStore: SmithStore<AppShellDisplaySettingsState>
     fileInputRef: React.RefObject<HTMLInputElement | null>
-    agentStore: PicoStore<AgentState>
-    store: PicoStore<AppShellComposerSnapshot>
+    agentStore: SmithStore<AgentState>
+    store: SmithStore<AppShellComposerSnapshot>
     topContent?: React.ReactNode
   }) {
     const machineId = useMachineId()

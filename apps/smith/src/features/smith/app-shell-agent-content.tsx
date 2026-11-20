@@ -3,44 +3,44 @@ import * as React from "react"
 import {
   AppShellComposerController,
   NewAgentComposerSelectors,
-} from "@/features/pico/app-shell-composer-controller"
+} from "@/features/smith/app-shell-composer-controller"
 import type {
   AppShellComposerActions,
   AppShellComposerSnapshot,
-} from "@/features/pico/app-shell-composer-state"
+} from "@/features/smith/app-shell-composer-state"
 import {
   AppShellAgentConversation,
   type AppShellConversationFrameHandle,
-} from "@/features/pico/app-shell-conversation"
+} from "@/features/smith/app-shell-conversation"
 import {
   useConversationHasMessages,
   type ConversationItemsStore,
-} from "@/features/pico/app-shell-conversation-store"
-import type { AppShellDisplaySettingsState } from "@/features/pico/app-shell-types"
-import type { AppShellWorkingState } from "@/features/pico/app-shell-working-state"
-import type { ComposerPanelHandle } from "@/features/pico/composer-panel"
-import type { ComposerContextUsageStore } from "@/features/pico/context-usage"
-import { shallowRecordEqual } from "@/features/pico/app-shell-common"
+} from "@/features/smith/app-shell-conversation-store"
+import type { AppShellDisplaySettingsState } from "@/features/smith/app-shell-types"
+import type { AppShellWorkingState } from "@/features/smith/app-shell-working-state"
+import type { ComposerPanelHandle } from "@/features/smith/composer-panel"
+import type { ComposerContextUsageStore } from "@/features/smith/context-usage"
+import { shallowRecordEqual } from "@/features/smith/app-shell-common"
 import {
   useSelector,
-  type PicoStore,
-} from "@/features/pico/tanstack-store-utils"
-import type { AgentState } from "@/lib/pico"
+  type SmithStore,
+} from "@/features/smith/tanstack-store-utils"
+import type { AgentState } from "@/lib/smith"
 import { cn } from "@/lib/utils"
-import { toast } from "@/lib/pico/toast"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { toast } from "@/lib/smith/toast"
+import { useMachineId } from "@/lib/smith/machine-context"
 import {
   buildRequestUrl,
   fetchJson,
   getDataTransferFiles,
   hasDraggedFiles,
-} from "@/features/pico/app-shell-utils"
+} from "@/features/smith/app-shell-utils"
 import {
   UserMessageActionsContext,
   type UserMessageActions,
-} from "@/features/pico/conversation-view"
-import { ToolRenderContext } from "@/features/pico/tool-renderers/registry"
-import { WaitingCardChip } from "@/features/pico/agent/waiting-cards"
+} from "@/features/smith/conversation-view"
+import { ToolRenderContext } from "@/features/smith/tool-renderers/registry"
+import { WaitingCardChip } from "@/features/smith/agent/waiting-cards"
 import { settle } from "@/lib/settle"
 
 export type AppShellAgentContentProps = {
@@ -51,7 +51,7 @@ export type AppShellAgentContentProps = {
   conversationFrameRef: React.RefObject<AppShellConversationFrameHandle | null>
   conversationItemsStore: ConversationItemsStore
   defaultNewAgentProject: string
-  displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
+  displaySettingsStore: SmithStore<AppShellDisplaySettingsState>
   fileInputRef: React.RefObject<HTMLInputElement | null>
   isLoadingOlderHistory: boolean
   isAgentViewLoading: boolean
@@ -61,10 +61,10 @@ export type AppShellAgentContentProps = {
   onCreateAgent: (cwdOverride?: string) => void
   onLoadOlderHistory: () => Promise<void>
   onOpenAddProjectDialog: () => void
-  agentStore: PicoStore<AgentState>
-  store: PicoStore<AppShellComposerSnapshot>
+  agentStore: SmithStore<AgentState>
+  store: SmithStore<AppShellComposerSnapshot>
   viewerContextId: string
-  workingStateStore: PicoStore<AppShellWorkingState | null>
+  workingStateStore: SmithStore<AppShellWorkingState | null>
 }
 
 export function AppShellAgentContent({

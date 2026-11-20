@@ -299,7 +299,7 @@ export class Viewers {
       writeFileSync(temporary, JSON.stringify(stored, null, 2))
       renameSync(temporary, this.#file)
     } catch (error) {
-      console.error("[pico] could not save viewer contexts:", error)
+      console.error("[smith] could not save viewer contexts:", error)
     }
   }
 }

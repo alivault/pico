@@ -1,29 +1,29 @@
 import * as React from "react"
-import { emitPicoEvent } from "@/features/pico/agent/events"
-import { useMachineFeatureCheck } from "@/features/pico/machine-store"
+import { emitSmithEvent } from "@/features/smith/agent/events"
+import { useMachineFeatureCheck } from "@/features/smith/machine-store"
 import {
   SERVER_RESTART_FEATURE,
   serverStatusLabel,
   useServerHealth,
-} from "@/features/pico/server-restart"
+} from "@/features/smith/server-restart"
 import {
   SettingsItemTrailing,
   SettingsPageHost,
   settingsPageEntries,
   settingsSearchFilter,
   type SettingsPageRef,
-} from "@/features/pico/settings-pages"
+} from "@/features/smith/settings-pages"
 import { ArrowLeftIcon } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
-import type { AppCommand } from "@/features/pico/app-shell-command-palette"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import type { AppCommand } from "@/features/smith/app-shell-command-palette"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
 import {
   appShortcut,
   formatShortcutLabel,
-} from "@/features/pico/keyboard-shortcuts"
-import { picoQueryKeys } from "@/features/pico/query-keys"
+} from "@/features/smith/keyboard-shortcuts"
+import { smithQueryKeys } from "@/features/smith/query-keys"
 import {
   SIDEBAR_VIEWS,
   setShowAgentPreviews,
@@ -32,13 +32,13 @@ import {
   useShowAgentPreviews,
   useSidebarView,
   type SidebarView,
-} from "@/features/pico/sidebar-display-settings"
-import type { DesktopNotificationPermission } from "@/features/pico/agent-done-notifications"
+} from "@/features/smith/sidebar-display-settings"
+import type { DesktopNotificationPermission } from "@/features/smith/agent-done-notifications"
 import type {
   PiCacheRetention,
   PiPerformanceSettingsResponse,
   PiTransport,
-} from "@/lib/pico/api"
+} from "@/lib/smith/api"
 import {
   THEME_FAMILIES,
   themeColorModeLabel,
@@ -49,7 +49,7 @@ import {
   themeFamilySupportsColorMode,
   type ThemeColorMode,
   type ThemeFamily,
-} from "@/lib/pico"
+} from "@/lib/smith"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -71,7 +71,7 @@ import {
 } from "@/components/ui/drawer"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { getShellLayout } from "@/hooks/use-shell-layout"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 const THEME_OPTIONS: Array<ThemeFamily> = [...THEME_FAMILIES]
 const PI_TRANSPORT_OPTIONS: Array<PiTransport> = [
@@ -680,7 +680,7 @@ function getSettingsCommandGroups({
             "hub",
             "host",
           ],
-          onSelect: () => emitPicoEvent("pico:open-machines", {}),
+          onSelect: () => emitSmithEvent("smith:open-machines", {}),
         },
         ...(hasFeature(SERVER_RESTART_FEATURE)
           ? [
@@ -688,7 +688,7 @@ function getSettingsCommandGroups({
                 id: "server",
                 title: "Server",
                 description:
-                  "The version of Pico on this machine, its updates, and a restart that loads them.",
+                  "The version of Smith on this machine, its updates, and a restart that loads them.",
                 valueLabel: serverStatus,
                 page: "server",
                 keywords: [
@@ -712,7 +712,7 @@ function getSettingsCommandGroups({
             "What uses memory on this machine: the server, terminals, jobs, and the agent browser.",
           valueLabel: "Open",
           keywords: ["resources", "memory", "ram", "jobs", "processes"],
-          onSelect: () => emitPicoEvent("pico:open-resources", {}),
+          onSelect: () => emitSmithEvent("smith:open-resources", {}),
         },
       ],
     },
@@ -868,7 +868,7 @@ function SettingsBrowseBody({
           Use ↑/↓ to select, Return to open or toggle, and Esc to close.
         </span>
         <span className="ml-auto shrink-0 tabular-nums">
-          Pico v{__PICO_VERSION__}
+          Smith v{__SMITH_VERSION__}
         </span>
       </div>
     </Command>
@@ -1060,7 +1060,7 @@ function AppShellSettingsDialog({
   const showAgentPreviews = useShowAgentPreviews()
   const sidebarView = useSidebarView(machineId)
   const performanceQuery = useQuery({
-    queryKey: picoQueryKeys.piPerformance(viewerContextId),
+    queryKey: smithQueryKeys.piPerformance(viewerContextId),
     queryFn: () =>
       fetchJson<PiPerformanceSettingsResponse>(
         buildRequestUrl("/api/settings/performance", {
@@ -1094,7 +1094,7 @@ function AppShellSettingsDialog({
     onSuccess: (response) => {
       if (!response.ok) return
       queryClient.setQueryData(
-        picoQueryKeys.piPerformance(viewerContextId),
+        smithQueryKeys.piPerformance(viewerContextId),
         response
       )
       if (response.appliesToActiveAgentAfterRestart) {

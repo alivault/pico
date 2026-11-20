@@ -34,7 +34,7 @@ function systemdRun() {
 
 /** Whether jobs can get their own scope here (checked one time). */
 export function jobScopesAvailable() {
-  if (process.env.PICO_JOB_SCOPES === "0" || process.platform !== "linux")
+  if (process.env.SMITH_JOB_SCOPES === "0" || process.platform !== "linux")
     return Promise.resolve(false)
   const run = systemdRun()
   if (!run) return Promise.resolve(false)
@@ -82,7 +82,7 @@ export function scopeLimits(settings: {
 }
 
 export function jobUnit(jobId: string) {
-  return `pico-job-${jobId}`
+  return `smith-job-${jobId}`
 }
 
 /** A command line that runs `file args` in the job's own scope. */

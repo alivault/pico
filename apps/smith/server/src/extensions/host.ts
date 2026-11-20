@@ -1,5 +1,5 @@
 /**
- * The host bridge: Pico services that extensions use.
+ * The host bridge: Smith services that extensions use.
  *
  * The runtime and its extensions open before the services that need the
  * runtime (agents, terminals, the event hub). Extensions get this bridge at
@@ -11,7 +11,7 @@ import type { ConversationId, Harness } from "@earendil-works/pi-durable"
 import type { AgentSearch } from "../core/agent-search.ts"
 import type { ToolLimits } from "../core/profiles.ts"
 import type { QueuedItem } from "../core/queue.ts"
-import type { PicoSettingsData } from "../core/settings.ts"
+import type { SmithSettingsData } from "../core/settings.ts"
 import type { MachineManager } from "../machines/manager.ts"
 import type { BrowserManager } from "../services/browser.ts"
 import type { Notifier } from "../services/notify.ts"
@@ -46,7 +46,7 @@ export type HostAgents = {
    * Put a message in the follow-up queue of an agent, after the queued
    * prompts of the user. It never steers: the agent gets it when its turn
    * answers, and an idle agent starts a turn. A paused queue keeps it.
-   * `from`: the agent that sends it, for the queue; default Pico.
+   * `from`: the agent that sends it, for the queue; default Smith.
    */
   followUp(
     id: string,
@@ -174,7 +174,7 @@ export type HostServices = {
   events: HostEvents
   terminals: HostTerminals
   harness: Harness
-  settings: () => Readonly<PicoSettingsData>
+  settings: () => Readonly<SmithSettingsData>
   dataDir: string
   notifier?: Notifier
   browser?: BrowserManager
@@ -212,7 +212,7 @@ export class HostBridge {
       try {
         await listener(services)
       } catch (error) {
-        console.warn("[pico] extension startup failed:", error)
+        console.warn("[smith] extension startup failed:", error)
       }
     }
   }

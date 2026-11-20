@@ -70,7 +70,7 @@ export type Question = {
 export type QuestionsState = { items: Record<string, Question> }
 
 export const QuestionsDoc = defineDoc<QuestionsState>({
-  kind: "pico.questions",
+  kind: "smith.questions",
   checkpointWhen: () => false,
   version: 1,
   scope: "conversation",
@@ -320,7 +320,7 @@ const askTool = defineTool({
 
 registerState({
   key: "questions",
-  kinds: ["pico.questions"],
+  kinds: ["smith.questions"],
   async read(reader, conversationId, context) {
     const state = await reader.snapshot(QuestionsDoc, conversationId, context)
     const pending = pendingQuestions(state as QuestionsState | undefined)

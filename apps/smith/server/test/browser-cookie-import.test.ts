@@ -25,7 +25,7 @@ import {
   type ImportedCookie,
 } from "../src/services/browser-cookie-import.ts"
 
-const tempDir = () => mkdtemp(join(tmpdir(), "pico-cookie-import-"))
+const tempDir = () => mkdtemp(join(tmpdir(), "smith-cookie-import-"))
 
 /** A Chromium `v10` value, as Chrome writes it. */
 function encryptV10(

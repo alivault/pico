@@ -71,8 +71,8 @@ void test("entryRow keeps text and short tool calls, not thinking", () => {
 })
 
 void test("the index reads new entries of the durable database", async () => {
-  const dir = await tempDir("pico-search-")
-  const source = join(dir, "pico.sqlite")
+  const dir = await tempDir("smith-search-")
+  const source = join(dir, "smith.sqlite")
   const durable = new DatabaseSync(source)
   durable.exec(
     "CREATE TABLE entries (id INTEGER PRIMARY KEY, conversation_id INTEGER NOT NULL, head INTEGER, commit_seq INTEGER NOT NULL, record TEXT NOT NULL)"

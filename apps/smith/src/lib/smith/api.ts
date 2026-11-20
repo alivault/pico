@@ -9,7 +9,7 @@ import type {
   StateSyncPayload,
   TreeNode,
   UiRequest,
-} from "@/lib/pico"
+} from "@/lib/smith"
 
 export type ApiErrorResponse = {
   ok: false
@@ -901,7 +901,7 @@ export type SidebarStateEvent = SidebarStateSnapshot & {
   clientId: string
 }
 
-export type PicoServerEvent =
+export type SmithServerEvent =
   | StateSyncPayload
   | ConversationDeltaEvent
   | AgentsEvent

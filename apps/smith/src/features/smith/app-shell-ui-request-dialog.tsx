@@ -1,8 +1,8 @@
 import * as React from "react"
 import { ArrowLeftIcon } from "lucide-react"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
-import type { ExtensionUiEvent, UiRequestResponse } from "@/lib/pico/api"
+import type { ExtensionUiEvent, UiRequestResponse } from "@/lib/smith/api"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -32,9 +32,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { ShortcutButton, ShortcutFooter } from "@/components/ui/shortcut-footer"
 import { Textarea } from "@/components/ui/textarea"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 type AppShellUiRequestDialogProps = {
   pendingUiRequest: ExtensionUiEvent | null
@@ -234,7 +234,7 @@ function AuthLoginActions({
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="truncate font-medium">Open login page</span>
               <span className="line-clamp-2 text-xs text-muted-foreground">
-                Continue OAuth in your browser. Keep Pico open while the
+                Continue OAuth in your browser. Keep Smith open while the
                 provider redirects back.
               </span>
             </div>
@@ -445,7 +445,9 @@ function GenericUiRequestDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{pendingUiRequest?.title || "Pico request"}</DialogTitle>
+          <DialogTitle>
+            {pendingUiRequest?.title || "Smith request"}
+          </DialogTitle>
           {pendingUiRequest?.message ? (
             <DialogDescription>{pendingUiRequest.message}</DialogDescription>
           ) : null}

@@ -1,11 +1,11 @@
 /**
- * What uses memory on this machine for Pico: the server, the pty-host, each
+ * What uses memory on this machine for Smith: the server, the pty-host, each
  * running job (with all its child processes), and the agent browser. The
  * machine API serves it (`/api/resources`), so a hub can show remote machines
  * too.
  *
  * `MemoryPressure` watches the kernel's pressure numbers (Linux) and frees
- * what Pico can give back without harm. It never stops a job.
+ * what Smith can give back without harm. It never stops a job.
  */
 import { freemem, totalmem } from "node:os"
 
@@ -150,7 +150,7 @@ export type PressureDeps = ResourceDeps & {
   dropTranscripts: () => number
   notifier?: Notifier | undefined
   agentLink: (agentId: string) => string
-  /** The title of a job's agent, so the user can find the job in Pico. */
+  /** The title of a job's agent, so the user can find the job in Smith. */
   agentTitle?: (agentId: string) => string | undefined
 }
 
@@ -159,7 +159,7 @@ function clip(text: string, max: number) {
   return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text
 }
 
-/** Watches memory pressure and frees what Pico can give back. */
+/** Watches memory pressure and frees what Smith can give back. */
 export class MemoryPressure {
   readonly #deps: PressureDeps
   readonly #read: typeof memoryPressure
@@ -223,14 +223,14 @@ export class MemoryPressure {
       notified = true
       await this.#deps.notifier
         .send({
-          title: "Pico: the machine is low on memory",
+          title: "Smith: the machine is low on memory",
           body: `Jobs that use the most: ${heavy
             .map((job) => {
               const title = this.#deps.agentTitle?.(job.agentId)
               const owner = title ? `, agent "${clip(title, 40)}"` : ""
               return `${job.name} (${formatBytes(job.memory)}${owner})`
             })
-            .join(", ")}. Pico does not stop them.`,
+            .join(", ")}. Smith does not stop them.`,
           url: this.#deps.agentLink(heavy[0]!.agentId),
           tag: "memory-pressure",
           level: "warning",

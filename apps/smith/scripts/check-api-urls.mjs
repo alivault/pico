@@ -2,7 +2,7 @@
 /**
  * Every client request names its machine. Requests go through
  * `buildRequestUrl` (with a `machineId`), `buildHubRequestUrl`, `hubUrl`, or
- * `machineApiUrl` (see `src/lib/pico/machine.ts`), which add the
+ * `machineApiUrl` (see `src/lib/smith/machine.ts`), which add the
  * `/m/<machine>` prefix of the hub proxy. This check fails on:
  *
  * - a raw `fetch`, `EventSource`, or `WebSocket` with a server path;
@@ -42,7 +42,7 @@ const RULES = [
   },
   {
     pattern: /\bmachineStorageKey\(/g,
-    allowed: ["src/lib/pico/machine.ts", "src/lib/pico/storage.ts"],
+    allowed: ["src/lib/smith/machine.ts", "src/lib/smith/storage.ts"],
     message:
       "Use machineLocalStorageGetItem or machineLocalStorageSetItem, not machineStorageKey",
   },

@@ -3,7 +3,7 @@
  *
  * Each conversation has its own Chrome context. Its cookies and local storage
  * survive restarts (a file per conversation), and its open tabs are kept in
- * the `pico.browser` document, so they open again after a restart.
+ * the `smith.browser` document, so they open again after a restart.
  */
 import { existsSync } from "node:fs"
 import { homedir } from "node:os"
@@ -45,7 +45,7 @@ export type BrowserState = {
 }
 
 export const BrowserDoc = defineDoc<BrowserState>({
-  kind: "pico.browser",
+  kind: "smith.browser",
   checkpointWhen: () => false,
   version: 1,
   scope: "conversation",
@@ -56,7 +56,7 @@ export const BrowserDoc = defineDoc<BrowserState>({
 
 registerState({
   key: "browser",
-  kinds: ["pico.browser"],
+  kinds: ["smith.browser"],
   async read(reader, conversationId, context) {
     const state = await reader.snapshot(BrowserDoc, conversationId, context)
     return state && state.tabs.length > 0 ? json(state) : undefined
@@ -186,7 +186,7 @@ export function createBrowserExtension(host: HostBridge) {
     const action = args.action
     const locator =
       args.ref !== undefined
-        ? page.locator(`[data-pico-ref="${args.ref}"]`)
+        ? page.locator(`[data-smith-ref="${args.ref}"]`)
         : args.selector
           ? page.locator(args.selector).first()
           : args.text
@@ -240,7 +240,7 @@ export function createBrowserExtension(host: HostBridge) {
     const { page } = await browser.page(conversation, tabs)
     const target =
       args.ref !== undefined
-        ? page.locator(`[data-pico-ref="${args.ref}"]`)
+        ? page.locator(`[data-smith-ref="${args.ref}"]`)
         : args.selector
           ? page.locator(args.selector).first()
           : args.text
@@ -453,7 +453,7 @@ export function createBrowserExtension(host: HostBridge) {
       "screenshot (full_page);",
       "eval (a JavaScript expression in the page; returns its JSON value);",
       "tabs, switch_tab (id), close_tab (id);",
-      "handoff (text: what the user should do, for example log in to a site or solve a captcha; the user sees your browser live in Pico and uses it, and the call waits until the user answers; use it only when you cannot go on yourself);",
+      "handoff (text: what the user should do, for example log in to a site or solve a captcha; the user sees your browser live in Smith and uses it, and the call waits until the user answers; use it only when you cannot go on yourself);",
       "close (close the browser; cookies stay saved).",
     ].join(" "),
     parameters: Type.Object({

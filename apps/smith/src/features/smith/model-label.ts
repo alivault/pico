@@ -1,4 +1,4 @@
-import type { ModelOption } from "@/lib/pico"
+import type { ModelOption } from "@/lib/smith"
 
 export function modelLabel(
   model: ModelOption | undefined,

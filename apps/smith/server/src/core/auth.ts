@@ -465,7 +465,7 @@ export class Auth {
       if (!credential) return { ok: true, windows }
       const headers: Record<string, string> = {
         Authorization: `Bearer ${credential.token}`,
-        "User-Agent": "pico",
+        "User-Agent": "smith",
         Accept: "application/json",
       }
       if (credential.accountId)

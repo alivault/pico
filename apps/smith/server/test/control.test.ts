@@ -1,5 +1,5 @@
 /**
- * The MCP server and the `agent` command, end to end: a Pico server with a
+ * The MCP server and the `agent` command, end to end: a Smith server with a
  * fake OpenAI-compatible model, which answers `echo: <the last user text>`.
  * A message with SLOW gets its answer after 1.5 s.
  */
@@ -62,7 +62,7 @@ async function fakeModel(): Promise<Server> {
   return server
 }
 
-async function startPico(data: string, modelPort: number) {
+async function startSmith(data: string, modelPort: number) {
   const agentDir = join(data, "agent")
   await mkdir(agentDir, { recursive: true })
   await writeFile(
@@ -88,7 +88,7 @@ async function startPico(data: string, modelPort: number) {
   const child = spawn(
     process.execPath,
     [
-      "dist/pico-server.mjs",
+      "dist/smith-server.mjs",
       "serve",
       "--port",
       "0",
@@ -124,7 +124,7 @@ async function startPico(data: string, modelPort: number) {
   }
 }
 
-/** Run `pico-server agent …`; stdin is `input`. */
+/** Run `smith-server agent …`; stdin is `input`. */
 function cli(
   data: string,
   env: NodeJS.ProcessEnv,
@@ -135,7 +135,7 @@ function cli(
     (done) => {
       const child = spawn(
         process.execPath,
-        ["dist/pico-server.mjs", ...args, "--data-dir", data],
+        ["dist/smith-server.mjs", ...args, "--data-dir", data],
         { env, stdio: ["pipe", "pipe", "pipe"] }
       )
       let stdout = ""
@@ -190,14 +190,14 @@ void test("the agent command parses arguments and states", () => {
 })
 
 void test("the MCP server and the agent command start, message, and wait for agents", async () => {
-  const data = await tempDir("pico-control-")
-  const project = await tempDir("pico-control-project-")
+  const data = await tempDir("smith-control-")
+  const project = await tempDir("smith-control-project-")
   const model = await fakeModel()
-  const pico = await startPico(data, (model.address() as AddressInfo).port)
+  const smith = await startSmith(data, (model.address() as AddressInfo).port)
   try {
     let rpcId = 0
     const rpc = async (method: string, params?: unknown) => {
-      const response = await fetch(`${pico.url}/mcp`, {
+      const response = await fetch(`${smith.url}/mcp`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -235,9 +235,9 @@ void test("the MCP server and the agent command start, message, and wait for age
     assert.equal(init.result?.protocolVersion, "2025-06-18")
     assert.equal(
       (init.result?.serverInfo as { name: string } | undefined)?.name,
-      "pico"
+      "smith"
     )
-    const notified = await fetch(`${pico.url}/mcp`, {
+    const notified = await fetch(`${smith.url}/mcp`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -246,7 +246,7 @@ void test("the MCP server and the agent command start, message, and wait for age
       }),
     })
     assert.equal(notified.status, 202)
-    assert.equal((await fetch(`${pico.url}/mcp`)).status, 405)
+    assert.equal((await fetch(`${smith.url}/mcp`)).status, 405)
     assert.equal((await rpc("nope")).error?.code, -32601)
     const tools = (
       (await rpc("tools/list")).result as { tools: Array<{ name: string }> }
@@ -264,7 +264,7 @@ void test("the MCP server and the agent command start, message, and wait for age
     // A browser page on another site cannot call it.
     assert.equal(
       (
-        await fetch(`${pico.url}/mcp`, {
+        await fetch(`${smith.url}/mcp`, {
           method: "POST",
           headers: {
             "content-type": "application/json",
@@ -292,7 +292,7 @@ void test("the MCP server and the agent command start, message, and wait for age
 
     // The agent's project shows in the sidebar.
     const sidebar = (await (
-      await fetch(`${pico.url}/api/sidebar-state`)
+      await fetch(`${smith.url}/api/sidebar-state`)
     ).json()) as { projects: string[] }
     assert.ok(sidebar.projects.length === 1, JSON.stringify(sidebar))
 
@@ -342,7 +342,7 @@ void test("the MCP server and the agent command start, message, and wait for age
     assert.match(none.content[0]!.text, /No agent has messages/)
 
     // The command.
-    const env = pico.env
+    const env = smith.env
     const start = await cli(data, env, [
       "agent",
       "start",
@@ -419,12 +419,12 @@ void test("the MCP server and the agent command start, message, and wait for age
     assert.equal(usage.code, 1)
     assert.match(usage.stderr, /needs a message/)
     const mcp = await cli(data, env, ["mcp", "--json"])
-    assert.deepEqual(JSON.parse(mcp.stdout), { url: `${pico.url}/mcp` })
+    assert.deepEqual(JSON.parse(mcp.stdout), { url: `${smith.url}/mcp` })
   } catch (error) {
-    console.error(pico.log())
+    console.error(smith.log())
     throw error
   } finally {
-    await pico.stop()
+    await smith.stop()
     model.close()
   }
 })

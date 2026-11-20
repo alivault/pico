@@ -1,8 +1,8 @@
 import * as React from "react"
 import { useHotkeys, type UseHotkeyDefinition } from "@tanstack/react-hotkeys"
 
-import type { AgentListEntry } from "@/lib/pico/api"
-import type { ArchiveAgentsResult } from "@/features/pico/archive-agents"
+import type { AgentListEntry } from "@/lib/smith/api"
+import type { ArchiveAgentsResult } from "@/features/smith/archive-agents"
 
 import {
   agentNumberModifierFlag,
@@ -13,7 +13,7 @@ import {
   rightSidebarPaneShortcutKeys,
   type RightSidebarShortcutPane,
 } from "./keyboard-shortcuts"
-import { isInShownMachineShell } from "@/lib/pico/machine-context"
+import { isInShownMachineShell } from "@/lib/smith/machine-context"
 import { getShownSidebarAgentItems } from "./sidebar-agent-numbers"
 
 const DOUBLE_ESCAPE_INTERVAL_MS = 500
@@ -775,7 +775,7 @@ export function useAppShellShortcuts({
       options: {
         meta: {
           name: "App shell shortcut",
-          description: "Run a Pico app shell command.",
+          description: "Run a Smith app shell command.",
         },
       },
     })),
@@ -801,7 +801,7 @@ export function useAppShellShortcuts({
       options: {
         meta: {
           name: "App shell shortcut",
-          description: "Run a Pico app shell command.",
+          description: "Run a Smith app shell command.",
         },
       },
     },

@@ -19,10 +19,10 @@ Use these words everywhere: in UI text, tool names and descriptions, API routes,
 ## What does not change
 
 1. **Persisted strings.** Renaming these loses user data, so keep the string and rename only the TypeScript name. Add a comment such as `// Stored name: do not change.`
-   - Document kinds: `pico.session`, `pico.queue`, `pico.delivered`, and the others (`kind:` in `defineDoc`).
+   - Document kinds: `smith.session`, `smith.queue`, `smith.delivered`, and the others (`kind:` in `defineDoc`).
    - The public ID prefix `s` (`s12`). IDs are stored in `meta.parent`, in pi imports, in sidebar order, and in links in notifications. An ID is opaque, so the letter does not matter.
-   - `localStorage` keys (`pico-pinned-sessions`, `pico-collapsed-directories`, …). They hold pins, collapsed projects, and recent projects.
-2. **Names that pi or pi-durable owns.** `AgentSession`, `ConversationId`, `conversationId`, `harness.conversation()`, `scope: "session"` and `scope: "conversation"` in `defineDoc`, and pi's `AgentDoc`, `LiveDoc`, `InboxDoc`. Note that a Pico agent is a pi-durable conversation.
+   - `localStorage` keys (`smith-pinned-sessions`, `smith-collapsed-directories`, …). They hold pins, collapsed projects, and recent projects.
+2. **Names that pi or pi-durable owns.** `AgentSession`, `ConversationId`, `conversationId`, `harness.conversation()`, `scope: "session"` and `scope: "conversation"` in `defineDoc`, and pi's `AgentDoc`, `LiveDoc`, `InboxDoc`. Note that a Smith agent is a pi-durable conversation.
 3. **Other meanings of the same words.** Do not rename these:
    - React `children` props, DOM `parentElement`, `firstElementChild`, `child_process`.
    - Tree nodes: the conversation tree (`/api/.../tree`), the file tree, git trees, and the sidebar tree code (`visibleChildrenById`, `isVirtualRootChild`, `childIndent`). Rename only where the node is a subagent.
@@ -87,8 +87,8 @@ Request and response fields follow the same rule: `sessionId` → `agentId`, `se
 | `auto_session_naming_error` | `auto_agent_naming_error` |
 | `new-session` (dialog)      | `new-agent`               |
 | `add-directory` (dialog)    | `add-project`             |
-| `pico:open-session` (DOM)   | `pico:open-agent`         |
-| `pico:session-extensions`   | `pico:agent-extensions`   |
+| `smith:open-session` (DOM)  | `smith:open-agent`        |
+| `smith:session-extensions`  | `smith:agent-extensions`  |
 
 Check each `"session"` and `"directory"` literal (layout kinds, settings sections) one at a time.
 
@@ -101,24 +101,24 @@ Check each `"session"` and `"directory"` literal (layout kinds, settings section
 
 ### Files
 
-| Old                                                    | New                                                  |
-| ------------------------------------------------------ | ---------------------------------------------------- |
-| `server/src/core/sessions.ts`                          | `server/src/core/agents.ts`                          |
-| `server/src/extensions/sessions.ts`                    | `server/src/extensions/agents.ts`                    |
-| `server/test/child-sessions.test.ts`                   | `server/test/subagents.test.ts`                      |
-| `server/test/extensions-sessions.test.ts`              | `server/test/extensions-agents.test.ts`              |
-| `server/test/session-switch.test.ts`                   | `server/test/agent-switch.test.ts`                   |
-| `src/features/pico/agent/children.tsx`                 | `src/features/pico/agent/subagents.tsx`              |
-| `src/features/pico/agent/session-extensions.ts`        | `src/features/pico/agent/agent-extensions.ts`        |
-| `src/features/pico/agent/session-lineage.tsx`          | `src/features/pico/agent/agent-lineage.tsx`          |
-| `src/features/pico/app-shell-session-*.tsx`            | `src/features/pico/app-shell-agent-*.tsx`            |
-| `src/features/pico/app-shell-sessions-dialog.tsx`      | `src/features/pico/app-shell-agents-dialog.tsx`      |
-| `src/features/pico/app-shell-add-directory-dialog.tsx` | `src/features/pico/app-shell-add-project-dialog.tsx` |
-| `src/features/pico/archived-sessions-dialog.tsx`       | `src/features/pico/archived-agents-dialog.tsx`       |
-| `src/features/pico/other-machine-session-dialogs.tsx`  | `src/features/pico/other-machine-agent-dialogs.tsx`  |
-| `src/features/pico/session-*.ts`                       | `src/features/pico/agent-*.ts`                       |
-| `src/features/pico/sidebar-session-numbers.ts`         | `src/features/pico/sidebar-agent-numbers.ts`         |
-| `src/features/pico/use-app-shell-session-*.ts`         | `src/features/pico/use-app-shell-agent-*.ts`         |
+| Old                                                     | New                                                   |
+| ------------------------------------------------------- | ----------------------------------------------------- |
+| `server/src/core/sessions.ts`                           | `server/src/core/agents.ts`                           |
+| `server/src/extensions/sessions.ts`                     | `server/src/extensions/agents.ts`                     |
+| `server/test/child-sessions.test.ts`                    | `server/test/subagents.test.ts`                       |
+| `server/test/extensions-sessions.test.ts`               | `server/test/extensions-agents.test.ts`               |
+| `server/test/session-switch.test.ts`                    | `server/test/agent-switch.test.ts`                    |
+| `src/features/smith/agent/children.tsx`                 | `src/features/smith/agent/subagents.tsx`              |
+| `src/features/smith/agent/session-extensions.ts`        | `src/features/smith/agent/agent-extensions.ts`        |
+| `src/features/smith/agent/session-lineage.tsx`          | `src/features/smith/agent/agent-lineage.tsx`          |
+| `src/features/smith/app-shell-session-*.tsx`            | `src/features/smith/app-shell-agent-*.tsx`            |
+| `src/features/smith/app-shell-sessions-dialog.tsx`      | `src/features/smith/app-shell-agents-dialog.tsx`      |
+| `src/features/smith/app-shell-add-directory-dialog.tsx` | `src/features/smith/app-shell-add-project-dialog.tsx` |
+| `src/features/smith/archived-sessions-dialog.tsx`       | `src/features/smith/archived-agents-dialog.tsx`       |
+| `src/features/smith/other-machine-session-dialogs.tsx`  | `src/features/smith/other-machine-agent-dialogs.tsx`  |
+| `src/features/smith/session-*.ts`                       | `src/features/smith/agent-*.ts`                       |
+| `src/features/smith/sidebar-session-numbers.ts`         | `src/features/smith/sidebar-agent-numbers.ts`         |
+| `src/features/smith/use-app-shell-session-*.ts`         | `src/features/smith/use-app-shell-agent-*.ts`         |
 
 Use `git mv`, so git keeps the history.
 
@@ -141,16 +141,16 @@ The "Agent pane" and the "Agent tab" keep their names. They show the current age
 
 Phases 1 and 2 touch different directories, so two subagents can do them at the same time, each in its own worktree. The name map above is the contract between them.
 
-### Phase 1: Server (`apps/pico/server/**`)
+### Phase 1: Server (`apps/smith/server/**`)
 
 1. Rename the files with `git mv`.
 2. Rename the tools, the actions, the profiles, the subagent prompt, and the settings.
 3. Rename the API routes, the request and response fields, and the event types.
 4. Rename the code names. Keep the persisted strings (see "What does not change").
 5. Update the tests, and add a test that the old tool names are gone from the tool list.
-6. Run `pnpm --filter @pico/server typecheck` and `pnpm test`.
+6. Run `pnpm --filter @smith/server typecheck` and `pnpm test`.
 
-### Phase 2: Web client (`apps/pico/src/**`, `apps/pico/scripts/**`)
+### Phase 2: Web client (`apps/smith/src/**`, `apps/smith/scripts/**`)
 
 1. Rename the files with `git mv`, and fix the imports.
 2. Change the API calls and event types to the new routes and names.
@@ -164,15 +164,15 @@ Phases 1 and 2 touch different directories, so two subagents can do them at the 
 1. Merge phase 1, then phase 2, into one branch.
 2. Run `pnpm check` from the repo root.
 3. Search for old words that remain, and look at each match:
-   `rg -i -w "sessions?|child(ren)?|directory|directories" apps/pico/src apps/pico/server/src apps/pico/server/test`
-4. Run Pico from `pnpm dev`. Test: create an agent, rename it, archive and restore it, spawn a subagent in a worktree, send it a message, wait for its report, compact a conversation, move an agent to another project, and use another machine through the hub.
+   `rg -i -w "sessions?|child(ren)?|directory|directories" apps/smith/src apps/smith/server/src apps/smith/server/test`
+4. Run Smith from `pnpm dev`. Test: create an agent, rename it, archive and restore it, spawn a subagent in a worktree, send it a message, wait for its report, compact a conversation, move an agent to another project, and use another machine through the hub.
 
 ### Phase 4: Docs
 
 1. `README.md`: the feature list, the tool names, and the screenshot alt text.
 2. `apps/website/site/index.html`.
 3. `AGENTS.md` (this repo) and `~/.pi/agent/AGENTS.md`: rename the "Child sessions" section to "Subagents".
-4. Format with `pnpm exec vp fmt -c apps/pico/vite.config.ts <files>`, and deploy the website with `pnpm website:deploy`.
+4. Format with `pnpm exec vp fmt -c apps/smith/vite.config.ts <files>`, and deploy the website with `pnpm website:deploy`.
 
 ### Phase 5: Release
 
@@ -181,5 +181,5 @@ This is a breaking change. Release a new major version. Update all machines on t
 ## Risks
 
 - **Size.** About 8,000 matches for `session`, 2,200 for `directory`, and 900 for `child`. Do not use a blind search and replace. Use the rules in "What does not change". Rename one name at a time, and let `tsc` and `vp lint` (which type-checks) find each use.
-- **Persisted data.** A changed document kind or ID prefix hides all saved agents. Phase 3 must start Pico on a copy of a real data directory (`pnpm start --data-dir`) and check that all agents, names, parents, and projects are still there.
+- **Persisted data.** A changed document kind or ID prefix hides all saved agents. Phase 3 must start Smith on a copy of a real data directory (`pnpm start --data-dir`) and check that all agents, names, parents, and projects are still there.
 - **Missed strings.** A route or event name that one side changes and the other does not fails only at run time. The search in phase 3 and the manual test catch these.

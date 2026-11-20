@@ -1,53 +1,53 @@
 import * as React from "react"
-import "@/features/pico/agent/register"
-import { ResourcesDialogController } from "@/features/pico/resources-dialog"
-import { CookieImportDialogController } from "@/features/pico/agent/browser-cookie-import"
-import { usePicoEvent } from "@/features/pico/agent/events"
-import { toast } from "@/lib/pico/toast"
+import "@/features/smith/agent/register"
+import { ResourcesDialogController } from "@/features/smith/resources-dialog"
+import { CookieImportDialogController } from "@/features/smith/agent/browser-cookie-import"
+import { useSmithEvent } from "@/features/smith/agent/events"
+import { toast } from "@/lib/smith/toast"
 
 import {
   AppShellAddProjectDialogController,
   type AppShellAddProjectDialogHandle,
-} from "@/features/pico/app-shell-add-project-dialog"
+} from "@/features/smith/app-shell-add-project-dialog"
 import {
   AppShellAuthDialogController,
   type AppShellAuthDialogHandle,
-} from "@/features/pico/app-shell-auth-dialog"
+} from "@/features/smith/app-shell-auth-dialog"
 import {
   AppShellCommandPaletteController,
   type AppShellCommandPaletteHandle,
-} from "@/features/pico/app-shell-command-palette"
-import type { AppCommand } from "@/features/pico/app-shell-command-palette"
+} from "@/features/smith/app-shell-command-palette"
+import type { AppCommand } from "@/features/smith/app-shell-command-palette"
 import {
   AppShellAgentsDialogController,
   type AppShellAgentsDialogHandle,
-} from "@/features/pico/app-shell-agents-dialog"
+} from "@/features/smith/app-shell-agents-dialog"
 import {
   AppShellSettingsDialogController,
   type AppShellSettingsDialogHandle,
-} from "@/features/pico/app-shell-settings-dialog"
+} from "@/features/smith/app-shell-settings-dialog"
 import {
   AppShellTreeDialogController,
   type AppShellTreeDialogHandle,
-} from "@/features/pico/app-shell-tree-dialog"
+} from "@/features/smith/app-shell-tree-dialog"
 import {
   AppShellUiRequestDialogController,
   type AppShellUiRequestDialogHandle,
-} from "@/features/pico/app-shell-ui-request-dialog"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+} from "@/features/smith/app-shell-ui-request-dialog"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
 import {
   useStableEvent,
   shallowRecordEqual,
-} from "@/features/pico/app-shell-common"
-import type { AppShellSidebarStore } from "@/features/pico/app-shell-sidebar-store"
-import { useAppShellSidebarValue } from "@/features/pico/app-shell-sidebar-store"
+} from "@/features/smith/app-shell-common"
+import type { AppShellSidebarStore } from "@/features/smith/app-shell-sidebar-store"
+import { useAppShellSidebarValue } from "@/features/smith/app-shell-sidebar-store"
 import type {
   AppShellDisplaySettingsState,
   AppShellNotificationState,
   SelectAgentNavigationOptions,
-} from "@/features/pico/app-shell-types"
-import { GitCommitDialogController } from "@/features/pico/right-sidebar-git-commit-dialog"
-import type { GitCommitDialogControllerHandle } from "@/features/pico/right-sidebar-types"
+} from "@/features/smith/app-shell-types"
+import { GitCommitDialogController } from "@/features/smith/right-sidebar-git-commit-dialog"
+import type { GitCommitDialogControllerHandle } from "@/features/smith/right-sidebar-types"
 import {
   DeleteOldProjectAgentsDialogController,
   DeleteAgentsDialogController,
@@ -57,20 +57,20 @@ import {
   type DeleteAgentsDialogHandle,
   type ForkAgentDialogHandle,
   type RenameAgentDialogHandle,
-} from "@/features/pico/app-shell-agent-dialogs"
+} from "@/features/smith/app-shell-agent-dialogs"
 import {
   useSelector,
-  type PicoStore,
-} from "@/features/pico/tanstack-store-utils"
-import type { AgentState, ThemeColorMode, ThemeFamily } from "@/lib/pico"
-import { isApiErrorResponse } from "@/lib/pico/api"
+  type SmithStore,
+} from "@/features/smith/tanstack-store-utils"
+import type { AgentState, ThemeColorMode, ThemeFamily } from "@/lib/smith"
+import { isApiErrorResponse } from "@/lib/smith/api"
 import type {
   AgentListEntry,
   DirectorySearchResponse,
   PathCompletionsResponse,
-} from "@/lib/pico/api"
-import type { ArchiveAgentsResult } from "@/features/pico/archive-agents"
-import { useMachineId } from "@/lib/pico/machine-context"
+} from "@/lib/smith/api"
+import type { ArchiveAgentsResult } from "@/features/smith/archive-agents"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 type AppShellFloatingControllersProps = {
   activeAgentId?: string
@@ -97,12 +97,12 @@ type AppShellFloatingControllersProps = {
   archiveAgents: (targets: Array<AgentListEntry>) => ArchiveAgentsResult
   deleteOldProjectAgentsDialogRef: React.RefObject<DeleteOldProjectAgentsDialogHandle | null>
   deleteOldProjectAgentsOpenRef: React.RefObject<boolean>
-  notificationStore: PicoStore<AppShellNotificationState>
+  notificationStore: SmithStore<AppShellNotificationState>
   forkDialogRef: React.RefObject<ForkAgentDialogHandle | null>
   forkOpenRef: React.RefObject<boolean>
   gitCommitDialogRef: React.RefObject<GitCommitDialogControllerHandle | null>
   gitCommitOpenRef: React.RefObject<boolean>
-  displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
+  displaySettingsStore: SmithStore<AppShellDisplaySettingsState>
   knownProjects: Array<string>
   moveAgentProjectDialogRef: React.RefObject<AppShellAddProjectDialogHandle | null>
   moveAgentProjectOpenRef: React.RefObject<boolean>
@@ -122,7 +122,7 @@ type AppShellFloatingControllersProps = {
   onThemeChange: (value: ThemeFamily) => void
   onThemeColorModeChange: (value: ThemeColorMode) => void
   onThemePreviewChange: (value: ThemeFamily, colorMode: ThemeColorMode) => void
-  recentProjectsStore: PicoStore<Array<string>>
+  recentProjectsStore: SmithStore<Array<string>>
   renameDialogRef: React.RefObject<RenameAgentDialogHandle | null>
   renameOpenRef: React.RefObject<boolean>
   renameAgentPath: React.ComponentProps<
@@ -132,7 +132,7 @@ type AppShellFloatingControllersProps = {
   agentsDialogProject: string
   agentsDialogRef: React.RefObject<AppShellAgentsDialogHandle | null>
   agentsOpenRef: React.RefObject<boolean>
-  agentStore: PicoStore<AgentState>
+  agentStore: SmithStore<AgentState>
   settingsDialogRef: React.RefObject<AppShellSettingsDialogHandle | null>
   settingsOpenRef: React.RefObject<boolean>
   sidebarStore: AppShellSidebarStore
@@ -575,7 +575,7 @@ const AppShellSettingsDialogHost = React.memo(
       { compare: shallowRecordEqual }
     )
 
-    usePicoEvent("pico:open-agent-settings", ({ page }) => {
+    useSmithEvent("smith:open-agent-settings", ({ page }) => {
       settingsDialogRef.current?.openPage(page ?? "agent-notifications")
     })
 

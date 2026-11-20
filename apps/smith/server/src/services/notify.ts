@@ -175,7 +175,7 @@ export class Notifier {
         try {
           await this.#sendPush(subscription, payload, {
             vapidDetails: {
-              subject: "mailto:pico@localhost",
+              subject: "mailto:smith@localhost",
               publicKey: this.#data.vapid.publicKey,
               privateKey: this.#data.vapid.privateKey,
             },
@@ -188,7 +188,7 @@ export class Notifier {
         } catch (error) {
           const status = (error as { statusCode?: number }).statusCode
           if (status === 404 || status === 410) gone.push(subscription.endpoint)
-          else console.warn("[pico] push failed:", (error as Error).message)
+          else console.warn("[smith] push failed:", (error as Error).message)
         }
       })
     )
@@ -208,7 +208,7 @@ export class Notifier {
         })
         if (response.ok) delivered += 1
       } catch (error) {
-        console.warn("[pico] ntfy failed:", (error as Error).message)
+        console.warn("[smith] ntfy failed:", (error as Error).message)
       }
     }
     return delivered

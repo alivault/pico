@@ -1,4 +1,4 @@
-# Plan: More capability in Pico through pi-durable
+# Plan: More capability in Smith through pi-durable
 
 Status: implemented in seven commits (Phase 0 to Phase 6). See the notes at the end for the differences from this plan. Scope: all ideas from the agent review, with two changes:
 
@@ -39,16 +39,16 @@ that waits.
    or a screenshot goes to the client in `details`. The model sees one summary line.
 5. **Follow-ups use a `requestId`.** A timer, a watch or a child report submits
    to a session with a fixed `requestId`, so a restart cannot send it two times.
-6. **YOLO.** No `beforeTool` blocks. Pico stays a single-user tool behind Tailscale.
+6. **YOLO.** No `beforeTool` blocks. Smith stays a single-user tool behind Tailscale.
 
 ## Phase 0: Foundation (do first)
 
 ### 0.1 Host bridge for extensions
 
-Extensions need Pico services (`Sessions`, `Terminals`, git, events), but
+Extensions need Smith services (`Sessions`, `Terminals`, git, events), but
 `openRuntime()` runs before `Sessions` exists.
 
-- Add `server/src/extensions/host.ts` with a `PicoHost` interface and a late
+- Add `server/src/extensions/host.ts` with a `SmithHost` interface and a late
   binding: `host.bind({ sessions, terminals, events, paths })`.
 - `openRuntime()` takes the host object and gives it to each extension factory.
 - A tool that runs before `bind()` waits for it (restart recovery).
@@ -71,9 +71,9 @@ them. `parent` shows them as children.
 
 ### 0.3 Client renderer registry for tool results
 
-`src/features/pico/conversation-view.tsx` (2800 lines) renders tools inline.
+`src/features/smith/conversation-view.tsx` (2800 lines) renders tools inline.
 
-- Add `src/features/pico/tool-renderers/` with `registry.tsx`: `toolName -> renderer`.
+- Add `src/features/smith/tool-renderers/` with `registry.tsx`: `toolName -> renderer`.
   A renderer can replace the whole card (`Card`, always open), only the body
   (`Body`), or only the header summary.
 - The tool card asks the registry first, then uses the existing `bash`,
@@ -100,7 +100,7 @@ extension test covers: normal call, restart in the middle, and fork behavior.
 
 ### 1.1 `todo` (extension `todo`)
 
-- Doc `pico.todo`: `{ items: [{ id, text, status: "pending"|"active"|"done"|"blocked", note? }] }`,
+- Doc `smith.todo`: `{ items: [{ id, text, status: "pending"|"active"|"done"|"blocked", note? }] }`,
   `history: "rewindable"`, `fork: "asOf"` (tree navigation shows the list as it was).
 - Tool `todo` with ops `set | add | update | remove | clear`. Result returns the list.
 - Section `todo`: the open items, short. It survives compaction because it is a section.
@@ -109,7 +109,7 @@ extension test covers: normal call, restart in the middle, and fork behavior.
 
 ### 1.2 `ask_user` (extension `ask`)
 
-- Doc `pico.questions`: `{ pending: { [callId]: Question }, answered: {...} }`.
+- Doc `smith.questions`: `{ pending: { [callId]: Question }, answered: {...} }`.
   `Question` = `{ prompt, kind: "choice"|"multi"|"text"|"form", options?, fields?, createdAt }`.
 - Tool `ask_user`, `replay: "safe"`:
   1. `memo` the question into the doc.
@@ -141,7 +141,7 @@ extension test covers: normal call, restart in the middle, and fork behavior.
 
 ### 2.1 `schedule` (extension `schedule`)
 
-- Task definition `pico.timer`, in the extension's `tasks`:
+- Task definition `smith.timer`, in the extension's `tasks`:
   phases `sleep → fire → (loop if recurring) → done`.
   - `sleep`: `runtime.sleep(fireAt)`.
   - `fire`: submit `{ type: "input", content: message, requestId: "timer:<taskId>:<n>", whenBusy: followUp }`
@@ -151,12 +151,12 @@ extension test covers: normal call, restart in the middle, and fork behavior.
   `schedule` uses `memo` for the task ID.
 - Accept `in: "20m"`, ISO time, and simple cron (`every: "0 9 * * 1-5"`, package `croner`).
 - UI panel: pending timers with time left and a cancel button (`watchTaskGraph`
-  filtered to `pico.timer` for this conversation).
+  filtered to `smith.timer` for this conversation).
 - A timer that was due while the server was down fires once at startup, not many times.
 
 ### 2.2 `watch` (extension `watch`)
 
-- Task `pico.watch`: phases `check → sleep → check … → fire`.
+- Task `smith.watch`: phases `check → sleep → check … → fire`.
 - Kinds of check:
   - `command`: run with `env.exec`, match on exit code or regex on output.
   - `url`: HTTP status or body regex.
@@ -170,9 +170,9 @@ extension test covers: normal call, restart in the middle, and fork behavior.
 
 A process cannot survive a server restart. The record of it can.
 
-- Doc `pico.jobs`: `{ [jobId]: { command, cwd, status, exitCode?, startedAt, endedAt?, logPath, terminalId?, notifyOnExit } }`.
+- Doc `smith.jobs`: `{ [jobId]: { command, cwd, status, exitCode?, startedAt, endedAt?, logPath, terminalId?, notifyOnExit } }`.
 - Run each job in a PTY of the existing `services/terminal.ts`, so the user can
-  open it live in the terminal panel. Also tee output to `~/.pico/jobs/<id>.log`.
+  open it live in the terminal panel. Also tee output to `~/.smith/jobs/<id>.log`.
 - Tools: `job_start { command, cwd?, notify_on_exit? }`, `job_status`,
   `job_output { id, tail?, grep? }`, `job_stop`, `job_list`.
 - On exit with `notify_on_exit`, submit a follow-up with the exit code and the
@@ -183,7 +183,7 @@ A process cannot survive a server restart. The record of it can.
 
 ### 2.4 `scratchpad` (extension `scratchpad`)
 
-- Files under `~/.pico/scratch/<conversationId>/<id>`. Index in doc `pico.scratch`
+- Files under `~/.smith/scratch/<conversationId>/<id>`. Index in doc `smith.scratch`
   (`fork: "current"`).
 - Tools: `scratch_put { name?, content | from_tool_result }`,
   `scratch_get { id, offset?, limit?, grep? }`, `scratch_list`, `scratch_delete`.
@@ -197,8 +197,8 @@ A process cannot survive a server restart. The record of it can.
 ### 3.1 Optional worktrees for new sessions
 
 - New `server/src/services/worktree.ts`:
-  - `create(repoRoot, branch?, base?)` → `git worktree add -b pico/<slug> <path> <base>`.
-  - Path: `~/.pico/worktrees/<repo-name>/<slug>` (outside the repo, so tools do
+  - `create(repoRoot, branch?, base?)` → `git worktree add -b smith/<slug> <path> <base>`.
+  - Path: `~/.smith/worktrees/<repo-name>/<slug>` (outside the repo, so tools do
     not see sibling worktrees).
   - `remove(path, { force })`, `list(repoRoot)`, `isClean(path)`.
   - Copy files that git ignores but the project needs? Setting with a glob list,
@@ -217,14 +217,14 @@ A process cannot survive a server restart. The record of it can.
 ### 3.2 `spawn_session` and friends (extension `sessions`)
 
 Based on durable example `23-subagent-background.ts`, but children are normal
-Pico sessions.
+Smith sessions.
 
 - `spawn_session { goal, cwd?, model?, thinking?, profile?, worktree?: boolean | { branch?, base? }, name?, wait?: boolean }`
   - `replay: "safe"`. `memo` the child session ID.
   - Creates the child through `host.sessions.create()` with `parent`, `depth`,
     and an optional worktree. Submits `goal` with `requestId: "spawn:<callId>"`.
   - `wait: false` (default): return the child ID at once. A background reporter
-    task `pico.child-report` waits for the child submission, then posts the
+    task `smith.child-report` waits for the child submission, then posts the
     answer back to the parent as a follow-up (`requestId: "report:<child>:<n>"`).
   - `wait: true`: wait for the submission and return the final answer.
   - `details: { sessionId }`. The UI shows a card with a live status and an
@@ -302,19 +302,19 @@ in, the tools return a clear error.
 
 - Tool `preview_url { url | job_id + port, path? }`. With a job, wait until the
   port answers.
-- Doc `pico.preview`: `{ url, port?, jobId? }`.
-- Remote access: the phone cannot reach `localhost:5173` on the server. Pico
+- Doc `smith.preview`: `{ url, port?, jobId? }`.
+- Remote access: the phone cannot reach `localhost:5173` on the server. Smith
   opens a **separate port for each preview**, from a range (default
   4100–4199), that forwards HTTP and WebSocket traffic (for HMR) to the dev
   server. Paths stay at `/`, so apps that use absolute paths work. The preview
-  listener binds to the same host as Pico. Allow only local targets.
+  listener binds to the same host as Smith. Allow only local targets.
 - UI: a Preview panel (iframe) with reload, open in new tab, and a device width toggle.
 - Optional: `preview_screenshot` through the durable browser (5.3), so the
   model can see the page.
 
 ### 5.2 `notify` (extension `notify`) and push
 
-- Server: Web Push with VAPID keys in `~/.pico/push.json`. Subscriptions in
+- Server: Web Push with VAPID keys in `~/.smith/push.json`. Subscriptions in
   the settings file. Package `web-push`.
 - Client: a service worker (`public/sw.js`) and a "Enable notifications on this
   device" switch in settings. iOS needs HTTPS and an installed PWA; document
@@ -329,8 +329,8 @@ in, the tools return a clear error.
 
 - `playwright-core` with the installed Chrome (no browser download).
   One browser process, one context for each conversation.
-- Doc `pico.browser`: open tabs (URL, title). The cookies and storage state
-  go to `~/.pico/browser/<conversationId>.json` after each action.
+- Doc `smith.browser`: open tabs (URL, title). The cookies and storage state
+  go to `~/.smith/browser/<conversationId>.json` after each action.
   After a restart, the context is created again from that file and the tabs reopen.
 - Tools: `browser_open { url }`, `browser_snapshot` (accessibility tree with refs),
   `browser_act { ref | selector, action: click|type|select|press|scroll, value? }`,
@@ -342,7 +342,7 @@ in, the tools return a clear error.
 
 ### 6.1 Memory (extension `memory`)
 
-- Doc family `pico.memory`, `scope: "session"`, key = repo root (or `cwd` when
+- Doc family `smith.memory`, `scope: "session"`, key = repo root (or `cwd` when
   not a repo). A `global` key for facts that are not project-specific.
 - Value: `{ facts: [{ id, text, tags?, updatedAt, source: "agent"|"user" }] }`.
 - Tool `memory { op: add|update|remove|list|search, ... }`.
@@ -366,7 +366,7 @@ in, the tools return a clear error.
 - Each new extension must be in the registry by name before profiles can
   select it (Phase 0.1 makes this true).
 
-### 6.3 `memo` audit of Pico tools
+### 6.3 `memo` audit of Smith tools
 
 - `web-access`: keep `replay: "safe"` (no side effects).
 - `mcp`: MCP tools can have side effects. Keep `unsafe` as the default, and add
@@ -426,7 +426,7 @@ Each step is one PR, with `pnpm check` green and restart tests for its tasks.
    `vscode-jsonrpc`, `playwright-core`. All lazy loaded or server-only. Check
    the package size before release.
 7. **Preview proxy security.** The proxy exposes local dev servers to anyone who
-   can reach Pico. This is the same trust model as the terminals, but say it in
+   can reach Smith. This is the same trust model as the terminals, but say it in
    the README.
 
 ## Implementation notes
@@ -452,7 +452,7 @@ The code follows this plan, with these differences:
   plan.
 - **Tool profiles (6.2):** the picker is in the new-session view and the Agent
   tab, not next to the model picker.
-- **MCP OAuth (6.4):** tokens go to `~/.pico/mcp-oauth.json`, because
+- **MCP OAuth (6.4):** tokens go to `~/.smith/mcp-oauth.json`, because
   `pi-mcp` leaves storage to the application.
-- **Language servers (4.4):** Pico ships `typescript-language-server` and
+- **Language servers (4.4):** Smith ships `typescript-language-server` and
   TypeScript, so TypeScript and JavaScript work without setup.

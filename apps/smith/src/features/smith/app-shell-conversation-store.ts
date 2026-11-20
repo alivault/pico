@@ -1,13 +1,13 @@
 import * as React from "react"
 
-import type { ConversationItem } from "@/lib/pico"
+import type { ConversationItem } from "@/lib/smith"
 import {
   assistantMessageHasFooterMeta,
   assistantMessageHasVisibleBlocks,
   type AssistantMessagesSnapshot,
   type AssistantMessagesStore,
-} from "@/features/pico/conversation-view"
-import { sameStringArray } from "@/features/pico/app-shell-common"
+} from "@/features/smith/conversation-view"
+import { sameStringArray } from "@/features/smith/app-shell-common"
 
 export type RenderConversationGroupDescriptor =
   | {

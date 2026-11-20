@@ -7,13 +7,13 @@
  *   pnpm media --screenshots    # only the screenshots (the agent still runs)
  *   pnpm media --video          # only the video
  *   pnpm media --no-build       # use the built web and server as they are
- *   pnpm media --out DIR        # the output folder (default: <tmp>/pico-demo/out)
+ *   pnpm media --out DIR        # the output folder (default: <tmp>/smith-demo/out)
  *   pnpm media --install-only   # copy the files of the last run; take nothing
  *   pnpm media --dry            # only open the new agent page (dry.png); no model
  *
- * It makes the demo project (`demo-project.mjs`) and starts its own Pico,
- * with its own data folder and port, so your Pico and its agents are not
- * touched. A real model does the work: Pico uses your Pi credentials and
+ * It makes the demo project (`demo-project.mjs`) and starts its own Smith,
+ * with its own data folder and port, so your Smith and its agents are not
+ * touched. A real model does the work: Smith uses your Pi credentials and
  * default model, so a run costs one agent task with two subagents, a few
  * minutes. It gets an agent folder of its own, with a link to your
  * `auth.json` and only the model lines of your `settings.json`, so your
@@ -22,11 +22,11 @@
  * poster, when ffmpeg has no libwebp).
  *
  * The output folder gets:
- *   pico-workspace.png       desktop, dark (2898×1916)
- *   pico-workspace-alt.png   desktop, light
- *   pico-mobile.png          phone, dark (1170×2532)
- *   pico-mobile-alt.png      phone, light
- *   pico-child-sessions-demo.mp4 and .webp (the poster)
+ *   smith-workspace.png       desktop, dark (2898×1916)
+ *   smith-workspace-alt.png   desktop, light
+ *   smith-mobile.png          phone, dark (1170×2532)
+ *   smith-mobile-alt.png      phone, light
+ *   smith-child-sessions-demo.mp4 and .webp (the poster)
  *   review.png               frames of the video, to look at it fast
  *
  * To change the story, change PROMPT and the steps in `recordRun`. To
@@ -73,12 +73,12 @@ const MOBILE = {
  * website by URL, so they are in one place only.
  */
 const INSTALL = {
-  "pico-workspace.png": ["apps/website/site/screenshots"],
-  "pico-workspace-alt.png": ["apps/website/site/screenshots"],
-  "pico-mobile.png": ["apps/website/site/screenshots"],
-  "pico-mobile-alt.png": ["apps/website/site/screenshots"],
-  "pico-child-sessions-demo.mp4": ["apps/website/site/videos"],
-  "pico-child-sessions-demo.webp": ["apps/website/site/videos"],
+  "smith-workspace.png": ["apps/website/site/screenshots"],
+  "smith-workspace-alt.png": ["apps/website/site/screenshots"],
+  "smith-mobile.png": ["apps/website/site/screenshots"],
+  "smith-mobile-alt.png": ["apps/website/site/screenshots"],
+  "smith-child-sessions-demo.mp4": ["apps/website/site/videos"],
+  "smith-child-sessions-demo.webp": ["apps/website/site/videos"],
 }
 
 function parseOptions(argv) {
@@ -94,7 +94,7 @@ function parseOptions(argv) {
     build: !has("--no-build"),
     dry: has("--dry"),
     out: resolve(
-      outIndex >= 0 ? argv[outIndex + 1] : join(tmpdir(), "pico-demo", "out")
+      outIndex >= 0 ? argv[outIndex + 1] : join(tmpdir(), "smith-demo", "out")
     ),
   }
 }
@@ -163,13 +163,13 @@ function demoAgentDir(dir) {
   return dir
 }
 
-/** Start a Pico of its own; returns its URL and a stop function. */
-async function startPico(dataDir, agentDir) {
+/** Start a Smith of its own; returns its URL and a stop function. */
+async function startSmith(dataDir, agentDir) {
   const port = await freePort()
   const child = spawn(
     process.execPath,
     [
-      join(appDir, "bin/pico.mjs"),
+      join(appDir, "bin/smith.mjs"),
       "serve",
       "--port",
       String(port),
@@ -188,7 +188,7 @@ async function startPico(dataDir, agentDir) {
   child.stderr.on("data", (chunk) => (log += chunk))
   const url = `http://127.0.0.1:${port}`
   for (let attempt = 0; attempt < 120; attempt += 1) {
-    if (child.exitCode !== null) throw new Error(`Pico stopped:\n${log}`)
+    if (child.exitCode !== null) throw new Error(`Smith stopped:\n${log}`)
     const ok = await fetch(`${url}/api/system/health`)
       .then((response) => response.ok)
       .catch(() => false)
@@ -215,7 +215,7 @@ function busy(page) {
   )
 }
 
-/** The ID of the first agent of the demo Pico; waits until it exists. */
+/** The ID of the first agent of the demo Smith; waits until it exists. */
 async function firstAgent(url) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const { agents } = await fetch(`${url}/api/machine/agents`).then((r) =>
@@ -381,7 +381,7 @@ function encodeVideo(frames, marks, out) {
   lines.push(`file '${frames.at(-1).name}'`)
   const list = join(dirname(frames[0].name), "list.txt")
   writeFileSync(list, `${lines.join("\n")}\n`)
-  const video = join(out, "pico-child-sessions-demo.mp4")
+  const video = join(out, "smith-child-sessions-demo.mp4")
   run("ffmpeg", [
     "-loglevel",
     "error",
@@ -409,7 +409,7 @@ function encodeVideo(frames, marks, out) {
     "+faststart",
     video,
   ])
-  writePoster(video, poster, join(out, "pico-child-sessions-demo.webp"))
+  writePoster(video, poster, join(out, "smith-child-sessions-demo.webp"))
   run("ffmpeg", [
     "-loglevel",
     "error",
@@ -558,10 +558,10 @@ async function main() {
   need("git")
   if (options.video && !ffmpegHasWebp()) need("cwebp")
   // The real path: on macOS the temporary folder is a symlink
-  // (/var -> /private/var), and Pico keys a new agent's draft by the real
+  // (/var -> /private/var), and Smith keys a new agent's draft by the real
   // path of its project. A sidebar project with a symlink in its path
   // does not match it, and the page stays on the draft.
-  const root = join(realpathSync(tmpdir()), "pico-demo")
+  const root = join(realpathSync(tmpdir()), "smith-demo")
   const project = join(root, "tiny-tasks")
   const dataDir = join(root, "data")
   const raw = join(root, "raw")
@@ -576,12 +576,12 @@ async function main() {
   }
   createDemoProject(project)
   console.log(`Demo project: ${project}`)
-  const pico = await startPico(dataDir, demoAgentDir(join(root, "agent")))
-  console.log(`Demo Pico: ${pico.url} (data in ${dataDir})`)
+  const smith = await startSmith(dataDir, demoAgentDir(join(root, "agent")))
+  console.log(`Demo Smith: ${smith.url} (data in ${dataDir})`)
   const browser = await chromium.launch({ executablePath: findChromium() })
   try {
     // The sidebar shows the demo project.
-    await fetch(`${pico.url}/api/sidebar-state`, {
+    await fetch(`${smith.url}/api/sidebar-state`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ projects: [project] }),
@@ -590,7 +590,7 @@ async function main() {
       console.log("Running the demo (a real agent works; a few minutes)…")
     const result = await recordRun(
       browser,
-      pico.url,
+      smith.url,
       project,
       options.video && !options.dry ? join(root, "frames") : undefined,
       options.dry ? join(options.out, "dry.png") : undefined,
@@ -607,10 +607,10 @@ async function main() {
     if (options.screenshots) {
       console.log("Taking the screenshots…")
       const shots = [
-        ["pico-workspace.png", desktopShot, "dark"],
-        ["pico-workspace-alt.png", desktopShot, "light"],
-        ["pico-mobile.png", mobileShot, "dark"],
-        ["pico-mobile-alt.png", mobileShot, "light"],
+        ["smith-workspace.png", desktopShot, "dark"],
+        ["smith-workspace-alt.png", desktopShot, "light"],
+        ["smith-mobile.png", mobileShot, "dark"],
+        ["smith-mobile-alt.png", mobileShot, "light"],
       ]
       for (const [name, shot, scheme] of shots) {
         await shot(browser, result.agentUrl, scheme, join(raw, name))
@@ -619,7 +619,7 @@ async function main() {
     }
   } finally {
     await browser.close()
-    await pico.stop()
+    await smith.stop()
   }
 
   const made = Object.keys(INSTALL).filter((name) =>

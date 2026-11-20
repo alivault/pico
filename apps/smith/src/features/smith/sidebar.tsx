@@ -1,5 +1,5 @@
 import * as React from "react"
-import { copyAgentId } from "@/features/pico/copy-agent-id"
+import { copyAgentId } from "@/features/smith/copy-agent-id"
 import { createPortal } from "react-dom"
 
 import {
@@ -39,7 +39,7 @@ import {
   SquarePenIcon,
 } from "lucide-react"
 
-import type { AgentJob, AgentListEntry } from "@/lib/pico/api"
+import type { AgentJob, AgentListEntry } from "@/lib/smith/api"
 import { Button } from "@/components/ui/button"
 import {
   Collapsible,
@@ -89,7 +89,7 @@ import {
   useSidebarLayout,
   useSidebarView,
   type SidebarView,
-} from "@/features/pico/sidebar-display-settings"
+} from "@/features/smith/sidebar-display-settings"
 import { Spinner } from "@/components/ui/spinner"
 import {
   PortalContainerProvider,
@@ -105,67 +105,67 @@ import {
   readStoredPinnedAgentKeys,
   machineLocalStorageSetItem,
   agentListEntryKey,
-} from "@/lib/pico"
-import { openJobTerminal, usePicoEvent } from "@/features/pico/agent/events"
+} from "@/lib/smith"
+import { openJobTerminal, useSmithEvent } from "@/features/smith/agent/events"
 import {
   SidebarAgentJobDots,
   SidebarAgentJobsContext,
   type SidebarAgentJobsActions,
-} from "@/features/pico/sidebar-agent-jobs"
+} from "@/features/smith/sidebar-agent-jobs"
 import {
   isAltChange,
   isMachineAgentUnread,
   useHasMachineGroups,
-} from "@/features/pico/machines"
+} from "@/features/smith/machines"
 import {
   viewerContextIdForSummaries,
   type MachineInfo,
   type MachineAgentSummary,
-} from "@/features/pico/machine-store"
+} from "@/features/smith/machine-store"
 import {
   archiveOtherMachineAgent,
   OtherMachineArchiveDialog,
   OtherMachineRenameDialog,
-} from "@/features/pico/other-machine-agent-dialogs"
+} from "@/features/smith/other-machine-agent-dialogs"
 import {
   workingAgentsMessage,
   workingSubagents,
-} from "@/features/pico/archive-agents"
-import { toast } from "@/lib/pico/toast"
-import { startSidebarSync } from "@/features/pico/sidebar-sync"
-import { ServerUpdateStatus } from "@/features/pico/server-restart"
-import { ProjectIcon } from "@/features/pico/project-icon"
-import { useSidebarAgentNumber } from "@/features/pico/sidebar-agent-numbers"
-import { openMachine, openAgent as openMachineAgent } from "@/lib/pico/machine"
+} from "@/features/smith/archive-agents"
+import { toast } from "@/lib/smith/toast"
+import { startSidebarSync } from "@/features/smith/sidebar-sync"
+import { ServerUpdateStatus } from "@/features/smith/server-restart"
+import { ProjectIcon } from "@/features/smith/project-icon"
+import { useSidebarAgentNumber } from "@/features/smith/sidebar-agent-numbers"
+import { openMachine, openAgent as openMachineAgent } from "@/lib/smith/machine"
 import {
   formatDisplayPath,
   formatFolderName,
-} from "@/features/pico/app-shell-common"
+} from "@/features/smith/app-shell-common"
 import {
   agentNumberShortcut,
   appShortcut,
   formatShortcutLabel,
-} from "@/features/pico/keyboard-shortcuts"
+} from "@/features/smith/keyboard-shortcuts"
 import {
-  createPicoStore,
+  createSmithStore,
   setStoreState,
   useSelector,
-  type PicoStore,
-} from "@/features/pico/tanstack-store-utils"
+  type SmithStore,
+} from "@/features/smith/tanstack-store-utils"
 import { cn } from "@/lib/utils"
-import { MachineProvider, useMachineId } from "@/lib/pico/machine-context"
-import { useSidebarSlot } from "@/features/pico/sidebar-slots"
+import { MachineProvider, useMachineId } from "@/lib/smith/machine-context"
+import { useSidebarSlot } from "@/features/smith/sidebar-slots"
 import {
   compareSidebarAgents,
   sortSidebarAgents,
-} from "@/features/pico/agent-order"
+} from "@/features/smith/agent-order"
 import {
   buildAgentTree,
   pinnedAgentRows,
   pinnedAgentTreeKeys,
   samePinnedAgentRows,
   type AgentTree,
-} from "@/features/pico/pinned-agent-tree"
+} from "@/features/smith/pinned-agent-tree"
 import {
   AGENT_STATUS_GROUPS,
   agentStatusGroup,
@@ -176,7 +176,7 @@ import {
   type AgentStatusFilters,
   type AgentStatusGroup,
   useAgentStatusFilter,
-} from "@/features/pico/agent-status-filter"
+} from "@/features/smith/agent-status-filter"
 
 const SIDEBAR_LOADING_SPINNER_DELAY_MS = 250
 const SIDEBAR_TIME_MIN_DELAY_MS = 1000
@@ -270,9 +270,9 @@ function useAltKeyHeld() {
   )
 }
 // Stored name: do not change.
-const PINNED_AGENT_GROUP_COLLAPSE_KEY = "__pico_pinned_sessions__"
+const PINNED_AGENT_GROUP_COLLAPSE_KEY = "__smith_pinned_sessions__"
 // Stored name: do not change.
-const PROJECTS_AGENT_GROUP_COLLAPSE_KEY = "__pico_directories__"
+const PROJECTS_AGENT_GROUP_COLLAPSE_KEY = "__smith_directories__"
 // The state groups do not collapse.
 const NO_GROUP_COLLAPSE_KEYS: Array<string> = []
 
@@ -418,7 +418,7 @@ function projectOrderEqual(left: Array<string>, right: Array<string>) {
 
 type CollapsedProjectState = Record<string, boolean>
 
-type CollapsedProjectStore = PicoStore<CollapsedProjectState> & {
+type CollapsedProjectStore = SmithStore<CollapsedProjectState> & {
   loadStored: () => void
   toggle: (project: string) => void
   setCollapsed: (project: string, collapsed: boolean) => void
@@ -441,7 +441,7 @@ function createCollapsedProjectStore(
   machineId: string,
   storageKey = COLLAPSED_PROJECTS_STORAGE_KEY
 ): CollapsedProjectStore {
-  const store = createPicoStore<CollapsedProjectState>(
+  const store = createSmithStore<CollapsedProjectState>(
     {},
     sameCollapsedProjectState
   ) as CollapsedProjectStore
@@ -506,7 +506,7 @@ function createCollapsedProjectStore(
     },
   } satisfies Omit<
     CollapsedProjectStore,
-    keyof PicoStore<CollapsedProjectState>
+    keyof SmithStore<CollapsedProjectState>
   >)
 
   return store
@@ -606,7 +606,7 @@ function SortableProjectGroup({
   )
 }
 
-type SelectedAgentKeyStore = PicoStore<ReadonlySet<string>> & {
+type SelectedAgentKeyStore = SmithStore<ReadonlySet<string>> & {
   setKeys: (keys: Array<string>) => void
 }
 
@@ -615,7 +615,7 @@ type ActiveSidebarAgentState = {
   agentKey: string
 }
 
-type ActiveSidebarAgentStore = PicoStore<ActiveSidebarAgentState> & {
+type ActiveSidebarAgentStore = SmithStore<ActiveSidebarAgentState> & {
   setActive: (active: { agentId?: string; agentKey?: string }) => void
 }
 
@@ -630,7 +630,7 @@ function sameStringSet(left: ReadonlySet<string>, right: ReadonlySet<string>) {
 }
 
 function createSelectedAgentKeyStore(): SelectedAgentKeyStore {
-  const store = createPicoStore<ReadonlySet<string>>(
+  const store = createSmithStore<ReadonlySet<string>>(
     new Set(),
     sameStringSet
   ) as SelectedAgentKeyStore
@@ -639,7 +639,10 @@ function createSelectedAgentKeyStore(): SelectedAgentKeyStore {
     setKeys(keys) {
       setStoreState(store, new Set(keys.filter(Boolean)))
     },
-  } satisfies Omit<SelectedAgentKeyStore, keyof PicoStore<ReadonlySet<string>>>)
+  } satisfies Omit<
+    SelectedAgentKeyStore,
+    keyof SmithStore<ReadonlySet<string>>
+  >)
 
   return store
 }
@@ -655,7 +658,7 @@ function normalizeActiveSidebarAgentKey(agentKey: string | undefined) {
 }
 
 function createActiveSidebarAgentStore(): ActiveSidebarAgentStore {
-  const store = createPicoStore<ActiveSidebarAgentState>({
+  const store = createSmithStore<ActiveSidebarAgentState>({
     agentId: "",
     agentKey: "",
   }) as ActiveSidebarAgentStore
@@ -674,7 +677,7 @@ function createActiveSidebarAgentStore(): ActiveSidebarAgentStore {
     },
   } satisfies Omit<
     ActiveSidebarAgentStore,
-    keyof PicoStore<ActiveSidebarAgentState>
+    keyof SmithStore<ActiveSidebarAgentState>
   >)
 
   return store
@@ -1104,7 +1107,7 @@ type ProjectAgentsState = {
   loadingByProject: Record<string, boolean>
 }
 
-export type ProjectAgentsStore = PicoStore<ProjectAgentsState> & {
+export type ProjectAgentsStore = SmithStore<ProjectAgentsState> & {
   setData: (
     agentsByProject: Record<string, Array<AgentListEntry>>,
     loadingByProject: Record<string, boolean>
@@ -1454,7 +1457,7 @@ export function createProjectAgentsStore(
   agentsByProject: Record<string, Array<AgentListEntry>>,
   loadingByProject: Record<string, boolean>
 ): ProjectAgentsStore {
-  const store = createPicoStore<ProjectAgentsState>(
+  const store = createSmithStore<ProjectAgentsState>(
     buildProjectAgentsState(agentsByProject, loadingByProject),
     sameProjectAgentsState
   ) as ProjectAgentsStore
@@ -1466,7 +1469,7 @@ export function createProjectAgentsStore(
         buildProjectAgentsState(nextAgentsByProject, nextLoadingByProject)
       )
     },
-  } satisfies Omit<ProjectAgentsStore, keyof PicoStore<ProjectAgentsState>>)
+  } satisfies Omit<ProjectAgentsStore, keyof SmithStore<ProjectAgentsState>>)
 
   return store
 }
@@ -2621,10 +2624,10 @@ const NO_MOVE_TARGET_PROJECTS: Array<string> = []
 function machineSummaryEntry(agent: MachineAgentSummary): AgentListEntry {
   return {
     id: agent.id,
-    // The agent path of a Pico server. With it, the rename and archive
+    // The agent path of a Smith server. With it, the rename and archive
     // routes find the agent, and the key of the row matches the pinned
     // agent keys of that machine.
-    path: `pico:${agent.id}`,
+    path: `smith:${agent.id}`,
     cwd: agent.project || agent.cwd,
     title: agent.title,
     ...(agent.lastMessageAt
@@ -2676,8 +2679,8 @@ function useOtherMachinePinnedAgentKeys(machineId: string, online: boolean) {
     if (contextId) startSidebarSync(machineId, contextId)
   }, [machineId, online])
 
-  usePicoEvent(
-    "pico:sidebar-state",
+  useSmithEvent(
+    "smith:sidebar-state",
     ({ machineId: changedMachine, changed }) => {
       if (changedMachine !== machineId) return
       if (changed.includes("pinnedAgentKeys"))
@@ -2769,7 +2772,7 @@ function useOtherMachineSidebar(machine: MachineInfo) {
     const collapsed = createCollapsedProjectStore(
       machine.id,
       // Stored name: do not change.
-      `pico-machine-collapsed-directories:${machine.id}`
+      `smith-machine-collapsed-directories:${machine.id}`
     )
     collapsed.loadStored()
     return {
@@ -2921,7 +2924,7 @@ function OtherMachineGroupedProjects({ machine }: { machine: MachineInfo }) {
     PINNED_AGENT_GROUP_COLLAPSE_KEY,
     ...(groupByStatus ? [] : grouped.projects),
   ]
-  usePicoEvent("pico:collapse-projects", (detail) => {
+  useSmithEvent("smith:collapse-projects", (detail) => {
     if (detail.machineId === machine.id)
       stores.collapsed.setAll(collapseAllKeys, detail.collapsed)
   })
@@ -3077,7 +3080,7 @@ type SidebarAgentSource = {
   jobActions: SidebarAgentJobsActions
 }
 
-const sidebarAgentSources = createPicoStore<
+const sidebarAgentSources = createSmithStore<
   ReadonlyMap<string, SidebarAgentSource>
 >(new Map())
 
@@ -3999,13 +4002,13 @@ function useAppSidebarView({
     collapsedProjectStore.loadStored()
   }, [collapsedProjectStore])
 
-  usePicoEvent("pico:collapse-projects", (detail) => {
+  useSmithEvent("smith:collapse-projects", (detail) => {
     if (detail.machineId === machineId)
       collapsedProjectStore.setAll(collapseAllKeys, detail.collapsed)
   })
 
-  usePicoEvent(
-    "pico:sidebar-state",
+  useSmithEvent(
+    "smith:sidebar-state",
     ({ machineId: changedMachine, changed }) => {
       if (changedMachine !== machineId) return
       if (changed.includes("collapsedProjects"))

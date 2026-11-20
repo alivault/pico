@@ -206,7 +206,7 @@ void test("endsWithQuestion finds a question at the end, outside code", () => {
   assert.equal(endsWithQuestion("Why? Because.\n\nDone."), false)
   assert.equal(endsWithQuestion("Run:\n```\nwhich node?\n```"), false)
   assert.equal(endsWithQuestion("See `a?b`."), false)
-  assert.equal(endsWithQuestion("Done.\nRestart Pico."), false)
+  assert.equal(endsWithQuestion("Done.\nRestart Smith."), false)
 })
 
 void test("a final answer that ends with a question gets one nudge to ask_user", async () => {

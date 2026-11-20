@@ -1,14 +1,14 @@
-import type { RightSidebarTabValue } from "@/features/pico/right-sidebar-types"
+import type { RightSidebarTabValue } from "@/features/smith/right-sidebar-types"
 import {
   setStoreField,
   setStoreState,
-  type PicoStore,
-} from "@/features/pico/tanstack-store-utils"
+  type SmithStore,
+} from "@/features/smith/tanstack-store-utils"
 import {
   RIGHT_SIDEBAR_ACTIVE_TAB_STORAGE_KEY,
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
-} from "@/lib/pico"
+} from "@/lib/smith"
 
 export type OpenFileViewTabOptions = { pin?: boolean }
 
@@ -37,7 +37,7 @@ function storeRightSidebarActiveTab(tab: RightSidebarTabValue) {
 }
 
 export function setRightSidebarActiveTab(
-  store: PicoStore<AppShellRightSidebarState>,
+  store: SmithStore<AppShellRightSidebarState>,
   tab: RightSidebarTabValue
 ) {
   setStoreField(store, "activeTab", tab)
@@ -70,7 +70,7 @@ export function selectRightSidebarHasVisibleFiles(
 }
 
 export function resetRightSidebarFiles(
-  store: PicoStore<AppShellRightSidebarState>
+  store: SmithStore<AppShellRightSidebarState>
 ) {
   setStoreState(store, (state) => ({
     ...state,
@@ -82,7 +82,7 @@ export function resetRightSidebarFiles(
 }
 
 export function openRightSidebarFile(
-  store: PicoStore<AppShellRightSidebarState>,
+  store: SmithStore<AppShellRightSidebarState>,
   path: string,
   options?: OpenFileViewTabOptions
 ) {
@@ -121,7 +121,7 @@ export function openRightSidebarFile(
 
 /** Make the preview tab of `path` a pinned tab. Do not change the shown tab. */
 export function pinRightSidebarFile(
-  store: PicoStore<AppShellRightSidebarState>,
+  store: SmithStore<AppShellRightSidebarState>,
   path: string
 ) {
   setStoreState(store, (state) =>
@@ -138,7 +138,7 @@ export function pinRightSidebarFile(
 }
 
 export function closeRightSidebarFile(
-  store: PicoStore<AppShellRightSidebarState>,
+  store: SmithStore<AppShellRightSidebarState>,
   path: string
 ) {
   setStoreState(store, (state) => {
@@ -166,7 +166,7 @@ export function closeRightSidebarFile(
 }
 
 export function closeOtherRightSidebarFiles(
-  store: PicoStore<AppShellRightSidebarState>,
+  store: SmithStore<AppShellRightSidebarState>,
   path: string
 ) {
   setStoreState(store, (state) => {
@@ -181,7 +181,7 @@ export function closeOtherRightSidebarFiles(
 }
 
 export function closeRightSidebarFilesToRight(
-  store: PicoStore<AppShellRightSidebarState>,
+  store: SmithStore<AppShellRightSidebarState>,
   path: string
 ) {
   setStoreState(store, (state) => {
@@ -211,7 +211,7 @@ export function closeRightSidebarFilesToRight(
 }
 
 export function closeAllRightSidebarFiles(
-  store: PicoStore<AppShellRightSidebarState>
+  store: SmithStore<AppShellRightSidebarState>
 ) {
   setStoreState(store, (state) => ({
     ...state,
@@ -222,7 +222,7 @@ export function closeAllRightSidebarFiles(
 }
 
 export function reorderRightSidebarFiles(
-  store: PicoStore<AppShellRightSidebarState>,
+  store: SmithStore<AppShellRightSidebarState>,
   paths: Array<string>
 ) {
   const uniquePaths = paths.filter(

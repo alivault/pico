@@ -1,4 +1,4 @@
-import { buildHubRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { buildHubRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
 
 /** Web Push needs a service worker, the Push API, and HTTPS or localhost. */
 export function pushSupported() {
@@ -124,7 +124,7 @@ export async function enablePush(viewerContextId: string) {
     )
   const permission = await Notification.requestPermission()
   if (permission !== "granted")
-    throw new Error("The browser does not allow notifications for Pico.")
+    throw new Error("The browser does not allow notifications for Smith.")
   const { publicKey } = await fetchJson<{ publicKey: string }>(
     buildHubRequestUrl("/api/push/key", { contextId: viewerContextId })
   )

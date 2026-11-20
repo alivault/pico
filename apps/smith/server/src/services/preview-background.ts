@@ -2,8 +2,8 @@
  * The background of a previewed page. The Preview iframe shows its own
  * background color in the overscroll gap (rubberband scroll on macOS), so
  * the preview listener puts a small script into each HTML page. The script
- * tells the parent (Pico) the page's background color and color scheme,
- * and Pico gives the iframe that color.
+ * tells the parent (Smith) the page's background color and color scheme,
+ * and Smith gives the iframe that color.
  *
  * The script goes in as the page streams: the proxy keeps the first bytes
  * until it finds `<head>`, puts the script after it, and sends the rest as
@@ -21,7 +21,7 @@ import { Transform, type TransformCallback } from "node:stream"
 import * as zlib from "node:zlib"
 
 /** The message type that the script posts to the parent window. */
-export const PREVIEW_BACKGROUND_MESSAGE = "pico-preview-background"
+export const PREVIEW_BACKGROUND_MESSAGE = "smith-preview-background"
 
 /**
  * Posts `{ type, color, colorScheme }` to the parent window. `color` is the
@@ -65,7 +65,7 @@ const SCRIPT_HASH = `'sha256-${createHash("sha256")
   .digest("base64")}'`
 
 const SCRIPT_TAG = Buffer.from(
-  `<script data-pico-preview>${PREVIEW_BACKGROUND_SCRIPT}</script>`,
+  `<script data-smith-preview>${PREVIEW_BACKGROUND_SCRIPT}</script>`,
   "utf8"
 )
 

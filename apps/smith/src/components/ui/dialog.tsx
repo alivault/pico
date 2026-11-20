@@ -8,13 +8,13 @@ import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 import { usePortalContainer } from "@/components/ui/portal-container"
 
-const PICO_DIALOG_CLOSED_EVENT = "pico:dialog-closed"
+const SMITH_DIALOG_CLOSED_EVENT = "smith:dialog-closed"
 
 function dispatchDialogClosedEvent() {
   if (typeof window === "undefined") return
 
   window.setTimeout(() => {
-    window.dispatchEvent(new CustomEvent(PICO_DIALOG_CLOSED_EVENT))
+    window.dispatchEvent(new CustomEvent(SMITH_DIALOG_CLOSED_EVENT))
   }, 160)
 }
 

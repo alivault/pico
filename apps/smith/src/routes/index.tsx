@@ -6,23 +6,23 @@ import { z } from "zod"
 
 import { PortalContainerProvider } from "@/components/ui/portal-container"
 import { SidebarProvider } from "@/components/ui/sidebar"
-import { PicoAppShell } from "@/features/pico/app-shell"
-import { MachinesDialogController } from "@/features/pico/machines"
-import { ServerUnreachableOverlay } from "@/features/pico/server-unreachable-overlay"
-import { WindowSidebar } from "@/features/pico/window-sidebar"
-import type { SelectAgentNavigationOptions } from "@/features/pico/app-shell-types"
+import { SmithAppShell } from "@/features/smith/app-shell"
+import { MachinesDialogController } from "@/features/smith/machines"
+import { ServerUnreachableOverlay } from "@/features/smith/server-unreachable-overlay"
+import { WindowSidebar } from "@/features/smith/window-sidebar"
+import type { SelectAgentNavigationOptions } from "@/features/smith/app-shell-types"
 import {
   LOCAL_MACHINE_ID,
   normalizeMachineId,
   setMachineNavigator,
-} from "@/lib/pico/machine"
-import { MachineProvider } from "@/lib/pico/machine-context"
-import { queryClientForMachine } from "@/lib/pico/query-client"
-import { useServerConnection } from "@/lib/pico/server-connection"
+} from "@/lib/smith/machine"
+import { MachineProvider } from "@/lib/smith/machine-context"
+import { queryClientForMachine } from "@/lib/smith/query-client"
+import { useServerConnection } from "@/lib/smith/server-connection"
 
 const indexSearchSchema = z.object({
   agent: z.string().optional(),
-  /** A remote machine of the hub; see `lib/pico/machine.ts`. */
+  /** A remote machine of the hub; see `lib/smith/machine.ts`. */
   machine: z.string().optional(),
 })
 
@@ -88,7 +88,8 @@ function App() {
       return
     const onMessage = (event: MessageEvent) => {
       const data = event.data as { type?: unknown; url?: unknown } | null
-      if (data?.type !== "pico:open-url" || typeof data.url !== "string") return
+      if (data?.type !== "smith:open-url" || typeof data.url !== "string")
+        return
       let params: URLSearchParams
       try {
         params = new URL(data.url, window.location.origin).searchParams
@@ -148,7 +149,7 @@ function App() {
               mode={machineId === shownMachine ? "visible" : "hidden"}
             >
               <MachineShell machineId={machineId}>
-                <PicoAppShell
+                <SmithAppShell
                   agentId={
                     machineId === shownMachine ? agent : workspace.agentId
                   }

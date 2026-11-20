@@ -203,7 +203,7 @@ export class SearchIndex {
       this.#open()
     } catch (error) {
       this.#error = `Search is not available: ${error instanceof Error ? error.message : String(error)}`
-      console.warn(`[pico] ${this.#error}`)
+      console.warn(`[smith] ${this.#error}`)
       return
     }
     void this.catchUp()
@@ -318,7 +318,7 @@ export class SearchIndex {
     try {
       await this.#fill()
     } catch (error) {
-      console.warn("[pico] search index:", error)
+      console.warn("[smith] search index:", error)
     }
   }
 
@@ -332,7 +332,7 @@ export class SearchIndex {
           }
         ).id ?? 0
     } catch (error) {
-      console.warn("[pico] search index: cannot read entries:", error)
+      console.warn("[smith] search index: cannot read entries:", error)
       return
     }
     while (!this.#closed && this.#lastEntry < this.#target) {

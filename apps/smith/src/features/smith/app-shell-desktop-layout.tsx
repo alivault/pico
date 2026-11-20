@@ -3,30 +3,33 @@ import * as React from "react"
 import { resizeRailPrimaryInteractiveClass } from "@/components/ui/resize-rail"
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useLatestRef, sameStringArray } from "@/features/pico/app-shell-common"
+import {
+  useLatestRef,
+  sameStringArray,
+} from "@/features/smith/app-shell-common"
 import {
   AppShellAgentContent,
   type AppShellAgentContentProps,
-} from "@/features/pico/app-shell-agent-content"
-import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
-import type { AppShellUiState } from "@/features/pico/app-shell-types"
-import { GitTabStatusText } from "@/features/pico/right-sidebar-git-header-actions"
+} from "@/features/smith/app-shell-agent-content"
+import type { ComposerDiffLineComment } from "@/features/smith/app-shell-composer-state"
+import type { AppShellUiState } from "@/features/smith/app-shell-types"
+import { GitTabStatusText } from "@/features/smith/right-sidebar-git-header-actions"
 import {
   selectRightSidebarHasVisibleFiles,
   selectRightSidebarVisibleFileTabs,
   setRightSidebarActiveTab,
   type AppShellRightSidebarState,
   type OpenFileViewTabOptions,
-} from "@/features/pico/app-shell-right-sidebar-state"
-import { MachineConnectionBanner } from "@/features/pico/machines"
-import { JobFocusWatcher } from "@/features/pico/agent/job-state"
-import { TodoTabProgress } from "@/features/pico/agent/todo"
+} from "@/features/smith/app-shell-right-sidebar-state"
+import { MachineConnectionBanner } from "@/features/smith/machines"
+import { JobFocusWatcher } from "@/features/smith/agent/job-state"
+import { TodoTabProgress } from "@/features/smith/agent/todo"
 import {
   applyStoreAction,
   setStoreField,
   useSelector,
-  type PicoStore,
-} from "@/features/pico/tanstack-store-utils"
+  type SmithStore,
+} from "@/features/smith/tanstack-store-utils"
 import {
   getSidebarHorizontalResizeCursor,
   getSidebarResizeTargetMinimumSize,
@@ -46,21 +49,21 @@ import {
   TERMINAL_PANEL_HEIGHT_STORAGE_KEY,
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
-} from "@/lib/pico"
-import type { AgentState } from "@/lib/pico"
+} from "@/lib/smith"
+import type { AgentState } from "@/lib/smith"
 
 const RightSidebar = React.lazy(async () => {
-  const module = await import("@/features/pico/right-sidebar")
+  const module = await import("@/features/smith/right-sidebar")
   return { default: module.RightSidebar }
 })
 
 const AgentPanel = React.lazy(async () => {
-  const module = await import("@/features/pico/agent/agent-panel")
+  const module = await import("@/features/smith/agent/agent-panel")
   return { default: module.AgentPanel }
 })
 
 const TerminalPanel = React.lazy(async () => {
-  const module = await import("@/features/pico/terminal-panel")
+  const module = await import("@/features/smith/terminal-panel")
   return { default: module.TerminalPanel }
 })
 
@@ -87,7 +90,7 @@ function AppShellTabsList({
   agentStore,
   viewerContextId,
 }: {
-  agentStore: PicoStore<AgentState>
+  agentStore: SmithStore<AgentState>
   viewerContextId: string
 }) {
   const cwd = useSelector(agentStore, (agentState) => agentState.cwd)
@@ -140,8 +143,8 @@ const AppShellGitPanelController = React.memo(
     onCloseOtherFiles: (path: string) => void
     onOpenFile: (path: string, options?: OpenFileViewTabOptions) => void
     onReorderFiles: (paths: Array<string>) => void
-    rightSidebarStore: PicoStore<AppShellRightSidebarState>
-    agentStore: PicoStore<AgentState>
+    rightSidebarStore: SmithStore<AppShellRightSidebarState>
+    agentStore: SmithStore<AgentState>
     viewerContextId: string
   }) {
     const cwd = useSelector(agentStore, (agentState) => agentState.cwd)
@@ -229,8 +232,8 @@ function AppShellDesktopGitPanel({
   onCloseOtherFiles: (path: string) => void
   onOpenFile: (path: string, options?: OpenFileViewTabOptions) => void
   onReorderFiles: (paths: Array<string>) => void
-  rightSidebarStore: PicoStore<AppShellRightSidebarState>
-  agentStore: PicoStore<AgentState>
+  rightSidebarStore: SmithStore<AppShellRightSidebarState>
+  agentStore: SmithStore<AgentState>
   viewerContextId: string
 }) {
   const cwd = useSelector(agentStore, (agentState) => agentState.cwd)
@@ -664,7 +667,7 @@ function AppShellDesktopVerticalResizeHandle({
 }
 
 type AppShellTabsControllerProps = AppShellAgentContentProps & {
-  appUiStore: PicoStore<AppShellUiState>
+  appUiStore: SmithStore<AppShellUiState>
   diffLineComments: Array<ComposerDiffLineComment>
   gitPanelOpen: boolean
   header?: React.ReactNode
@@ -681,7 +684,7 @@ type AppShellTabsControllerProps = AppShellAgentContentProps & {
   onOpenFileViewTab: (path: string, options?: OpenFileViewTabOptions) => void
   onReorderFileViewTabs: (paths: Array<string>) => void
   onValueChange: (value: string) => void
-  rightSidebarStore: PicoStore<AppShellRightSidebarState>
+  rightSidebarStore: SmithStore<AppShellRightSidebarState>
 }
 
 export function AppShellTabsController(props: AppShellTabsControllerProps) {

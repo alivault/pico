@@ -22,17 +22,17 @@ import {
 import { SidebarMenuAction, SidebarMenuItem } from "@/components/ui/sidebar"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { fetchJson } from "@/features/pico/app-shell-utils"
-import { copyTextToClipboard } from "@/features/pico/markdown-renderer"
+import { fetchJson } from "@/features/smith/app-shell-utils"
+import { copyTextToClipboard } from "@/features/smith/markdown-renderer"
 import {
   registerSettingsPage,
   SettingsListPage,
   type SettingsItem,
-} from "@/features/pico/settings-pages"
-import { useMachineFeatureCheck } from "@/features/pico/machine-store"
-import { isRemoteMachine, machineApiUrl } from "@/lib/pico/machine"
-import { useMachineId } from "@/lib/pico/machine-context"
-import { toast } from "@/lib/pico/toast"
+} from "@/features/smith/settings-pages"
+import { useMachineFeatureCheck } from "@/features/smith/machine-store"
+import { isRemoteMachine, machineApiUrl } from "@/lib/smith/machine"
+import { useMachineId } from "@/lib/smith/machine-context"
+import { toast } from "@/lib/smith/toast"
 
 export type ServerHealth = {
   ok: true
@@ -72,7 +72,7 @@ export const SERVER_RESTART_FEATURE = "server-restart"
 export const SELF_UPDATE_FEATURE = "self-update"
 
 const serverHealthKey = (machineId: string) =>
-  ["pico", "server-health", machineId] as const
+  ["smith", "server-health", machineId] as const
 
 function fetchHealth(machineId: string) {
   return fetchJson<ServerHealth>(machineApiUrl(machineId, "/api/system/health"))
@@ -142,11 +142,11 @@ export async function restartServer({
         body: JSON.stringify({ now: true }),
       }
     )
-    toast.loading("Pico is restarting…", { id: toastId })
+    toast.loading("Smith is restarting…", { id: toastId })
     void queryClient.invalidateQueries({ queryKey: serverHealthKey(machineId) })
     const after = await waitForNewServer(machineId, before)
     if (!after) {
-      toast.error("Pico did not start again in time", {
+      toast.error("Smith did not start again in time", {
         id: toastId,
         description: "Look at the server log.",
       })
@@ -168,23 +168,23 @@ export async function restartServer({
     }
     showRunning(after.version, updated, toastId)
   } catch (error) {
-    toast.error("Could not restart Pico", {
+    toast.error("Could not restart Smith", {
       id: toastId,
       description: error instanceof Error ? error.message : String(error),
     })
   }
 }
 
-const UPDATED_KEY = "pico:updated-to"
+const UPDATED_KEY = "smith:updated-to"
 
 function releaseNotesUrl(version: string) {
-  return `https://github.com/alivault/pico/releases/tag/v${version}`
+  return `https://github.com/alivault/smith/releases/tag/v${version}`
 }
 
 /** The toast after a restart; after an update, it links the release notes. */
 function showRunning(version: string, updated: boolean, id?: string) {
   toast.success(
-    updated ? `Pico is updated to ${version}` : `Pico ${version} is running`,
+    updated ? `Smith is updated to ${version}` : `Smith ${version} is running`,
     {
       ...(id ? { id } : {}),
       description: undefined,
@@ -211,7 +211,7 @@ if (typeof window !== "undefined") {
 }
 
 const updateStatusKey = (machineId: string) =>
-  ["pico", "server-update", machineId] as const
+  ["smith", "server-update", machineId] as const
 
 function updateUrl(machineId: string, path = "") {
   return machineApiUrl(machineId, `/api/system/update${path}`)
@@ -257,7 +257,7 @@ export async function checkForUpdate({
   void queryClient.invalidateQueries({ queryKey: serverHealthKey(machineId) })
   if (status.error) toast.error(status.error)
   else if (!status.available)
-    toast.success(`Pico ${status.installed} is up to date`, {
+    toast.success(`Smith ${status.installed} is up to date`, {
       description: `The newest ${status.channel} version is ${status.latest}.`,
     })
   return status
@@ -296,7 +296,7 @@ export async function updateServer({
   try {
     let status = await postUpdate(machineId, "/install")
     toast.loading(
-      status.latest ? `Installing Pico ${status.latest}…` : "Installing…",
+      status.latest ? `Installing Smith ${status.latest}…` : "Installing…",
       { id: toastId }
     )
     void queryClient.invalidateQueries({ queryKey: serverHealthKey(machineId) })
@@ -312,7 +312,7 @@ export async function updateServer({
     if (status.error) throw new Error(status.error)
     await restartServer({ machineId, queryClient })
   } catch (error) {
-    toast.error("Could not update Pico", {
+    toast.error("Could not update Smith", {
       id: toastId,
       description: error instanceof Error ? error.message : String(error),
     })
@@ -345,14 +345,14 @@ export function ServerUpdateStatus() {
         )}
         <span className="min-w-0 truncate">
           {release.installing
-            ? `Installing Pico ${release.latest}…`
-            : `Pico ${release.latest} is available`}
+            ? `Installing Smith ${release.latest}…`
+            : `Smith ${release.latest} is available`}
         </span>
       </div>
       {release.installing ? null : (
         <TitleTooltip title="Update and restart">
           <SidebarMenuAction
-            aria-label="Update Pico"
+            aria-label="Update Smith"
             onClick={() => void updateServer({ machineId, queryClient })}
           >
             <DownloadIcon />
@@ -372,7 +372,7 @@ function ServerPage() {
 
   const version: SettingsItem = {
     id: "version",
-    title: health ? `Pico ${health.version}` : "Pico",
+    title: health ? `Smith ${health.version}` : "Smith",
     description: health?.update?.available
       ? health.update.version
         ? `Version ${health.update.version} is installed. A restart runs it.`
@@ -390,7 +390,7 @@ function ServerPage() {
           id: "restart",
           title: "Restart",
           description:
-            "Pico restarts at once. Turns that the restart cuts off continue after it; a running tool call starts again or ends with an error.",
+            "Smith restarts at once. Turns that the restart cuts off continue after it; a running tool call starts again or ends with an error.",
           icon: <RotateCwIcon />,
           onSelect: () => void restartServer({ machineId, queryClient }),
         },
@@ -436,10 +436,10 @@ function updateSettingsItems({
   if (status.available && latest && status.install === "npm")
     items.push({
       id: "update",
-      title: `Update to Pico ${latest}`,
+      title: `Update to Smith ${latest}`,
       description: status.installing
-        ? "Installing with npm. Then Pico restarts."
-        : "Install it with npm, then restart Pico.",
+        ? "Installing with npm. Then Smith restarts."
+        : "Install it with npm, then restart Smith.",
       keywords: ["update", "upgrade", "install", "new version"],
       icon: <DownloadIcon />,
       busy: status.installing,
@@ -450,8 +450,8 @@ function updateSettingsItems({
     const command = status.command
     items.push({
       id: "update-command",
-      title: `Pico ${latest} is available`,
-      description: `Pico cannot update this install by itself. Run: ${command}`,
+      title: `Smith ${latest} is available`,
+      description: `Smith cannot update this install by itself. Run: ${command}`,
       keywords: ["update", "upgrade", "install", "command"],
       icon: <CopyIcon />,
       value: "Copy command",
@@ -471,7 +471,7 @@ function updateSettingsItems({
         (status.checkedAt
           ? `Last checked ${new Date(status.checkedAt).toLocaleString()}${latest ? `. The newest ${status.channel} version is ${latest}.` : "."}`
           : status.install === "source"
-            ? "This Pico runs from a source checkout; update it with git."
+            ? "This Smith runs from a source checkout; update it with git."
             : "Not checked yet."),
       keywords: ["update", "check", "version", "latest"],
       icon: <RefreshCwIcon />,

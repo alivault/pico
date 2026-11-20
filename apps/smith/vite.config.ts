@@ -10,7 +10,7 @@ import babel from "@rolldown/plugin-babel"
 import { searchForWorkspaceRoot } from "vite"
 import type { Plugin } from "vite"
 
-const picoVersion = (
+const smithVersion = (
   JSON.parse(
     readFileSync(new URL("./package.json", import.meta.url), "utf8")
   ) as { version: string }
@@ -29,7 +29,7 @@ const allowedHosts = Array.from(
     `${localHostnameWithoutSuffix.toLowerCase()}.local`,
   ])
 )
-const backendUrl = process.env.PICO_DEV_BACKEND_URL ?? "http://127.0.0.1:3141"
+const backendUrl = process.env.SMITH_DEV_BACKEND_URL ?? "http://127.0.0.1:3141"
 const backendProxy = {
   target: backendUrl,
   // Preserve Host so the backend's same-origin check also works through Vite.
@@ -39,13 +39,13 @@ const backendProxy = {
 
 function staticSpaShell(): Plugin {
   return {
-    name: "pico-static-spa-shell",
+    name: "smith-static-spa-shell",
     apply: "build",
     closeBundle() {
       const publicDirectory = join(process.cwd(), ".output", "public")
       const indexPath = join(publicDirectory, "index.html")
       if (!existsSync(indexPath)) {
-        throw new Error("Vite did not produce the Pico SPA entry document")
+        throw new Error("Vite did not produce the Smith SPA entry document")
       }
       copyFileSync(indexPath, join(publicDirectory, "_shell.html"))
     },
@@ -72,7 +72,7 @@ const config = {
       "src/routeTree.gen.ts",
       ".output/**",
       ".tanstack/**",
-      ".pico-dev/**",
+      ".smith-dev/**",
       "server/dist/**",
     ],
     options: { typeAware: true, typeCheck: true },
@@ -96,12 +96,12 @@ const config = {
       "yarn.lock",
       ".output/**",
       ".tanstack/**",
-      ".pico-dev/**",
+      ".smith-dev/**",
       "server/dist/**",
     ],
   },
   define: {
-    __PICO_VERSION__: JSON.stringify(picoVersion),
+    __SMITH_VERSION__: JSON.stringify(smithVersion),
   },
   resolve: {
     tsconfigPaths: true,
@@ -124,7 +124,7 @@ const config = {
     proxy: {
       "/api": backendProxy,
       "/events": backendProxy,
-      // The hub proxy to the other machines (see `src/lib/pico/machine.ts`).
+      // The hub proxy to the other machines (see `src/lib/smith/machine.ts`).
       "/m/": backendProxy,
     },
   },
@@ -134,7 +134,7 @@ const config = {
     proxy: {
       "/api": backendProxy,
       "/events": backendProxy,
-      // The hub proxy to the other machines (see `src/lib/pico/machine.ts`).
+      // The hub proxy to the other machines (see `src/lib/smith/machine.ts`).
       "/m/": backendProxy,
     },
   },

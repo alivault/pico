@@ -68,49 +68,49 @@ import { resizeRailPrimaryInteractiveClass } from "@/components/ui/resize-rail"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { useLatestRef } from "@/features/pico/app-shell-common"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { formatShortcutLabel } from "@/features/pico/keyboard-shortcuts"
-import { MarkdownBlock } from "@/features/pico/markdown-renderer"
-import { useFileLineComments } from "@/features/pico/file-line-comments"
-import { useProjectFileEditing } from "@/features/pico/project-file-editing"
+import { useLatestRef } from "@/features/smith/app-shell-common"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { formatShortcutLabel } from "@/features/smith/keyboard-shortcuts"
+import { MarkdownBlock } from "@/features/smith/markdown-renderer"
+import { useFileLineComments } from "@/features/smith/file-line-comments"
+import { useProjectFileEditing } from "@/features/smith/project-file-editing"
 import {
   ProjectFileImage,
   isSvgFilePath,
-} from "@/features/pico/project-file-image"
-import { formatBytes } from "@/features/pico/resources-dialog"
-import { useDirtyProjectFilePaths } from "@/features/pico/project-file-edits"
-import { picoQueryKeys } from "@/features/pico/query-keys"
+} from "@/features/smith/project-file-image"
+import { formatBytes } from "@/features/smith/resources-dialog"
+import { useDirtyProjectFilePaths } from "@/features/smith/project-file-edits"
+import { smithQueryKeys } from "@/features/smith/query-keys"
 import {
   ProjectFileIconSprite,
   ProjectFileTypeIcon,
-} from "@/features/pico/right-sidebar-file-icons"
-import { gitChangesQueryOptions } from "@/features/pico/right-sidebar-git-data"
-import { GitSectionNote } from "@/features/pico/right-sidebar-section-note"
+} from "@/features/smith/right-sidebar-file-icons"
+import { gitChangesQueryOptions } from "@/features/smith/right-sidebar-git-data"
+import { GitSectionNote } from "@/features/smith/right-sidebar-section-note"
 import {
   getErrorMessage,
   normalizeCwd,
-} from "@/features/pico/right-sidebar-shared"
+} from "@/features/smith/right-sidebar-shared"
 import type {
   GitCommitDiffTab,
   GitScopedProps,
   OpenProjectFileOptions,
   RightSidebarTabValue,
-} from "@/features/pico/right-sidebar-types"
+} from "@/features/smith/right-sidebar-types"
 import {
   RIGHT_SIDEBAR_FILE_TREE_WIDTH_STORAGE_KEY,
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
-} from "@/lib/pico"
+} from "@/lib/smith"
 import type {
   GitChangeFile,
   ProjectFileReadResponse,
   ProjectFileTreeResponse,
-} from "@/lib/pico/api"
+} from "@/lib/smith/api"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { installGlobalResizeCursor } from "@/hooks/use-sidebar-resize"
 import { cn } from "@/lib/utils"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 type ProjectFileTreeData = Extract<ProjectFileTreeResponse, { ok: true }>
 type ProjectFileReadData = Extract<ProjectFileReadResponse, { ok: true }>
@@ -121,7 +121,7 @@ const EMPTY_RIGHT_SIDEBAR_FILE_TABS: Array<string> = []
 const EMPTY_COMMIT_DIFF_TABS: Array<GitCommitDiffTab> = []
 
 const ProjectFileEditor = React.lazy(
-  () => import("@/features/pico/project-file-editor")
+  () => import("@/features/smith/project-file-editor")
 )
 const SAVE_SHORTCUT_LABEL = formatShortcutLabel("Mod+S")
 
@@ -163,7 +163,7 @@ export function projectFileTreeQueryOptions({
   cwd: string
 }) {
   return {
-    queryKey: picoQueryKeys.projectFileTree(viewerContextId, cwd),
+    queryKey: smithQueryKeys.projectFileTree(viewerContextId, cwd),
     queryFn: () =>
       fetchJson<ProjectFileTreeData>(
         buildRequestUrl(`/api/files/tree?cwd=${encodeURIComponent(cwd)}`, {
@@ -188,7 +188,7 @@ function projectFileReadQueryOptions({
   path: string
 }) {
   return {
-    queryKey: picoQueryKeys.projectFileRead(viewerContextId, cwd, path),
+    queryKey: smithQueryKeys.projectFileRead(viewerContextId, cwd, path),
     queryFn: () =>
       fetchJson<ProjectFileReadData>(
         buildRequestUrl(

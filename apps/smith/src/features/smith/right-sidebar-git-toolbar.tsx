@@ -13,22 +13,22 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { showGitPushSuccessToast } from "@/features/pico/git-toast-utils"
+import { showGitPushSuccessToast } from "@/features/smith/git-toast-utils"
 import {
   appShortcut,
   formatShortcutLabel,
   pullShortcut,
-} from "@/features/pico/keyboard-shortcuts"
-import { picoQueryKeys } from "@/features/pico/query-keys"
-import { GitBranchDialog } from "@/features/pico/right-sidebar-git-branch-dialog"
-import { GitCommitDialog } from "@/features/pico/right-sidebar-git-commit-dialog"
+} from "@/features/smith/keyboard-shortcuts"
+import { smithQueryKeys } from "@/features/smith/query-keys"
+import { GitBranchDialog } from "@/features/smith/right-sidebar-git-branch-dialog"
+import { GitCommitDialog } from "@/features/smith/right-sidebar-git-commit-dialog"
 import {
   gitChangesQueryOptions,
   gitStatusHasDiverged,
@@ -36,20 +36,20 @@ import {
   invalidateGitQueries,
   selectGitFiles,
   selectGitStatusSummary,
-} from "@/features/pico/right-sidebar-git-data"
-import { GitSectionNote } from "@/features/pico/right-sidebar-section-note"
+} from "@/features/smith/right-sidebar-git-data"
+import { GitSectionNote } from "@/features/smith/right-sidebar-section-note"
 import {
   formatDisplayPath,
   formatFolderName,
   getErrorMessage,
   normalizeCwd,
-} from "@/features/pico/right-sidebar-shared"
+} from "@/features/smith/right-sidebar-shared"
 import type {
   GitRemoteAction,
   GitScopedProps,
-} from "@/features/pico/right-sidebar-types"
-import type { GitActionResponse } from "@/lib/pico/api"
-import { useMachineId } from "@/lib/pico/machine-context"
+} from "@/features/smith/right-sidebar-types"
+import type { GitActionResponse } from "@/lib/smith/api"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 // Hide a button label when the git toolbar is narrow. The label stays for
 // screen readers.
@@ -268,19 +268,19 @@ export function GitPanelToolbar({
     notifyOnChangeProps: ["data"],
   })
   const statusFetchCount = useIsFetching({
-    queryKey: picoQueryKeys.gitStatus(viewerContextId, normalizedCwd),
+    queryKey: smithQueryKeys.gitStatus(viewerContextId, normalizedCwd),
     exact: true,
   })
   const filesFetchCount = useIsFetching({
-    queryKey: picoQueryKeys.gitFiles(viewerContextId, normalizedCwd),
+    queryKey: smithQueryKeys.gitFiles(viewerContextId, normalizedCwd),
     exact: true,
   })
   const branchesFetchCount = useIsFetching({
-    queryKey: picoQueryKeys.gitBranches(viewerContextId, normalizedCwd),
+    queryKey: smithQueryKeys.gitBranches(viewerContextId, normalizedCwd),
     exact: true,
   })
   const commitsFetchCount = useIsFetching({
-    queryKey: picoQueryKeys.gitCommits(viewerContextId, normalizedCwd),
+    queryKey: smithQueryKeys.gitCommits(viewerContextId, normalizedCwd),
     exact: false,
   })
   const refreshing =
@@ -319,7 +319,7 @@ export function GitPanelToolbar({
     },
     onSuccess: async (response, action) => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitStatus(viewerContextId, normalizedCwd),
+        queryKey: smithQueryKeys.gitStatus(viewerContextId, normalizedCwd),
         exact: true,
         refetchType: "active",
       })
@@ -350,21 +350,21 @@ export function GitPanelToolbar({
   })
 
   const shortcutPushMutatingCount = useIsMutating({
-    mutationKey: picoQueryKeys.gitAction(
+    mutationKey: smithQueryKeys.gitAction(
       viewerContextId,
       normalizedCwd,
       "push"
     ),
   })
   const shortcutForcePushMutatingCount = useIsMutating({
-    mutationKey: picoQueryKeys.gitAction(
+    mutationKey: smithQueryKeys.gitAction(
       viewerContextId,
       normalizedCwd,
       "force-push"
     ),
   })
   const shortcutPullMutatingCount = useIsMutating({
-    mutationKey: picoQueryKeys.gitAction(
+    mutationKey: smithQueryKeys.gitAction(
       viewerContextId,
       normalizedCwd,
       "pull"

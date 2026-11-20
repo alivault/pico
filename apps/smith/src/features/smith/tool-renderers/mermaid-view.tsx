@@ -17,7 +17,7 @@ export default function MermaidView({ source }: { source: string }) {
     })
     counter += 1
     mermaid
-      .render(`pico-mermaid-${counter}`, source)
+      .render(`smith-mermaid-${counter}`, source)
       .then((result) => {
         if (!cancelled) {
           setSvg(result.svg)

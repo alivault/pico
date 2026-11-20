@@ -4,12 +4,12 @@
  * Tools are named `mcp__<server>__<tool>`, as in Pi. Each server's `exposure`
  * decides how the model reaches them, also as in Pi: `codemode` (default)
  * only from code mode scripts, `direct` as ordinary tools, and `hidden` not
- * at all. Pico has no tool search, so Pi's `deferred` works as `codemode`.
+ * at all. Smith has no tool search, so Pi's `deferred` works as `codemode`.
  * Servers connect in the background; the tool list updates when they are
- * ready. Pico watches `mcp.json` and applies its changes without a restart:
+ * ready. Smith watches `mcp.json` and applies its changes without a restart:
  * it connects new and changed servers, and closes removed ones.
  *
- * HTTP servers can use OAuth: the user signs in from Pico's settings, and the
+ * HTTP servers can use OAuth: the user signs in from Smith's settings, and the
  * tokens go to `<data>/mcp-oauth.json`. A server with `replaySafe: true` (for
  * read-only servers) gets replay-safe tools, which rerun after a crash.
  */
@@ -174,7 +174,7 @@ function oauthProvider(
     serverUrl: server.config.url!,
     redirectUrl,
     clientMetadata: {
-      client_name: "Pico",
+      client_name: "Smith",
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       token_endpoint_auth_method: "none",
@@ -272,7 +272,7 @@ function readConfigOrNone(agentDir: string) {
   try {
     return readConfig(agentDir)
   } catch (error) {
-    console.warn(`[pico] ${(error as Error).message}`)
+    console.warn(`[smith] ${(error as Error).message}`)
     return {}
   }
 }
@@ -325,12 +325,12 @@ export function createMcpExtension(
       if (server.dropped) return
       server.needsAuth = error instanceof McpOAuthAuthorizationRequiredError
       server.error = server.needsAuth
-        ? "Sign in to this server in Pico's agent settings"
+        ? "Sign in to this server in Smith's agent settings"
         : error instanceof Error
           ? error.message
           : String(error)
       console.warn(
-        `[pico] MCP server ${server.name} is unavailable: ${server.error}`
+        `[smith] MCP server ${server.name} is unavailable: ${server.error}`
       )
     })
 
@@ -385,7 +385,9 @@ export function createMcpExtension(
     if (same) return []
     servers = next
     for (const server of closing)
-      console.info(`[pico] MCP server ${server.name} closes (mcp.json changed)`)
+      console.info(
+        `[smith] MCP server ${server.name} closes (mcp.json changed)`
+      )
     await Promise.all(closing.map(drop))
     changed()
     return starting.map(start)
@@ -409,7 +411,7 @@ export function createMcpExtension(
       timer = setTimeout(() => {
         reload().catch((error: unknown) => {
           console.warn(
-            `[pico] could not reload ${CONFIG_FILE}: ${
+            `[smith] could not reload ${CONFIG_FILE}: ${
               error instanceof Error ? error.message : String(error)
             }`
           )
@@ -417,11 +419,11 @@ export function createMcpExtension(
       }, RELOAD_DELAY_MS)
     })
     watcher.on("error", (error) => {
-      console.warn("[pico] stopped watching mcp.json:", error)
+      console.warn("[smith] stopped watching mcp.json:", error)
       watcher?.close()
     })
   } catch (error) {
-    console.warn(`[pico] cannot watch ${agentDir} for mcp.json:`, error)
+    console.warn(`[smith] cannot watch ${agentDir} for mcp.json:`, error)
   }
 
   return {
@@ -530,7 +532,7 @@ async function connect(server: Server, store: OAuthStore) {
   const { config } = server
   const attempt = server.attempt
   const client = new McpClient({
-    name: "pico",
+    name: "smith",
     version: "3",
     requestTimeoutMs: 120_000,
   })

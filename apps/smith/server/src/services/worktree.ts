@@ -111,7 +111,7 @@ export async function createWorktree(
   const suffix = randomBytes(3).toString("hex")
   const requested = options.branch?.trim()
   const slug = slugify(requested ?? options.name ?? "agent")
-  const branch = requested || `pico/${slug}-${suffix}`
+  const branch = requested || `smith/${slug}-${suffix}`
   const path = join(
     options.dataDir,
     "worktrees",

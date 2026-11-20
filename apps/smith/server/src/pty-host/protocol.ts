@@ -1,5 +1,5 @@
 /**
- * The protocol between the Pico server and its pty-host.
+ * The protocol between the Smith server and its pty-host.
  *
  * The pty-host is a small process that owns the pseudo-terminals of one data
  * directory, so terminals and jobs keep running while the server restarts
@@ -98,13 +98,13 @@ export function ptyHostPaths(dataDir: string) {
     const uid = process.getuid?.() ?? 0
     socket = join(
       tmpdir(),
-      `pico-pty-${uid}-${hash}`,
+      `smith-pty-${uid}-${hash}`,
       `socket-v${PTY_HOST_PROTOCOL}`
     )
   }
   if (process.platform === "win32") {
     const hash = createHash("sha256").update(dataDir).digest("hex").slice(0, 12)
-    socket = `\\\\.\\pipe\\pico-pty-host-${hash}-v${PTY_HOST_PROTOCOL}`
+    socket = `\\\\.\\pipe\\smith-pty-host-${hash}-v${PTY_HOST_PROTOCOL}`
   }
   return {
     dir,
@@ -155,7 +155,7 @@ export function lineReader(onMessage: (message: unknown) => void) {
         try {
           onMessage(JSON.parse(line))
         } catch (error) {
-          console.warn("[pico] pty-host: a bad message:", error)
+          console.warn("[smith] pty-host: a bad message:", error)
         }
       }
       newline = buffer.indexOf("\n")

@@ -1,5 +1,5 @@
 /**
- * Helpers that Pico's own extensions share.
+ * Helpers that Smith's own extensions share.
  */
 import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"

@@ -32,55 +32,55 @@ import {
   RightSidebarTabStrip,
   projectFileTreeQueryOptions,
   type ProjectFilesPreviewMode,
-} from "@/features/pico/right-sidebar-project-files"
+} from "@/features/smith/right-sidebar-project-files"
 import { Spinner } from "@/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { useMachineFeature } from "@/features/pico/machine-store"
-import { picoQueryKeys } from "@/features/pico/query-keys"
-import { GitPanelErrorToasts } from "@/features/pico/right-sidebar-git-toolbar"
-import { usePicoDiffThemeOptions } from "@/features/pico/pico-diff-theme"
-import { GitCommitsSection } from "@/features/pico/right-sidebar-git-commits"
-import { GitChangesTabCount } from "@/features/pico/right-sidebar-git-header-actions"
-import { FileReviewContent } from "@/features/pico/right-sidebar-git-review"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { useMachineFeature } from "@/features/smith/machine-store"
+import { smithQueryKeys } from "@/features/smith/query-keys"
+import { GitPanelErrorToasts } from "@/features/smith/right-sidebar-git-toolbar"
+import { useSmithDiffThemeOptions } from "@/features/smith/smith-diff-theme"
+import { GitCommitsSection } from "@/features/smith/right-sidebar-git-commits"
+import { GitChangesTabCount } from "@/features/smith/right-sidebar-git-header-actions"
+import { FileReviewContent } from "@/features/smith/right-sidebar-git-review"
 import {
   getStuckScrollTriggerValue,
   setDerivedScrollState,
-} from "@/features/pico/scroll-shadow-utils"
+} from "@/features/smith/scroll-shadow-utils"
 import {
   ScrollGradientOverlays,
   useScrollGradients,
-} from "@/features/pico/scroll-gradient-utils"
-import { GitSectionNote } from "@/features/pico/right-sidebar-section-note"
+} from "@/features/smith/scroll-gradient-utils"
+import { GitSectionNote } from "@/features/smith/right-sidebar-section-note"
 import {
   getErrorMessage,
   normalizeCwd,
-} from "@/features/pico/right-sidebar-shared"
+} from "@/features/smith/right-sidebar-shared"
 import type {
   OpenProjectFileOptions,
   GitCommitDiffTab,
   GitCommitDiffTabRequest,
   RightSidebarProps,
   RightSidebarTabValue,
-} from "@/features/pico/right-sidebar-types"
+} from "@/features/smith/right-sidebar-types"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
   RIGHT_SIDEBAR_HISTORY_TAB_STORAGE_KEY,
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
-} from "@/lib/pico"
-import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
-import "@/features/pico/agent/register"
-import { AgentPanel, useAgentBusy } from "@/features/pico/agent/agent-panel"
-import { useAgentExtensions } from "@/features/pico/agent/agent-extensions"
-import { BrowserPanel } from "@/features/pico/agent/browser-panel"
-import { usePreviewAddress } from "@/features/pico/agent/browser-preview"
-import { IssuesPanel } from "@/features/pico/right-sidebar-issues"
-import { useGitHubRepo } from "@/features/pico/right-sidebar-issues-data"
-import { TodoTabProgress } from "@/features/pico/agent/todo"
-import type { GitCommitDiffMode, GitCommitDiffResponse } from "@/lib/pico/api"
+} from "@/lib/smith"
+import type { ComposerDiffLineComment } from "@/features/smith/app-shell-composer-state"
+import "@/features/smith/agent/register"
+import { AgentPanel, useAgentBusy } from "@/features/smith/agent/agent-panel"
+import { useAgentExtensions } from "@/features/smith/agent/agent-extensions"
+import { BrowserPanel } from "@/features/smith/agent/browser-panel"
+import { usePreviewAddress } from "@/features/smith/agent/browser-preview"
+import { IssuesPanel } from "@/features/smith/right-sidebar-issues"
+import { useGitHubRepo } from "@/features/smith/right-sidebar-issues-data"
+import { TodoTabProgress } from "@/features/smith/agent/todo"
+import type { GitCommitDiffMode, GitCommitDiffResponse } from "@/lib/smith/api"
 import { cn } from "@/lib/utils"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 type GitCommitDiffData = Extract<GitCommitDiffResponse, { ok: true }>
 type CommitDiffStyle = "unified" | "split"
@@ -482,7 +482,7 @@ function CommitDiffFileRenderer({
     comments,
     pendingComment,
   })
-  const themeOptions = usePicoDiffThemeOptions()
+  const themeOptions = useSmithDiffThemeOptions()
   const options = {
     ...themeOptions,
     diffStyle,
@@ -855,7 +855,7 @@ function CommitDiffContent({
   }
   const diffQuery = useQuery({
     queryKey: tab
-      ? picoQueryKeys.gitCommitDiff(
+      ? smithQueryKeys.gitCommitDiff(
           viewerContextId,
           cwd,
           tab.commit,
@@ -863,7 +863,7 @@ function CommitDiffContent({
           tab.path,
           tab.previousPath
         )
-      : ["pico", "git-commit-diff", viewerContextId, cwd, "", ""],
+      : ["smith", "git-commit-diff", viewerContextId, cwd, "", ""],
     queryFn: () =>
       fetchJson<GitCommitDiffData>(
         buildRequestUrl(

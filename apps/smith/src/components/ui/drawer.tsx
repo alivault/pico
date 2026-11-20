@@ -4,13 +4,13 @@ import { Drawer as DrawerPrimitive } from "vaul"
 import { cn } from "@/lib/utils"
 import { usePortalContainer } from "@/components/ui/portal-container"
 
-const PICO_DIALOG_CLOSED_EVENT = "pico:dialog-closed"
+const SMITH_DIALOG_CLOSED_EVENT = "smith:dialog-closed"
 
 function dispatchDrawerClosedEvent() {
   if (typeof window === "undefined") return
 
   window.setTimeout(() => {
-    window.dispatchEvent(new CustomEvent(PICO_DIALOG_CLOSED_EVENT))
+    window.dispatchEvent(new CustomEvent(SMITH_DIALOG_CLOSED_EVENT))
   }, 160)
 }
 

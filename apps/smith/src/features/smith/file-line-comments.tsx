@@ -5,7 +5,7 @@
  */
 import * as React from "react"
 
-import type { ComposerFileLineComment } from "@/features/pico/app-shell-composer-state"
+import type { ComposerFileLineComment } from "@/features/smith/app-shell-composer-state"
 
 export type NewFileLineComment = Omit<ComposerFileLineComment, "id" | "kind">
 

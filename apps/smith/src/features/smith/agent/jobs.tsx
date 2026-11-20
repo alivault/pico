@@ -9,7 +9,7 @@ import {
   SquareIcon,
   SquareTerminalIcon,
 } from "lucide-react"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import {
   Item,
@@ -23,24 +23,27 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { FADE_UNDER_ACTIONS, REVEAL_ON_HOVER } from "@/features/pico/agent/todo"
-import { registerAgentSection } from "@/features/pico/agent/agent-panel"
+import {
+  FADE_UNDER_ACTIONS,
+  REVEAL_ON_HOVER,
+} from "@/features/smith/agent/todo"
+import { registerAgentSection } from "@/features/smith/agent/agent-panel"
 import {
   directPreviewUrl,
   previewUrl,
   showPreview,
-} from "@/features/pico/agent/browser-preview"
-import { openJobTerminal } from "@/features/pico/agent/events"
+} from "@/features/smith/agent/browser-preview"
+import { openJobTerminal } from "@/features/smith/agent/events"
 import {
   jobPrompt,
   useAgentJobs,
   type AgentJob,
-} from "@/features/pico/agent/job-state"
-import { postAgentJson } from "@/features/pico/agent/agent-extensions"
+} from "@/features/smith/agent/job-state"
+import { postAgentJson } from "@/features/smith/agent/agent-extensions"
 import {
   useTrackWaitingCard,
   waitingCardKey,
-} from "@/features/pico/agent/waiting-cards"
+} from "@/features/smith/agent/waiting-cards"
 import {
   errorText,
   FinishedGroup,
@@ -48,22 +51,22 @@ import {
   relativeTime,
   TextDialog,
   useNow,
-} from "@/features/pico/agent/shared"
+} from "@/features/smith/agent/shared"
 import {
   registerToolRenderer,
   toolArgs,
   toolDetails,
   useToolRenderContext,
   type ToolRendererProps,
-} from "@/features/pico/tool-renderers/registry"
+} from "@/features/smith/tool-renderers/registry"
 import {
   formatBytes,
   useMachineResources,
-} from "@/features/pico/resources-dialog"
-import { useMachineFeature } from "@/features/pico/machine-store"
-import { normalizeCwd } from "@/features/pico/right-sidebar-shared"
+} from "@/features/smith/resources-dialog"
+import { useMachineFeature } from "@/features/smith/machine-store"
+import { normalizeCwd } from "@/features/smith/right-sidebar-shared"
 import { cn } from "@/lib/utils"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 type Job = AgentJob
 
@@ -330,7 +333,7 @@ registerAgentSection({
 })
 
 const InlineJobTerminal = React.lazy(
-  () => import("@/features/pico/agent/inline-job-terminal")
+  () => import("@/features/smith/agent/inline-job-terminal")
 )
 
 type TerminalInput = (data: string) => boolean

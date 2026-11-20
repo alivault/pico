@@ -72,7 +72,7 @@ The image URLs come in the conversation items (`imagePath` in `core/items.ts`). 
 | `includeActiveSession`                                     | `includeActiveAgent`                               | `POST /api/project-agents/cleanup`  |
 | `directories`, `pinnedSessionKeys`, `collapsedDirectories` | `projects`, `pinnedAgentKeys`, `collapsedProjects` | `POST /api/sidebar-state`, `/merge` |
 
-`path` (for example `pico:s12`) and `cwd` stay.
+`path` (for example `smith:s12`) and `cwd` stay.
 
 ## Response fields
 
@@ -141,12 +141,12 @@ The `registerState` provider keys (`todo`, `jobs`, `scratch`, `questions`, `brow
 
 ## Stored names that stay
 
-- Document kinds: `pico.session` (`AgentMetaDoc`), `pico.queue`, `pico.delivered`, `pico.jobs`, `pico.jobs.index`, `pico.questions`, `pico.todo`, `pico.browser`, `pico.pi-imports`. `scope: "session"` in `defineDoc` (pi-durable).
-- Task names `pico.child-report` and `pico.remote-child-report`, and the stored task input fields `parent`, `child`, `childTitle`.
-- The ID prefix `s` (`s12`), the path prefix `pico:` (`pico:s12`), and the key prefix `session:` (`agentKey()` gives `session:s12`; pins keep it).
+- Document kinds: `smith.session` (`AgentMetaDoc`), `smith.queue`, `smith.delivered`, `smith.jobs`, `smith.jobs.index`, `smith.questions`, `smith.todo`, `smith.browser`, `smith.pi-imports`. `scope: "session"` in `defineDoc` (pi-durable).
+- Task names `smith.child-report` and `smith.remote-child-report`, and the stored task input fields `parent`, `child`, `childTitle`.
+- The ID prefix `s` (`s12`), the path prefix `smith:` (`smith:s12`), and the key prefix `session:` (`agentKey()` gives `session:s12`; pins keep it).
 - Request IDs `spawn:`, `send:`, `report:`, `stall:`, `hub:`.
-- `~/.pico/sidebar.json`: `directories`, `pinnedSessionKeys`, `collapsedDirectories`. `SidebarState` maps them to `projects`, `pinnedAgentKeys`, `collapsedProjects`.
-- `~/.pico/viewers.json`: `selectedSession`, `activeDraft.sessionKey`, `sidebarDirectories`. `Viewers` maps them to `selectedAgent`, `agentKey`, `sidebarProjects`.
+- `~/.smith/sidebar.json`: `directories`, `pinnedSessionKeys`, `collapsedDirectories`. `SidebarState` maps them to `projects`, `pinnedAgentKeys`, `collapsedProjects`.
+- `~/.smith/viewers.json`: `selectedSession`, `activeDraft.sessionKey`, `sidebarDirectories`. `Viewers` maps them to `selectedAgent`, `agentKey`, `sidebarProjects`.
 - pi's names: `AgentDoc`, `ConversationId`, `conversationId`, pi's `session` header and `session_info` entries in `import-pi.ts`, `importPiSessions`, `~/.pi/agent/sessions`.
 - Not renamed (other meanings): browser sessions in `services/browser.ts`, `child_process` and process children, the conversation tree's `children`, `cwd` and the filesystem routes.
 
@@ -160,5 +160,5 @@ The `registerState` provider keys (`todo`, `jobs`, `scratch`, `questions`, `brow
 
 ## Open points
 
-- Saved tool limits in `pico.session` (`limits.add`, `limits.remove`) and the user's custom profiles in `settings.json` can hold the old names (`spawn_session`, `send_to_session`, `sessions.stop`, extension `sessions`). They no longer match a tool. A subagent from before the change has `spawn_session` removed, not `spawn_subagent`, until its profile is applied again (a profile or limits change). The plan accepts no backwards compatibility, so the server does not convert them.
+- Saved tool limits in `smith.session` (`limits.add`, `limits.remove`) and the user's custom profiles in `settings.json` can hold the old names (`spawn_session`, `send_to_session`, `sessions.stop`, extension `sessions`). They no longer match a tool. A subagent from before the change has `spawn_session` removed, not `spawn_subagent`, until its profile is applied again (a profile or limits change). The plan accepts no backwards compatibility, so the server does not convert them.
 - A saved conversation keeps calls to the old tool names in its history. The model sees them in old turns, but it can only call the new tools.

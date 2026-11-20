@@ -28,21 +28,21 @@ import {
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { postAgentJson } from "@/features/pico/agent/agent-extensions"
-import { CookieImportCard } from "@/features/pico/agent/browser-cookie-import"
-import { buildRequestUrl } from "@/features/pico/app-shell-utils"
+import { postAgentJson } from "@/features/smith/agent/agent-extensions"
+import { CookieImportCard } from "@/features/smith/agent/browser-cookie-import"
+import { buildRequestUrl } from "@/features/smith/app-shell-utils"
 import {
   PreviewPanel,
   setBrowserMode,
   useBrowserMode,
   usePreviewAddress,
   type BrowserMode,
-} from "@/features/pico/agent/browser-preview"
+} from "@/features/smith/agent/browser-preview"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { useMachineReadOnly } from "@/features/pico/machine-store"
+import { useMachineReadOnly } from "@/features/smith/machine-store"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { useMachineId } from "@/lib/pico/machine-context"
-import { toast } from "@/lib/pico/toast"
+import { useMachineId } from "@/lib/smith/machine-context"
+import { toast } from "@/lib/smith/toast"
 import { cn } from "@/lib/utils"
 
 type BrowserTab = { id: string; url: string; title: string }

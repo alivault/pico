@@ -1,6 +1,6 @@
 import { QueryClient } from "@tanstack/react-query"
 
-export function createPicoQueryClient() {
+export function createSmithQueryClient() {
   return new QueryClient({
     defaultOptions: {
       queries: {
@@ -22,7 +22,7 @@ const machineQueryClients = new Map<string, QueryClient>()
 export function queryClientForMachine(machineId: string) {
   let client = machineQueryClients.get(machineId)
   if (!client) {
-    client = createPicoQueryClient()
+    client = createSmithQueryClient()
     machineQueryClients.set(machineId, client)
   }
   return client

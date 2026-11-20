@@ -1,5 +1,5 @@
-import type { PromptImage, StreamingBehavior } from "@/lib/pico"
-import { LOCAL_MACHINE_ID } from "@/lib/pico/machine"
+import type { PromptImage, StreamingBehavior } from "@/lib/smith"
+import { LOCAL_MACHINE_ID } from "@/lib/smith/machine"
 
 const OFFLINE_PROMPT_DB_VERSION = 1
 const OFFLINE_PROMPT_STORE_NAME = "prompts"
@@ -9,7 +9,7 @@ const OFFLINE_PROMPT_STORE_NAME = "prompts"
  * has its own database (and fallback key) with this name.
  */
 function queueName(machine: string) {
-  return `pico-offline-prompts${machine === LOCAL_MACHINE_ID ? "" : `@${machine}`}`
+  return `smith-offline-prompts${machine === LOCAL_MACHINE_ID ? "" : `@${machine}`}`
 }
 
 export type OfflinePromptImage = Pick<PromptImage, "type" | "mimeType" | "data">

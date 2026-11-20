@@ -4,11 +4,11 @@ import {
   machineLocalStorageSetItem,
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
-} from "@/lib/pico/storage"
-import { storageKeyMachine } from "@/lib/pico/machine"
+} from "@/lib/smith/storage"
+import { storageKeyMachine } from "@/lib/smith/machine"
 
 // Stored name: do not change.
-export const SHOW_AGENT_PREVIEWS_STORAGE_KEY = "pico-sidebar-session-previews"
+export const SHOW_AGENT_PREVIEWS_STORAGE_KEY = "smith-sidebar-session-previews"
 
 const listeners = new Set<() => void>()
 
@@ -67,7 +67,7 @@ export function setShowAgentPreviews(enabled: boolean) {
 export type SidebarGroupBy = "project" | "status"
 
 // Stored name: do not change.
-export const SIDEBAR_GROUP_BY_STORAGE_KEY = "pico-sidebar-group-by"
+export const SIDEBAR_GROUP_BY_STORAGE_KEY = "smith-sidebar-group-by"
 
 const groupByListeners = new Set<() => void>()
 const groupByByMachine = new Map<string, SidebarGroupBy>()
@@ -136,7 +136,7 @@ export function setSidebarGroupBy(machineId: string, groupBy: SidebarGroupBy) {
 export type SidebarLayout = "groups" | "split"
 
 // Stored name: do not change.
-export const SIDEBAR_LAYOUT_STORAGE_KEY = "pico-sidebar-layout"
+export const SIDEBAR_LAYOUT_STORAGE_KEY = "smith-sidebar-layout"
 
 const layoutListeners = new Set<() => void>()
 let sidebarLayout: SidebarLayout | undefined

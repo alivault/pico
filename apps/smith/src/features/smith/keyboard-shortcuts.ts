@@ -7,9 +7,9 @@ import {
 
 export const isMacPlatform = detectPlatform() === "mac"
 
-// The modifier for Pico shortcuts. On macOS, Control is free because the
+// The modifier for Smith shortcuts. On macOS, Control is free because the
 // browser uses Command. On Windows and Linux, the browser uses Control, so
-// Pico uses Alt.
+// Smith uses Alt.
 export const appModifier = isMacPlatform ? "Control" : "Alt"
 
 export const appModifierFlag = isMacPlatform
@@ -17,7 +17,7 @@ export const appModifierFlag = isMacPlatform
   : ({ alt: true } as const)
 
 // Alt+1…9 opens a sidebar agent by number on all platforms. On macOS,
-// Control+1…9 often switches desktops, so Pico does not use it.
+// Control+1…9 often switches desktops, so Smith does not use it.
 export const agentNumberModifier = "Alt"
 
 export const agentNumberModifierFlag = { alt: true } as const
@@ -29,7 +29,7 @@ export function agentNumberShortcut(number: number) {
 // Alt+arrow keys move through the conversation on all platforms: Left and
 // Right go to the previous and next message, Up and Down to the top and
 // bottom. On macOS, Control+arrow keys open Mission Control and switch
-// desktops, so Pico does not use them.
+// desktops, so Smith does not use them.
 export const conversationNavModifierFlag = { alt: true } as const
 
 export function conversationNavShortcut(

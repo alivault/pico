@@ -1,7 +1,7 @@
 /**
  * Agents on durable conversations.
  *
- * A Pico agent is an ownerless durable conversation with a `pico.session`
+ * A Smith agent is an ownerless durable conversation with a `smith.session`
  * document (`AgentMetaDoc`): its directory, project, name, summary, and
  * labels. Navigating the conversation tree forks the conversation and the
  * fork takes the agent's place, so an agent is a family of conversations of
@@ -163,7 +163,7 @@ export type AgentMeta = {
 
 export const AgentMetaDoc = defineDoc<AgentMeta>({
   // Stored name: do not change.
-  kind: "pico.session",
+  kind: "smith.session",
   checkpointWhen: () => false,
   version: 1,
   scope: "conversation",
@@ -278,7 +278,7 @@ export function conversationIdOf(id: string): ConversationId {
 }
 
 export function agentPath(id: string) {
-  return `pico:${id}`
+  return `smith:${id}`
 }
 
 /**
@@ -293,7 +293,7 @@ export function agentKey(id: string) {
 export function parseAgentId(value: string | undefined): string | undefined {
   const trimmed = value?.trim()
   if (!trimmed) return undefined
-  if (trimmed.startsWith("pico:")) return trimmed.slice(5)
+  if (trimmed.startsWith("smith:")) return trimmed.slice(6)
   if (trimmed.startsWith("session:")) return trimmed.slice(8)
   return trimmed
 }
@@ -390,7 +390,7 @@ function inboxMessage(item: InboxItem): PendingMessage | undefined {
 }
 
 /**
- * A queued prompt that Pico holds out of the inbox while the queue is paused.
+ * A queued prompt that Smith holds out of the inbox while the queue is paused.
  * `requestId`: a follow-up from another agent, held only one time. `from` and
  * `at`: who queued it and when (see `core/queue.ts`).
  */
@@ -401,7 +401,7 @@ type HeldItem = HeldQueueItem
  * here, so the agent does not get them. Resume submits them again.
  */
 export const HeldQueueDoc = defineDoc<{ items: HeldItem[] }>({
-  kind: "pico.queue",
+  kind: "smith.queue",
   checkpointWhen: () => false,
   version: 1,
   scope: "conversation",
@@ -852,12 +852,12 @@ export class Agents implements HostAgents {
         } else if (kind === "pi.usage") {
           this.#markDirty(id, { usage: true })
         } else if (this.#isStateKind(kind)) {
-          if (kind === "pico.questions") {
+          if (kind === "smith.questions") {
             if (pendingQuestions(value as QuestionsState | undefined).length)
               this.#questionWaits.add(id)
             else this.#questionWaits.delete(id)
             this.#updateNeedsInput(id)
-          } else if (kind === "pico.jobs") {
+          } else if (kind === "smith.jobs") {
             const job = jobNeedingUser(value as JobsState | undefined)
             if (job) this.#jobWaits.set(id, job)
             else this.#jobWaits.delete(id)
@@ -936,7 +936,7 @@ export class Agents implements HostAgents {
         cancelQuestions(this.#harness, entry.conversationId, ctx, [callId])
       )
       .catch((error: unknown) =>
-        console.warn("[pico] could not close a question:", error)
+        console.warn("[smith] could not close a question:", error)
       )
   }
 
@@ -945,7 +945,7 @@ export class Agents implements HostAgents {
     try {
       await cancelQuestions(this.#harness, conversationIdOf(id), ctx)
     } catch (error) {
-      console.warn("[pico] could not close the open questions:", error)
+      console.warn("[smith] could not close the open questions:", error)
     }
   }
 
@@ -972,7 +972,7 @@ export class Agents implements HostAgents {
         const value = await provider.read(this.#harness, conversationId, ctx)
         if (value !== undefined) state[provider.key] = value
       } catch (error) {
-        console.warn(`[pico] could not read ${provider.key} state:`, error)
+        console.warn(`[smith] could not read ${provider.key} state:`, error)
       }
     }
     const subagents = this.list({ parent: id })
@@ -980,7 +980,7 @@ export class Agents implements HostAgents {
     const meta = this.meta(id)
     const instructions = await this.instructionFiles(id).catch(
       (error: unknown) => {
-        console.warn("[pico] could not read the instruction files:", error)
+        console.warn("[smith] could not read the instruction files:", error)
         return []
       }
     )
@@ -1192,7 +1192,7 @@ export class Agents implements HostAgents {
       try {
         await this.#flushAgent(id, changes)
       } catch (error) {
-        console.error(`[pico] could not publish agent ${id}:`, error)
+        console.error(`[smith] could not publish agent ${id}:`, error)
       }
     }
   }
@@ -1370,7 +1370,7 @@ export class Agents implements HostAgents {
         Object.assign(draft, JSON.parse(JSON.stringify(meta)))
       }, ctx)
     } catch (error) {
-      console.error(`[pico] could not save agent ${id}:`, error)
+      console.error(`[smith] could not save agent ${id}:`, error)
     }
   }
 
@@ -2112,7 +2112,7 @@ export class Agents implements HostAgents {
     id: string,
     message: string,
     requestId: string,
-    from = "pico"
+    from = "smith"
   ) {
     const target = this.current(id) ?? id
     const meta = this.meta(target)
@@ -2288,7 +2288,7 @@ export class Agents implements HostAgents {
     return withdrawn
   }
 
-  /** True when Pico holds queued prompts: the queue is paused. */
+  /** True when Smith holds queued prompts: the queue is paused. */
   async isQueuePaused(id: string) {
     return (await this.#heldItems(id)).length > 0
   }

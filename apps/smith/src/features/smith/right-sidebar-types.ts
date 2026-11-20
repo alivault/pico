@@ -1,5 +1,5 @@
-import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
-import type { GitCommitDiffMode, GitStatusSummary } from "@/lib/pico/api"
+import type { ComposerDiffLineComment } from "@/features/smith/app-shell-composer-state"
+import type { GitCommitDiffMode, GitStatusSummary } from "@/lib/smith/api"
 
 export type GitStatusValue = GitStatusSummary | null
 export type GitRemoteAction = "push" | "force-push" | "pull"

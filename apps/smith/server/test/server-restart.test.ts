@@ -31,7 +31,7 @@ async function startedState(data: string, notPid?: number) {
 
 function serverArgs(data: string) {
   return [
-    "dist/pico-server.mjs",
+    "dist/smith-server.mjs",
     "serve",
     "--port",
     "0",
@@ -43,12 +43,12 @@ function serverArgs(data: string) {
 }
 
 void test("a supervised server exits with the restart code", async () => {
-  const data = await tempDir("pico-restart-test-")
+  const data = await tempDir("smith-restart-test-")
   const child = spawn(process.execPath, serverArgs(data), {
     env: {
       ...process.env,
       PI_CODING_AGENT_DIR: join(data, "agent"),
-      PICO_SUPERVISED: "1",
+      SMITH_SUPERVISED: "1",
     },
     stdio: "ignore",
   })
@@ -81,11 +81,11 @@ void test("a supervised server exits with the restart code", async () => {
 })
 
 void test("a server without a launcher starts itself again", async () => {
-  const data = await tempDir("pico-restart-test-")
+  const data = await tempDir("smith-restart-test-")
   const env = {
     ...process.env,
     PI_CODING_AGENT_DIR: join(data, "agent"),
-    PICO_SUPERVISED: undefined,
+    SMITH_SUPERVISED: undefined,
   }
   const child = spawn(process.execPath, serverArgs(data), {
     env,
@@ -98,7 +98,7 @@ void test("a server without a launcher starts itself again", async () => {
     const before = await startedState(data)
     const restart = spawnSync(
       process.execPath,
-      ["dist/pico-server.mjs", "restart", "--data-dir", data],
+      ["dist/smith-server.mjs", "restart", "--data-dir", data],
       { env, encoding: "utf8" }
     )
     assert.equal(restart.status, 0, restart.stderr + restart.stdout)
@@ -108,7 +108,7 @@ void test("a server without a launcher starts itself again", async () => {
   } finally {
     spawnSync(
       process.execPath,
-      ["dist/pico-server.mjs", "stop", "--wait", "--data-dir", data],
+      ["dist/smith-server.mjs", "stop", "--wait", "--data-dir", data],
       { env }
     )
     if (child.exitCode === null && child.signalCode === null) {
@@ -161,8 +161,8 @@ async function slowModel() {
 }
 
 void test("a restart does not wait for an active turn, and the turn continues", async () => {
-  const data = await tempDir("pico-restart-test-")
-  const project = await tempDir("pico-restart-project-")
+  const data = await tempDir("smith-restart-test-")
+  const project = await tempDir("smith-restart-project-")
   const model = await slowModel()
   const agentDir = join(data, "agent")
   await mkdir(agentDir, { recursive: true })
@@ -188,7 +188,7 @@ void test("a restart does not wait for an active turn, and the turn continues", 
   const env = {
     ...process.env,
     PI_CODING_AGENT_DIR: agentDir,
-    PICO_SUPERVISED: undefined,
+    SMITH_SUPERVISED: undefined,
   }
   const child = spawn(process.execPath, serverArgs(data), {
     env,
@@ -203,7 +203,7 @@ void test("a restart does not wait for an active turn, and the turn continues", 
       (done) => {
         const command = spawn(
           process.execPath,
-          ["dist/pico-server.mjs", ...args, "--data-dir", data],
+          ["dist/smith-server.mjs", ...args, "--data-dir", data],
           { env, stdio: ["ignore", "pipe", "pipe"] }
         )
         let stdout = ""
@@ -340,23 +340,23 @@ async function jobStartModel(agentDir: string, command: string) {
   return { server, toolCalls: () => toolCalls }
 }
 
-// An agent ran `pico-app restart` as a job: the restart came while its
+// An agent ran `smith restart` as a job: the restart came while its
 // job_start call waited for the job's first output. The server then exited
 // with code 0 instead of the restart code, and the launcher stopped.
 void test("a supervised server exits with the restart code while a job_start call waits", async () => {
-  const data = await tempDir("pico-restart-test-")
-  const project = await tempDir("pico-restart-project-")
+  const data = await tempDir("smith-restart-test-")
+  const project = await tempDir("smith-restart-project-")
   const agentDir = join(data, "agent")
   const model = await jobStartModel(agentDir, "sleep 30")
   const env = {
     ...process.env,
     PI_CODING_AGENT_DIR: agentDir,
-    // The jobs run in a pty-host, as in a real Pico.
-    PICO_NO_PTY_HOST: undefined,
-    PICO_SUPERVISED: undefined,
+    // The jobs run in a pty-host, as in a real Smith.
+    SMITH_NO_PTY_HOST: undefined,
+    SMITH_SUPERVISED: undefined,
   }
   const child = spawn(process.execPath, serverArgs(data), {
-    env: { ...env, PICO_SUPERVISED: "1" },
+    env: { ...env, SMITH_SUPERVISED: "1" },
     stdio: "ignore",
   })
   const exited = new Promise<number | null>((done) =>
@@ -366,7 +366,7 @@ void test("a supervised server exits with the restart code while a job_start cal
     new Promise<{ status: number | null; output: string }>((done) => {
       const command = spawn(
         process.execPath,
-        ["dist/pico-server.mjs", ...args, "--data-dir", data],
+        ["dist/smith-server.mjs", ...args, "--data-dir", data],
         { env, stdio: ["ignore", "pipe", "pipe"] }
       )
       let output = ""
@@ -415,16 +415,16 @@ void test("a supervised server exits with the restart code while a job_start cal
 })
 
 void test("the launcher starts the server again, with its output in server.log", async () => {
-  const data = await tempDir("pico-restart-test-")
+  const data = await tempDir("smith-restart-test-")
   const env = {
     ...process.env,
     PI_CODING_AGENT_DIR: join(data, "agent"),
-    PICO_SUPERVISED: undefined,
+    SMITH_SUPERVISED: undefined,
   }
   const launcher = spawn(
     process.execPath,
     [
-      "../bin/pico.mjs",
+      "../bin/smith.mjs",
       "serve",
       "--no-open",
       "--port",
@@ -443,7 +443,7 @@ void test("the launcher starts the server again, with its output in server.log",
     const before = await startedState(data)
     const restart = spawnSync(
       process.execPath,
-      ["dist/pico-server.mjs", "restart", "--data-dir", data],
+      ["dist/smith-server.mjs", "restart", "--data-dir", data],
       { env, encoding: "utf8" }
     )
     assert.equal(restart.status, 0, restart.stderr + restart.stdout)
@@ -451,12 +451,12 @@ void test("the launcher starts the server again, with its output in server.log",
     assert.notEqual(after.pid, before.pid)
     assert.equal(launcher.exitCode, null, "the launcher stopped")
     const log = await readFile(join(data, "server.log"), "utf8")
-    assert.match(log, /Pico is restarting…/)
+    assert.match(log, /Smith is restarting…/)
     assert.match(log, new RegExp(`restart: server pid ${after.pid}`))
   } finally {
     spawnSync(
       process.execPath,
-      ["dist/pico-server.mjs", "stop", "--wait", "--data-dir", data],
+      ["dist/smith-server.mjs", "stop", "--wait", "--data-dir", data],
       { env }
     )
     if (launcher.exitCode === null && launcher.signalCode === null) {

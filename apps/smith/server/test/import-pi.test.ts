@@ -13,7 +13,7 @@ import { conversationIdOf, AgentMetaDoc } from "../src/core/agents.ts"
 import { tempDir } from "./support.ts"
 
 void test("Pi import preserves branches, edits, settings, and history without running work", async () => {
-  const directory = await tempDir("pico-import-test-")
+  const directory = await tempDir("smith-import-test-")
   const source = join(directory, "session.jsonl")
   const timestamp = "2026-01-02T03:04:05.000Z"
   const header = {
@@ -106,7 +106,7 @@ void test("Pi import preserves branches, edits, settings, and history without ru
     [header, ...entries].map((entry) => JSON.stringify(entry)).join("\n") + "\n"
   await writeFile(source, bytes)
   const harness = await Harness.open(
-    await openNodeSqliteStorage(join(directory, "pico.sqlite")),
+    await openNodeSqliteStorage(join(directory, "smith.sqlite")),
     { models: createModels(), registry: createRegistry() },
     ctx
   )
@@ -148,7 +148,7 @@ void test("Pi import preserves branches, edits, settings, and history without ru
 })
 
 void test("Pi import rejects broken parents instead of silently discarding entries", async () => {
-  const directory = await tempDir("pico-import-bad-")
+  const directory = await tempDir("smith-import-bad-")
   const source = join(directory, "bad.jsonl")
   await writeFile(
     source,

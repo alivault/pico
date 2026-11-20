@@ -2,13 +2,13 @@ import * as React from "react"
 import { NotebookTextIcon } from "lucide-react"
 
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { registerAgentSection } from "@/features/pico/agent/agent-panel"
-import { TextDialog } from "@/features/pico/agent/shared"
+import { registerAgentSection } from "@/features/smith/agent/agent-panel"
+import { TextDialog } from "@/features/smith/agent/shared"
 import {
   registerToolRenderer,
   toolArgs,
   toolDetails,
-} from "@/features/pico/tool-renderers/registry"
+} from "@/features/smith/tool-renderers/registry"
 
 type ScratchEntry = {
   id: string

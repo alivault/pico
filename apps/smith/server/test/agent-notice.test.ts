@@ -6,7 +6,7 @@ import { reportMessage, STOPPED_ANSWER } from "../src/extensions/agents.ts"
 import {
   isLocalAgentId,
   parseAgentNotice,
-} from "../../src/lib/pico/agent-notice.ts"
+} from "../../src/lib/smith/agent-notice.ts"
 
 void test("the client reads the reports of agents as notices", () => {
   const done = parseAgentNotice(
@@ -90,7 +90,7 @@ void test("the client reads messages and stalls of agents as notices", () => {
 
 void test("the client reads job notices", () => {
   const failed = parseAgentNotice(
-    "[Job failed] build exited with code 2 after 1 h 3 min, while the Pico server restarted.\n(job j1: pnpm build\n--watch)\nLast output:\nerror: x"
+    "[Job failed] build exited with code 2 after 1 h 3 min, while the Smith server restarted.\n(job j1: pnpm build\n--watch)\nLast output:\nerror: x"
   )
   assert.equal(failed?.kind, "job")
   assert.equal(failed?.state, "failed")

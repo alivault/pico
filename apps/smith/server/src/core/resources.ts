@@ -52,7 +52,7 @@ export class ResourceCache {
       noExtensions: true,
       noThemes: true,
     })
-    // Pico opens a project on the user's request, and loads no extensions, so
+    // Smith opens a project on the user's request, and loads no extensions, so
     // its project skills, prompts, and context files are trusted.
     await loader.reload({ resolveProjectTrust: async () => true })
     return {

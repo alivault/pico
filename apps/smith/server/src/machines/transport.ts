@@ -1,5 +1,5 @@
 /**
- * The way from a hub to the Pico server of a remote machine. Version 1 has
+ * The way from a hub to the Smith server of a remote machine. Version 1 has
  * only SSH (`ssh.ts`). A later transport, for example direct HTTP over the
  * tailnet, can use the same interface.
  */

@@ -1,7 +1,7 @@
 /**
- * Pico's own settings, in `~/.pico/settings.json`. Model defaults, compaction,
- * and retry come from Pi's settings instead, so Pico and Pi agree. Only the
- * fixed compaction level (`compactAtTokens`) is Pico's, because Pi has none.
+ * Smith's own settings, in `~/.smith/settings.json`. Model defaults, compaction,
+ * and retry come from Pi's settings instead, so Smith and Pi agree. Only the
+ * fixed compaction level (`compactAtTokens`) is Smith's, because Pi has none.
  */
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
@@ -11,7 +11,7 @@ import type { Profile } from "./profiles.ts"
 export type Transport = "auto" | "sse" | "websocket" | "websocket-cached"
 export type CacheRetention = "standard" | "long"
 
-export type PicoSettingsData = {
+export type SmithSettingsData = {
   hideThinkingBlock: boolean
   transport: Transport
   cacheRetention: CacheRetention
@@ -29,7 +29,7 @@ export type PicoSettingsData = {
   notifyNeedsInput: boolean
   /** An ntfy topic URL that gets the same notifications; empty is off. */
   ntfyUrl: string
-  /** The address of Pico for links in notifications, for example a Tailscale URL. */
+  /** The address of Smith for links in notifications, for example a Tailscale URL. */
   publicUrl: string
   /** Run the durable browser without a window. */
   browserHeadless: boolean
@@ -49,7 +49,7 @@ export type PicoSettingsData = {
   compactAtTokens: number
 }
 
-export const DEFAULT_SETTINGS: PicoSettingsData = {
+export const DEFAULT_SETTINGS: SmithSettingsData = {
   hideThinkingBlock: false,
   transport: "auto",
   cacheRetention: "standard",
@@ -68,28 +68,28 @@ export const DEFAULT_SETTINGS: PicoSettingsData = {
   compactAtTokens: 0,
 }
 
-export class PicoSettings {
+export class SmithSettings {
   readonly #file: string
-  #data: PicoSettingsData
+  #data: SmithSettingsData
 
   constructor(file: string) {
     this.#file = file
-    let stored: Partial<PicoSettingsData> = {}
+    let stored: Partial<SmithSettingsData> = {}
     try {
       stored = JSON.parse(
         readFileSync(file, "utf8")
-      ) as Partial<PicoSettingsData>
+      ) as Partial<SmithSettingsData>
     } catch {
       // No settings yet.
     }
     this.#data = { ...DEFAULT_SETTINGS, ...stored }
   }
 
-  get data(): Readonly<PicoSettingsData> {
+  get data(): Readonly<SmithSettingsData> {
     return this.#data
   }
 
-  update(change: Partial<PicoSettingsData>) {
+  update(change: Partial<SmithSettingsData>) {
     this.#data = { ...this.#data, ...change }
     mkdirSync(dirname(this.#file), { recursive: true })
     const temporary = `${this.#file}.tmp`

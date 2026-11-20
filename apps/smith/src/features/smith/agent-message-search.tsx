@@ -9,9 +9,9 @@ import { MessageSquareTextIcon } from "lucide-react"
 
 import { CommandGroup, CommandItem } from "@/components/ui/command"
 import { Spinner } from "@/components/ui/spinner"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import type { MachineInfo } from "@/features/pico/machine-store"
-import type { AgentSearchMatch, AgentSearchResponse } from "@/lib/pico/api"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import type { MachineInfo } from "@/features/smith/machine-store"
+import type { AgentSearchMatch, AgentSearchResponse } from "@/lib/smith/api"
 
 /** A search waits for this pause in the typing. */
 const SEARCH_DELAY_MS = 250
@@ -62,7 +62,7 @@ export function useAgentMessageSearch({
         project?.machineId === machineId ? project.path : undefined
       return {
         queryKey: [
-          "pico",
+          "smith",
           "agent-message-search",
           machineId,
           delayed,

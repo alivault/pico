@@ -101,7 +101,7 @@ void test("in a shell, only a secret prompt counts as a wait", async () => {
   )
   try {
     // The shell's own prompt is not a question.
-    watcher.output("pico main ❯ ")
+    watcher.output("smith main ❯ ")
     await sleep(100)
     assert.deepEqual(events, [])
     watcher.input("ls\r")

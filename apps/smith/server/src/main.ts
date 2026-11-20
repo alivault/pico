@@ -1,22 +1,22 @@
 /**
- * `pico-server`: run, inspect, and stop the Pico server.
+ * `smith-server`: run, inspect, and stop the Smith server.
  *
- *   pico-server serve [--port 3141] [--host 127.0.0.1] [--data-dir ~/.pico] [--web-dir dir] [--detach]
+ *   smith-server serve [--port 3141] [--host 127.0.0.1] [--data-dir ~/.smith] [--web-dir dir] [--detach]
  *     Terminals and jobs run in a pty-host process, so they survive a restart;
- *     `--no-pty-host` (or PICO_NO_PTY_HOST=1) keeps them in the server.
- *   pico-server status [--json]
- *   pico-server stop [--wait] [--pty-host]
+ *     `--no-pty-host` (or SMITH_NO_PTY_HOST=1) keeps them in the server.
+ *   smith-server status [--json]
+ *   smith-server stop [--wait] [--pty-host]
  *     `--pty-host` also stops the pty-host, so terminals and jobs end too.
- *   pico-server restart
+ *   smith-server restart
  *     Stop at once and start again with the same options. Turns that the
  *     restart cuts off continue. (`--now` is accepted and ignored.)
- *   pico-server update [version] [--check] [--channel stable|preview] [--no-restart]
+ *   smith-server update [version] [--check] [--channel stable|preview] [--no-restart]
  *     Install the newest version on the update channel the way this copy
  *     was installed, and restart a running server (see services/self-update.ts).
- *   pico-server channel [show | set stable|preview]
- *   pico-server machine add|list|status|reconnect|rename|enable|disable|remove …
- *   pico-server agent list|start|send|show|wait|stop …   (see control/cli.ts)
- *   pico-server mcp      the MCP URL (see control/mcp.ts)
+ *   smith-server channel [show | set stable|preview]
+ *   smith-server machine add|list|status|reconnect|rename|enable|disable|remove …
+ *   smith-server agent list|start|send|show|wait|stop …   (see control/cli.ts)
+ *   smith-server mcp      the MCP URL (see control/mcp.ts)
  *
  * Only one server may own a data directory: the durable database has no
  * locking across processes. A second `serve` finds the running server and
@@ -55,7 +55,7 @@ import {
 } from "./config.ts"
 import { agentCommand, mcpCommand } from "./control/cli.ts"
 import { machineCommand } from "./machines/cli.ts"
-import { startServer, type PicoServer } from "./server.ts"
+import { startServer, type SmithServer } from "./server.ts"
 import { stopPtyHost } from "./pty-host/client.ts"
 import {
   compareVersions,
@@ -151,7 +151,7 @@ async function acquireLock(paths: ServerPaths): Promise<() => void> {
     mkdirSync(guard)
   } catch {
     throw new Error(
-      `Lock acquisition is already in progress. If no Pico process is running, move ${guard} to Trash and retry.`
+      `Lock acquisition is already in progress. If no Smith process is running, move ${guard} to Trash and retry.`
     )
   }
   try {
@@ -183,14 +183,14 @@ async function acquireLock(paths: ServerPaths): Promise<() => void> {
           const state = readState(paths)
           const where = state ? ` at http://${state.host}:${state.port}` : ""
           throw new Error(
-            `Pico is already running (pid ${owner})${where}. Stop it with \`pico-server stop\`.`
+            `Smith is already running (pid ${owner})${where}. Stop it with \`smith-server stop\`.`
           )
         }
         // A crashed server left the lock; take it over.
         unlinkSync(paths.lockFile)
       }
     }
-    throw new Error("Could not take the Pico data directory lock")
+    throw new Error("Could not take the Smith data directory lock")
   } finally {
     rmdirSync(guard)
   }
@@ -203,16 +203,16 @@ function defaultWebDir() {
 
 /**
  * The pty-host program next to this one, so terminals and jobs survive a
- * restart; undefined with `--no-pty-host`, `PICO_NO_PTY_HOST=1`, or when
+ * restart; undefined with `--no-pty-host`, `SMITH_NO_PTY_HOST=1`, or when
  * the program is missing (then they run in the server).
  */
 function ptyHostOption(options: Map<string, string | boolean>) {
-  if (options.get("no-pty-host") || process.env.PICO_NO_PTY_HOST === "1")
+  if (options.get("no-pty-host") || process.env.SMITH_NO_PTY_HOST === "1")
     return undefined
   const script = fileURLToPath(new URL("./pty-host.mjs", import.meta.url))
   if (!existsSync(script)) {
     console.warn(
-      `[pico] ${script} is missing: terminals run in the server and stop with it`
+      `[smith] ${script} is missing: terminals run in the server and stop with it`
     )
     return undefined
   }
@@ -220,22 +220,22 @@ function ptyHostOption(options: Map<string, string | boolean>) {
 }
 
 /**
- * The exit code that asks a launcher (`bin/pico.mjs`, `build.mjs --watch`)
+ * The exit code that asks a launcher (`bin/smith.mjs`, `build.mjs --watch`)
  * to start the server again. The launchers have their own copy of it.
  */
 const RESTART_EXIT_CODE = 75
 
 /**
- * A launcher waits for this process (PICO_SUPERVISED=1). Read it one time
+ * A launcher waits for this process (SMITH_SUPERVISED=1). Read it one time
  * and take it out of the environment: terminals, jobs, and the servers that
  * they start have no launcher, so they must not exit to one.
  */
-const SUPERVISED = process.env.PICO_SUPERVISED === "1"
-delete process.env.PICO_SUPERVISED
+const SUPERVISED = process.env.SMITH_SUPERVISED === "1"
+delete process.env.SMITH_SUPERVISED
 
 /**
  * Start this server again, after it closed and released its lock. A
- * launcher (PICO_SUPERVISED=1) starts the new process, so that it stays in
+ * launcher (SMITH_SUPERVISED=1) starts the new process, so that it stays in
  * the launcher's terminal. Without one, start it in the background like
  * `serve --detach`, with its output in `<data>/server.log`.
  */
@@ -250,7 +250,7 @@ function relaunch(paths: ServerPaths) {
   closeSync(log)
   child.unref()
   console.log(
-    `Pico continues in the background (pid ${child.pid}). Output: ${paths.logFile}`
+    `Smith continues in the background (pid ${child.pid}). Output: ${paths.logFile}`
   )
 }
 
@@ -291,7 +291,7 @@ async function serveDetached(options: Map<string, string | boolean>) {
   const running = readState(paths)
   if (running && alive(running.pid) && (await health(running))) {
     console.log(
-      `Pico is already running at http://${running.host}:${running.port}`
+      `Smith is already running at http://${running.host}:${running.port}`
     )
     return
   }
@@ -307,7 +307,7 @@ async function serveDetached(options: Map<string, string | boolean>) {
       detached: true,
       stdio: ["ignore", log, log],
       // No launcher waits for this server: it starts itself again.
-      env: { ...process.env, PICO_SUPERVISED: undefined },
+      env: { ...process.env, SMITH_SUPERVISED: undefined },
     }
   )
   closeSync(log)
@@ -316,18 +316,18 @@ async function serveDetached(options: Map<string, string | boolean>) {
   while (Date.now() < deadline) {
     if (child.exitCode !== null)
       throw new Error(
-        `Pico stopped with exit code ${child.exitCode}. See ${paths.logFile}`
+        `Smith stopped with exit code ${child.exitCode}. See ${paths.logFile}`
       )
     const state = readState(paths)
     if (state && state.pid === child.pid && (await health(state))) {
       console.log(
-        `Pico ${state.version} is running at http://${state.host}:${state.port}`
+        `Smith ${state.version} is running at http://${state.host}:${state.port}`
       )
       return
     }
     await new Promise((resolveWait) => setTimeout(resolveWait, 250))
   }
-  throw new Error(`Pico did not start in time. See ${paths.logFile}`)
+  throw new Error(`Smith did not start in time. See ${paths.logFile}`)
 }
 
 async function serve(options: Map<string, string | boolean>) {
@@ -340,21 +340,21 @@ async function serve(options: Map<string, string | boolean>) {
       : resolve(String(webOption ?? defaultWebDir()))
   const paths = serverPaths(dataDir, webDir)
   const host = String(
-    options.get("host") ?? process.env.PICO_HOST ?? "127.0.0.1"
+    options.get("host") ?? process.env.SMITH_HOST ?? "127.0.0.1"
   )
-  const requestedPort = options.get("port") ?? process.env.PICO_PORT
+  const requestedPort = options.get("port") ?? process.env.SMITH_PORT
   const port = requestedPort ? Number(requestedPort) : DEFAULT_PORT
   if (!Number.isInteger(port) || port < 0 || port > 65535)
     throw new Error("Invalid port")
   const running = readState(paths)
   if (running && alive(running.pid) && (await health(running))) {
     console.log(
-      `Pico is already running (pid ${running.pid}) at http://${running.host}:${running.port}`
+      `Smith is already running (pid ${running.pid}) at http://${running.host}:${running.port}`
     )
     return
   }
   const release = await acquireLock(paths)
-  let server: PicoServer
+  let server: SmithServer
   let requestStop: (drain: boolean) => void = () => undefined
   let requestRestart: () => void = () => undefined
   try {
@@ -380,7 +380,7 @@ async function serve(options: Map<string, string | boolean>) {
   }
   writeFileSync(paths.stateFile, JSON.stringify(state, null, 2))
   console.log(
-    `Pico ${VERSION} is running at http://${host === "0.0.0.0" ? "localhost" : host}:${server.port()}`
+    `Smith ${VERSION} is running at http://${host === "0.0.0.0" ? "localhost" : host}:${server.port()}`
   )
   console.log(`Data: ${dataDir}${webDir ? `\nWeb: ${webDir}` : ""}`)
 
@@ -398,7 +398,7 @@ async function serve(options: Map<string, string | boolean>) {
     restartAfter = restart
     const waits = drain && server.agents.activeTurnCount() > 0
     console.log(
-      `Pico is ${restart ? "restarting" : "stopping"}${waits ? " after active turns finish" : ""}…`
+      `Smith is ${restart ? "restarting" : "stopping"}${waits ? " after active turns finish" : ""}…`
     )
     // This timer also keeps the process alive until the stop ends. Without
     // it, a step below that waits only for an unref'd timer (or for nothing)
@@ -407,7 +407,7 @@ async function serve(options: Map<string, string | boolean>) {
     const limit = drain ? 11 * 60_000 : 15_000
     setTimeout(() => {
       console.error(
-        `[pico] the ${restartAfter ? "restart" : "stop"} did not finish in ${limit / 1000} s: stopping at once`
+        `[smith] the ${restartAfter ? "restart" : "stop"} did not finish in ${limit / 1000} s: stopping at once`
       )
       release()
       if (restartAfter) relaunch(paths)
@@ -416,7 +416,7 @@ async function serve(options: Map<string, string | boolean>) {
     try {
       await server.shutdown({ drain })
     } catch (error) {
-      console.error("[pico] shutdown failed:", error)
+      console.error("[smith] shutdown failed:", error)
     }
     release()
     if (restartAfter) relaunch(paths)
@@ -430,7 +430,7 @@ async function serve(options: Map<string, string | boolean>) {
 }
 
 /**
- * The server state as JSON. When Pico is not running, the exit code is 1;
+ * The server state as JSON. When Smith is not running, the exit code is 1;
  * with `--json`, stdout is then empty.
  */
 async function status(options: Map<string, string | boolean>) {
@@ -438,8 +438,8 @@ async function status(options: Map<string, string | boolean>) {
   const json = Boolean(options.get("json"))
   const state = readState(paths)
   if (!state || !alive(state.pid)) {
-    if (json) console.error("Pico is not running.")
-    else console.log("Pico is not running.")
+    if (json) console.error("Smith is not running.")
+    else console.log("Smith is not running.")
     process.exitCode = 1
     return
   }
@@ -465,7 +465,7 @@ async function stopCommand(options: Map<string, string | boolean>) {
     )
   }
   if (!state || !alive(state.pid)) {
-    console.log("Pico is not running.")
+    console.log("Smith is not running.")
     await stopHost()
     return
   }
@@ -481,17 +481,17 @@ async function stopCommand(options: Map<string, string | boolean>) {
       process.kill(state.pid, "SIGTERM")
     })
   if (!options.get("wait") && !options.get("pty-host")) {
-    console.log("Pico is stopping.")
+    console.log("Smith is stopping.")
     return
   }
   while (alive(state.pid))
     await new Promise((resolveWait) => setTimeout(resolveWait, 250))
-  console.log("Pico stopped.")
+  console.log("Smith stopped.")
   await stopHost()
 }
 
 /**
- * `pico-server restart`: ask the server to restart at once, and wait until
+ * `smith-server restart`: ask the server to restart at once, and wait until
  * the new process answers. `--now` is accepted and ignored: a restart
  * never waits for active turns.
  */
@@ -499,7 +499,7 @@ async function restartCommand(options: Map<string, string | boolean>) {
   const paths = serverPaths(dataDirOption(options))
   const state = readState(paths)
   if (!state || !alive(state.pid)) {
-    console.log("Pico is not running. Start it with `pico-app serve`.")
+    console.log("Smith is not running. Start it with `smith serve`.")
     process.exitCode = 1
     return
   }
@@ -519,7 +519,7 @@ async function restartCommand(options: Map<string, string | boolean>) {
   }
   if (!response.ok)
     throw new Error(result.error ?? `Restart failed: ${response.status}`)
-  console.log("Pico is restarting…")
+  console.log("Smith is restarting…")
   const deadline = Date.now() + 60_000
   while (Date.now() < deadline) {
     await new Promise((resolveWait) => setTimeout(resolveWait, 500))
@@ -527,15 +527,15 @@ async function restartCommand(options: Map<string, string | boolean>) {
     if (!next || next.pid === state.pid || !alive(next.pid)) continue
     if (await health(next)) {
       console.log(
-        `Pico ${next.version} is running at http://${next.host}:${next.port}`
+        `Smith ${next.version} is running at http://${next.host}:${next.port}`
       )
       return
     }
   }
-  // A launcher (`pico-app serve`, `pnpm start`) and a server in the
+  // A launcher (`smith serve`, `pnpm start`) and a server in the
   // background both write the server's output to the log file.
   throw new Error(
-    `Pico did not start again in time. ${
+    `Smith did not start again in time. ${
       alive(state.pid)
         ? `The old server (pid ${state.pid}) still runs.`
         : `The old server (pid ${state.pid}) stopped, and no new server answers.`
@@ -544,7 +544,7 @@ async function restartCommand(options: Map<string, string | boolean>) {
 }
 
 /**
- * `pico-server update`: install the newest version on the channel, then
+ * `smith-server update`: install the newest version on the channel, then
  * restart a running server so that it runs it.
  */
 async function updateCommand(
@@ -569,40 +569,40 @@ async function updateCommand(
   }
   const newer = compareVersions(target, installed) > 0
   if (typeof wanted !== "string" && !newer) {
-    console.log(`Pico ${installed} is up to date (${channel} channel).`)
+    console.log(`Smith ${installed} is up to date (${channel} channel).`)
     return
   }
   if (options.get("check")) {
     console.log(
-      `Pico ${target} is available (${channel} channel); ${installed} is installed. Run \`pico-app update\` to install it.`
+      `Smith ${target} is available (${channel} channel); ${installed} is installed. Run \`smith update\` to install it.`
     )
     return
   }
   if (install.kind !== "npm") {
     console.log(
       install.kind === "source"
-        ? `This Pico runs from a source checkout (${install.root}). Update it with:\n  ${installCommand(install, target)}`
-        : `Pico cannot update this install (${install.root}) by itself. Run:\n  ${installCommand(install, target)}`
+        ? `This Smith runs from a source checkout (${install.root}). Update it with:\n  ${installCommand(install, target)}`
+        : `Smith cannot update this install (${install.root}) by itself. Run:\n  ${installCommand(install, target)}`
     )
     process.exitCode = 1
     return
   }
-  console.log(`Installing Pico ${target} into ${install.prefix}…`)
+  console.log(`Installing Smith ${target} into ${install.prefix}…`)
   await installVersion(install, target, {
     onOutput: (chunk) => process.stdout.write(chunk),
   })
-  console.log(`Pico ${target} is installed.`)
+  console.log(`Smith ${target} is installed.`)
   console.log(
-    `Release notes: https://github.com/alivault/pico/releases/tag/v${target}`
+    `Release notes: https://github.com/alivault/smith/releases/tag/v${target}`
   )
   const paths = serverPaths(dataDir)
   const state = readState(paths)
   if (!state || !alive(state.pid)) {
-    console.log("Pico is not running. Start it with `pico-app serve --detach`.")
+    console.log("Smith is not running. Start it with `smith serve --detach`.")
     return
   }
   if (options.get("no-restart")) {
-    console.log("Run `pico-app restart` to load it.")
+    console.log("Run `smith restart` to load it.")
     return
   }
   await restartCommand(options)
@@ -617,7 +617,7 @@ function positional(argv: string[], valueOptions: string[]) {
   )
 }
 
-/** `pico-server channel [show | set stable|preview]`. */
+/** `smith-server channel [show | set stable|preview]`. */
 function channelCommand(
   argv: string[],
   options: Map<string, string | boolean>
@@ -631,12 +631,12 @@ function channelCommand(
   if (action === "set" && isUpdateChannel(value)) {
     writeUpdateConfig(dataDir, { channel: value })
     console.log(
-      `The update channel is ${value}. Run \`pico-app update\` to install its newest version.`
+      `The update channel is ${value}. Run \`smith update\` to install its newest version.`
     )
     return
   }
   console.error(
-    `Usage: pico-app channel [show | set ${UPDATE_CHANNELS.join("|")}]`
+    `Usage: smith channel [show | set ${UPDATE_CHANNELS.join("|")}]`
   )
   process.exitCode = 2
 }
@@ -661,7 +661,7 @@ async function importCommand(options: Map<string, string | boolean>) {
       if (existsSync(paths.database + suffix))
         copyFileSync(
           paths.database + suffix,
-          join(backup, "pico.sqlite" + suffix)
+          join(backup, "smith.sqlite" + suffix)
         )
     }
     console.log(`Database backup: ${backup}`)
@@ -734,7 +734,7 @@ async function main() {
     default:
       console.error(`Unknown command: ${command}`)
       console.error(
-        "Usage: pico-server serve|status|stop|restart|update|channel|import-pi|machine|agent|mcp [--port N] [--host H] [--data-dir D] [--web-dir D] [--source-dir D] [--detach] [--json]"
+        "Usage: smith-server serve|status|stop|restart|update|channel|import-pi|machine|agent|mcp [--port N] [--host H] [--data-dir D] [--web-dir D] [--source-dir D] [--detach] [--json]"
       )
       process.exitCode = 2
   }

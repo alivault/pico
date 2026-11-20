@@ -4,10 +4,10 @@ Status: proposal (Phase 4, item 5). Nothing here is built yet.
 
 ## Problem
 
-Every terminal and job is a child of the Pico server. When the server stops
+Every terminal and job is a child of the Smith server. When the server stops
 (a release, a crash, `pnpm dev` after each server rebuild), node-pty closes
-the pty masters, the shells get SIGHUP, and the jobs die. Pico marks them
-`lost`. During development of Pico itself this happens many times each hour.
+the pty masters, the shells get SIGHUP, and the jobs die. Smith marks them
+`lost`. During development of Smith itself this happens many times each hour.
 
 ## Goal
 
@@ -18,8 +18,8 @@ exit codes. Nothing else changes for the client or the agent.
 ## Process model
 
 - **One pty-host for each data directory.** It owns all ptys of that data
-  directory. The data directory identifies a Pico instance (`~/.pico`,
-  `/tmp/pico-test-data`, a remote machine's own `~/.pico`), so test instances
+  directory. The data directory identifies a Smith instance (`~/.smith`,
+  `/tmp/smith-test-data`, a remote machine's own `~/.smith`), so test instances
   and the live instance never share a pty-host.
 - **The server starts it, on demand.** At startup the server connects to
   `<dataDir>/pty-host/socket`. If nothing answers, it spawns
@@ -34,7 +34,7 @@ exit codes. Nothing else changes for the client or the agent.
   removed.
 - **It stops itself when it has no work.** When no pty runs and no server is
   connected for 10 minutes, the pty-host exits. So it does not stay after
-  the user stops using Pico.
+  the user stops using Smith.
 - **The server is the only client.** The pty-host does not know sessions,
   documents, or the web client.
 
@@ -42,9 +42,9 @@ exit codes. Nothing else changes for the client or the agent.
 
 - The pty-host is a small separate bundle (`dist/pty-host.mjs`) with its own
   `PTY_HOST_PROTOCOL` number. The hello message carries the protocol number,
-  the Pico version, and the pid.
+  the Smith version, and the pid.
 - **Same protocol:** the server uses the running pty-host, also when the
-  Pico version is different. The protocol changes rarely, as the pty-host
+  Smith version is different. The protocol changes rarely, as the pty-host
   does little.
 - **Different protocol:** the server does not use the old pty-host for new
   terminals. It asks the old one to `drain`: it takes no new ptys, keeps its
@@ -57,14 +57,14 @@ exit codes. Nothing else changes for the client or the agent.
 - `pnpm dev` rebuilds of the server do not restart the pty-host. A change to
   the pty-host code itself shows as a new protocol number only when the
   messages change. For other changes the developer stops it with a command
-  (`pico-app pty-host restart`, which drains it).
+  (`smith pty-host restart`, which drains it).
 
 ## Transport and protocol
 
 - A Unix domain socket: `<dataDir>/pty-host/socket`. The directory is mode
   0700 and the socket 0600, as for the SSH control sockets in
   `machines/ssh.ts`. Only the user can connect. No TCP port.
-- Windows: a named pipe with the same protocol. (Pico's terminals already
+- Windows: a named pipe with the same protocol. (Smith's terminals already
   depend on node-pty; Windows support stays as it is now.)
 - Messages: one JSON object for each line (NDJSON). Output data is a string
   (node-pty gives strings). It is simple to debug with `socat`.
@@ -99,12 +99,12 @@ Into the pty-host (the minimum that must live while the server is down):
 - The per-viewer input sequence numbers, so a retry after a reconnect is
   still written one time.
 - An **exit journal**: on exit, the pty-host appends `{key, exitCode,
-signal, endedAt}` to `<dataDir>/pty-host/exits.jsonl` (fsync) and keeps the
+  signal, endedAt}` to `<dataDir>/pty-host/exits.jsonl` (fsync) and keeps the
   exited pty for 30 minutes.
 
 Stays in the server (it needs documents, sessions, and the agent):
 
-- Job records (`pico.jobs`), the job index, steers, notifications, focus.
+- Job records (`smith.jobs`), the job index, steers, notifications, focus.
 - The input-wait watcher. It needs only the output stream and `mode`, which
   the server gets through the socket. After a reconnect it starts again from
   "quiet now".
@@ -126,7 +126,7 @@ At startup the server sends `hello` and gets the list of ptys:
 2. A job in the index whose pty has exited: read the exit from the list (or
    from `exits.jsonl` when the pty-host restarted). Record `exited` with the
    real exit code and the end time, and send the usual `[Job finished]` or
-   `[Job failed]` steer, with "(it ended while Pico restarted)".
+   `[Job failed]` steer, with "(it ended while Smith restarted)".
 3. A job in the index with no pty and no exit entry: `lost`, as today. This
    happens only when the pty-host itself died.
 
@@ -159,7 +159,7 @@ its history.
 
 ## Remote machines
 
-Nothing changes in the hub. A remote machine runs its own Pico server with
+Nothing changes in the hub. A remote machine runs its own Smith server with
 its own data directory, and that server starts its own pty-host on the remote
 machine. The hub still talks only to the remote server through the SSH
 forward. A remote server restart (for an update through the hub) now keeps
@@ -170,7 +170,7 @@ the remote jobs too.
 `scripts/dev.mjs` stops its children by process group. The pty-host is
 detached into its own session (`setsid` through `detached: true`), so it
 stays. Each server rebuild reconnects in about 100 ms. Test instances with
-their own `PICO_DEV_DATA_DIR` get their own pty-host. A `--no-pty-host` flag
+their own `SMITH_DEV_DATA_DIR` get their own pty-host. A `--no-pty-host` flag
 (and the tests) keep the in-process mode, so the server tests stay simple.
 
 ## Failure modes
@@ -181,7 +181,7 @@ their own `PICO_DEV_DATA_DIR` get their own pty-host. A `--no-pty-host` flag
 | The server crashes                             | Nothing happens to the ptys. The next server attaches.                                                                                            |
 | A stale socket (no process)                    | `connect` fails with `ECONNREFUSED`: the server checks the lock pid, removes the socket and the lock, and starts a new pty-host.                  |
 | Two servers on one data directory              | Both can connect; each keeps its own attachments. This is not a supported setup today either; the lock on the server side stays as it is.         |
-| The socket path is too long (macOS: 104 bytes) | Use `<tmpdir>/pico-<hash of dataDir>/socket`, as `machines/ssh.ts` does.                                                                          |
+| The socket path is too long (macOS: 104 bytes) | Use `<tmpdir>/smith-<hash of dataDir>/socket`, as `machines/ssh.ts` does.                                                                         |
 | A slow server (backpressure)                   | The pty-host keeps the bounded backlog; it drops the oldest chunks, and the server gets a `reset` on attach, as a browser does now.               |
 | Version mismatch                               | See "Versions and upgrades".                                                                                                                      |
 
@@ -230,9 +230,9 @@ Build the pty-host as designed, but in two steps:
    Jobs and shells survive server restarts on the same protocol. Version
    mismatch: drain, and mark the old jobs `lost` (no N-1 support yet).
 2. **Step B:** N-1 protocol support, `mode` through the host, cgroup scopes
-   in `spawn`, and `pico-app pty-host restart`.
+   in `spawn`, and `smith pty-host restart`.
 
 The alternative saves perhaps half of the work, but it gives a second job
-path with weaker terminals, and shells still die. For Pico developing itself
+path with weaker terminals, and shells still die. For Smith developing itself
 with `pnpm dev`, both jobs and shells must survive, so the pty-host is
 worth it.

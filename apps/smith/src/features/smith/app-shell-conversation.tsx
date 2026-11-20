@@ -24,21 +24,21 @@ import { TitleTooltip } from "@/components/ui/tooltip"
 import {
   formatDisplayPath,
   shallowRecordEqual,
-} from "@/features/pico/app-shell-common"
-import type { AppShellDisplaySettingsState } from "@/features/pico/app-shell-types"
+} from "@/features/smith/app-shell-common"
+import type { AppShellDisplaySettingsState } from "@/features/smith/app-shell-types"
 import {
   COMPACT_WORKING_LABEL,
   type AppShellWorkingState,
-} from "@/features/pico/app-shell-working-state"
-import { DraftGitStatusBadge } from "@/features/pico/right-sidebar-git-header-actions"
+} from "@/features/smith/app-shell-working-state"
+import { DraftGitStatusBadge } from "@/features/smith/right-sidebar-git-header-actions"
 import {
   conversationNavShortcut,
   formatShortcutLabel,
-} from "@/features/pico/keyboard-shortcuts"
+} from "@/features/smith/keyboard-shortcuts"
 import {
   AssistantMessagesStoreCard,
   UserMessageCard,
-} from "@/features/pico/conversation-view"
+} from "@/features/smith/conversation-view"
 import {
   assistantMessagesSnapshotFromStore,
   createMutableAssistantMessagesStore,
@@ -50,13 +50,13 @@ import {
   type ConversationItemsStore,
   type MutableAssistantMessagesStore,
   type RenderConversationGroupDescriptor,
-} from "@/features/pico/app-shell-conversation-store"
+} from "@/features/smith/app-shell-conversation-store"
 import {
   useAppShellMessageScroll,
   useMessageJumpValue,
   type MessageJumpStateStore,
-} from "@/features/pico/use-app-shell-message-scroll"
-import { picoAgentScopeKey } from "@/features/pico/query-keys"
+} from "@/features/smith/use-app-shell-message-scroll"
+import { smithAgentScopeKey } from "@/features/smith/query-keys"
 import {
   MessageScroller,
   MessageScrollerContent,
@@ -67,10 +67,10 @@ import {
 } from "@/components/ui/message-scroller"
 import {
   useSelector,
-  type PicoStore,
-} from "@/features/pico/tanstack-store-utils"
-import type { AgentState } from "@/lib/pico"
-import { parseAgentNotice } from "@/lib/pico/agent-notice"
+  type SmithStore,
+} from "@/features/smith/tanstack-store-utils"
+import type { AgentState } from "@/lib/smith"
+import { parseAgentNotice } from "@/lib/smith/agent-notice"
 
 export type AppShellConversationFrameHandle = {
   jumpToNextMessage: () => void
@@ -274,7 +274,7 @@ type AppShellConversationAgentState = Pick<
   | "streaming"
 >
 
-function useAppShellConversationAgentState(store: PicoStore<AgentState>) {
+function useAppShellConversationAgentState(store: SmithStore<AgentState>) {
   return useSelector(
     store,
     (agentState) => ({
@@ -400,7 +400,7 @@ function AppShellConversationFrame(props: AppShellConversationFrameProps) {
   // again and no follow state leaks between agents.
   // The key also changes when the agent view finishes loading, because
   // the scroller treats rows that arrive later as new turns.
-  const agentScrollKey = `${picoAgentScopeKey(props.agentState) || "none"}:${
+  const agentScrollKey = `${smithAgentScopeKey(props.agentState) || "none"}:${
     props.isAgentViewLoading ? "loading" : "ready"
   }`
 
@@ -847,7 +847,7 @@ function AppShellConversationEmptyState({
   onCreateAgent: () => void
   streaming: boolean
   viewerContextId: string
-  workingStateStore: PicoStore<AppShellWorkingState | null>
+  workingStateStore: SmithStore<AppShellWorkingState | null>
 }) {
   const hasMessages = useConversationHasMessages(conversationItemsStore)
   const hasAssistantOutput = useConversationHasAssistantOutput(
@@ -899,7 +899,7 @@ function AppShellConversationEmptyState({
         <EmptyDescription>
           {draft
             ? undefined
-            : "This is the native Pico agent view backed by the new TypeScript runtime."}
+            : "This is the native Smith agent view backed by the new TypeScript runtime."}
         </EmptyDescription>
       </EmptyHeader>
       {draft ? (
@@ -927,7 +927,7 @@ function AppShellConversationWorkingFooter({
   centerMessages: boolean
   conversationItemsStore: ConversationItemsStore
   onCancelCompaction: () => void
-  workingStateStore: PicoStore<AppShellWorkingState | null>
+  workingStateStore: SmithStore<AppShellWorkingState | null>
 }) {
   const hasMessages = useConversationHasMessages(conversationItemsStore)
   const hasAssistantOutput = useConversationHasAssistantOutput(
@@ -969,9 +969,9 @@ function AppShellConversationMessageStack({
   centerMessages: boolean
   conversationItemsStore: ConversationItemsStore
   hideToolBlocks: boolean
-  agentStore: PicoStore<AgentState>
+  agentStore: SmithStore<AgentState>
   workingFooter: React.ReactNode
-  workingStateStore: PicoStore<AppShellWorkingState | null>
+  workingStateStore: SmithStore<AppShellWorkingState | null>
 }) {
   const hideThinking = useSelector(
     agentStore,
@@ -1021,16 +1021,16 @@ export const AppShellAgentConversation = React.memo(
     awaitingFirstTurn: boolean
     conversationFrameRef: React.RefObject<AppShellConversationFrameHandle | null>
     conversationItemsStore: ConversationItemsStore
-    displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
+    displaySettingsStore: SmithStore<AppShellDisplaySettingsState>
     isLoadingOlderHistory: boolean
     isAgentViewLoading: boolean
     isSubmitting: boolean
     onCancelCompaction: () => void
     onCreateAgent: () => void
     onLoadOlderHistory: () => Promise<void>
-    agentStore: PicoStore<AgentState>
+    agentStore: SmithStore<AgentState>
     viewerContextId: string
-    workingStateStore: PicoStore<AppShellWorkingState | null>
+    workingStateStore: SmithStore<AppShellWorkingState | null>
   }) {
     const agentState = useAppShellConversationAgentState(agentStore)
     const { autoScrollEnabled, centerMessages, hideToolBlocks } =

@@ -1,10 +1,10 @@
 import type { QueryClient } from "@tanstack/react-query"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { picoQueryKeys } from "@/features/pico/query-keys"
-import { getErrorMessage } from "@/features/pico/right-sidebar-shared"
-import type { GitStatusValue } from "@/features/pico/right-sidebar-types"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { smithQueryKeys } from "@/features/smith/query-keys"
+import { getErrorMessage } from "@/features/smith/right-sidebar-shared"
+import type { GitStatusValue } from "@/features/smith/right-sidebar-types"
 import type {
   GitChangeFile,
   GitChangesResponse,
@@ -13,7 +13,7 @@ import type {
   GitFileReviewResponse,
   GitLocalBranch,
   GitStatusResponse,
-} from "@/lib/pico/api"
+} from "@/lib/smith/api"
 
 export type GitStatusData = Extract<GitStatusResponse, { ok: true }>
 export type GitChangesData = Extract<GitChangesResponse, { ok: true }>
@@ -40,7 +40,7 @@ export function gitStatusQueryOptions({
   cwd: string
 }) {
   return {
-    queryKey: picoQueryKeys.gitStatus(viewerContextId, cwd),
+    queryKey: smithQueryKeys.gitStatus(viewerContextId, cwd),
     queryFn: () =>
       fetchJson<GitStatusData>(
         buildRequestUrl(`/api/git-status?cwd=${encodeURIComponent(cwd)}`, {
@@ -72,11 +72,11 @@ export function gitChangesQueryOptions({
 }) {
   const queryKey =
     scope === "files"
-      ? picoQueryKeys.gitFiles(viewerContextId, cwd)
+      ? smithQueryKeys.gitFiles(viewerContextId, cwd)
       : scope === "branches"
-        ? picoQueryKeys.gitBranches(viewerContextId, cwd)
+        ? smithQueryKeys.gitBranches(viewerContextId, cwd)
         : [
-            ...picoQueryKeys.gitCommits(viewerContextId, cwd),
+            ...smithQueryKeys.gitCommits(viewerContextId, cwd),
             commitsLimit ?? GIT_COMMITS_PAGE_SIZE,
           ]
 
@@ -112,7 +112,7 @@ export function gitFileDiffQueryOptions({
   path: string
 }) {
   return {
-    queryKey: picoQueryKeys.gitFileDiff(viewerContextId, cwd, path),
+    queryKey: smithQueryKeys.gitFileDiff(viewerContextId, cwd, path),
     queryFn: () =>
       fetchJson<GitFileDiffData>(
         buildRequestUrl(
@@ -143,7 +143,7 @@ export function gitFileReviewQueryOptions({
     : ""
 
   return {
-    queryKey: picoQueryKeys.gitFileReview(
+    queryKey: smithQueryKeys.gitFileReview(
       viewerContextId,
       cwd,
       path,
@@ -180,37 +180,37 @@ export async function invalidateGitQueries({
 }) {
   await Promise.all([
     queryClient.invalidateQueries({
-      queryKey: picoQueryKeys.gitStatus(viewerContextId, cwd),
+      queryKey: smithQueryKeys.gitStatus(viewerContextId, cwd),
       exact: true,
       refetchType: "active",
     }),
     queryClient.invalidateQueries({
-      queryKey: picoQueryKeys.gitFiles(viewerContextId, cwd),
+      queryKey: smithQueryKeys.gitFiles(viewerContextId, cwd),
       exact: true,
       refetchType: "active",
     }),
     queryClient.invalidateQueries({
-      queryKey: picoQueryKeys.gitFileDiffs(viewerContextId, cwd),
+      queryKey: smithQueryKeys.gitFileDiffs(viewerContextId, cwd),
       exact: false,
       refetchType: "active",
     }),
     queryClient.invalidateQueries({
-      queryKey: picoQueryKeys.gitFileReviews(viewerContextId, cwd),
+      queryKey: smithQueryKeys.gitFileReviews(viewerContextId, cwd),
       exact: false,
       refetchType: "active",
     }),
     queryClient.invalidateQueries({
-      queryKey: picoQueryKeys.projectFileTree(viewerContextId, cwd),
+      queryKey: smithQueryKeys.projectFileTree(viewerContextId, cwd),
       exact: true,
       refetchType: "active",
     }),
     queryClient.invalidateQueries({
-      queryKey: picoQueryKeys.gitBranches(viewerContextId, cwd),
+      queryKey: smithQueryKeys.gitBranches(viewerContextId, cwd),
       exact: true,
       refetchType: "active",
     }),
     queryClient.invalidateQueries({
-      queryKey: picoQueryKeys.gitCommits(viewerContextId, cwd),
+      queryKey: smithQueryKeys.gitCommits(viewerContextId, cwd),
       exact: false,
       refetchType: "active",
     }),

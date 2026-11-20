@@ -1,7 +1,7 @@
 import * as React from "react"
 import { ArrowLeftIcon, CheckIcon, GitBranchIcon } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -25,13 +25,13 @@ import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
 import { ShortcutButton, ShortcutFooter } from "@/components/ui/shortcut-footer"
 import { Spinner } from "@/components/ui/spinner"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { picoQueryKeys } from "@/features/pico/query-keys"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { smithQueryKeys } from "@/features/smith/query-keys"
 import {
   appShortcut,
   formatShortcutLabel,
   matchesShortcutEvent,
-} from "@/features/pico/keyboard-shortcuts"
+} from "@/features/smith/keyboard-shortcuts"
 import {
   formatGitRelativeDateCompact,
   gitChangesQueryOptions,
@@ -40,23 +40,23 @@ import {
   gitLocalBranchTrackText,
   gitRemoteBranchParts,
   invalidateGitQueries,
-} from "@/features/pico/right-sidebar-git-data"
+} from "@/features/smith/right-sidebar-git-data"
 import {
   getErrorMessage,
   normalizeCwd,
-} from "@/features/pico/right-sidebar-shared"
+} from "@/features/smith/right-sidebar-shared"
 import type {
   GitScopedProps,
   GitStatusValue,
-} from "@/features/pico/right-sidebar-types"
+} from "@/features/smith/right-sidebar-types"
 import type {
   GitActionResponse,
   GitLocalBranch,
   GitRemoteBranch,
-} from "@/lib/pico/api"
+} from "@/lib/smith/api"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 type GitBranchDialogStage = "browse" | "create"
 
@@ -559,7 +559,7 @@ export function GitBranchDialog({
       ),
     onSuccess: async (_response, payload) => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitStatus(viewerContextId, normalizedCwd),
+        queryKey: smithQueryKeys.gitStatus(viewerContextId, normalizedCwd),
         exact: true,
         refetchType: "active",
       })

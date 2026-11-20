@@ -1,9 +1,9 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 
-import { usePicoEvent } from "@/features/pico/agent/events"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { useToolRenderContext } from "@/features/pico/tool-renderers/registry"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useSmithEvent } from "@/features/smith/agent/events"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { useToolRenderContext } from "@/features/smith/tool-renderers/registry"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 /** One value for each Agent panel state provider on the server. */
 export type AgentExtensionState = Record<string, unknown>
@@ -18,7 +18,7 @@ export function agentExtensionsQueryKey(
   viewerContextId: string,
   agentId: string
 ) {
-  return ["pico", "agent-extensions", viewerContextId, agentId] as const
+  return ["smith", "agent-extensions", viewerContextId, agentId] as const
 }
 
 /** The Agent panel state of an agent, read again when the server says it changed. */
@@ -29,7 +29,7 @@ export function useAgentExtensions(
 ) {
   const machineId = useMachineId()
   const queryClient = useQueryClient()
-  usePicoEvent("pico:agent-extensions", (detail) => {
+  useSmithEvent("smith:agent-extensions", (detail) => {
     if (!agentId || (detail.agentId !== agentId && detail.agentId !== "*"))
       return
     void queryClient.invalidateQueries({

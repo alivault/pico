@@ -1,8 +1,8 @@
 import { CornerLeftUpIcon, GitForkIcon } from "lucide-react"
 
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { emitPicoEvent } from "@/features/pico/agent/events"
-import { useAgentExtensions } from "@/features/pico/agent/agent-extensions"
+import { emitSmithEvent } from "@/features/smith/agent/events"
+import { useAgentExtensions } from "@/features/smith/agent/agent-extensions"
 
 type AgentInfo = {
   parent?: { id: string; title: string }
@@ -38,7 +38,7 @@ export function AgentLineage({
             aria-label={`Open the parent agent, ${parent.title}`}
             className="inline-flex shrink-0 items-center rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
             onClick={() =>
-              emitPicoEvent("pico:open-agent", { agentId: parent.id })
+              emitSmithEvent("smith:open-agent", { agentId: parent.id })
             }
           >
             <CornerLeftUpIcon className="size-3" />

@@ -6,7 +6,7 @@ import {
   SquareIcon,
   UsersIcon,
 } from "lucide-react"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -21,28 +21,31 @@ import { Spinner } from "@/components/ui/spinner"
 import {
   registerAgentSection,
   type AgentSectionProps,
-} from "@/features/pico/agent/agent-panel"
-import { emitPicoEvent } from "@/features/pico/agent/events"
-import { FADE_UNDER_ACTIONS, REVEAL_ON_HOVER } from "@/features/pico/agent/todo"
+} from "@/features/smith/agent/agent-panel"
+import { emitSmithEvent } from "@/features/smith/agent/events"
+import {
+  FADE_UNDER_ACTIONS,
+  REVEAL_ON_HOVER,
+} from "@/features/smith/agent/todo"
 import {
   postAgentJson,
   useAgentExtensions,
-} from "@/features/pico/agent/agent-extensions"
+} from "@/features/smith/agent/agent-extensions"
 import {
   errorText,
   IconAction,
   relativeTime,
   useNow,
-} from "@/features/pico/agent/shared"
+} from "@/features/smith/agent/shared"
 import {
   registerToolRenderer,
   toolArgs,
   toolDetails,
   useToolRenderContext,
   type ToolRendererProps,
-} from "@/features/pico/tool-renderers/registry"
+} from "@/features/smith/tool-renderers/registry"
 import { cn } from "@/lib/utils"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 export type Subagent = {
   id: string
@@ -131,7 +134,7 @@ function SubagentRow({
         aria-label={`Open ${subagent.title}`}
         className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-1.5 py-1.5 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         onClick={() =>
-          emitPicoEvent("pico:open-agent", { agentId: subagent.id })
+          emitSmithEvent("smith:open-agent", { agentId: subagent.id })
         }
       >
         <span className="mt-1 flex size-4 shrink-0 items-center justify-center">
@@ -280,7 +283,7 @@ function SpawnCard({ block }: ToolRendererProps) {
             size="sm"
             variant="outline"
             onClick={() =>
-              emitPicoEvent("pico:open-agent", {
+              emitSmithEvent("smith:open-agent", {
                 agentId: details.agentId!,
               })
             }

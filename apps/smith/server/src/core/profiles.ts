@@ -87,7 +87,7 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
       "Web research, reading files, and the browser. No shell and no file changes.",
     extensions: [
       "coding-tools",
-      "pico",
+      "smith",
       "web-access",
       "mcp",
       "codemode",
@@ -170,7 +170,7 @@ type SelectionOptions = { subagent?: { parent: string }; limits?: ToolLimits }
 
 /**
  * Tool and action names from before the agent rename. Limits stored in an
- * agent's `pico.session` document and custom profiles in `settings.json` can
+ * agent's `smith.session` document and custom profiles in `settings.json` can
  * still have them, so they are read as the new names.
  */
 const RENAMED_TOOLS: Record<string, string> = {

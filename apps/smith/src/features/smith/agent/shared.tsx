@@ -16,10 +16,10 @@ import {
 } from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { MarkdownBlock } from "@/features/pico/markdown-renderer"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { MarkdownBlock } from "@/features/smith/markdown-renderer"
 import { cn } from "@/lib/utils"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 /**
  * An icon-only action with a tooltip and an accessible name. The default size
@@ -139,7 +139,7 @@ export function TextDialog({
   const machineId = useMachineId()
   const query = useQuery({
     queryKey: [
-      "pico",
+      "smith",
       "text-dialog",
       viewerContextId,
       agentId,

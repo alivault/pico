@@ -16,7 +16,7 @@ const MAX_CODE_LINES = 1500
 const CACHE_MAX_ENTRIES = 512
 
 const theme = createCssVariablesTheme({
-  name: "pico-variables",
+  name: "smith-variables",
   variablePrefix: "--sh-",
   fontStyle: true,
 })
@@ -96,11 +96,11 @@ export class HighlightService {
       }
       const html = highlighter.codeToHtml(text, {
         lang: normalized,
-        theme: "pico-variables",
+        theme: "smith-variables",
       })
       outcome = { language: normalized, html: lines(html) }
     } catch (error) {
-      console.warn("[pico] highlighting failed:", error)
+      console.warn("[smith] highlighting failed:", error)
       return { unavailable: true }
     }
     this.#cache.set(key, outcome)

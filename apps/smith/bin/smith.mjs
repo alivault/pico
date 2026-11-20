@@ -11,36 +11,36 @@ const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
 // `agent` and `mcp` have their own help, and take any text as a message.
 const ownArgs = ["agent", "mcp"].includes(args[0])
 if (!ownArgs && args.includes("--help")) {
-  console.log(`Pico — durable Pi sessions in your browser
-Usage: pico-app [serve|status|stop|restart|import-pi] [--port N] [--host H]
+  console.log(`Smith — durable Pi sessions in your browser
+Usage: smith [serve|status|stop|restart|import-pi] [--port N] [--host H]
                  [--data-dir D] [--web-dir D] [--open|--no-open] [--wait]
                  [--source-dir D] [--detach] [--json] [--no-pty-host]
                  [--pty-host]
-       pico-app update [version] [--check] [--channel stable|preview]
+       smith update [version] [--check] [--channel stable|preview]
                  [--no-restart]
-       pico-app channel [show | set stable|preview]
-       pico-app machine add|list|status|reconnect|rename|enable|disable|remove
-       pico-app agent list|start|send|show|wait|stop
-       pico-app mcp
-The default address is 127.0.0.1:3141. Data is stored in ~/.pico.
+       smith channel [show | set stable|preview]
+       smith machine add|list|status|reconnect|rename|enable|disable|remove
+       smith agent list|start|send|show|wait|stop
+       smith mcp
+The default address is 127.0.0.1:3141. Data is stored in ~/.smith.
 Use a separate --data-dir for development.
-serve --detach starts Pico in the background. The server output also goes
+serve --detach starts Smith in the background. The server output also goes
 to <data>/server.log.
-restart stops Pico at once and starts it again with the same options, for
+restart stops Smith at once and starts it again with the same options, for
 example after an update. Turns that a restart cuts off continue.
 update installs the newest version on the update channel (stable, or
-preview for prereleases) where Pico is installed, and restarts Pico;
-update --check only looks. Pico also looks in the background and shows a
+preview for prereleases) where Smith is installed, and restarts Smith;
+update --check only looks. Smith also looks in the background and shows a
 new version in Settings, Server.
-status --json prints the server state as JSON; the exit code is 1 when Pico is
+status --json prints the server state as JSON; the exit code is 1 when Smith is
 not running.
 Terminals and jobs run in a pty-host process and survive a restart;
 serve --no-pty-host keeps them in the server, and stop --pty-host ends them.
-Import old Pi sessions with import-pi while Pico is stopped.
-Show sessions of other machines over SSH with pico-app machine add <target>.
-Run pico-app machine help for details.
-Control agents from a shell or a script with pico-app agent; run
-pico-app agent help for details. pico-app mcp prints the address of Pico's
+Import old Pi sessions with import-pi while Smith is stopped.
+Show sessions of other machines over SSH with smith machine add <target>.
+Run smith machine help for details.
+Control agents from a shell or a script with smith agent; run
+smith agent help for details. smith mcp prints the address of Smith's
 MCP server, for Claude Code, Codex, and other MCP clients.`)
   process.exit(0)
 }
@@ -50,15 +50,15 @@ if (!ownArgs && args.includes("--version")) {
 }
 const [major, minor] = process.versions.node.split(".").map(Number)
 if (major < 22 || (major === 22 && minor < 19))
-  throw new Error("Pico requires Node.js 22.19 or later")
+  throw new Error("Smith requires Node.js 22.19 or later")
 const command = args[0] && !args[0].startsWith("-") ? args.shift() : "serve"
-// Open a browser only for a person who starts Pico, not for a service
+// Open a browser only for a person who starts Smith, not for a service
 // manager: systemd sets INVOCATION_ID, and a unit that starts again after a
 // failure would open a new tab each time.
 const open =
   !args.includes("--no-open") &&
   !args.includes("--detach") &&
-  process.env.PICO_OPEN !== "0" &&
+  process.env.SMITH_OPEN !== "0" &&
   !process.env.INVOCATION_ID &&
   command === "serve"
 const forwarded = args.filter((arg) => !["--open", "--no-open"].includes(arg))
@@ -73,8 +73,8 @@ const dataDir = resolve(
   expandHome(
     inlineData ??
       (dataIndex >= 0 ? forwarded[dataIndex + 1] : undefined) ??
-      process.env.PICO_DATA_DIR ??
-      join(homedir(), ".pico")
+      process.env.SMITH_DATA_DIR ??
+      join(homedir(), ".smith")
   )
 )
 // `agent` takes text after `--`, so its data option goes first.
@@ -89,7 +89,7 @@ if (
 ) {
   forwarded.push(
     "--web-dir",
-    process.env.PICO_WEB_DIR ?? join(root, ".output/public")
+    process.env.SMITH_WEB_DIR ?? join(root, ".output/public")
   )
 }
 // A server that asks for a restart exits with this code, and this launcher
@@ -97,7 +97,7 @@ if (
 const RESTART_EXIT_CODE = 75
 const supervise = command === "serve" && !forwarded.includes("--detach")
 // The server's output also goes to this file, as for a server in the
-// background, so that `pico-app restart` can point to it when the server
+// background, so that `smith restart` can point to it when the server
 // does not come back.
 const logFile = join(dataDir, "server.log")
 function writeLog(text) {
@@ -108,8 +108,8 @@ function writeLog(text) {
   }
 }
 function note(text) {
-  console.error(`[pico] ${text}`)
-  writeLog(`[pico] ${new Date().toISOString()} ${text}\n`)
+  console.error(`[smith] ${text}`)
+  writeLog(`[smith] ${new Date().toISOString()} ${text}\n`)
 }
 if (supervise) {
   mkdirSync(dataDir, { recursive: true })
@@ -130,18 +130,18 @@ function startChild(afterRestart = false) {
     process.execPath,
     [
       "--enable-source-maps",
-      join(root, "server/dist/pico-server.mjs"),
+      join(root, "server/dist/smith-server.mjs"),
       command,
       ...forwarded,
     ],
     {
       stdio: supervise ? ["inherit", "pipe", "pipe"] : "inherit",
-      env: supervise ? { ...process.env, PICO_SUPERVISED: "1" } : process.env,
+      env: supervise ? { ...process.env, SMITH_SUPERVISED: "1" } : process.env,
     }
   )
   if (supervise) {
     writeLog(
-      `[pico] ${new Date().toISOString()} ${afterRestart ? "restart" : "start"}: server pid ${child.pid}\n`
+      `[smith] ${new Date().toISOString()} ${afterRestart ? "restart" : "start"}: server pid ${child.pid}\n`
     )
     child.stdout.on("data", (chunk) => {
       process.stdout.write(chunk)

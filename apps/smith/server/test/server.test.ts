@@ -6,13 +6,13 @@ import { test } from "node:test"
 import { tempDir } from "./support.ts"
 
 void test("server needs no token, refuses a second owner, and stops cleanly", async () => {
-  const data = await tempDir("pico-test-")
+  const data = await tempDir("smith-test-")
   const env = {
     ...process.env,
     PI_CODING_AGENT_DIR: join(data, "agent"),
   }
   const args = [
-    "dist/pico-server.mjs",
+    "dist/smith-server.mjs",
     "serve",
     "--host",
     "0.0.0.0",

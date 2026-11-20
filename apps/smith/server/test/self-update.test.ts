@@ -56,12 +56,12 @@ void test("the preview channel takes the newer of next and latest", () => {
 
 void test("the install kind comes from where the package is", async () => {
   // macOS: the temporary directory is behind a symlink.
-  const dir = realpathSync(await tempDir("pico-update-test-"))
+  const dir = realpathSync(await tempDir("smith-update-test-"))
   const pkg = (path: string) => {
     mkdirSync(path, { recursive: true })
     return path
   }
-  const global = pkg(join(dir, "prefix/lib/node_modules/@alivault/pico"))
+  const global = pkg(join(dir, "prefix/lib/node_modules/@alivault/smith"))
   assert.deepEqual(detectInstall(global, "darwin"), {
     kind: "npm",
     root: global,
@@ -69,22 +69,22 @@ void test("the install kind comes from where the package is", async () => {
   })
   assert.equal(
     installCommand(detectInstall(global, "darwin"), "2.8.0"),
-    `npm install --global --prefix ${join(dir, "prefix")} @alivault/pico@2.8.0`
+    `npm install --global --prefix ${join(dir, "prefix")} @alivault/smith@2.8.0`
   )
-  const local = pkg(join(dir, "project/node_modules/@alivault/pico"))
+  const local = pkg(join(dir, "project/node_modules/@alivault/smith"))
   assert.equal(detectInstall(local, "darwin").kind, "other")
   const pnpm = pkg(
-    join(dir, "g/.pnpm/@alivault+pico@2/node_modules/@alivault/pico")
+    join(dir, "g/.pnpm/@alivault+smith@2/node_modules/@alivault/smith")
   )
   assert.equal(detectInstall(pnpm, "darwin").kind, "other")
-  const source = pkg(join(dir, "repo/apps/pico"))
+  const source = pkg(join(dir, "repo/apps/smith"))
   mkdirSync(join(source, "server/src"), { recursive: true })
   writeFileSync(join(source, "server/src/main.ts"), "")
   assert.equal(detectInstall(source, "darwin").kind, "source")
 })
 
 void test("the update settings survive a bad file", async () => {
-  const dir = await tempDir("pico-update-test-")
+  const dir = await tempDir("smith-update-test-")
   assert.deepEqual(readUpdateConfig(dir), { channel: "stable", check: true })
   writeUpdateConfig(dir, { channel: "preview" })
   writeUpdateConfig(dir, { check: false })
@@ -94,11 +94,11 @@ void test("the update settings survive a bad file", async () => {
 })
 
 void test("the CLI shows and sets the channel", async () => {
-  const data = await tempDir("pico-update-test-")
+  const data = await tempDir("smith-update-test-")
   const run = (...args: string[]) =>
     spawnSync(
       process.execPath,
-      ["dist/pico-server.mjs", ...args, "--data-dir", data],
+      ["dist/smith-server.mjs", ...args, "--data-dir", data],
       { encoding: "utf8" }
     )
   assert.equal(run("channel").stdout.trim(), "stable")
@@ -109,22 +109,22 @@ void test("the CLI shows and sets the channel", async () => {
 
 void test("the server checks the registry and reports the update", async () => {
   const registry = createServer((request, response) => {
-    assert.equal(request.url, "/-/package/@alivault%2fpico/dist-tags")
+    assert.equal(request.url, "/-/package/@alivault%2fsmith/dist-tags")
     response.setHeader("content-type", "application/json")
     response.end(JSON.stringify({ latest: "999.0.0", next: "999.1.0-beta.1" }))
   })
   await new Promise<void>((done) => registry.listen(0, "127.0.0.1", done))
   const registryUrl = `http://127.0.0.1:${(registry.address() as AddressInfo).port}`
-  const data = await tempDir("pico-update-test-")
+  const data = await tempDir("smith-update-test-")
   const env = {
     ...process.env,
     PI_CODING_AGENT_DIR: join(data, "agent"),
-    PICO_NPM_REGISTRY: registryUrl,
+    SMITH_NPM_REGISTRY: registryUrl,
   }
   const child = spawn(
     process.execPath,
     [
-      "dist/pico-server.mjs",
+      "dist/smith-server.mjs",
       "serve",
       "--port",
       "0",

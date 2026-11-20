@@ -318,7 +318,7 @@ export class MachineConnection {
     this.#schedule(0)
   }
 
-  /** Try now: after `pico-app machine reconnect`, or from the UI. */
+  /** Try now: after `smith machine reconnect`, or from the UI. */
   retryNow() {
     if (this.#closed || !this.profile.enabled) return
     if (this.#state === "online" || this.#attempt) return
@@ -345,7 +345,7 @@ export class MachineConnection {
     try {
       await this.#transport.connect(attempt.signal)
       let cache = readCache(this.#dir)
-      if (!cache.picoPath || !cache.nodeDir) {
+      if (!cache.smithPath || !cache.nodeDir) {
         cache = cacheFromDiscovery(
           await discover(this.#transport, attempt.signal),
           cache
@@ -357,7 +357,7 @@ export class MachineConnection {
       if (!status)
         throw new ProblemError({
           kind: "stopped",
-          message: `Pico is not running on ${this.profile.label}.`,
+          message: `Smith is not running on ${this.profile.label}.`,
         })
       await this.#transport.attach(status.port)
       writeCache(this.#dir, {
@@ -382,7 +382,7 @@ export class MachineConnection {
       )
         throw new ProblemError({
           kind: "update",
-          message: `Update Pico on ${this.profile.label} (it has ${manifest.version ?? "an old version"}).`,
+          message: `Update Smith on ${this.profile.label} (it has ${manifest.version ?? "an old version"}).`,
         })
       const summary = parseSummary(
         await this.request("GET", "/api/machine/summary", {
@@ -410,17 +410,17 @@ export class MachineConnection {
     try {
       return await remoteStatus(this.#transport, cache, this.profile, signal)
     } catch (error) {
-      // The remote node or pico-app moved: search again one time.
+      // The remote node or smith moved: search again one time.
       if (!(error instanceof TransportError) || error.code !== 127) throw error
       const found = cacheFromDiscovery(
         await discover(this.#transport, signal),
         cache
       )
       writeCache(this.#dir, found)
-      if (!found.picoPath || !found.nodeDir)
+      if (!found.smithPath || !found.nodeDir)
         throw new ProblemError({
           kind: "setup",
-          message: `pico-app or node 22.19+ was not found on ${this.profile.label}.`,
+          message: `smith or node 22.19+ was not found on ${this.profile.label}.`,
         })
       return remoteStatus(this.#transport, found, this.profile, signal)
     }
@@ -446,7 +446,7 @@ export class MachineConnection {
 
   #classify(error: unknown): ConnectionProblem {
     if (error instanceof ProblemError) return error.problem
-    const reconnect = `pico-app machine reconnect ${this.profile.label}`
+    const reconnect = `smith machine reconnect ${this.profile.label}`
     if (error instanceof TransportError) {
       const text = `${error.message}\n${error.stderr}`
       const url = firstUrl(text)
@@ -778,7 +778,7 @@ export class MachineManager {
           try {
             listener({ machine: connection.info(), payload })
           } catch (error) {
-            console.error("[pico] machine event listener failed:", error)
+            console.error("[smith] machine event listener failed:", error)
           }
         }
       },
@@ -798,7 +798,7 @@ export class MachineManager {
       const message = `machines.json is not valid: ${error instanceof Error ? error.message : String(error)}`
       if (message !== this.#fileError) {
         this.#fileError = message
-        console.warn(`[pico] ${message}`)
+        console.warn(`[smith] ${message}`)
         this.#emit()
       }
       return
@@ -908,7 +908,7 @@ export class MachineManager {
       try {
         listener()
       } catch (error) {
-        console.error("[pico] machine listener failed:", error)
+        console.error("[smith] machine listener failed:", error)
       }
     }
   }

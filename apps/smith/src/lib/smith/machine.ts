@@ -13,7 +13,7 @@
  * (`machine-context.tsx`).
  */
 
-import type { PromptImage } from "@/lib/pico"
+import type { PromptImage } from "@/lib/smith"
 
 export const LOCAL_MACHINE_ID = "local"
 
@@ -122,7 +122,7 @@ export function machineOfflineLabel(machineId: string) {
 }
 
 function machineOfflineMessage(label: string) {
-  return `${label} is offline. Pico sends nothing until it is back.`
+  return `${label} is offline. Smith sends nothing until it is back.`
 }
 
 /** The messages of each MachineOfflineError that the page made. */
@@ -169,17 +169,17 @@ export function assertMachineWritable(
 
 /** Local storage keys whose values belong to one machine. Stored names: do not change. */
 const MACHINE_SCOPED_KEYS = new Set([
-  "pico-draft-directory",
-  "pico-sidebar-directories",
-  "pico-collapsed-directories",
-  "pico-pinned-sessions",
-  "pico-recent-directories",
-  "pico-terminal-tabs",
-  "pico-job-focus-seen",
-  "pico-jobs-seen",
-  "pico-prompt-drafts",
-  "pico-sidebar-state-merged",
-  "pico-sidebar-group-by",
+  "smith-draft-directory",
+  "smith-sidebar-directories",
+  "smith-collapsed-directories",
+  "smith-pinned-sessions",
+  "smith-recent-directories",
+  "smith-terminal-tabs",
+  "smith-job-focus-seen",
+  "smith-jobs-seen",
+  "smith-prompt-drafts",
+  "smith-sidebar-state-merged",
+  "smith-sidebar-group-by",
 ])
 
 export function isMachineScopedStorageKey(key: string) {

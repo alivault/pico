@@ -66,7 +66,7 @@ export class EventHub {
       try {
         listener(event)
       } catch (error) {
-        console.error("[pico] event listener failed:", error)
+        console.error("[smith] event listener failed:", error)
       }
     }
     return event

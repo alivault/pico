@@ -10,13 +10,13 @@ import {
 } from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
 import {
-  emitPicoEvent,
+  emitSmithEvent,
   openJobTerminal,
-  usePicoEvent,
-} from "@/features/pico/agent/events"
-import { errorText } from "@/features/pico/agent/shared"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { useMachineId } from "@/lib/pico/machine-context"
+  useSmithEvent,
+} from "@/features/smith/agent/events"
+import { errorText } from "@/features/smith/agent/shared"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 /** The answer of `/api/resources` (see server/src/services/resources.ts). */
 export type MachineResources = {
@@ -75,7 +75,7 @@ export function useMachineResources(
 ) {
   const machineId = useMachineId()
   return useQuery({
-    queryKey: ["pico", "resources", machineId],
+    queryKey: ["smith", "resources", machineId],
     queryFn: () =>
       fetchJson<MachineResources>(
         buildRequestUrl("/api/resources", {
@@ -135,13 +135,13 @@ function jobLabel(job: ResourceJob) {
 /** Show a job: in its agent's terminal panel, or in the archived agents. */
 function openResourceJob(job: ResourceJob) {
   if (job.archived) {
-    emitPicoEvent("pico:open-archived-agents", {
+    emitSmithEvent("smith:open-archived-agents", {
       ...(job.project ? { project: job.project } : {}),
       jobs: true,
     })
     return
   }
-  emitPicoEvent("pico:open-agent", { agentId: job.agentId })
+  emitSmithEvent("smith:open-agent", { agentId: job.agentId })
   openJobTerminal(job.id, job.agentId)
 }
 
@@ -167,7 +167,7 @@ function ResourcesView({
           />
         ) : null}
       </Section>
-      <Section title="Pico">
+      <Section title="Smith">
         <Row
           label={`Server (pid ${data.server.pid})`}
           value={`${formatBytes(data.server.rss)}, heap ${formatBytes(data.server.heapUsed)}`}
@@ -245,7 +245,7 @@ function ResourcesDialog({
         <DialogHeader>
           <DialogTitle>Resources</DialogTitle>
           <DialogDescription>
-            What uses memory on this machine for Pico. Jobs include every
+            What uses memory on this machine for Smith. Jobs include every
             process they started. A job shows in the terminal panel of the agent
             that started it.
           </DialogDescription>
@@ -270,14 +270,14 @@ function ResourcesDialog({
   )
 }
 
-/** Mounted once in the app shell; opens on the `pico:open-resources` event. */
+/** Mounted once in the app shell; opens on the `smith:open-resources` event. */
 export function ResourcesDialogController({
   viewerContextId,
 }: {
   viewerContextId: string
 }) {
   const [open, setOpen] = React.useState(false)
-  usePicoEvent("pico:open-resources", () => setOpen(true))
+  useSmithEvent("smith:open-resources", () => setOpen(true))
   return open ? (
     <ResourcesDialog onOpenChange={setOpen} viewerContextId={viewerContextId} />
   ) : null

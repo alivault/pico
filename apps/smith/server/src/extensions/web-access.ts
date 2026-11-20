@@ -1,11 +1,11 @@
 /**
  * The `web-access` extension: pi-web-access's web tools as durable tools.
  * `web_search`, and `fetch_content`, which also reads stored content (what
- * pi-web-access's `get_search_content` does). Pico leaves out `source_check`:
+ * pi-web-access's `get_search_content` does). Smith leaves out `source_check`:
  * web_search and fetch_content do the same work.
  *
  * pi-web-access keeps its tool behavior in a host-neutral core, which its own
- * MCP server also uses. Pico drives the same core and its MCP tool schemas.
+ * MCP server also uses. Smith drives the same core and its MCP tool schemas.
  * Configuration is pi-web-access's own `~/.pi/web-search.json`.
  */
 import Type, { type TSchema } from "typebox"
@@ -137,7 +137,7 @@ export function createWebAccessExtension(): Extension {
   try {
     enabled = core().enabledToolNames
   } catch (error) {
-    console.warn("[pico] web access is unavailable:", error)
+    console.warn("[smith] web access is unavailable:", error)
     enabled = []
   }
   const definition = (name: string) =>

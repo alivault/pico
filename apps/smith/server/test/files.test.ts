@@ -13,7 +13,7 @@ import {
 import { tempDir } from "./support.ts"
 
 void test("workspace files reject traversal, escaped symlinks, and binary data", async () => {
-  const root = await tempDir("pico-files-test-")
+  const root = await tempDir("smith-files-test-")
   const workspace = join(root, "workspace")
   await mkdir(workspace)
   await writeFile(join(workspace, "readme.md"), "hello")
@@ -32,7 +32,7 @@ void test("workspace files reject traversal, escaped symlinks, and binary data",
 })
 
 void test("image files have a version for the viewer, and only images are served raw", async () => {
-  const workspace = await tempDir("pico-files-test-")
+  const workspace = await tempDir("smith-files-test-")
   // A 1×1 PNG.
   const png = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
@@ -71,7 +71,7 @@ void test("image files have a version for the viewer, and only images are served
 })
 
 void test("workspace file saves keep the mode and stop on a conflict", async () => {
-  const root = await tempDir("pico-files-write-test-")
+  const root = await tempDir("smith-files-write-test-")
   const workspace = join(root, "workspace")
   await mkdir(workspace)
   const file = join(workspace, "run.sh")
@@ -116,17 +116,17 @@ void test("workspace file saves keep the mode and stop on a conflict", async () 
 })
 
 void test("a project favicon is found in its folder, or in a monorepo app", async () => {
-  const plain = await tempDir("pico-files-test-")
+  const plain = await tempDir("smith-files-test-")
   assert.equal(await projectFavicon(plain), null)
 
-  const web = await tempDir("pico-files-test-")
+  const web = await tempDir("smith-files-test-")
   await mkdir(join(web, "public"))
   await writeFile(join(web, "public", "favicon.ico"), "ico")
   await writeFile(join(web, "public", "favicon.svg"), "<svg/>")
   // An SVG comes before an ICO in the same folder.
   assert.equal((await projectFavicon(web))?.path, "public/favicon.svg")
 
-  const monorepo = await tempDir("pico-files-test-")
+  const monorepo = await tempDir("smith-files-test-")
   await mkdir(join(monorepo, "apps", "web", "src", "app"), { recursive: true })
   await writeFile(
     join(monorepo, "apps", "web", "src", "app", "icon.png"),

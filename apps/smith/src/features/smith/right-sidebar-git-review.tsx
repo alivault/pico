@@ -5,7 +5,7 @@ import type {
   SelectedLineRange,
 } from "@pierre/diffs"
 import { MultiFileDiff, PatchDiff } from "@pierre/diffs/react"
-import { LineCommentForm } from "@/features/pico/line-comment-form"
+import { LineCommentForm } from "@/features/smith/line-comment-form"
 import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion"
 import {
   AlertTriangleIcon,
@@ -20,7 +20,7 @@ import {
   Undo2Icon,
 } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import {
   Accordion,
@@ -58,15 +58,15 @@ import { resizeRailPrimaryInteractiveClass } from "@/components/ui/resize-rail"
 import { Spinner } from "@/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { useMachineReadOnly } from "@/features/pico/machine-store"
-import { usePicoDiffThemeOptions } from "@/features/pico/pico-diff-theme"
-import { picoQueryKeys } from "@/features/pico/query-keys"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { useMachineReadOnly } from "@/features/smith/machine-store"
+import { useSmithDiffThemeOptions } from "@/features/smith/smith-diff-theme"
+import { smithQueryKeys } from "@/features/smith/query-keys"
 import {
   ProjectFileIconSprite,
   ProjectFileTypeIcon,
-} from "@/features/pico/right-sidebar-file-icons"
-import { GitCommitsSection } from "@/features/pico/right-sidebar-git-commits"
+} from "@/features/smith/right-sidebar-file-icons"
+import { GitCommitsSection } from "@/features/smith/right-sidebar-git-commits"
 import {
   GIT_REVIEW_FULL_CONTEXT_CHANGED_LINE_THRESHOLD,
   GIT_REVIEW_FULL_CONTEXT_SIZE_THRESHOLD_BYTES,
@@ -81,33 +81,33 @@ import {
   gitFileStatusTooltip,
   invalidateGitQueries,
   selectGitFiles,
-} from "@/features/pico/right-sidebar-git-data"
-import { GitPanelToolbar } from "@/features/pico/right-sidebar-git-toolbar"
-import { GitSectionNote } from "@/features/pico/right-sidebar-section-note"
+} from "@/features/smith/right-sidebar-git-data"
+import { GitPanelToolbar } from "@/features/smith/right-sidebar-git-toolbar"
+import { GitSectionNote } from "@/features/smith/right-sidebar-section-note"
 import {
   getErrorMessage,
   normalizeCwd,
-} from "@/features/pico/right-sidebar-shared"
-import type { ComposerDiffLineComment } from "@/features/pico/app-shell-composer-state"
+} from "@/features/smith/right-sidebar-shared"
+import type { ComposerDiffLineComment } from "@/features/smith/app-shell-composer-state"
 import type {
   GitCommitDiffTabRequest,
   GitScopedProps,
-} from "@/features/pico/right-sidebar-types"
+} from "@/features/smith/right-sidebar-types"
 import {
   getStuckScrollTriggerValue,
   hasScrolledContent,
   setDerivedScrollState,
-} from "@/features/pico/scroll-shadow-utils"
+} from "@/features/smith/scroll-shadow-utils"
 import {
   ScrollGradientOverlays,
   useScrollGradients,
-} from "@/features/pico/scroll-gradient-utils"
+} from "@/features/smith/scroll-gradient-utils"
 import {
   RIGHT_SIDEBAR_HISTORY_HEIGHT_STORAGE_KEY,
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
-} from "@/lib/pico"
-import type { GitActionResponse, GitChangeFile } from "@/lib/pico/api"
+} from "@/lib/smith"
+import type { GitActionResponse, GitChangeFile } from "@/lib/smith/api"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
   getSidebarVerticalResizeCursor,
@@ -115,8 +115,8 @@ import {
   type SidebarVerticalResizeCursor,
 } from "@/hooks/use-sidebar-resize"
 import { cn } from "@/lib/utils"
-import { useMachineId } from "@/lib/pico/machine-context"
-import { isAltChange } from "@/features/pico/machines"
+import { useMachineId } from "@/lib/smith/machine-context"
+import { isAltChange } from "@/features/smith/machines"
 
 function GitFileStatus({ status }: { status: string | undefined }) {
   const [indexCharacter, worktreeCharacter] = gitFileStatusCharacters(status)
@@ -1068,7 +1068,8 @@ function useFileReviewContentView({
             <AlertDialogTitle>Nuke working tree?</AlertDialogTitle>
             <AlertDialogDescription>
               This restores tracked files to HEAD and deletes untracked and
-              ignored files in this repository. This cannot be undone from Pico.
+              ignored files in this repository. This cannot be undone from
+              Smith.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1180,7 +1181,7 @@ function ReviewFileAccordionItem({
         onGutterUtilityClick: startLineComment,
       }
     : {}
-  const themeOptions = usePicoDiffThemeOptions()
+  const themeOptions = useSmithDiffThemeOptions()
   const canStage = gitFileCanStage(file)
   const canUnstage = gitFileCanUnstage(file)
 
@@ -1212,7 +1213,7 @@ function ReviewFileAccordionItem({
       ),
     onSuccess: async (_response, action) => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitStatus(viewerContextId, normalizedCwd),
+        queryKey: smithQueryKeys.gitStatus(viewerContextId, normalizedCwd),
         exact: true,
         refetchType: "active",
       })
@@ -1254,7 +1255,7 @@ function ReviewFileAccordionItem({
       ),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitStatus(viewerContextId, normalizedCwd),
+        queryKey: smithQueryKeys.gitStatus(viewerContextId, normalizedCwd),
         exact: true,
         refetchType: "active",
       })

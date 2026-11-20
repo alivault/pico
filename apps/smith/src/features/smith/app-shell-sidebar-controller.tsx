@@ -1,10 +1,10 @@
 import * as React from "react"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import {
   sameMapEntries,
   sameStringArray,
-} from "@/features/pico/app-shell-common"
+} from "@/features/smith/app-shell-common"
 import {
   clearUnreadForActiveSidebarAgent,
   fetchProjectAgentsIndexes,
@@ -19,13 +19,13 @@ import {
   useAppShellSidebarValue,
   type AppShellSidebarStore,
   type ProjectAgentsIndexData,
-} from "@/features/pico/app-shell-sidebar-store"
-import type { AppShellAgentWorkspaceHandle } from "@/features/pico/app-shell-types"
-import { AppSidebar, createProjectAgentsStore } from "@/features/pico/sidebar"
+} from "@/features/smith/app-shell-sidebar-store"
+import type { AppShellAgentWorkspaceHandle } from "@/features/smith/app-shell-types"
+import { AppSidebar, createProjectAgentsStore } from "@/features/smith/sidebar"
 import {
   buildAgentTree,
   pinnedAgentTreeKeys,
-} from "@/features/pico/pinned-agent-tree"
+} from "@/features/smith/pinned-agent-tree"
 import {
   normalizeAgentSelectionKeys,
   normalizeStoredProjectList,
@@ -33,23 +33,23 @@ import {
   machineLocalStorageSetItem,
   agentListEntryKey,
   SIDEBAR_PROJECTS_STORAGE_KEY,
-} from "@/lib/pico"
-import type { AgentListEntry } from "@/lib/pico/api"
+} from "@/lib/smith"
+import type { AgentListEntry } from "@/lib/smith/api"
 import {
   ArchivedAgentsDialog,
   type ArchivedAgentsView,
-} from "@/features/pico/archived-agents-dialog"
-import { usePicoEvent } from "@/features/pico/agent/events"
-import { useMachineId } from "@/lib/pico/machine-context"
-import { onServerReconnect } from "@/lib/pico/server-connection"
+} from "@/features/smith/archived-agents-dialog"
+import { useSmithEvent } from "@/features/smith/agent/events"
+import { useMachineId } from "@/lib/smith/machine-context"
+import { onServerReconnect } from "@/lib/smith/server-connection"
 import {
   filterProjectAgentsByStatus,
   agentMatchesStatusFilter,
   useAgentStatusFilter,
-} from "@/features/pico/agent-status-filter"
+} from "@/features/smith/agent-status-filter"
 
 // Stored name: do not change.
-const PINNED_AGENT_STORE_PROJECT = "__pico_pinned_sessions__"
+const PINNED_AGENT_STORE_PROJECT = "__smith_pinned_sessions__"
 
 function findSidebarAgentSelectionKey(
   entriesByKey: Map<string, AgentListEntry>,
@@ -109,7 +109,7 @@ function useAppShellSidebarControllerView({
     setArchivedAgentsView(view)
     setArchivedAgentsOpen(true)
   }
-  usePicoEvent("pico:open-archived-agents", (detail) =>
+  useSmithEvent("smith:open-archived-agents", (detail) =>
     openArchivedAgents(detail)
   )
   const [projectAgentsStore] = React.useState(() =>

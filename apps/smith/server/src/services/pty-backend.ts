@@ -261,7 +261,7 @@ export class HostPtyBackend implements PtyBackend {
   /** The host went away: its ptys are gone, and their ends are unknown. */
   #lostAll() {
     if (this.#closed) return
-    console.warn("[pico] the pty-host went away: its terminals are lost")
+    console.warn("[smith] the pty-host went away: its terminals are lost")
     const entries = [...this.#entries.values()]
     this.#entries.clear()
     this.#orphans.clear()

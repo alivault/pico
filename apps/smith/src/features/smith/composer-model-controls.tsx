@@ -2,7 +2,7 @@ import * as React from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { ChevronDownIcon } from "lucide-react"
 
-import type { AgentState } from "@/lib/pico"
+import type { AgentState } from "@/lib/smith"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -19,14 +19,14 @@ import { TitleTooltip } from "@/components/ui/tooltip"
 import {
   appShortcut,
   formatShortcutLabel,
-} from "@/features/pico/keyboard-shortcuts"
-import { shortModelLabel, thinkingLabel } from "@/features/pico/model-label"
+} from "@/features/smith/keyboard-shortcuts"
+import { shortModelLabel, thinkingLabel } from "@/features/smith/model-label"
 import {
   shallow,
   useSelector,
-  type PicoStore,
-} from "@/features/pico/tanstack-store-utils"
-import { emitPicoEvent } from "@/features/pico/agent/events"
+  type SmithStore,
+} from "@/features/smith/tanstack-store-utils"
+import { emitSmithEvent } from "@/features/smith/agent/events"
 import {
   ContextUsageBars,
   ContextUsageQuotaDetails,
@@ -34,9 +34,9 @@ import {
   ContextUsageWindowDetails,
   useContextUsageView,
   type ComposerContextUsageStore,
-} from "@/features/pico/context-usage"
-import { useMachineReadOnly } from "@/features/pico/machine-store"
-import { picoQueryKeys } from "@/features/pico/query-keys"
+} from "@/features/smith/context-usage"
+import { useMachineReadOnly } from "@/features/smith/machine-store"
+import { smithQueryKeys } from "@/features/smith/query-keys"
 
 /** The model and reasoning buttons of the composer. */
 export const ComposerModelControls = React.memo(function ComposerModelControls({
@@ -45,7 +45,7 @@ export const ComposerModelControls = React.memo(function ComposerModelControls({
   onOpenModelDialog,
   onSelectThinkingLevel,
 }: {
-  agentStore: PicoStore<AgentState>
+  agentStore: SmithStore<AgentState>
   disabled: boolean
   onOpenModelDialog: () => void
   onSelectThinkingLevel: (level: string) => void
@@ -135,7 +135,7 @@ export const ComposerContextUsage = React.memo(function ComposerContextUsage({
   viewerContextId,
 }: {
   activeAgentId?: string
-  agentStore: PicoStore<AgentState>
+  agentStore: SmithStore<AgentState>
   contextUsageStore: ComposerContextUsageStore
   viewerContextId: string
 }) {
@@ -161,7 +161,7 @@ export const ComposerContextUsage = React.memo(function ComposerContextUsage({
         // menu gets them again when it opens.
         if (open)
           void queryClient.invalidateQueries({
-            queryKey: picoQueryKeys.providerUsageAll(),
+            queryKey: smithQueryKeys.providerUsageAll(),
           })
       }}
     >
@@ -205,7 +205,7 @@ export const ComposerContextUsage = React.memo(function ComposerContextUsage({
         <DropdownMenuItem
           className="block"
           onClick={() =>
-            emitPicoEvent("pico:open-agent-settings", {
+            emitSmithEvent("smith:open-agent-settings", {
               page: "agent-context",
             })
           }

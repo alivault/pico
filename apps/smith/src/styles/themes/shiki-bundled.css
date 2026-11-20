@@ -1965,7 +1965,7 @@
   --background: #fafafa;
   /*
    * Material Theme Lighter's editor foreground is #90a4ae, which works as a
-   * muted code fallback but is too low-contrast for Pico's app chrome.
+   * muted code fallback but is too low-contrast for Smith's app chrome.
    */
   --foreground: #263238;
   --card: color-mix(in lab, var(--background) 96%, var(--foreground));

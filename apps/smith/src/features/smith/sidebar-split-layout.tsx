@@ -6,16 +6,16 @@ import {
   getSidebarVerticalResizeCursor,
   installGlobalResizeCursor,
 } from "@/hooks/use-sidebar-resize"
-import { useSidebarMachines } from "@/features/pico/machines"
+import { useSidebarMachines } from "@/features/smith/machines"
 import {
   OtherMachineAgentSource,
   SplitAgentList,
-} from "@/features/pico/sidebar"
-import { MachineProvider } from "@/lib/pico/machine-context"
+} from "@/features/smith/sidebar"
+import { MachineProvider } from "@/lib/smith/machine-context"
 import {
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
-} from "@/lib/pico/storage"
+} from "@/lib/smith/storage"
 import { cn } from "@/lib/utils"
 
 /**
@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils"
  */
 
 // Stored name: do not change.
-const SPLIT_RATIO_STORAGE_KEY = "pico-sidebar-split-ratio"
+const SPLIT_RATIO_STORAGE_KEY = "smith-sidebar-split-ratio"
 const DEFAULT_SPLIT_RATIO = 0.4
 // The smallest height of each part, in pixels.
 const MIN_PART_HEIGHT = 96

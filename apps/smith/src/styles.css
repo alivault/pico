@@ -8,7 +8,7 @@
 @import "./styles/themes/shiki-bundled.css";
 
 @plugin "@tailwindcss/typography";
-@custom-variant dark (&:is(.dark *, .flexoki-dark *, [data-pico-theme-mode="dark"] *));
+@custom-variant dark (&:is(.dark *, .flexoki-dark *, [data-smith-theme-mode="dark"] *));
 
 @theme {
   /* The compact (mobile) layout starts below this width. It is the minimum
@@ -112,24 +112,24 @@
   }
 }
 
-.pico-terminal-panel .xterm {
+.smith-terminal-panel .xterm {
   height: 100%;
   padding: 0.625rem;
 }
 
-.pico-terminal-panel .xterm-screen,
-.pico-terminal-panel .xterm-viewport {
+.smith-terminal-panel .xterm-screen,
+.smith-terminal-panel .xterm-viewport {
   background-color: transparent !important;
 }
 
-.pico-terminal-panel .xterm-viewport {
+.smith-terminal-panel .xterm-viewport {
   scrollbar-color: color-mix(in oklab, var(--muted-foreground) 40%, transparent)
     transparent;
 }
 
 /* The server's Shiki output colors tokens with `--sh-*` variables
    (server/src/services/highlight.ts). Map them to the theme's code colors,
-   as PICO_SHIKI_VARIABLE_DEFAULTS in lib/pico/themes.ts does for diffs. */
+   as SMITH_SHIKI_VARIABLE_DEFAULTS in lib/smith/themes.ts does for diffs. */
 .shiki {
   --sh-foreground: var(--code-fg);
   --sh-token-comment: var(--code-comment);

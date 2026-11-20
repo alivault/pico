@@ -8,7 +8,7 @@ import {
   SUBAGENT_DENIED_TOOLS,
 } from "../src/core/profiles.ts"
 import { HostBridge } from "../src/extensions/host.ts"
-import { createPicoExtensions } from "../src/extensions/index.ts"
+import { createSmithExtensions } from "../src/extensions/index.ts"
 import { tempDir } from "./support.ts"
 import {
   subagentMessageKind,
@@ -95,7 +95,7 @@ void test("subagent messages are marked as questions or finished work", () => {
 })
 
 void test("the tool list has spawn_subagent and agents, and no old session tools", async () => {
-  const { extensions } = createPicoExtensions({
+  const { extensions } = createSmithExtensions({
     host: new HostBridge(),
     dataDir: await tempDir(),
   })

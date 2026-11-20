@@ -816,7 +816,7 @@ export class GitWatcher {
     }
   }
 
-  /** Report a change Pico made itself, at once. */
+  /** Report a change Smith made itself, at once. */
   mutated(cwd: string) {
     invalidate()
     this.#hub.push({

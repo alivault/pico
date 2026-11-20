@@ -1,6 +1,6 @@
 /**
- * Agent operations for clients outside Pico: the `/api/machine/agent/*`
- * routes, the MCP server (`mcp.ts`), and the `pico-app agent` command
+ * Agent operations for clients outside Smith: the `/api/machine/agent/*`
+ * routes, the MCP server (`mcp.ts`), and the `smith agent` command
  * (`cli.ts`).
  *
  * `LocalAgentOps` works on the agents of this server. `RouteAgentBackend`
@@ -212,14 +212,14 @@ export async function waitUntilSettled(
   }
 }
 
-/** The options of a JSON request to a Pico server. */
+/** The options of a JSON request to a Smith server. */
 export type RouteRequest = (
   method: "GET" | "POST",
   path: string,
   options?: { body?: unknown; timeoutMs?: number; signal?: AbortSignal }
 ) => Promise<unknown>
 
-/** The operations of another Pico server, through its routes. */
+/** The operations of another Smith server, through its routes. */
 export class RouteAgentBackend implements AgentBackend {
   readonly #request: RouteRequest
 
@@ -353,7 +353,7 @@ export class LocalAgentOps implements AgentBackend {
     }
   }
 
-  /** The current ID of an agent from `s12`, `12`, or `pico:s12`. */
+  /** The current ID of an agent from `s12`, `12`, or `smith:s12`. */
   requireAgent(value: unknown) {
     const text = typeof value === "string" ? value : ""
     const id = this.#agents.current(normalizeAgentId(text))

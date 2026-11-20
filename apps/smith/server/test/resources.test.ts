@@ -77,7 +77,7 @@ void test("job scopes get limits from the settings", () => {
     "--scope",
     "--quiet",
     "--collect",
-    "--unit=pico-job-jx",
+    "--unit=smith-job-jx",
   ])
   assert.deepEqual(line.args.slice(-5), [
     "MemoryHigh=4G",
@@ -122,8 +122,8 @@ void test("a stopped job leaves no orphans (process group)", () =>
   stopLeavesNoOrphans(false))
 
 void test("a job in its own systemd scope is counted and stopped as a whole", async (t) => {
-  const previous = process.env.PICO_JOB_SCOPES
-  delete process.env.PICO_JOB_SCOPES
+  const previous = process.env.SMITH_JOB_SCOPES
+  delete process.env.SMITH_JOB_SCOPES
   try {
     if (!(await jobScopesAvailable())) {
       t.skip("No systemd user manager here")
@@ -131,13 +131,13 @@ void test("a job in its own systemd scope is counted and stopped as a whole", as
     }
     await stopLeavesNoOrphans(true)
   } finally {
-    if (previous !== undefined) process.env.PICO_JOB_SCOPES = previous
+    if (previous !== undefined) process.env.SMITH_JOB_SCOPES = previous
   }
 })
 
 void test("a job in a systemd scope gets its command unchanged", async (t) => {
-  const previous = process.env.PICO_JOB_SCOPES
-  delete process.env.PICO_JOB_SCOPES
+  const previous = process.env.SMITH_JOB_SCOPES
+  delete process.env.SMITH_JOB_SCOPES
   const terminals = new Terminals()
   try {
     if (!(await jobScopesAvailable())) {
@@ -163,14 +163,14 @@ void test("a job in a systemd scope gets its command unchanged", async (t) => {
     await waitFor(() => exited)
     assert.match(output, /len=3 home=set/)
   } finally {
-    if (previous !== undefined) process.env.PICO_JOB_SCOPES = previous
+    if (previous !== undefined) process.env.SMITH_JOB_SCOPES = previous
     terminals.shutdown()
   }
 })
 
 void test("idle shells close only when they run nothing but the shell", async () => {
-  const previous = process.env.PICO_TERMINAL_SHELL
-  process.env.PICO_TERMINAL_SHELL = "/bin/sh"
+  const previous = process.env.SMITH_TERMINAL_SHELL
+  process.env.SMITH_TERMINAL_SHELL = "/bin/sh"
   const terminals = new Terminals({ idleShellMs: 0 })
   try {
     const idle = await terminals.create("scope:s1:/", tmpdir(), "idle", 80, 24)
@@ -182,8 +182,8 @@ void test("idle shells close only when they run nothing but the shell", async ()
     assert.deepEqual(left, [busy.id])
     assert.ok(!left.includes(idle.id))
   } finally {
-    if (previous === undefined) delete process.env.PICO_TERMINAL_SHELL
-    else process.env.PICO_TERMINAL_SHELL = previous
+    if (previous === undefined) delete process.env.SMITH_TERMINAL_SHELL
+    else process.env.SMITH_TERMINAL_SHELL = previous
     terminals.shutdown()
   }
 })

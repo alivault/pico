@@ -1,54 +1,54 @@
-import type { PromptDraftTarget, AgentEntryIdentity } from "@/lib/pico"
+import type { PromptDraftTarget, AgentEntryIdentity } from "@/lib/smith"
 import {
   normalizeThemeColorMode,
   normalizeThemeFamily,
-} from "@/lib/pico/themes"
+} from "@/lib/smith/themes"
 import {
   isMachineScopedStorageKey,
   machineStorageKey,
-} from "@/lib/pico/machine"
+} from "@/lib/smith/machine"
 
-export const THEME_STORAGE_KEY = "pico-theme"
-export const THEME_COLOR_MODE_STORAGE_KEY = "pico-theme-color-mode"
-export const APPLIED_THEME_STORAGE_KEY = "pico-applied-theme"
+export const THEME_STORAGE_KEY = "smith-theme"
+export const THEME_COLOR_MODE_STORAGE_KEY = "smith-theme-color-mode"
+export const APPLIED_THEME_STORAGE_KEY = "smith-applied-theme"
 // Stored name: do not change.
-export const DRAFT_PROJECT_STORAGE_KEY = "pico-draft-directory"
+export const DRAFT_PROJECT_STORAGE_KEY = "smith-draft-directory"
 // Stored name: do not change.
-export const SIDEBAR_PROJECTS_STORAGE_KEY = "pico-sidebar-directories"
+export const SIDEBAR_PROJECTS_STORAGE_KEY = "smith-sidebar-directories"
 // Stored name: do not change.
-export const COLLAPSED_PROJECTS_STORAGE_KEY = "pico-collapsed-directories"
+export const COLLAPSED_PROJECTS_STORAGE_KEY = "smith-collapsed-directories"
 // Stored name: do not change.
-export const PINNED_AGENTS_STORAGE_KEY = "pico-pinned-sessions"
+export const PINNED_AGENTS_STORAGE_KEY = "smith-pinned-sessions"
 // Stored name: do not change.
-export const RECENT_PROJECTS_STORAGE_KEY = "pico-recent-directories"
+export const RECENT_PROJECTS_STORAGE_KEY = "smith-recent-directories"
 export const RECENT_PROJECTS_LIMIT = 8
 // Stored name: do not change.
-export const AGENT_DONE_SOUND_ENABLED_STORAGE_KEY = "pico-session-done-sound"
+export const AGENT_DONE_SOUND_ENABLED_STORAGE_KEY = "smith-session-done-sound"
 // Stored name: do not change.
 export const AGENT_DONE_DESKTOP_NOTIFICATIONS_ENABLED_STORAGE_KEY =
-  "pico-session-done-desktop-notifications"
-export const HIDE_TOOL_BLOCKS_STORAGE_KEY = "pico-hide-tools"
-export const CENTER_MESSAGES_STORAGE_KEY = "pico-center-messages"
-export const AUTO_SCROLL_ENABLED_STORAGE_KEY = "pico-auto-scroll"
-export const RIGHT_SIDEBAR_OPEN_STORAGE_KEY = "pico-right-sidebar-open"
+  "smith-session-done-desktop-notifications"
+export const HIDE_TOOL_BLOCKS_STORAGE_KEY = "smith-hide-tools"
+export const CENTER_MESSAGES_STORAGE_KEY = "smith-center-messages"
+export const AUTO_SCROLL_ENABLED_STORAGE_KEY = "smith-auto-scroll"
+export const RIGHT_SIDEBAR_OPEN_STORAGE_KEY = "smith-right-sidebar-open"
 export const RIGHT_SIDEBAR_ACTIVE_TAB_STORAGE_KEY =
-  "pico-right-sidebar-active-tab"
-export const RIGHT_SIDEBAR_WIDTHS_STORAGE_KEY = "pico-right-sidebar-widths"
+  "smith-right-sidebar-active-tab"
+export const RIGHT_SIDEBAR_WIDTHS_STORAGE_KEY = "smith-right-sidebar-widths"
 export const RIGHT_SIDEBAR_FILE_TREE_WIDTH_STORAGE_KEY =
-  "pico-right-sidebar-file-tree-width"
+  "smith-right-sidebar-file-tree-width"
 export const RIGHT_SIDEBAR_HISTORY_HEIGHT_STORAGE_KEY =
-  "pico-right-sidebar-history-height"
+  "smith-right-sidebar-history-height"
 export const RIGHT_SIDEBAR_HISTORY_TAB_STORAGE_KEY =
-  "pico-right-sidebar-history-tab"
-export const AGENT_SECTIONS_OPEN_STORAGE_KEY = "pico-agent-sections-open"
-export const TERMINAL_PANEL_OPEN_STORAGE_KEY = "pico-terminal-panel-open"
-export const TERMINAL_PANEL_HEIGHT_STORAGE_KEY = "pico-terminal-panel-height"
-export const TERMINAL_TABS_STORAGE_KEY = "pico-terminal-tabs"
-export const JOB_FOCUS_SEEN_STORAGE_KEY = "pico-job-focus-seen"
-export const JOBS_SEEN_STORAGE_KEY = "pico-jobs-seen"
-export const QUEUE_COLLAPSED_STORAGE_KEY = "pico-queue-collapsed"
-const PROMPT_DRAFTS_STORAGE_KEY = "pico-prompt-drafts"
-export const VIEWER_CONTEXT_STORAGE_KEY = "pico-context-id"
+  "smith-right-sidebar-history-tab"
+export const AGENT_SECTIONS_OPEN_STORAGE_KEY = "smith-agent-sections-open"
+export const TERMINAL_PANEL_OPEN_STORAGE_KEY = "smith-terminal-panel-open"
+export const TERMINAL_PANEL_HEIGHT_STORAGE_KEY = "smith-terminal-panel-height"
+export const TERMINAL_TABS_STORAGE_KEY = "smith-terminal-tabs"
+export const JOB_FOCUS_SEEN_STORAGE_KEY = "smith-job-focus-seen"
+export const JOBS_SEEN_STORAGE_KEY = "smith-jobs-seen"
+export const QUEUE_COLLAPSED_STORAGE_KEY = "smith-queue-collapsed"
+const PROMPT_DRAFTS_STORAGE_KEY = "smith-prompt-drafts"
+export const VIEWER_CONTEXT_STORAGE_KEY = "smith-context-id"
 
 export function createContextId() {
   if (

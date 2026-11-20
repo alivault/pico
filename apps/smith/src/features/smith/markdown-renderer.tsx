@@ -9,9 +9,9 @@ import remarkGfm from "remark-gfm"
 import { CheckIcon, CopyIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { HighlightedCode } from "@/features/pico/highlighted-code"
-import type { HighlightResponse } from "@/lib/pico/api"
-import { hubUrl } from "@/lib/pico/machine"
+import { HighlightedCode } from "@/features/smith/highlighted-code"
+import type { HighlightResponse } from "@/lib/smith/api"
+import { hubUrl } from "@/lib/smith/machine"
 import { cn } from "@/lib/utils"
 
 const highlightCache = new Map<
@@ -75,7 +75,7 @@ function MarkdownAnchor({
   node: _node,
   ...props
 }: MarkdownAnchorProps) {
-  // Web links open in a new tab, so the user does not leave Pico. App links
+  // Web links open in a new tab, so the user does not leave Smith. App links
   // (as obsidian:) and footnote links stay in the page.
   const external = href ? WEB_LINK_PATTERN.test(href) : false
   return (

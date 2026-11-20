@@ -1,11 +1,11 @@
 import { homedir } from "node:os"
 import { join, resolve } from "node:path"
 
-declare const PICO_VERSION: string
+declare const SMITH_VERSION: string
 
 /** The server version, injected at build time. */
 export const VERSION: string =
-  typeof PICO_VERSION === "string" ? PICO_VERSION : "0.0.0-dev"
+  typeof SMITH_VERSION === "string" ? SMITH_VERSION : "0.0.0-dev"
 
 /** Version of the HTTP/SSE contract with the web client. 2: sessions became agents. */
 export const API_CONTRACT_VERSION = 2
@@ -16,7 +16,7 @@ export const SERVER_PROTOCOL_VERSION = 3
 export const DEFAULT_PORT = 3141
 
 export type ServerPaths = {
-  /** Pico's own data: the durable database, settings, and server state. */
+  /** Smith's own data: the durable database, settings, and server state. */
   dataDir: string
   database: string
   /** The full-text index of the conversations; it can be built again. */
@@ -38,14 +38,14 @@ export type ServerPaths = {
 }
 
 export function defaultDataDir() {
-  const fromEnv = process.env.PICO_HOME?.trim()
-  return fromEnv ? resolve(fromEnv) : join(homedir(), ".pico")
+  const fromEnv = process.env.SMITH_HOME?.trim()
+  return fromEnv ? resolve(fromEnv) : join(homedir(), ".smith")
 }
 
 export function serverPaths(dataDir: string, webDir?: string): ServerPaths {
   return {
     dataDir,
-    database: join(dataDir, "pico.sqlite"),
+    database: join(dataDir, "smith.sqlite"),
     searchIndex: join(dataDir, "search.sqlite"),
     settingsFile: join(dataDir, "settings.json"),
     sidebarFile: join(dataDir, "sidebar.json"),

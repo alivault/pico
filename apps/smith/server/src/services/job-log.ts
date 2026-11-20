@@ -121,7 +121,7 @@ export class JobLogWriter {
       writeSync(this.#fd, buffer)
       this.#bytes += buffer.length
     } catch (error) {
-      console.warn("[pico] could not write a job log:", error)
+      console.warn("[smith] could not write a job log:", error)
     }
   }
 
@@ -130,7 +130,7 @@ export class JobLogWriter {
       closeSync(this.#fd!)
       renameSync(this.#path, this.#older)
     } catch (error) {
-      console.warn("[pico] could not rotate a job log:", error)
+      console.warn("[smith] could not rotate a job log:", error)
     }
     this.#bytes = 0
     try {
@@ -138,7 +138,7 @@ export class JobLogWriter {
     } catch (error) {
       // No log from here on; the job goes on.
       this.#fd = undefined
-      console.warn("[pico] could not open a job log:", error)
+      console.warn("[smith] could not open a job log:", error)
     }
   }
 

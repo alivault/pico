@@ -5,12 +5,12 @@
  * the same as the content that the editor started from.
  */
 import {
-  createPicoStore,
+  createSmithStore,
   setStoreState,
   shallow,
   useSelector,
-  type PicoStore,
-} from "@/features/pico/tanstack-store-utils"
+  type SmithStore,
+} from "@/features/smith/tanstack-store-utils"
 
 export type ProjectFileEdit = {
   cwd: string
@@ -26,12 +26,12 @@ export type ProjectFileEdit = {
 
 type ProjectFileEditsState = Record<string, ProjectFileEdit>
 
-const stores = new Map<string, PicoStore<ProjectFileEditsState>>()
+const stores = new Map<string, SmithStore<ProjectFileEditsState>>()
 
 function editStore(machineId: string) {
   let store = stores.get(machineId)
   if (!store) {
-    store = createPicoStore<ProjectFileEditsState>({})
+    store = createSmithStore<ProjectFileEditsState>({})
     stores.set(machineId, store)
   }
   return store

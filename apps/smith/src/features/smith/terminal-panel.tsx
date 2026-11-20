@@ -1,8 +1,8 @@
 import * as React from "react"
 import {
   takePendingJobTerminals,
-  usePicoEvent,
-} from "@/features/pico/agent/events"
+  useSmithEvent,
+} from "@/features/smith/agent/events"
 import type { FitAddon } from "@xterm/addon-fit"
 import type {
   IDisposable,
@@ -45,7 +45,7 @@ import {
   jobPrompt,
   useAgentJobs,
   type AgentJob,
-} from "@/features/pico/agent/job-state"
+} from "@/features/smith/agent/job-state"
 import {
   Dialog,
   DialogContent,
@@ -56,22 +56,22 @@ import {
 } from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { formatDisplayPath } from "@/features/pico/app-shell-common"
+import { formatDisplayPath } from "@/features/smith/app-shell-common"
 import {
   appShortcut,
   matchesShortcutEvent,
-} from "@/features/pico/keyboard-shortcuts"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { readStoredTerminalTabs, rememberStoredTerminalTabs } from "@/lib/pico"
-import { rememberJobSeen } from "@/lib/pico/storage"
-import { machineOfflineLabel } from "@/lib/pico/machine"
-import type { TerminalCreateResponse, TerminalEvent } from "@/lib/pico/api"
+} from "@/features/smith/keyboard-shortcuts"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { readStoredTerminalTabs, rememberStoredTerminalTabs } from "@/lib/smith"
+import { rememberJobSeen } from "@/lib/smith/storage"
+import { machineOfflineLabel } from "@/lib/smith/machine"
+import type { TerminalCreateResponse, TerminalEvent } from "@/lib/smith/api"
 import {
   appliedThemeClassColorMode,
   type ResolvedThemeMode,
-} from "@/lib/pico/themes"
+} from "@/lib/smith/themes"
 import { cn } from "@/lib/utils"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 type TerminalCreateData = Extract<TerminalCreateResponse, { ok: true }>
 
@@ -329,7 +329,7 @@ function terminalStatusDetail(status: TerminalStatus) {
     case "idle":
       return "This terminal has not started yet."
     case "connecting":
-      return "Pico is connecting to the terminal process."
+      return "Smith is connecting to the terminal process."
     case "connected":
       return status.shell
         ? `The terminal is connected and running ${status.shell}.`
@@ -1066,7 +1066,7 @@ export function TerminalTabPane({
     }
     const observer = new MutationObserver(applyTheme)
     observer.observe(document.documentElement, {
-      attributeFilter: ["class", "data-pico-theme-mode"],
+      attributeFilter: ["class", "data-smith-theme-mode"],
       attributes: true,
     })
     applyTheme()
@@ -1375,7 +1375,7 @@ export function TerminalPanel({
     })
   }
 
-  usePicoEvent("pico:open-job-terminal", () => {
+  useSmithEvent("smith:open-job-terminal", () => {
     for (const jobId of takePendingJobTerminals(agentId)) showJobTab(jobId)
   })
   React.useEffect(() => {
@@ -1578,7 +1578,7 @@ export function TerminalPanel({
     <section
       data-terminal-panel="true"
       className={cn(
-        "pico-terminal-panel flex h-full min-h-0 w-full min-w-0 flex-col bg-background",
+        "smith-terminal-panel flex h-full min-h-0 w-full min-w-0 flex-col bg-background",
         className
       )}
       onKeyDownCapture={(event) => {

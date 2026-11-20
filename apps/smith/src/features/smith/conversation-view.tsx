@@ -21,19 +21,19 @@ import type {
   ConversationImage,
   ConversationItem,
   PromptImage,
-} from "@/lib/pico"
-import { sameConversationImages } from "@/lib/pico/sync"
+} from "@/lib/smith"
+import { sameConversationImages } from "@/lib/smith/sync"
 import {
   CodeBlock,
   copyTextToClipboard,
   MarkdownBlock,
-} from "@/features/pico/markdown-renderer"
-import { ImageLightbox } from "@/features/pico/image-lightbox"
+} from "@/features/smith/markdown-renderer"
+import { ImageLightbox } from "@/features/smith/image-lightbox"
 import {
   ToolResultImages,
   useConversationImageSrc,
-} from "@/features/pico/tool-result-images"
-import { usePicoDiffThemeOptions } from "@/features/pico/pico-diff-theme"
+} from "@/features/smith/tool-result-images"
+import { useSmithDiffThemeOptions } from "@/features/smith/smith-diff-theme"
 import {
   Collapsible,
   CollapsibleContent,
@@ -48,18 +48,18 @@ import {
   toolArgsAreIncompleteJsonObject,
   toolCategoryFromTool,
   toolCouldBecomeExploreFromTool,
-} from "@/lib/pico/tool-classification"
+} from "@/lib/smith/tool-classification"
 import { cn } from "@/lib/utils"
-import "@/features/pico/agent/register"
-import { toolRenderer } from "@/features/pico/tool-renderers/registry"
-import { useMachineId } from "@/lib/pico/machine-context"
+import "@/features/smith/agent/register"
+import { toolRenderer } from "@/features/smith/tool-renderers/registry"
+import { useMachineId } from "@/lib/smith/machine-context"
 import {
   isLocalAgentId,
   parseAgentNotice,
   type AgentNotice,
   type AgentNoticeTone,
-} from "@/lib/pico/agent-notice"
-import { emitPicoEvent } from "@/features/pico/agent/events"
+} from "@/lib/smith/agent-notice"
+import { emitSmithEvent } from "@/features/smith/agent/events"
 
 export function promptImageKey(
   image: Pick<PromptImage, "previewUrl" | "data">
@@ -1847,7 +1847,7 @@ function EditDiffBlock({
   isBorderless?: boolean
   patch: string
 }) {
-  const themeOptions = usePicoDiffThemeOptions()
+  const themeOptions = useSmithDiffThemeOptions()
 
   return (
     <div
@@ -2479,7 +2479,7 @@ const CompactionBlockCard = React.memo(function CompactionBlockCard({
 
 /**
  * A user message, or a notice from another agent or a job (see
- * `lib/pico/agent-notice.ts`), which shows as a compact card.
+ * `lib/smith/agent-notice.ts`), which shows as a compact card.
  */
 export const UserMessageCard = React.memo(function UserMessageCard({
   item,
@@ -2582,7 +2582,7 @@ function AgentNoticeCard({
             <button
               type="button"
               className="shrink-0 cursor-pointer rounded-sm font-medium whitespace-nowrap underline-offset-2 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
-              onClick={() => emitPicoEvent("pico:open-agent", { agentId })}
+              onClick={() => emitSmithEvent("smith:open-agent", { agentId })}
             >
               {agentId}
             </button>

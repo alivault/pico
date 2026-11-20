@@ -4,14 +4,14 @@ Status: implemented in four commits (`46cb0ff`, `d5fa1bb`, `f516ae9`, and this n
 
 ## Problem
 
-The web client treats the machine as an ambient global. `pageMachineId` in `lib/pico/machine.ts` is a module variable, and these parts read it implicitly:
+The web client treats the machine as an ambient global. `pageMachineId` in `lib/smith/machine.ts` is a module variable, and these parts read it implicitly:
 
 - `apiUrl(path, machineId = pageMachineId)` adds `/m/<id>/` to each request. `fetchJson`, `buildRequestUrl`, the `/events` EventSource, and the terminal WebSocket all go through it.
 - `machineStorageKey` adds `@<id>` to the keys in `MACHINE_SCOPED_KEYS`.
 - `offline-prompt-queue.ts` selects its IndexedDB by `activeMachineId()`.
 - `machine-store.ts` sets the global offline flag (`setActiveMachineOffline`) for the active machine only.
 
-Query keys, session IDs, directory paths, and in-memory stores do not hold a machine ID. A path such as `/Users/Ali/code/pico` can exist on two machines. To prevent mixed data, the route gives each machine its own `QueryClient` and mounts a new `PicoAppShell` (`key={machine}`) at each switch. `fetchJson` uses a machine epoch to stop a request that started for the old machine: it never settles.
+Query keys, session IDs, directory paths, and in-memory stores do not hold a machine ID. A path such as `/Users/Ali/code/smith` can exist on two machines. To prevent mixed data, the route gives each machine its own `QueryClient` and mounts a new `SmithAppShell` (`key={machine}`) at each switch. `fetchJson` uses a machine epoch to stop a request that started for the old machine: it never settles.
 
 Results:
 
@@ -33,7 +33,7 @@ Non-goals:
 
 ### `MachineClient`
 
-One object for each machine, from a registry (`lib/pico/machine-client.ts`):
+One object for each machine, from a registry (`lib/smith/machine-client.ts`):
 
 ```ts
 type MachineClient = {
@@ -55,7 +55,7 @@ function machineClient(machineId: string): MachineClient
 ### Keys
 
 - Session identity: `SessionRef = { machineId, sessionId }`, with a string form `sessionKey(ref)`. For the local machine, the string form is the plain session ID, so that pinned sessions, drafts, and unread state stay readable.
-- Query keys: `["pico", machineId, ...]`. Put all keys in `picoQueryKeys`. There are inline keys today in `profiles.tsx`, `app-shell-auth-dialog.tsx`, `agent-settings-dialog.tsx`, `preview.tsx`, `agent/shared.tsx`, `app-shell.tsx`, and `use-app-shell-session-mutations.ts`.
+- Query keys: `["smith", machineId, ...]`. Put all keys in `smithQueryKeys`. There are inline keys today in `profiles.tsx`, `app-shell-auth-dialog.tsx`, `agent-settings-dialog.tsx`, `preview.tsx`, `agent/shared.tsx`, `app-shell.tsx`, and `use-app-shell-session-mutations.ts`.
 - Storage: `client.storageKey(key)` gives the same strings as `machineStorageKey` today (plain for local, `key@<id>` for remote).
 
 ### Connections
@@ -64,7 +64,7 @@ A `MachineConnection` for each machine owns its `/events` EventSource, its last 
 
 ### Shell
 
-There is one `PicoAppShell`, with no `key={machine}`. The URL (`?machine=&session=`) selects the shown `SessionRef`. Per-machine state (session store, conversation, sidebar data, right sidebar data, terminals) is in stores keyed by machine. Window-level state (layout, dialogs, display settings, composer drafts keyed by `SessionRef`) is global.
+There is one `SmithAppShell`, with no `key={machine}`. The URL (`?machine=&session=`) selects the shown `SessionRef`. Per-machine state (session store, conversation, sidebar data, right sidebar data, terminals) is in stores keyed by machine. Window-level state (layout, dialogs, display settings, composer drafts keyed by `SessionRef`) is global.
 
 ## Phases
 
@@ -87,7 +87,7 @@ Done when: no call site uses `apiUrl` or `apiInput` without a machine.
 
 ### Phase 2: Machine in keys and storage
 
-- Add `machineId` to all `picoQueryKeys` and move the inline keys into it.
+- Add `machineId` to all `smithQueryKeys` and move the inline keys into it.
 - Use one shared `QueryClient` for all machines, and remove `queryClientForMachine`. With machine IDs in the keys, the shared cache keeps the data of each machine apart, and a switch back still shows cached data at once.
 - Replace `machineStorageKey` with `client.storageKey`. Keep the string format.
 - `offline-prompt-queue.ts` takes the machine as an argument. The database names stay the same.
@@ -106,7 +106,7 @@ Done when: nothing calls `onMachineSwitch` or `onBeforeMachineSwitch`.
 
 ### Phase 4: One shell
 
-- Move the per-machine stores that `PicoAppShell` creates in refs (`sessionStore`, `rightSidebarStore`, `awaitingFirstTurnStore`, `pendingMessagesStore`, `pendingDraftPromptStore`, `sidebarStore`, and others) into a `MachineWorkspace` record keyed by machine. Make the window-level stores (`appUiStore`, `displaySettingsStore`, composer draft stores keyed by `SessionRef`) global.
+- Move the per-machine stores that `SmithAppShell` creates in refs (`sessionStore`, `rightSidebarStore`, `awaitingFirstTurnStore`, `pendingMessagesStore`, `pendingDraftPromptStore`, `sidebarStore`, and others) into a `MachineWorkspace` record keyed by machine. Make the window-level stores (`appUiStore`, `displaySettingsStore`, composer draft stores keyed by `SessionRef`) global.
 - Remove `key={machine}` from the route. A machine switch is now a view change, like a session switch.
 - Remove `setPageMachine`, the machine epoch, the never-settle branch in `fetchJson`, `pendingAction`, `takePendingMachineAction`, and `openMachine`'s handoff. `openMachine(id, { sessionId })` becomes a navigation. "New session in a directory of machine X" becomes a direct call to `createSession({ machineId, directory })`.
 - Show other machines in the sidebar with the same components as the shown machine, fed by summaries until phase 5.
@@ -144,7 +144,7 @@ The goal is the same as above: the client has no "current machine" global, each 
 
 ### One shell for each machine, kept alive (phase 4)
 
-The plan moved about twenty stores of `PicoAppShell` into records keyed by machine, with one shell for all machines. The implementation keeps one `PicoAppShell` for each machine that the page opened, in a React `Activity` (`routes/index.tsx`):
+The plan moved about twenty stores of `SmithAppShell` into records keyed by machine, with one shell for all machines. The implementation keeps one `SmithAppShell` for each machine that the page opened, in a React `Activity` (`routes/index.tsx`):
 
 - The URL selects the shown machine. The other shells are in `<Activity mode="hidden">`. They keep all their state (composer text and images, right sidebar, open files, conversation scroll). Their effects stop, so their event streams close and their window listeners go away, as before.
 - This is the Herdr model: one pane for each machine, all kept alive, one shown.

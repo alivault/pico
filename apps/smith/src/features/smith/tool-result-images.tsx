@@ -1,9 +1,9 @@
 import * as React from "react"
 
-import type { ConversationImage } from "@/lib/pico"
-import { machineApiUrl } from "@/lib/pico/machine"
-import { useMachineId } from "@/lib/pico/machine-context"
-import { ImageLightbox } from "@/features/pico/image-lightbox"
+import type { ConversationImage } from "@/lib/smith"
+import { machineApiUrl } from "@/lib/smith/machine"
+import { useMachineId } from "@/lib/smith/machine-context"
+import { ImageLightbox } from "@/features/smith/image-lightbox"
 
 /** The `src` of a conversation image on the machine of the conversation. */
 export function useConversationImageSrc() {

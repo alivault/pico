@@ -147,7 +147,7 @@ export class MachineProxy {
       "content-type": entry.type,
       "content-length": entry.body.length,
       "cache-control": "no-store",
-      "x-pico-offline": "1",
+      "x-smith-offline": "1",
     })
     response.end(request.method === "HEAD" ? undefined : entry.body)
     return true

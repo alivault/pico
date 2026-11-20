@@ -1,27 +1,27 @@
 import * as React from "react"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import {
   doneEventLabel,
   getCurrentAgentTitleFromState,
   agentNotificationKey,
   shallowRecordEqual,
-} from "@/features/pico/app-shell-common"
-import type { AppShellNotificationState } from "@/features/pico/app-shell-types"
+} from "@/features/smith/app-shell-common"
+import type { AppShellNotificationState } from "@/features/smith/app-shell-types"
 import {
   playAgentDoneSound,
   primeAgentDoneSound,
   showAgentDoneDesktopNotification,
-} from "@/features/pico/agent-done-notifications"
-import type { AppShellSidebarStore } from "@/features/pico/app-shell-sidebar-store"
+} from "@/features/smith/agent-done-notifications"
+import type { AppShellSidebarStore } from "@/features/smith/app-shell-sidebar-store"
 import {
   setStoreField,
   useSelector,
-  type PicoStore,
-} from "@/features/pico/tanstack-store-utils"
-import type { AgentState } from "@/lib/pico"
-import type { AgentDoneEvent } from "@/lib/pico/api"
-import { hasPushSubscription } from "@/features/pico/agent/push"
+  type SmithStore,
+} from "@/features/smith/tanstack-store-utils"
+import type { AgentState } from "@/lib/smith"
+import type { AgentDoneEvent } from "@/lib/smith/api"
+import { hasPushSubscription } from "@/features/smith/agent/push"
 
 /**
  * Shows the desktop notification for a finished agent. Web Push already
@@ -67,7 +67,7 @@ function getWindowTitleUnreadCount(
   return unreadKeys.size
 }
 
-function setPicoDocumentTitle({
+function setSmithDocumentTitle({
   backgroundCurrentAgentUnreadKey,
   currentPageTitle,
   agentWorking,
@@ -103,9 +103,9 @@ export function AppShellWindowEffectsHost({
 }: {
   isAgentViewLoading: boolean
   loadingDisplayAgentTitle: string
-  notificationStore: PicoStore<AppShellNotificationState>
+  notificationStore: SmithStore<AppShellNotificationState>
   onSelectAgent: (nextAgentId?: string) => void
-  agentStore: PicoStore<AgentState>
+  agentStore: SmithStore<AgentState>
   sidebarStore: AppShellSidebarStore
 }) {
   const agentWindowState = useSelector(
@@ -145,7 +145,7 @@ export function AppShellWindowEffectsHost({
   const currentPageTitle = isAgentViewLoading
     ? loadingDisplayAgentTitle
     : agentWindowState.uiTitle ||
-      (currentAgentTitle !== "New agent" ? currentAgentTitle : "Pico")
+      (currentAgentTitle !== "New agent" ? currentAgentTitle : "Smith")
   const onConsumeAgentDoneEvents = (ids: Array<string>) => {
     const consumedIds = new Set(ids)
     setStoreField(notificationStore, "agentDoneEvents", (current) =>
@@ -218,7 +218,7 @@ function AppShellWindowEffects({
   const processedAgentDoneEventIdsRef = React.useRef<Set<string>>(new Set())
 
   const updateDocumentTitle = () => {
-    setPicoDocumentTitle({
+    setSmithDocumentTitle({
       ...titleSnapshotRef.current,
       backgroundCurrentAgentUnreadKey:
         backgroundCurrentAgentUnreadKeyRef.current,
@@ -310,7 +310,7 @@ function AppShellWindowEffects({
         (event.agentKey && activeAgentKey && event.agentKey === activeAgentKey)
       )
       const label = doneEventLabel(event)
-      const body = event.cwd || agentCwd || "Open Pico to continue"
+      const body = event.cwd || agentCwd || "Open Smith to continue"
       const tag = event.agentPath || event.agentId || event.id
       const isPageForeground = isPageForegroundRef.current
 

@@ -1,68 +1,68 @@
-# Pico
+# Smith
 
 A web workspace for durable [Pi](https://www.npmjs.com/package/@earendil-works/pi-durable)
 coding agents. One Node server hosts the agent runtime and serves the
 React web app.
 
-![Pico workspace where an agent runs two subagents, each in its own worktree](https://pico.aliabbas.net/screenshots/pico-workspace.png)
+![Smith workspace where an agent runs two subagents, each in its own worktree](https://smith.aliabbas.net/screenshots/smith-workspace.png)
 
-![Pico workspace in light mode with subagents in the sidebar and the Agent tab](https://pico.aliabbas.net/screenshots/pico-workspace-alt.png)
+![Smith workspace in light mode with subagents in the sidebar and the Agent tab](https://smith.aliabbas.net/screenshots/smith-workspace-alt.png)
 
-| Dark mobile browser                                                                        | Light mobile browser                                                                            |
-| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| ![Pico mobile browser in dark mode](https://pico.aliabbas.net/screenshots/pico-mobile.png) | ![Pico mobile browser in light mode](https://pico.aliabbas.net/screenshots/pico-mobile-alt.png) |
+| Dark mobile browser                                                                           | Light mobile browser                                                                               |
+| --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| ![Smith mobile browser in dark mode](https://smith.aliabbas.net/screenshots/smith-mobile.png) | ![Smith mobile browser in light mode](https://smith.aliabbas.net/screenshots/smith-mobile-alt.png) |
 
 ## Requirements
 
 - Node.js 22.19 or later
 - pnpm 10.33 (only to run from source)
 - Git and a shell
-- Provider credentials in `~/.pi/agent/auth.json`, or set them in Pico
+- Provider credentials in `~/.pi/agent/auth.json`, or set them in Smith
 
 ## Install
 
 ```sh
-npm install -g @alivault/pico
-pico-app
+npm install -g @alivault/smith
+smith
 ```
 
-Or try it without a global install: `npx @alivault/pico`.
+Or try it without a global install: `npx @alivault/smith`.
 
-### Run Pico
+### Run Smith
 
-`pico-app` runs Pico in this terminal and opens
-`http://127.0.0.1:3141`. Pico stops when you close the terminal. To keep it
+`smith` runs Smith in this terminal and opens
+`http://127.0.0.1:3141`. Smith stops when you close the terminal. To keep it
 running in the background, use `--detach`:
 
 ```sh
-pico-app serve --detach       # output goes to ~/.pico/server.log
-pico-app status               # is Pico running? --json for scripts
-pico-app stop --wait          # stop after active turns finish
-pico-app stop --pty-host      # also end terminals and jobs
-pico-app restart              # restart at once; cut-off turns continue
-pico-app --port 3141 --no-open
-pico-app --data-dir PATH      # default: ~/.pico
-pico-app import-pi            # import Pi sessions as agents (stop Pico first)
+smith serve --detach       # output goes to ~/.smith/server.log
+smith status               # is Smith running? --json for scripts
+smith stop --wait          # stop after active turns finish
+smith stop --pty-host      # also end terminals and jobs
+smith restart              # restart at once; cut-off turns continue
+smith --port 3141 --no-open
+smith --data-dir PATH      # default: ~/.smith
+smith import-pi            # import Pi sessions as agents (stop Smith first)
 ```
 
-Pico does not start again after a reboot. Run `pico-app serve --detach`
+Smith does not start again after a reboot. Run `smith serve --detach`
 again, or start it from a service manager without `--detach`.
 
 ### Update
 
 ```sh
-pico-app update
+smith update
 ```
 
-This installs the newest version where Pico is installed (the same npm
-prefix, for example `~/.local`), and restarts Pico.
-`pico-app update --check` only looks, `--no-restart` leaves the restart to
-you, and `pico-app update 2.8.0` installs a given version.
+This installs the newest version where Smith is installed (the same npm
+prefix, for example `~/.local`), and restarts Smith.
+`smith update --check` only looks, `--no-restart` leaves the restart to
+you, and `smith update 2.8.0` installs a given version.
 
-Pico also looks for a new version every six hours. The sidebar shows it, and
+Smith also looks for a new version every six hours. The sidebar shows it, and
 Settings, Server can install it. There you can also turn on preview releases
-(`pico-app channel set preview`, the npm tag `next`) or turn off the check.
-Pico that runs from source, or that pnpm or npx installed, shows the command to
+(`smith channel set preview`, the npm tag `next`) or turn off the check.
+Smith that runs from source, or that pnpm or npx installed, shows the command to
 run instead.
 
 ## Run from source
@@ -77,11 +77,11 @@ Open `http://127.0.0.1:3141`. Useful commands:
 
 ```sh
 pnpm start --no-open --port 3141
-pnpm start --data-dir PATH   # default: ~/.pico
+pnpm start --data-dir PATH   # default: ~/.smith
 pnpm start status
 pnpm start stop --wait       # let active turns finish first
 pnpm start restart           # load a new build at once
-pnpm start import-pi         # import Pi sessions as agents (stop Pico first)
+pnpm start import-pi         # import Pi sessions as agents (stop Smith first)
 ```
 
 ## What it does
@@ -91,12 +91,12 @@ pnpm start import-pi         # import Pi sessions as agents (stop Pico first)
 - **Workspace.** Git changes and diffs, file browser, syntax highlighting, and
   terminals.
 - **Terminals that survive restarts.** Terminals and background jobs run in a
-  small `pico-pty-host` process (one for each data directory). When the Pico
+  small `smith-pty-host` process (one for each data directory). When the Smith
   server restarts, it finds them again with their output. The host stops by
   itself when no terminal runs and no server is connected for 10 minutes;
   with no server for 12 hours, it also ends shells that run nothing. To stop
-  Pico and the host: `pico-app stop --pty-host` (terminals and jobs end too).
-  `pico-app serve --no-pty-host` keeps terminals in the server process.
+  Smith and the host: `smith stop --pty-host` (terminals and jobs end too).
+  `smith serve --no-pty-host` keeps terminals in the server process.
 - **Agent tools.** Todo lists, questions to the user, background jobs that
   report their exit, terminals, subagents in git worktrees, browser
   automation, code mode, web access, and MCP.
@@ -115,7 +115,7 @@ pnpm start import-pi         # import Pi sessions as agents (stop Pico first)
 - **Search across agents.** The agents dialog also finds messages: the text
   of every agent, also archived ones, on all machines. Agents search past
   work with the `agents` tool (`search`, then `read` with `entry`). The index
-  is `~/.pico/search.sqlite`. Pico builds it in the background, and you can
+  is `~/.smith/search.sqlite`. Smith builds it in the background, and you can
   delete it at any time.
 
 Pi skills, prompt templates, project instructions, and credentials are used.
@@ -123,38 +123,38 @@ Legacy Pi extensions are not loaded.
 
 ## Remote access
 
-Pico has no login. Anyone who can reach it can run commands as your user.
+Smith has no login. Anyone who can reach it can run commands as your user.
 Use Tailscale and never expose it to the public internet.
 
 ```sh
-pico-app --host <tailscale-ip> --no-open
+smith --host <tailscale-ip> --no-open
 ```
 
 Use Tailscale Serve for HTTPS (needed for push notifications).
 
 ## Multiple machines
 
-One Pico can show the agents of other computers, for example a build
-server. Each machine runs its own Pico on its `127.0.0.1`. The Pico that you
+One Smith can show the agents of other computers, for example a build
+server. Each machine runs its own Smith on its `127.0.0.1`. The Smith that you
 open (the hub) connects to them over SSH and shows them in the sidebar.
 Agents, terminals, and jobs run on their own machine and continue when the
 hub goes offline.
 
 ```sh
-pico-app machine add ali@workbox      # SSH target, alias, or Tailscale name
-pico-app machine list
-pico-app machine status workbox
-pico-app machine reconnect workbox    # after a password, key, or check prompt
-pico-app machine disable workbox      # stop connecting; enable connects again
-pico-app machine remove workbox       # Pico keeps running on workbox
+smith machine add ali@workbox      # SSH target, alias, or Tailscale name
+smith machine list
+smith machine status workbox
+smith machine reconnect workbox    # after a password, key, or check prompt
+smith machine disable workbox      # stop connecting; enable connects again
+smith machine remove workbox       # Smith keeps running on workbox
 ```
 
 `machine add` connects in your terminal, so SSH can ask for a password or a
-host key. It finds Node.js 22.19+ and Pico on the remote machine, and asks
-before it installs Pico (with npm, into `~/.local`). The hub then uses your
+host key. It finds Node.js 22.19+ and Smith on the remote machine, and asks
+before it installs Smith (with npm, into `~/.local`). The hub then uses your
 SSH config, keys, and agent with one shared connection. It never asks for
 input; when SSH needs you, the machine shows **Attention** and the command to
-run. Pico does not store passwords or keys, and it copies no settings or
+run. Smith does not store passwords or keys, and it copies no settings or
 credentials to other machines.
 
 Tailscale works: use a MagicDNS name or a `100.x` address as the target,
@@ -165,16 +165,16 @@ hub on localhost or your tailnet. Agents on the hub can use the agent tools
 (`spawn_subagent`, `agents`) with a `machine` argument, for example to start
 a subagent on `workbox`.
 
-## Control Pico from scripts and other agents
+## Control Smith from scripts and other agents
 
-`pico-app agent` starts, messages, and waits for agents of a running Pico:
+`smith agent` starts, messages, and waits for agents of a running Smith:
 
 ```sh
-id=$(pico-app agent start . "Find why the tests are slow")
-pico-app agent send "$id" "Now fix it" --wait
-pico-app agent show "$id"
-pico-app agent list
-pico-app agent search "websocket reconnect"   # the messages of all agents
+id=$(smith agent start . "Find why the tests are slow")
+smith agent send "$id" "Now fix it" --wait
+smith agent show "$id"
+smith agent list
+smith agent search "websocket reconnect"   # the messages of all agents
 ```
 
 `.` is the directory; without it, the agent works in the current directory.
@@ -184,21 +184,21 @@ interrupts: a busy agent gets the message after its current turn, unless you
 add `--steer`. A goal or message of `-` comes from stdin. With `--wait`,
 `send` and `start` print the answer; the exit code is 0 when the agent is
 done, 1 when it failed or stopped, 2 when it waits for you, and 3 when
-`--timeout` passes first. `--json` prints JSON. `pico-app agent wait ID`
-waits for an agent, and `pico-app agent stop ID` stops its current turn. Run
-`pico-app agent help` for all options.
+`--timeout` passes first. `--json` prints JSON. `smith agent wait ID`
+waits for an agent, and `smith agent stop ID` stops its current turn. Run
+`smith agent help` for all options.
 
-Pico is also an MCP server, at `/mcp`. Agents outside Pico, such as Claude
-Code and Codex, can then list, start, message, read, wait for, and stop Pico
-agents, and search their messages. `pico-app mcp` prints the address and the commands to add it:
+Smith is also an MCP server, at `/mcp`. Agents outside Smith, such as Claude
+Code and Codex, can then list, start, message, read, wait for, and stop Smith
+agents, and search their messages. `smith mcp` prints the address and the commands to add it:
 
 ```sh
-claude mcp add --transport http pico http://127.0.0.1:3141/mcp
-codex mcp add pico --url http://127.0.0.1:3141/mcp
+claude mcp add --transport http smith http://127.0.0.1:3141/mcp
+codex mcp add smith --url http://127.0.0.1:3141/mcp
 ```
 
-The MCP server has no sign-in, like the rest of Pico: anyone who can reach
-Pico can use it.
+The MCP server has no sign-in, like the rest of Smith: anyone who can reach
+Smith can use it.
 
 ## Development
 
@@ -210,10 +210,10 @@ pnpm build
 
 This is a pnpm monorepo:
 
-- `apps/pico`: the Pico app. Client code is in `apps/pico/src`. Server code
-  is in `apps/pico/server/src`.
+- `apps/smith`: the Smith app. Client code is in `apps/smith/src`. Server code
+  is in `apps/smith/server/src`.
 - `apps/website`: the static site at
-  [pico.aliabbas.net](https://pico.aliabbas.net). Deploy it with
+  [smith.aliabbas.net](https://smith.aliabbas.net). Deploy it with
   `pnpm website:deploy`.
 
 ## License

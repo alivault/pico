@@ -1,9 +1,9 @@
 import * as React from "react"
 
-import { openJobTerminal } from "@/features/pico/agent/events"
-import { useAgentExtensions } from "@/features/pico/agent/agent-extensions"
-import { jobFocusSeen, rememberJobFocusSeen } from "@/lib/pico/storage"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { openJobTerminal } from "@/features/smith/agent/events"
+import { useAgentExtensions } from "@/features/smith/agent/agent-extensions"
+import { jobFocusSeen, rememberJobFocusSeen } from "@/lib/smith/storage"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 /** A background job, as the server's `jobs` state gives it. */
 export type AgentJob = {
@@ -42,7 +42,7 @@ export function useAgentJobs(
 
 /**
  * The one line that tells the user what a job needs, if anything. A wait
- * that Pico only guesses from a prompt-like line is `quiet`: the client shows
+ * that Smith only guesses from a prompt-like line is `quiet`: the client shows
  * it, but does not call the user.
  */
 export function jobPrompt(job: AgentJob | undefined) {

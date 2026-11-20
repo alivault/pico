@@ -3,8 +3,8 @@ import * as React from "react"
 import {
   TerminalTabPane,
   type TerminalStatus,
-} from "@/features/pico/terminal-panel"
-import { useToolRenderContext } from "@/features/pico/tool-renderers/registry"
+} from "@/features/smith/terminal-panel"
+import { useToolRenderContext } from "@/features/smith/tool-renderers/registry"
 import { cn } from "@/lib/utils"
 
 /**

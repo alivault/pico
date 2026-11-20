@@ -70,7 +70,7 @@ function fakeTailscale(
 }
 
 async function stateFile() {
-  return join(await mkdtemp(join(tmpdir(), "pico-ts-serve-")), "serve.json")
+  return join(await mkdtemp(join(tmpdir(), "smith-ts-serve-")), "serve.json")
 }
 
 async function listen(server: Server) {
@@ -96,11 +96,11 @@ void test("tailscaleHttpsHost finds requests through Tailscale Serve over HTTPS"
   )
   assert.equal(
     tailscaleHttpsHost({
-      host: "pico.example.com",
+      host: "smith.example.com",
       "x-forwarded-proto": "https",
       "tailscale-headers-info": "https://tailscale.com/s/serve-headers",
     }),
-    "pico.example.com"
+    "smith.example.com"
   )
   // Plain HTTP, also on a Tailscale name, keeps the plain listener.
   assert.equal(tailscaleHttpsHost({ host: `${HOST}:3141` }), undefined)
@@ -112,7 +112,7 @@ void test("tailscaleHttpsHost finds requests through Tailscale Serve over HTTPS"
   // Another HTTPS proxy is not Tailscale Serve.
   assert.equal(
     tailscaleHttpsHost({
-      host: "pico.example.com",
+      host: "smith.example.com",
       "x-forwarded-proto": "https",
     }),
     undefined
@@ -136,7 +136,7 @@ void test("TailscaleServe adds and removes only its own entries", async () => {
 
   assert.equal(await serve.add(50876, "http://127.0.0.1:50876"), 50876)
   assert.equal(await serve.add(50876, "http://127.0.0.1:50876"), 50876)
-  // The user's entry on the port stays; Pico takes the next free port.
+  // The user's entry on the port stays; Smith takes the next free port.
   assert.equal(await serve.add(50000, "http://127.0.0.1:50000"), 50001)
   assert.deepEqual(tailscale.changes(), [
     "serve --bg --https=50876 http://127.0.0.1:50876",
@@ -149,11 +149,11 @@ void test("TailscaleServe adds and removes only its own entries", async () => {
     ],
   })
 
-  // The user changed this entry: it is no longer Pico's.
+  // The user changed this entry: it is no longer Smith's.
   tailscale.entries.set(50001, "http://127.0.0.1:7777")
   await serve.remove(50876)
   await serve.remove(50001)
-  // Not an entry of Pico.
+  // Not an entry of Smith.
   await serve.remove(443)
   assert.deepEqual(tailscale.changes().slice(2), ["serve --https=50876 off"])
   assert.deepEqual([...tailscale.entries.keys()], [443, 50000, 50001])

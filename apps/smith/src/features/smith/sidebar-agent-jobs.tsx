@@ -1,12 +1,12 @@
 import * as React from "react"
 
 import { TitleTooltip } from "@/components/ui/tooltip"
-import type { AgentJob, AgentListEntry } from "@/lib/pico/api"
+import type { AgentJob, AgentListEntry } from "@/lib/smith/api"
 import {
   parseSeenJobs,
   seenJobsSnapshot,
   subscribeSeenJobs,
-} from "@/lib/pico/storage"
+} from "@/lib/smith/storage"
 import { cn } from "@/lib/utils"
 
 /**

@@ -1,5 +1,5 @@
-import { copyTextToClipboard } from "@/features/pico/markdown-renderer"
-import { toast } from "@/lib/pico/toast"
+import { copyTextToClipboard } from "@/features/smith/markdown-renderer"
+import { toast } from "@/lib/smith/toast"
 
 /** Copy an agent's ID (for example `s168777`), as agents use it in tools. */
 export async function copyAgentId(agentId: string) {

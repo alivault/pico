@@ -1,4 +1,4 @@
-import type { AgentListEntry } from "@/lib/pico/api"
+import type { AgentListEntry } from "@/lib/smith/api"
 
 /**
  * The sidebar order of agents, in three groups:

@@ -1,7 +1,7 @@
 import * as React from "react"
 import { CheckIcon } from "lucide-react"
 
-import type { AgentState, ModelOption } from "@/lib/pico"
+import type { AgentState, ModelOption } from "@/lib/smith"
 
 import {
   Command,
@@ -20,12 +20,15 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { useMachineReadOnly } from "@/features/pico/machine-store"
-import { modelFamilyPrefixes, withoutPrefix } from "@/features/pico/model-label"
+import { useMachineReadOnly } from "@/features/smith/machine-store"
+import {
+  modelFamilyPrefixes,
+  withoutPrefix,
+} from "@/features/smith/model-label"
 import {
   useSelector,
-  type PicoStore,
-} from "@/features/pico/tanstack-store-utils"
+  type SmithStore,
+} from "@/features/smith/tanstack-store-utils"
 
 export type AppShellModelDialogHandle = {
   open: () => void
@@ -66,7 +69,7 @@ export function AppShellModelDialog({
   onSelectModel,
   ref,
 }: {
-  agentStore: PicoStore<AgentState>
+  agentStore: SmithStore<AgentState>
   /** True while the dialog is open, so the app shortcuts stay off. */
   openRef: React.RefObject<boolean>
   onSelectModel: (value: string) => void

@@ -1,5 +1,5 @@
 /**
- * The `pico` extension: the system prompt, built the way the Pi coding agent
+ * The `smith` extension: the system prompt, built the way the Pi coding agent
  * builds it: a preamble, rules, project context (AGENTS.md), skills, and the
  * working directory. Each part is a durable prompt section, so only parts that
  * change are sent again.
@@ -14,7 +14,7 @@ import {
 import type { ResourceCache } from "../core/resources.ts"
 
 const DEFAULT_PREAMBLE =
-  "You are an expert coding assistant operating inside Pico, a coding agent harness built on pi. You help users by reading files, executing commands, editing code, and writing new files."
+  "You are an expert coding assistant operating inside Smith, a coding agent harness built on pi. You help users by reading files, executing commands, editing code, and writing new files."
 
 const TOOL_GUIDELINES: Record<string, string[]> = {
   read: ["Use read to examine files instead of cat or sed."],
@@ -55,7 +55,7 @@ function rules(names: readonly string[]) {
 
 export function createPromptExtension(resources: ResourceCache) {
   return defineExtension({
-    name: "pico",
+    name: "smith",
     sections: [
       section(
         "preamble",

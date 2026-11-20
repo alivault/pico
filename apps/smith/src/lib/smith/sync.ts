@@ -9,8 +9,8 @@ import type {
   StateSyncPayload,
   StreamingBehavior,
   ToolBlock,
-} from "@/lib/pico"
-import { toolCategoryFromTool } from "@/lib/pico/tool-classification"
+} from "@/lib/smith"
+import { toolCategoryFromTool } from "@/lib/smith/tool-classification"
 
 type MessageContentPart = {
   type?: unknown

@@ -73,7 +73,7 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { MarkdownBlock } from "@/features/pico/markdown-renderer"
+import { MarkdownBlock } from "@/features/smith/markdown-renderer"
 import {
   useGitHubLabels,
   useGitHubRepo,
@@ -85,12 +85,12 @@ import {
   type AvailableRepo,
   type IssueActions,
   type IssueState,
-} from "@/features/pico/right-sidebar-issues-data"
-import { GitSectionNote } from "@/features/pico/right-sidebar-section-note"
-import { getErrorMessage } from "@/features/pico/right-sidebar-shared"
+} from "@/features/smith/right-sidebar-issues-data"
+import { GitSectionNote } from "@/features/smith/right-sidebar-section-note"
+import { getErrorMessage } from "@/features/smith/right-sidebar-shared"
 import { useIsMobile } from "@/hooks/use-mobile"
-import type { GhIssueSummary, GhLabel } from "@/lib/pico/api"
-import { toast } from "@/lib/pico/toast"
+import type { GhIssueSummary, GhLabel } from "@/lib/smith/api"
+import { toast } from "@/lib/smith/toast"
 import { cn } from "@/lib/utils"
 
 /** From this panel width, the list and the issue show side by side. */

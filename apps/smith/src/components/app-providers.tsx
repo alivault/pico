@@ -4,7 +4,7 @@ import { ThemeProvider } from "next-themes"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
-import { APPLIED_THEME_CLASSES, APPLIED_THEME_STORAGE_KEY } from "@/lib/pico"
+import { APPLIED_THEME_CLASSES, APPLIED_THEME_STORAGE_KEY } from "@/lib/smith"
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   return (

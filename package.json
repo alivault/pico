@@ -1,19 +1,19 @@
 {
-  "name": "pico-monorepo",
+  "name": "smith-monorepo",
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-only",
   "scripts": {
-    "dev": "pnpm --filter @alivault/pico dev",
-    "build": "pnpm --filter @alivault/pico build",
-    "start": "pnpm --filter @alivault/pico start",
-    "test": "pnpm --filter @alivault/pico test",
-    "check": "pnpm --filter @alivault/pico check",
-    "release": "pnpm --filter @alivault/pico release",
-    "media": "pnpm --filter @alivault/pico media",
-    "og-image": "pnpm --filter @alivault/pico og-image",
-    "website:dev": "pnpm --filter @pico/website run dev",
-    "website:deploy": "pnpm --filter @pico/website run deploy"
+    "dev": "pnpm --filter @alivault/smith dev",
+    "build": "pnpm --filter @alivault/smith build",
+    "start": "pnpm --filter @alivault/smith start",
+    "test": "pnpm --filter @alivault/smith test",
+    "check": "pnpm --filter @alivault/smith check",
+    "release": "pnpm --filter @alivault/smith release",
+    "media": "pnpm --filter @alivault/smith media",
+    "og-image": "pnpm --filter @alivault/smith og-image",
+    "website:dev": "pnpm --filter @smith/website run dev",
+    "website:deploy": "pnpm --filter @smith/website run deploy"
   },
   "devDependencies": {
     "vite-plus": "catalog:"

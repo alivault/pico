@@ -17,12 +17,12 @@ import { Spinner } from "@/components/ui/spinner"
 import {
   useAgentExtensions,
   type AgentExtensionState,
-} from "@/features/pico/agent/agent-extensions"
+} from "@/features/smith/agent/agent-extensions"
 import {
   AGENT_SECTIONS_OPEN_STORAGE_KEY,
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
-} from "@/lib/pico/storage"
+} from "@/lib/smith/storage"
 
 /**
  * The Agent panel: what the selected agent keeps besides its

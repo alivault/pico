@@ -1,6 +1,6 @@
 /**
- * A hub for tests: a normal Pico server whose machines use a transport to a
- * Pico on this computer instead of SSH. The test bundles and runs it.
+ * A hub for tests: a normal Smith server whose machines use a transport to a
+ * Smith on this computer instead of SSH. The test bundles and runs it.
  *
  *   node local-hub.mjs <data-dir> <remote-port> [<web-dir>]
  */
@@ -27,7 +27,7 @@ class LocalTransport implements MachineTransport {
     if (argv[0] === "sh")
       return {
         code: 0,
-        stdout: "os=Test\nnode=/usr/bin v24.0.0\npico=/bin/pico-app\n",
+        stdout: "os=Test\nnode=/usr/bin v24.0.0\nsmith=/bin/smith\n",
         stderr: "",
       }
     if (argv.includes("status")) {
@@ -47,7 +47,7 @@ class LocalTransport implements MachineTransport {
           stderr: "",
         }
       } catch {
-        return { code: 1, stdout: "", stderr: "Pico is not running." }
+        return { code: 1, stdout: "", stderr: "Smith is not running." }
       }
     }
     return { code: 127, stdout: "", stderr: "unknown command" }

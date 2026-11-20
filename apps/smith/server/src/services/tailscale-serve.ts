@@ -1,5 +1,5 @@
 /**
- * Previews over Tailscale Serve. When the user opens Pico at
+ * Previews over Tailscale Serve. When the user opens Smith at
  * `https://<machine>.ts.net/` through Tailscale Serve, a preview listener on
  * plain HTTP is not reachable at `https://<machine>.ts.net:<port>/`. This
  * module adds a Serve entry for the port:
@@ -8,7 +8,7 @@
  *
  * and removes it again with `tailscale serve --https=<port> off`. It records
  * the entries it adds in a file, so the next start removes the entries of a
- * Pico that stopped without cleanup. It changes only the entries that it
+ * Smith that stopped without cleanup. It changes only the entries that it
  * added, and only while they still proxy to the same target.
  */
 import { execFile } from "node:child_process"
@@ -128,7 +128,7 @@ function portUsed(status: ServeStatus, port: number) {
 export class TailscaleServe {
   readonly #stateFile: string
   readonly #run: TailscaleRunner
-  /** Serve entries that this Pico added, by port. */
+  /** Serve entries that this Smith added, by port. */
   readonly #entries = new Map<number, string>()
   /** Entries of an earlier run that could not be removed yet. */
   #stale: Entry[] = []
@@ -178,7 +178,7 @@ export class TailscaleServe {
     })
   }
 
-  /** Remove an entry that this Pico added, if it is still unchanged. */
+  /** Remove an entry that this Smith added, if it is still unchanged. */
   async remove(port: number) {
     await this.#ready
     return this.#serial(async () => {

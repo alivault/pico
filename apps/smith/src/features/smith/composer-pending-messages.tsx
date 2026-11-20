@@ -43,13 +43,13 @@ import {
   QUEUE_COLLAPSED_STORAGE_KEY,
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
-} from "@/lib/pico/storage"
+} from "@/lib/smith/storage"
 import {
   getClipboardImageFiles,
   readFileAsPromptImage,
-} from "@/features/pico/app-shell-utils"
-import { promptImageKey } from "@/features/pico/conversation-view"
-import { parseAgentNotice } from "@/lib/pico/agent-notice"
+} from "@/features/smith/app-shell-utils"
+import { promptImageKey } from "@/features/smith/conversation-view"
+import { parseAgentNotice } from "@/lib/smith/agent-notice"
 import {
   appendQueueRow,
   hasQueueChanges,
@@ -67,7 +67,7 @@ import {
   type QueueEditRow,
   type QueueEditAgent,
   type QueueLane,
-} from "@/features/pico/pending-queue"
+} from "@/features/smith/pending-queue"
 
 export type ComposerPendingMessagesHandle = {
   /**

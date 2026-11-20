@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useWaitingForAnswer } from "@/features/pico/agent/agent-extensions"
+import { useWaitingForAnswer } from "@/features/smith/agent/agent-extensions"
 import {
   ArrowUpIcon,
   FileTextIcon,
@@ -11,56 +11,56 @@ import {
   XIcon,
 } from "lucide-react"
 
-import type { PromptImage, AgentState, StreamingBehavior } from "@/lib/pico"
-import type { CompletionItem } from "@/lib/pico/api"
+import type { PromptImage, AgentState, StreamingBehavior } from "@/lib/smith"
+import type { CompletionItem } from "@/lib/smith/api"
 
 import {
   isComposerFileLineComment,
   type ComposerLineComment,
-} from "@/features/pico/app-shell-composer-state"
-import type { SlashCommandDescriptor } from "@/features/pico/composer-utils"
+} from "@/features/smith/app-shell-composer-state"
+import type { SlashCommandDescriptor } from "@/features/smith/composer-utils"
 import {
   shallow,
   useSelector,
-  type PicoStore,
-} from "@/features/pico/tanstack-store-utils"
+  type SmithStore,
+} from "@/features/smith/tanstack-store-utils"
 
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { ComposerAssistMenu } from "@/features/pico/composer-assist-menu"
+import { ComposerAssistMenu } from "@/features/smith/composer-assist-menu"
 import {
   ComposerContextUsage,
   ComposerModelControls,
-} from "@/features/pico/composer-model-controls"
-import type { ComposerContextUsageStore } from "@/features/pico/context-usage"
+} from "@/features/smith/composer-model-controls"
+import type { ComposerContextUsageStore } from "@/features/smith/context-usage"
 import {
   ComposerPendingMessages,
   type ComposerPendingMessagesHandle,
-} from "@/features/pico/composer-pending-messages"
-import type { PendingQueueSaveRow } from "@/features/pico/pending-queue"
+} from "@/features/smith/composer-pending-messages"
+import type { PendingQueueSaveRow } from "@/features/smith/pending-queue"
 import {
   appShortcut,
   matchesShortcutEvent,
-} from "@/features/pico/keyboard-shortcuts"
+} from "@/features/smith/keyboard-shortcuts"
 import {
   formatComposerLineCommentReference,
   formatComposerSkillName,
   parseComposerSkillMessage,
   serializeComposerDraft,
-} from "@/features/pico/composer-utils"
+} from "@/features/smith/composer-utils"
 import {
   getDataTransferFiles,
   hasDraggedFiles,
-} from "@/features/pico/app-shell-utils"
-import { useLatestRef } from "@/features/pico/app-shell-common"
-import { promptImageKey } from "@/features/pico/conversation-view"
+} from "@/features/smith/app-shell-utils"
+import { useLatestRef } from "@/features/smith/app-shell-common"
+import { promptImageKey } from "@/features/smith/conversation-view"
 import {
   findExactSlashCommand,
   useComposerAssist,
-} from "@/features/pico/use-composer-assist"
+} from "@/features/smith/use-composer-assist"
 
 type PendingComposerMessage = {
   pendingId: string
@@ -81,9 +81,9 @@ export type ComposerPanelHandle = {
 
 type ImageFileSelection = FileList | Array<File> | null
 
-type ComposerAgentStore = PicoStore<AgentState>
+type ComposerAgentStore = SmithStore<AgentState>
 
-type ComposerDisplaySettingsStore = PicoStore<{
+type ComposerDisplaySettingsStore = SmithStore<{
   autoScrollEnabled: boolean
   centerMessages: boolean
   hideToolBlocks: boolean

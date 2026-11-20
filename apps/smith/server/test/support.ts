@@ -119,7 +119,7 @@ process.on("exit", () => {
   for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true })
 })
 
-export async function tempDir(prefix = "pico-ext-test-") {
+export async function tempDir(prefix = "smith-ext-test-") {
   const dir = await mkdtemp(join(tmpdir(), prefix))
   tempDirs.push(dir)
   return dir

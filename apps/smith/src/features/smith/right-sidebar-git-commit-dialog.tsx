@@ -7,7 +7,7 @@ import {
   WandSparklesIcon,
 } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -29,13 +29,13 @@ import {
 } from "@/components/ui/drawer"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { picoQueryKeys } from "@/features/pico/query-keys"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { smithQueryKeys } from "@/features/smith/query-keys"
 import {
   appShortcut,
   formatShortcutLabel,
   matchesShortcutEvent,
-} from "@/features/pico/keyboard-shortcuts"
+} from "@/features/smith/keyboard-shortcuts"
 import {
   gitChangesQueryOptions,
   gitFilesLineSummary,
@@ -45,18 +45,18 @@ import {
   selectGitFiles,
   selectGitStatusSummary,
   type GitCommitMessageData,
-} from "@/features/pico/right-sidebar-git-data"
+} from "@/features/smith/right-sidebar-git-data"
 import {
   getErrorMessage,
   normalizeCwd,
-} from "@/features/pico/right-sidebar-shared"
+} from "@/features/smith/right-sidebar-shared"
 import type {
   GitCommitDialogControllerHandle,
   GitStatusValue,
-} from "@/features/pico/right-sidebar-types"
-import type { GitChangeFile, GitCommitResponse } from "@/lib/pico/api"
+} from "@/features/smith/right-sidebar-types"
+import type { GitChangeFile, GitCommitResponse } from "@/lib/smith/api"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 import { settle } from "@/lib/settle"
 
 type GitCommitDialogStage = "browse" | "message"
@@ -635,7 +635,7 @@ export function GitCommitDialog({
       dispatch({ type: "clear-message" })
       onOpenChange(false)
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitStatus(viewerContextId, cwd),
+        queryKey: smithQueryKeys.gitStatus(viewerContextId, cwd),
         exact: true,
         refetchType: "active",
       })

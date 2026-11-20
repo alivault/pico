@@ -27,7 +27,7 @@ import {
   isAuthFailure,
   parseDiscovery,
   pickNode,
-  picoCommand,
+  smithCommand,
   versionAtLeast,
 } from "../src/machines/remote.ts"
 import { socketPath, SshTransport, targetArgs } from "../src/machines/ssh.ts"
@@ -48,7 +48,7 @@ void test("machine profiles parse, validate, and round-trip", async () => {
         {
           id: "m_000001",
           target: "ssh://ali@gpu.tail1234.ts.net:2222",
-          dataDir: "~/pico-data",
+          dataDir: "~/smith-data",
           enabled: false,
         },
       ],
@@ -92,7 +92,7 @@ void test("machine profiles parse, validate, and round-trip", async () => {
     /Duplicate/
   )
 
-  const file = join(await tempDir("pico-machines-"), "machines.json")
+  const file = join(await tempDir("smith-machines-"), "machines.json")
   assert.deepEqual(readProfiles(file), [])
   writeProfiles(file, machines)
   assert.deepEqual(readProfiles(file), machines)
@@ -119,7 +119,7 @@ void test("SSH helpers quote, split targets, and keep socket paths short", () =>
 })
 
 void test("SSH attach forwards again when a stale api.sock file stays", async () => {
-  const dir = await tempDir("pico-ssh-")
+  const dir = await tempDir("smith-ssh-")
   const log = join(dir, "ssh-args.log")
   const ssh = join(dir, "fake-ssh")
   writeFileSync(ssh, `#!/bin/sh\necho "$*" >> '${log}'\nexit 0\n`)
@@ -148,7 +148,7 @@ void test("SSH attach forwards again when a stale api.sock file stays", async ()
   assert.ok(forwards.every((line) => line.includes(`${api}:127.0.0.1:3141`)))
 })
 
-void test("remote discovery picks a new enough node and the first pico-app", () => {
+void test("remote discovery picks a new enough node and the first smith", () => {
   const found = parseDiscovery(
     [
       "os=Linux",
@@ -156,7 +156,7 @@ void test("remote discovery picks a new enough node and the first pico-app", () 
       "node=/usr/bin v18.19.0",
       "node=/home/ali/.nvm/versions/node/v22.20.0/bin v22.20.0",
       "node=/usr/bin v18.19.0",
-      "pico=/home/ali/.local/bin/pico-app",
+      "smith=/home/ali/.local/bin/smith",
     ].join("\n")
   )
   assert.equal(found.os, "Linux")
@@ -169,15 +169,15 @@ void test("remote discovery picks a new enough node and the first pico-app", () 
   assert.ok(!versionAtLeast("v22.18.9", [22, 19]))
   assert.ok(versionAtLeast("v23.0.0", [22, 19]))
   assert.deepEqual(
-    picoCommand({ nodeDir: "/n", picoPath: "/p/pico-app" }, { dataDir: "/d" }, [
+    smithCommand({ nodeDir: "/n", smithPath: "/p/smith" }, { dataDir: "/d" }, [
       "status",
       "--json",
     ]),
     [
       "env",
       "PATH=/n:/usr/local/bin:/usr/bin:/bin",
-      "PICO_OPEN=0",
-      "/p/pico-app",
+      "SMITH_OPEN=0",
+      "/p/smith",
       "status",
       "--json",
       "--data-dir",
@@ -337,7 +337,7 @@ async function managerWith(
   profile: Partial<MachineProfile>,
   transport: MachineTransport
 ) {
-  const dir = await tempDir("pico-machines-")
+  const dir = await tempDir("smith-machines-")
   const file = join(dir, "machines.json")
   writeProfiles(file, [
     {
@@ -406,10 +406,7 @@ void test("auth failures need attention and retry every 30 seconds", async () =>
   const info = manager.list()[0]!
   assert.equal(info.state, "attention")
   assert.equal(info.problem?.kind, "auth")
-  assert.match(
-    info.problem?.message ?? "",
-    /pico-app machine reconnect workbox/
-  )
+  assert.match(info.problem?.message ?? "", /smith machine reconnect workbox/)
   assert.deepEqual(clock.delays(), [30_000])
   await manager.close()
 })
@@ -438,7 +435,7 @@ void test("disabled profiles do not connect, and file changes apply", async () =
 })
 
 // -----------------------------------------------------------------------------
-// A hub and a remote Pico on this computer, with a fake transport.
+// A hub and a remote Smith on this computer, with a fake transport.
 
 type Started = {
   url: string
@@ -459,7 +456,7 @@ async function buildLocalHub() {
   await esbuild.build({
     entryPoints: ["test/fixtures/local-hub.ts"],
     // In node_modules: the checks skip it, and it finds the dependencies.
-    outfile: "node_modules/.cache/pico-test/local-hub.mjs",
+    outfile: "node_modules/.cache/smith-test/local-hub.mjs",
     bundle: true,
     platform: "node",
     format: "esm",
@@ -468,18 +465,18 @@ async function buildLocalHub() {
     external: [...external, ...external.map((name) => `${name}/*`)],
     banner: {
       js: [
-        'import { createRequire as __picoCreateRequire } from "node:module";',
-        "const require = __picoCreateRequire(import.meta.url);",
+        'import { createRequire as __smithCreateRequire } from "node:module";',
+        "const require = __smithCreateRequire(import.meta.url);",
       ].join("\n"),
     },
   })
-  return "node_modules/.cache/pico-test/local-hub.mjs"
+  return "node_modules/.cache/smith-test/local-hub.mjs"
 }
 
-async function startPico(
+async function startSmith(
   data: string,
   args = [
-    "dist/pico-server.mjs",
+    "dist/smith-server.mjs",
     "serve",
     "--port",
     "0",
@@ -535,9 +532,9 @@ async function until<T>(read: () => Promise<T | undefined>, ms = 10_000) {
 }
 
 void test("a hub proxies HTTP, SSE, and terminals to a remote machine", async () => {
-  const remoteData = await tempDir("pico-remote-")
-  const hubData = await tempDir("pico-hub-")
-  const remote = await startPico(remoteData)
+  const remoteData = await tempDir("smith-remote-")
+  const hubData = await tempDir("smith-hub-")
+  const remote = await startSmith(remoteData)
   writeProfiles(join(hubData, "machines.json"), [
     {
       id: "m_remote",
@@ -547,7 +544,7 @@ void test("a hub proxies HTTP, SSE, and terminals to a remote machine", async ()
       enabled: true,
     },
   ])
-  const hub = await startPico(hubData, [
+  const hub = await startSmith(hubData, [
     await buildLocalHub(),
     hubData,
     String(remote.port),
@@ -672,7 +669,7 @@ void test("a hub proxies HTTP, SSE, and terminals to a remote machine", async ()
     // The offline view: copies of GET answers and the last event state.
     const cached = await fetch(`${hub.url}/m/m_remote/api/client/manifest`)
     assert.equal(cached.status, 200)
-    assert.equal(cached.headers.get("x-pico-offline"), "1")
+    assert.equal(cached.headers.get("x-smith-offline"), "1")
     const offlineAbort = new AbortController()
     const offlineEvents = await fetch(
       `${hub.url}/m/m_remote/events?context=t`,

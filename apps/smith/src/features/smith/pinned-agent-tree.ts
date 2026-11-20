@@ -2,9 +2,9 @@
  * The Pinned group draws each pinned agent with its subagent tree. The
  * project and state groups do not show these agents again.
  */
-import { sortSidebarAgents } from "@/features/pico/agent-order"
-import type { AgentListEntry } from "@/lib/pico/api"
-import { agentListEntryKey } from "@/lib/pico/storage"
+import { sortSidebarAgents } from "@/features/smith/agent-order"
+import type { AgentListEntry } from "@/lib/smith/api"
+import { agentListEntryKey } from "@/lib/smith/storage"
 
 /** The links between agents, for `pinnedAgentRows`. */
 export type AgentTree = {

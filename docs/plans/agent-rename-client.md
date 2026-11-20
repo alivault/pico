@@ -4,13 +4,13 @@ Phase 2 of `agent-rename.md`. The plan's tables do not name these wire names, so
 
 ## Query parameters
 
-| Old                                     | New              | Where (client)                                                                                   |
-| --------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------ |
-| `session` (API request)                 | `agent`          | `app-shell-utils.ts` (`buildRequestUrl`, `agentId`)                                              |
-| `sessionKey`                            | `agentKey`       | `use-app-shell-prompt-mutations.ts`, `use-app-shell-agent-mutations.ts`                          |
-| `session` (page URL, notification link) | `agent`          | `lib/pico/machine.ts` (`machinePageUrl`), `routes/index.tsx` (search schema and `pico:open-url`) |
-| `directory` (index requests)            | `project`        | `app-shell-sidebar-store.ts`, `app-shell-agents-dialog.tsx` (`/api/project-agents-indexes`)      |
-| `sidebarDirectory` (`/events`)          | `sidebarProject` | `use-app-shell-agent-sync.ts`                                                                    |
+| Old                                     | New              | Where (client)                                                                                     |
+| --------------------------------------- | ---------------- | -------------------------------------------------------------------------------------------------- |
+| `session` (API request)                 | `agent`          | `app-shell-utils.ts` (`buildRequestUrl`, `agentId`)                                                |
+| `sessionKey`                            | `agentKey`       | `use-app-shell-prompt-mutations.ts`, `use-app-shell-agent-mutations.ts`                            |
+| `session` (page URL, notification link) | `agent`          | `lib/smith/machine.ts` (`machinePageUrl`), `routes/index.tsx` (search schema and `smith:open-url`) |
+| `directory` (index requests)            | `project`        | `app-shell-sidebar-store.ts`, `app-shell-agents-dialog.tsx` (`/api/project-agents-indexes`)        |
+| `sidebarDirectory` (`/events`)          | `sidebarProject` | `use-app-shell-agent-sync.ts`                                                                      |
 
 The server reads `sessionPath` as a query parameter too (`api.ts` `target()`, `server.ts` terminal scope). The client does not send it. By the rule it is `agentPath`.
 
@@ -18,12 +18,12 @@ The server reads `sessionPath` as a query parameter too (`api.ts` `target()`, `s
 
 | Old                                                                                    | New                                                | Where (client)                                                                                                          |
 | -------------------------------------------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `directory` (`/api/project-agents/cleanup`)                                            | `project`                                          | `app-shell-agent-dialogs.tsx`, `DeleteOldProjectAgentsRequest` in `lib/pico/api.ts`                                     |
-| `includeActiveSession`                                                                 | `includeActiveAgent`                               | `lib/pico/api.ts` (`DeleteOldProjectAgentsRequest`)                                                                     |
+| `directory` (`/api/project-agents/cleanup`)                                            | `project`                                          | `app-shell-agent-dialogs.tsx`, `DeleteOldProjectAgentsRequest` in `lib/smith/api.ts`                                    |
+| `includeActiveSession`                                                                 | `includeActiveAgent`                               | `lib/smith/api.ts` (`DeleteOldProjectAgentsRequest`)                                                                    |
 | `sessionKey`                                                                           | `agentKey`                                         | `use-app-shell-prompt-mutations.ts`, `use-app-shell-agent-mutations.ts`, `app-shell.tsx`, `use-app-shell-agent-sync.ts` |
 | `directories`, `pinnedSessionKeys`, `collapsedDirectories` (`POST /api/sidebar-state`) | `projects`, `pinnedAgentKeys`, `collapsedProjects` | `sidebar-sync.ts`                                                                                                       |
 
-## Response fields (`lib/pico/api.ts`)
+## Response fields (`lib/smith/api.ts`)
 
 | Old                                                                                                      | New                                                |
 | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
@@ -50,9 +50,9 @@ The server reads `sessionPath` as a query parameter too (`api.ts` `target()`, `s
 | `directories`, `directoryStates`, `directoryIndexes`                 | `projects`, `projectStates`, `projectIndexes`              | `agents`                                                                    |
 | `sessionId`                                                          | `agentId`                                                  | `conversation_delta`                                                        |
 | `sessionKey`                                                         | `agentKey`                                                 | `state_sync`                                                                |
-| `sessionId`, `sessionKey`, `sessionFile`, `sessionName`, `directory` | `agentId`, `agentKey`, `agentFile`, `agentName`, `project` | `state_sync` agent state (`AgentState` in `lib/pico/index.ts`)              |
+| `sessionId`, `sessionKey`, `sessionFile`, `sessionName`, `directory` | `agentId`, `agentKey`, `agentFile`, `agentName`, `project` | `state_sync` agent state (`AgentState` in `lib/smith/index.ts`)             |
 
-## Hub machine summary (`/api/machines/events`, `features/pico/machine-store.ts`)
+## Hub machine summary (`/api/machines/events`, `features/smith/machine-store.ts`)
 
 | Old                        | New        |
 | -------------------------- | ---------- |
@@ -83,14 +83,14 @@ These are in the plan's table; listed here because the client uses them: `maxSub
 ## Client-only names (not on the wire)
 
 - Mobile tab value `"session"` → `"conversation"`, label "Session" → "Conversation" (`app-shell.tsx`, `app-shell-desktop-layout.tsx`, `use-app-shell-shortcuts.ts`).
-- DOM event details: `pico:open-agent` and `pico:agent-extensions` take `{ agentId }`. `pico:sidebar-state` lists `"projects" | "pinnedAgentKeys" | "collapsedProjects"`.
+- DOM event details: `smith:open-agent` and `smith:agent-extensions` take `{ agentId }`. `smith:sidebar-state` lists `"projects" | "pinnedAgentKeys" | "collapsedProjects"`.
 - Command palette IDs: `new-agent`, `open-agents`, `conversation-tree`, `fork-conversation`, `clone-conversation`, `compact-conversation`, `rename-agent`, `delete-agent`, `delete-selected-agents`, `add-project`.
 - Data attributes and CSS variables: `data-sidebar-agent-item`, `data-sidebar-agent-group`, `--sidebar-agent-gap`, `--agent-text-left`, and the others.
-- Query keys: `["pico", "agent-extensions", …]`, `["pico", "project-agents-index", …]`, `["pico", "archived-agents", …]`, `["pico", "agent-tree", …]`.
+- Query keys: `["smith", "agent-extensions", …]`, `["smith", "project-agents-index", …]`, `["smith", "archived-agents", …]`, `["smith", "agent-tree", …]`.
 
 ## Stored names that stay
 
-- `localStorage`: `pico-pinned-sessions`, `pico-sidebar-session-previews`, `pico-session-done-sound`, `pico-session-done-desktop-notifications`, `pico-draft-directory`, `pico-sidebar-directories`, `pico-collapsed-directories`, `pico-recent-directories`, `pico-machine-collapsed-directories:<id>`.
-- Keys in stored records: `__pico_pinned_sessions__`, `__pico_directories__` (collapsed groups), the `session:` prefix of prompt draft keys, and the Agent panel section key `children` (open sections).
+- `localStorage`: `smith-pinned-sessions`, `smith-sidebar-session-previews`, `smith-session-done-sound`, `smith-session-done-desktop-notifications`, `smith-draft-directory`, `smith-sidebar-directories`, `smith-collapsed-directories`, `smith-recent-directories`, `smith-machine-collapsed-directories:<id>`.
+- Keys in stored records: `__smith_pinned_sessions__`, `__smith_directories__` (collapsed groups), the `session:` prefix of prompt draft keys, and the Agent panel section key `children` (open sections).
 - The sound file was `/sounds/session-done.mp3`. Phase 3 renamed it to `/sounds/agent-done.mp3`, because it is not stored.
 - pi's tree entry type `session_info`, and the browser's `sessionStorage`.

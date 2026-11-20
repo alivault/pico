@@ -1,4 +1,4 @@
-import type { AgentListEntry } from "@/lib/pico/api"
+import type { AgentListEntry } from "@/lib/smith/api"
 
 /**
  * What a request to archive agents did: archived them at once (`true`),

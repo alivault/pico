@@ -7,14 +7,14 @@
  * All writes to the synced keys go through `machineLocalStorageSetItem`, so
  * this module sees each change without changes at the call sites. A change
  * from another device goes into local storage, and then a
- * `pico:sidebar-state` event tells the stores of that machine to read it
+ * `smith:sidebar-state` event tells the stores of that machine to read it
  * again.
  *
  * There is one sync for each machine, so several machines can sync at the
  * same time.
  */
-import { emitPicoEvent } from "@/features/pico/agent/events"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { emitSmithEvent } from "@/features/smith/agent/events"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
 import {
   COLLAPSED_PROJECTS_STORAGE_KEY,
   PINNED_AGENTS_STORAGE_KEY,
@@ -24,9 +24,9 @@ import {
   readStoredCollapsedProjects,
   readStoredPinnedAgentKeys,
   readStoredSidebarProjects,
-} from "@/lib/pico"
-import type { SidebarStateEvent, SidebarStateSnapshot } from "@/lib/pico/api"
-import { setLocalStorageWriteListener } from "@/lib/pico/storage"
+} from "@/lib/smith"
+import type { SidebarStateEvent, SidebarStateSnapshot } from "@/lib/smith/api"
+import { setLocalStorageWriteListener } from "@/lib/smith/storage"
 
 export type SidebarSyncField =
   | "projects"
@@ -46,7 +46,7 @@ const KEY_BY_FIELD: Record<SidebarSyncField, string> = {
 }
 
 /** Set after this browser added its own lists to the shared state once. */
-const MERGED_STORAGE_KEY = "pico-sidebar-state-merged"
+const MERGED_STORAGE_KEY = "smith-sidebar-state-merged"
 const FLUSH_DELAY_MS = 150
 const RETRY_DELAY_MS = 5000
 
@@ -167,7 +167,7 @@ class MachineSidebarSync {
       this.#applyingRemote = false
     }
     if (changed.length > 0)
-      emitPicoEvent("pico:sidebar-state", {
+      emitSmithEvent("smith:sidebar-state", {
         machineId: this.machineId,
         changed,
       })

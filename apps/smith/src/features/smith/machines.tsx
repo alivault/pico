@@ -23,7 +23,7 @@ import {
   MessageCircleQuestionIcon,
   RefreshCwIcon,
 } from "lucide-react"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import {
   AlertDialog,
@@ -72,10 +72,10 @@ import {
 } from "@/components/ui/sidebar"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { emitPicoEvent, usePicoEvent } from "@/features/pico/agent/events"
-import { errorText, relativeTime } from "@/features/pico/agent/shared"
-import { fetchJson } from "@/features/pico/app-shell-utils"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { emitSmithEvent, useSmithEvent } from "@/features/smith/agent/events"
+import { errorText, relativeTime } from "@/features/smith/agent/shared"
+import { fetchJson } from "@/features/smith/app-shell-utils"
+import { useMachineId } from "@/lib/smith/machine-context"
 import {
   hubUrl,
   LOCAL_MACHINE_ID,
@@ -83,18 +83,18 @@ import {
   openMachine,
   queueMachineAction,
   type MachineAction,
-} from "@/lib/pico/machine"
+} from "@/lib/smith/machine"
 import {
   appShortcut,
   formatShortcutLabel,
-} from "@/features/pico/keyboard-shortcuts"
+} from "@/features/smith/keyboard-shortcuts"
 import {
   SIDEBAR_VIEWS,
   setSidebarView,
   sidebarViewLabel,
   useSidebarView,
   type SidebarView,
-} from "@/features/pico/sidebar-display-settings"
+} from "@/features/smith/sidebar-display-settings"
 import { cn } from "@/lib/utils"
 import {
   hasLiveJob,
@@ -102,14 +102,14 @@ import {
   toggleAgentStatusFilter,
   useAgentStatusFilter,
   type AgentStatusFilter,
-} from "@/features/pico/agent-status-filter"
+} from "@/features/smith/agent-status-filter"
 import {
   useMachines,
   viewerContextIdForSummaries,
   type MachineInfo,
   type MachineAgentSummary,
   type MachineState,
-} from "@/features/pico/machine-store"
+} from "@/features/smith/machine-store"
 
 async function machineAction(
   id: string,
@@ -144,7 +144,7 @@ export function machineStateLabel(machine: MachineInfo) {
   if (machine.state === "attention" && machine.problem?.kind === "auth")
     return "Sign-in needed"
   if (machine.state === "attention" && machine.problem?.kind === "stopped")
-    return "Pico stopped"
+    return "Smith stopped"
   return STATE_LABELS[machine.state]
 }
 
@@ -452,7 +452,7 @@ function MachineGroupLabel({
   )
 }
 
-const COLLAPSED_STORAGE_KEY = "pico-machine-groups-collapsed"
+const COLLAPSED_STORAGE_KEY = "smith-machine-groups-collapsed"
 
 function readCollapsed(): Record<string, boolean> {
   try {
@@ -577,7 +577,7 @@ function MachineGroup({
       // The window shows the dialog: the mobile sidebar sheet, which
       // holds this group, closes first.
       onRemove={() =>
-        emitPicoEvent("pico:remove-machine", { machineId: machine.id })
+        emitSmithEvent("smith:remove-machine", { machineId: machine.id })
       }
     >
       <div {...listeners}>
@@ -679,9 +679,9 @@ function RemoveMachineDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Remove {machine.label}?</AlertDialogTitle>
           <AlertDialogDescription>
-            This hub stops showing {machine.label}. Pico and its agents keep
+            This hub stops showing {machine.label}. Smith and its agents keep
             running on {machine.label}. To add it again, run{" "}
-            <code>pico-app machine add {machine.target}</code> on the hub.
+            <code>smith machine add {machine.target}</code> on the hub.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -709,7 +709,7 @@ function RemoveMachineDialog({
 function machineStatusText(machine: MachineInfo) {
   const parts = [machineStateLabel(machine)]
   const version = machine.version ?? machine.summary?.version
-  if (version) parts.push(`Pico ${version}`)
+  if (version) parts.push(`Smith ${version}`)
   if (machine.id === LOCAL_MACHINE_ID) parts.push("this hub")
   else if (machine.state === "online" && machine.since)
     parts.push(`connected ${relativeTime(machine.since)}`)
@@ -964,7 +964,7 @@ function MachineContextMenu({
 type MachineSidebarPrefs = { order: Array<string>; hidden: Array<string> }
 
 // Stored name: do not change.
-const MACHINE_SIDEBAR_STORAGE_KEY = "pico-sidebar-machines"
+const MACHINE_SIDEBAR_STORAGE_KEY = "smith-sidebar-machines"
 
 let prefsSnapshot: MachineSidebarPrefs | undefined
 const prefsListeners = new Set<() => void>()
@@ -1224,7 +1224,7 @@ export function MachineConnectionBanner() {
         </span>{" "}
         <span className="text-muted-foreground">
           {machine.state === "connecting"
-            ? "Pico connects to it now."
+            ? "Smith connects to it now."
             : `You see the last state. ${machine.problem?.message ?? ""}${seconds !== undefined ? ` Next try in ${seconds} s.` : ""}`}
         </span>
         {machine.problem?.url ? (
@@ -1255,7 +1255,7 @@ export function MachineConnectionBanner() {
 }
 
 export function emitOpenMachines() {
-  emitPicoEvent("pico:open-machines", {})
+  emitSmithEvent("smith:open-machines", {})
 }
 
 function MachineRow({ machine }: { machine: MachineInfo }) {
@@ -1302,7 +1302,7 @@ function MachineRow({ machine }: { machine: MachineInfo }) {
           <div className="truncate font-mono text-xs text-muted-foreground">
             ssh {machine.target}
             {machine.dataDir ? ` · ${machine.dataDir}` : ""}
-            {machine.version ? ` · Pico ${machine.version}` : ""}
+            {machine.version ? ` · Smith ${machine.version}` : ""}
           </div>
           {machine.problem ? (
             <div className="space-y-1 text-xs">
@@ -1317,16 +1317,16 @@ function MachineRow({ machine }: { machine: MachineInfo }) {
                 <p className="text-muted-foreground">
                   Run in a terminal on the hub:{" "}
                   <code className="rounded bg-muted px-1">
-                    pico-app machine reconnect {machine.label}
+                    smith machine reconnect {machine.label}
                   </code>
                 </p>
               ) : null}
               {machine.problem.kind === "update" ? (
                 <p className="text-muted-foreground">
-                  Update Pico on {machine.label}, then run in a terminal on the
+                  Update Smith on {machine.label}, then run in a terminal on the
                   hub:{" "}
                   <code className="rounded bg-muted px-1">
-                    pico-app machine reconnect {machine.label}
+                    smith machine reconnect {machine.label}
                   </code>
                 </p>
               ) : null}
@@ -1361,7 +1361,7 @@ function MachineRow({ machine }: { machine: MachineInfo }) {
               onClick={() => {
                 if (
                   window.confirm(
-                    `Remove ${machine.label} from this hub? Pico and its agents keep running on ${machine.label}.`
+                    `Remove ${machine.label} from this hub? Smith and its agents keep running on ${machine.label}.`
                   )
                 )
                   void machineAction(machine.id, "remove")
@@ -1390,8 +1390,8 @@ function MachinesDialog({
         <DialogHeader>
           <DialogTitle>Machines</DialogTitle>
           <DialogDescription>
-            Agents of other computers, over SSH. Each machine runs its own Pico;
-            its agents continue when this hub is offline.
+            Agents of other computers, over SSH. Each machine runs its own
+            Smith; its agents continue when this hub is offline.
           </DialogDescription>
         </DialogHeader>
         {!loaded ? (
@@ -1414,11 +1414,11 @@ function MachinesDialog({
               <div className="space-y-2 py-3 text-sm">
                 <p>
                   Run this command in a terminal on the hub. SSH can then ask
-                  for a password or a host key. Pico does not store passwords or
-                  keys.
+                  for a password or a host key. Smith does not store passwords
+                  or keys.
                 </p>
                 <code className="block rounded bg-muted p-2 text-xs">
-                  pico-app machine add user@host
+                  smith machine add user@host
                 </code>
                 <p className="text-muted-foreground">
                   A Tailscale MagicDNS name works as the host. Anyone who can
@@ -1435,15 +1435,15 @@ function MachinesDialog({
 
 /**
  * Mounted once in the app shell, outside the sidebar: the machines dialog
- * (`pico:open-machines`) and the dialog that removes a machine
- * (`pico:remove-machine`).
+ * (`smith:open-machines`) and the dialog that removes a machine
+ * (`smith:remove-machine`).
  */
 export function MachinesDialogController() {
   const [open, setOpen] = React.useState(false)
   const [removingId, setRemovingId] = React.useState<string>()
   const { machines } = useMachines()
-  usePicoEvent("pico:open-machines", () => setOpen(true))
-  usePicoEvent("pico:remove-machine", ({ machineId }) =>
+  useSmithEvent("smith:open-machines", () => setOpen(true))
+  useSmithEvent("smith:remove-machine", ({ machineId }) =>
     setRemovingId(machineId)
   )
   const removing = machines.find((machine) => machine.id === removingId)

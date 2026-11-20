@@ -76,7 +76,7 @@ class ContainerWidget extends WidgetType {
   }
 }
 
-const commentedLine = Decoration.line({ class: "cm-pico-commented-line" })
+const commentedLine = Decoration.line({ class: "cm-smith-commented-line" })
 
 function lineInDoc(state: EditorState, lineNumber: number) {
   return Math.min(Math.max(1, lineNumber), state.doc.lines)
@@ -164,7 +164,7 @@ class PlusMarker extends GutterMarker {
   toDOM() {
     const button = document.createElement("button")
     button.type = "button"
-    button.className = "cm-pico-comment-plus"
+    button.className = "cm-smith-comment-plus"
     button.textContent = "+"
     button.title = "Comment on this line"
     button.setAttribute("aria-label", "Comment on this line")
@@ -176,14 +176,14 @@ const plusMarker = new PlusMarker()
 class SpacerMarker extends GutterMarker {
   toDOM() {
     const spacer = document.createElement("span")
-    spacer.className = "cm-pico-comment-plus"
+    spacer.className = "cm-smith-comment-plus"
     return spacer
   }
 }
 
 function commentGutter(handlers: { current: FileCommentHandlers }) {
   return gutter({
-    class: "cm-pico-comment-gutter",
+    class: "cm-smith-comment-gutter",
     lineMarker(view, line) {
       const layout = view.state.field(layoutField)
       const hovered = view.state.field(hoverLineField)
@@ -202,7 +202,7 @@ function commentGutter(handlers: { current: FileCommentHandlers }) {
       mousedown(view, line, event) {
         if (!view.state.field(layoutField).canComment) return false
         const target = event.target as HTMLElement | null
-        if (!target?.closest(".cm-pico-comment-plus")) return false
+        if (!target?.closest(".cm-smith-comment-plus")) return false
         event.preventDefault()
         const lineNumber = view.state.doc.lineAt(line.from).number
         handlers.current.start({ startLine: lineNumber, endLine: lineNumber })
@@ -228,7 +228,7 @@ function selectionTooltip(
       create: (view) => {
         const button = document.createElement("button")
         button.type = "button"
-        button.className = "cm-pico-comment-selection"
+        button.className = "cm-smith-comment-selection"
         button.textContent = layout.canComment ? "Comment" : "Save to comment"
         if (!layout.canComment) {
           button.disabled = true
@@ -264,16 +264,16 @@ function selectionTooltipField(handlers: { current: FileCommentHandlers }) {
 }
 
 const commentTheme = EditorView.theme({
-  ".cm-pico-commented-line": {
+  ".cm-smith-commented-line": {
     backgroundColor: "color-mix(in oklab, var(--warning) 12%, transparent)",
   },
-  ".cm-pico-comment-gutter .cm-gutterElement": {
+  ".cm-smith-comment-gutter .cm-gutterElement": {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     padding: "0",
   },
-  ".cm-pico-comment-plus": {
+  ".cm-smith-comment-plus": {
     display: "inline-flex",
     width: "1rem",
     height: "1rem",
@@ -287,12 +287,12 @@ const commentTheme = EditorView.theme({
     font: "600 12px/1 var(--font-sans, sans-serif)",
     cursor: "pointer",
   },
-  "span.cm-pico-comment-plus": { visibility: "hidden" },
-  ".cm-tooltip.cm-tooltip:has(.cm-pico-comment-selection)": {
+  "span.cm-smith-comment-plus": { visibility: "hidden" },
+  ".cm-tooltip.cm-tooltip:has(.cm-smith-comment-selection)": {
     border: "0",
     backgroundColor: "transparent",
   },
-  ".cm-pico-comment-selection": {
+  ".cm-smith-comment-selection": {
     border: "1px solid var(--border)",
     borderRadius: "0.375rem",
     padding: "0.125rem 0.5rem",
@@ -302,7 +302,7 @@ const commentTheme = EditorView.theme({
     boxShadow: "0 1px 3px rgb(0 0 0 / 0.15)",
     cursor: "pointer",
   },
-  ".cm-pico-comment-selection:disabled": {
+  ".cm-smith-comment-selection:disabled": {
     cursor: "not-allowed",
     opacity: "0.6",
   },

@@ -28,15 +28,18 @@ import {
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { fetchJson } from "@/features/pico/app-shell-utils"
-import { emitPicoEvent, type PicoEventMap } from "@/features/pico/agent/events"
-import { useMachineReadOnly } from "@/features/pico/machine-store"
-import { useMachineId } from "@/lib/pico/machine-context"
-import { hubUrl, isRemoteMachine } from "@/lib/pico/machine"
+import { fetchJson } from "@/features/smith/app-shell-utils"
+import {
+  emitSmithEvent,
+  type SmithEventMap,
+} from "@/features/smith/agent/events"
+import { useMachineReadOnly } from "@/features/smith/machine-store"
+import { useMachineId } from "@/lib/smith/machine-context"
+import { hubUrl, isRemoteMachine } from "@/lib/smith/machine"
 import {
   safeLocalStorageGetItem,
   safeLocalStorageSetItem,
-} from "@/lib/pico/storage"
+} from "@/lib/smith/storage"
 
 export type BrowserMode = "preview" | "agent"
 
@@ -74,7 +77,7 @@ function formatAddress({ port, path }: { port: number; path: string }) {
 }
 
 // Window events, so that all views of a key update together.
-const STORAGE_EVENT = "pico:preview-storage"
+const STORAGE_EVENT = "smith:preview-storage"
 
 function useStoredValue(key: string) {
   const subscribe = (listener: () => void) => {
@@ -102,15 +105,15 @@ function storeValue(key: string, value: string) {
 }
 
 function previewAddressKey(machineId: string, cwd: string) {
-  return `pico-preview-address:${machineId}:${cwd}`
+  return `smith-preview-address:${machineId}:${cwd}`
 }
 
 function previewViewportKey(machineId: string, cwd: string) {
-  return `pico-preview-viewport:${machineId}:${cwd}`
+  return `smith-preview-viewport:${machineId}:${cwd}`
 }
 
 function browserModeKey(machineId: string) {
-  return `pico-browser-mode:${machineId}`
+  return `smith-browser-mode:${machineId}`
 }
 
 /** Save the preview address of a project, as an agent's dev server. */
@@ -127,9 +130,9 @@ export function setPreviewAddress(
  * its machine. With `open`, the user asked for it: the shell shows the
  * Preview always.
  */
-export function showPreview(detail: PicoEventMap["pico:preview-available"]) {
+export function showPreview(detail: SmithEventMap["smith:preview-available"]) {
   setPreviewAddress(detail.machineId, detail.cwd, detail)
-  emitPicoEvent("pico:preview-available", detail)
+  emitSmithEvent("smith:preview-available", detail)
 }
 
 /**
@@ -157,7 +160,7 @@ export async function previewUrl(
 
 /**
  * The direct URL of a dev server, when this browser runs on its machine:
- * the local machine, with Pico open on a loopback address.
+ * the local machine, with Smith open on a loopback address.
  */
 export function directPreviewUrl(
   machineId: string,
@@ -215,7 +218,7 @@ const PAGE_COLOR = new RegExp(
 export function pageBackground(data: unknown) {
   if (typeof data !== "object" || data === null) return undefined
   const { type, color, colorScheme } = data as Record<string, unknown>
-  if (type !== "pico-preview-background") return undefined
+  if (type !== "smith-preview-background") return undefined
   if (typeof color !== "string" || color.length > 120) return undefined
   const value = color.trim()
   if (!PAGE_COLOR.test(value)) return undefined
@@ -715,7 +718,7 @@ export function PreviewPanel({ cwd }: { cwd: string }) {
             {httpsPage ? (
               <span className="max-w-xs text-xs">
                 This page uses HTTPS, so the browser can block a preview over
-                HTTP. Open Pico over HTTP to use the Preview.
+                HTTP. Open Smith over HTTP to use the Preview.
               </span>
             ) : null}
           </div>

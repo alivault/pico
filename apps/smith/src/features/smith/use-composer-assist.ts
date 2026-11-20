@@ -1,15 +1,15 @@
 import * as React from "react"
 import { AsyncDebouncer } from "@tanstack/pacer"
 
-import type { CompletionItem } from "@/lib/pico/api"
+import type { CompletionItem } from "@/lib/smith/api"
 import { settle } from "@/lib/settle"
-import { useLatestRef } from "@/features/pico/app-shell-common"
+import { useLatestRef } from "@/features/smith/app-shell-common"
 
 import type {
   ComposerCompletionQuery,
   SlashCommandDescriptor,
   SlashCommandInput,
-} from "@/features/pico/composer-utils"
+} from "@/features/smith/composer-utils"
 
 import {
   applyCompletionItem,
@@ -19,7 +19,7 @@ import {
   parseComposerSkillMessage,
   parseSlashCommandInput,
   sameCompletionContext,
-} from "@/features/pico/composer-utils"
+} from "@/features/smith/composer-utils"
 
 export type ComposerSelection = {
   start: number
@@ -65,7 +65,7 @@ function createCompletionDebouncer() {
         : await requestPathCompletions(query.rawPrefix)
     },
     {
-      key: "pico.composer.completions",
+      key: "smith.composer.completions",
       wait: 80,
     }
   )

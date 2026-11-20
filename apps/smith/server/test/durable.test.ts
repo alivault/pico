@@ -16,7 +16,7 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import { tempDir } from "./support.ts"
 
 void test("durable agents run concurrently, deduplicate, queue, and persist", async () => {
-  const directory = await tempDir("pico-durable-test-")
+  const directory = await tempDir("smith-durable-test-")
   const database = join(directory, "test.sqlite")
   let active = 0
   let maxActive = 0

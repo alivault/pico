@@ -1,5 +1,5 @@
 /**
- * The sidebar layout that all devices share, in `~/.pico/sidebar.json`: the
+ * The sidebar layout that all devices share, in `~/.smith/sidebar.json`: the
  * added projects in order, the pinned agents, and the collapsed projects.
  * Each change increases `revision`.
  */

@@ -21,7 +21,7 @@ import {
   type SidebarHorizontalResizeCursor,
 } from "@/hooks/use-sidebar-resize"
 import { cn } from "@/lib/utils"
-import { isMacPlatform } from "@/features/pico/keyboard-shortcuts"
+import { isMacPlatform } from "@/features/smith/keyboard-shortcuts"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -50,7 +50,7 @@ const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_WIDTH = "20rem"
 const SIDEBAR_WIDTH_MIN = "16rem"
 const SIDEBAR_WIDTH_MAX = "32rem"
-const SIDEBAR_WIDTH_STORAGE_KEY = "pico-sidebar-width"
+const SIDEBAR_WIDTH_STORAGE_KEY = "smith-sidebar-width"
 const SIDEBAR_WIDTH_LEGACY_STORAGE_KEY = "sidebar_width"
 const SIDEBAR_WIDTH_MOBILE = "20rem"
 const SIDEBAR_WIDTH_ICON = "3rem"

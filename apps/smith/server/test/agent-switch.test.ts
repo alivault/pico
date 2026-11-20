@@ -16,9 +16,9 @@ const IMAGE =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 
 void test("an open event stream follows agent selection and moves its live watcher", async () => {
-  const data = await tempDir("pico-switch-test-")
+  const data = await tempDir("smith-switch-test-")
   const harness = await Harness.open(
-    await openNodeSqliteStorage(join(data, "pico.sqlite")),
+    await openNodeSqliteStorage(join(data, "smith.sqlite")),
     { models: createModels(), registry: createRegistry() },
     ctx
   )
@@ -63,7 +63,7 @@ void test("an open event stream follows agent selection and moves its live watch
   const child = spawn(
     process.execPath,
     [
-      "dist/pico-server.mjs",
+      "dist/smith-server.mjs",
       "serve",
       "--port",
       "0",
@@ -164,7 +164,7 @@ void test("an open event stream follows agent selection and moves its live watch
     const renamed = await fetch(`${url}/api/agent/rename`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: `pico:${ids[1]}`, name: "Renamed second" }),
+      body: JSON.stringify({ path: `smith:${ids[1]}`, name: "Renamed second" }),
     })
     assert.equal(renamed.status, 200)
     assert.equal((await nextState()).agentName, "Renamed second")

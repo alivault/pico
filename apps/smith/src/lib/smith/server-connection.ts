@@ -1,18 +1,18 @@
 /**
- * Whether the page can reach its Pico server (the hub). When the server is
+ * Whether the page can reach its Smith server (the hub). When the server is
  * down, every request fails. The page then shows one "server unreachable"
  * view (`ServerUnreachableOverlay`) instead of one error toast for each
  * failed request, and it checks the server again until it answers.
  */
 import * as React from "react"
 
-import { LOCAL_MACHINE_ID, machineApiUrl } from "@/lib/pico/machine"
+import { LOCAL_MACHINE_ID, machineApiUrl } from "@/lib/smith/machine"
 
 export type ServerConnectionState = "unknown" | "online" | "unreachable"
 
-export const SERVER_UNREACHABLE_MESSAGE = "Pico cannot reach its server."
+export const SERVER_UNREACHABLE_MESSAGE = "Smith cannot reach its server."
 
-/** A request that failed because the Pico server did not answer. */
+/** A request that failed because the Smith server did not answer. */
 export class ServerUnreachableError extends Error {
   constructor() {
     super(SERVER_UNREACHABLE_MESSAGE)
@@ -22,7 +22,7 @@ export class ServerUnreachableError extends Error {
 
 /**
  * Whether a failed response comes from a gateway in front of a stopped
- * server, such as the Vite proxy or a reverse proxy. The Pico server sends
+ * server, such as the Vite proxy or a reverse proxy. The Smith server sends
  * JSON with its errors, so a 502, 503, or 504 without JSON is not from it.
  */
 export function isGatewayFailure(status: number, body: string) {

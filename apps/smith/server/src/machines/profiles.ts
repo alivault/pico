@@ -4,7 +4,7 @@
  * user's own config, keys, and agent.
  *
  * A cache in `<data>/machines/<id>/cache.json` keeps what setup found on the
- * remote host. Pico works without it.
+ * remote host. Smith works without it.
  */
 import { randomBytes } from "node:crypto"
 import {
@@ -23,7 +23,7 @@ export type MachineProfile = {
   label: string
   /** What `ssh` gets: a host alias, `user@host`, or `ssh://user@host:2222`. */
   target: string
-  /** The remote data directory; null is the remote default (`~/.pico`). */
+  /** The remote data directory; null is the remote default (`~/.smith`). */
   dataDir: string | null
   enabled: boolean
 }
@@ -33,8 +33,8 @@ export type MachineCache = {
   /** The directory of the remote `node` (22.19 or later). */
   nodeDir?: string
   nodeVersion?: string
-  /** The remote `pico-app` command. */
-  picoPath?: string
+  /** The remote `smith` command. */
+  smithPath?: string
   port?: number
   version?: string
 }
@@ -188,7 +188,7 @@ export function readCache(dir: string): MachineCache {
       "os",
       "nodeDir",
       "nodeVersion",
-      "picoPath",
+      "smithPath",
       "version",
     ] as const) {
       if (typeof value[key] === "string" && value[key]) cache[key] = value[key]
@@ -208,6 +208,6 @@ export function writeCache(dir: string, cache: MachineCache) {
     writeFileSync(`${file}.tmp`, JSON.stringify(cache, null, 2))
     renameSync(`${file}.tmp`, file)
   } catch (error) {
-    console.warn("[pico] could not write the machine cache:", error)
+    console.warn("[smith] could not write the machine cache:", error)
   }
 }

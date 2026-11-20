@@ -1,17 +1,17 @@
 import {
   SHIKI_BUNDLED_THEME_DEFINITIONS,
   SHIKI_BUNDLED_THEME_PAIR_DEFINITIONS,
-} from "@/lib/pico/shiki-bundled-themes"
+} from "@/lib/smith/shiki-bundled-themes"
 
 export const THEME_COLOR_MODES = ["auto", "light", "dark"] as const
 
-export const PICO_CODE_SHIKI_THEME = "pico-code"
-export const PICO_DIFF_SHIKI_THEMES = {
-  light: "pico-diff-light",
-  dark: "pico-diff-dark",
+export const SMITH_CODE_SHIKI_THEME = "smith-code"
+export const SMITH_DIFF_SHIKI_THEMES = {
+  light: "smith-diff-light",
+  dark: "smith-diff-dark",
 } as const
 
-export const PICO_SHIKI_VARIABLE_DEFAULTS = {
+export const SMITH_SHIKI_VARIABLE_DEFAULTS = {
   foreground: "var(--code-fg)",
   background: "var(--background)",
   "token-comment": "var(--code-comment)",
@@ -61,8 +61,8 @@ export const THEME_DEFINITIONS = [
   {
     id: "default",
     label: "Default",
-    description: "Use Pico's default palette.",
-    keywords: ["pico", "default"],
+    description: "Use Smith's default palette.",
+    keywords: ["smith", "default"],
     classes: { light: "light", dark: "dark" },
   },
   {

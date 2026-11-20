@@ -17,7 +17,7 @@ void test("an upload name is safe in a path", () => {
 })
 
 void test("an upload is saved in the data directory", async () => {
-  const data = await tempDir("pico-upload-test-")
+  const data = await tempDir("smith-upload-test-")
   const body = Object.assign(Readable.from([Buffer.from("hello")]), {
     headers: {},
   }) as unknown as IncomingMessage

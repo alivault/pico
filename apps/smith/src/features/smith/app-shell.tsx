@@ -1,54 +1,54 @@
 import * as React from "react"
-import { emitPicoEvent, usePicoEvent } from "@/features/pico/agent/events"
-import { useMachineFeature } from "@/features/pico/machine-store"
-import { startSidebarSync } from "@/features/pico/sidebar-sync"
+import { emitSmithEvent, useSmithEvent } from "@/features/smith/agent/events"
+import { useMachineFeature } from "@/features/smith/machine-store"
+import { startSidebarSync } from "@/features/smith/sidebar-sync"
 import { focusShellSide, getShellLayout } from "@/hooks/use-shell-layout"
 import {
   onMachineAction,
   openMachine,
   takeMachineActions,
   type MachineAction,
-} from "@/lib/pico/machine"
+} from "@/lib/smith/machine"
 import { Throttler } from "@tanstack/pacer"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import { SidebarInset, useSidebar } from "@/components/ui/sidebar"
-import { AppShellFloatingControllers } from "@/features/pico/app-shell-floating-controllers"
-import { AppShellTabsController } from "@/features/pico/app-shell-desktop-layout"
+import { AppShellFloatingControllers } from "@/features/smith/app-shell-floating-controllers"
+import { AppShellTabsController } from "@/features/smith/app-shell-desktop-layout"
 import {
   AppShellAgentHeader,
   type AppShellAgentHeaderActions,
-} from "@/features/pico/app-shell-agent-header"
-import { AppShellSidebarController } from "@/features/pico/app-shell-sidebar-controller"
-import { AppShellWindowEffectsHost } from "@/features/pico/app-shell-window-effects"
-import { setBrowserMode } from "@/features/pico/agent/browser-preview"
-import type { AppShellAddProjectDialogHandle } from "@/features/pico/app-shell-add-project-dialog"
-import type { AppShellAuthDialogHandle } from "@/features/pico/app-shell-auth-dialog"
+} from "@/features/smith/app-shell-agent-header"
+import { AppShellSidebarController } from "@/features/smith/app-shell-sidebar-controller"
+import { AppShellWindowEffectsHost } from "@/features/smith/app-shell-window-effects"
+import { setBrowserMode } from "@/features/smith/agent/browser-preview"
+import type { AppShellAddProjectDialogHandle } from "@/features/smith/app-shell-add-project-dialog"
+import type { AppShellAuthDialogHandle } from "@/features/smith/app-shell-auth-dialog"
 import {
   AppShellModelDialog,
   type AppShellModelDialogHandle,
-} from "@/features/pico/app-shell-model-dialog"
+} from "@/features/smith/app-shell-model-dialog"
 import type {
   AppCommand,
   AppShellCommandPaletteHandle,
-} from "@/features/pico/app-shell-command-palette"
-import type { AppShellAgentsDialogHandle } from "@/features/pico/app-shell-agents-dialog"
-import type { AppShellSettingsDialogHandle } from "@/features/pico/app-shell-settings-dialog"
+} from "@/features/smith/app-shell-command-palette"
+import type { AppShellAgentsDialogHandle } from "@/features/smith/app-shell-agents-dialog"
+import type { AppShellSettingsDialogHandle } from "@/features/smith/app-shell-settings-dialog"
 import type {
   DeleteOldProjectAgentsDialogHandle,
   DeleteAgentsDialogHandle,
   ForkAgentDialogHandle,
   RenameAgentDialogHandle,
-} from "@/features/pico/app-shell-agent-dialogs"
-import type { AppShellTreeDialogHandle } from "@/features/pico/app-shell-tree-dialog"
+} from "@/features/smith/app-shell-agent-dialogs"
+import type { AppShellTreeDialogHandle } from "@/features/smith/app-shell-tree-dialog"
 import {
   type ArchiveAgentsResult,
   workingAgents,
   workingAgentsMessage,
   workingSubagents,
-} from "@/features/pico/archive-agents"
-import type { AppShellUiRequestDialogHandle } from "@/features/pico/app-shell-ui-request-dialog"
+} from "@/features/smith/archive-agents"
+import type { AppShellUiRequestDialogHandle } from "@/features/smith/app-shell-ui-request-dialog"
 import {
   findSidebarAgentSelectionKey,
   getCurrentAgentTitleFromState,
@@ -58,7 +58,7 @@ import {
   agentScrollKey,
   shallowRecordEqual,
   useLatestRef,
-} from "@/features/pico/app-shell-common"
+} from "@/features/smith/app-shell-common"
 import {
   EMPTY_COMPOSER_LINE_COMMENTS,
   EMPTY_COMPOSER_IMAGES,
@@ -78,20 +78,20 @@ import {
   isComposerFileLineComment,
   type PendingComposerMessage,
   type UserConversationItem,
-} from "@/features/pico/app-shell-composer-state"
+} from "@/features/smith/app-shell-composer-state"
 import {
   FileLineCommentsProvider,
   type FileLineCommentsValue,
-} from "@/features/pico/file-line-comments"
+} from "@/features/smith/file-line-comments"
 import {
   isHeldPendingId,
   type PendingQueueSaveRow,
-} from "@/features/pico/pending-queue"
+} from "@/features/smith/pending-queue"
 import {
   createConversationItemsStore,
   type ConversationItemsStore,
-} from "@/features/pico/app-shell-conversation-store"
-import type { AppShellConversationFrameHandle } from "@/features/pico/app-shell-conversation"
+} from "@/features/smith/app-shell-conversation-store"
+import type { AppShellConversationFrameHandle } from "@/features/smith/app-shell-conversation"
 import {
   closeAllRightSidebarFiles,
   closeOtherRightSidebarFiles,
@@ -106,13 +106,13 @@ import {
   setRightSidebarActiveTab,
   type AppShellRightSidebarState,
   type OpenFileViewTabOptions,
-} from "@/features/pico/app-shell-right-sidebar-state"
+} from "@/features/smith/app-shell-right-sidebar-state"
 import {
   endProjectFileEdits,
   getDirtyProjectFilePaths,
   useDirtyProjectFilePaths,
-} from "@/features/pico/project-file-edits"
-import { normalizeCwd } from "@/features/pico/right-sidebar-shared"
+} from "@/features/smith/project-file-edits"
+import { normalizeCwd } from "@/features/smith/right-sidebar-shared"
 import {
   createAppShellSidebarStore,
   mergeSidebarAgentStatusMap,
@@ -123,7 +123,7 @@ import {
   upsertOptimisticSidebarAgentEntry,
   useAppShellSidebarValue,
   type AppShellSidebarStore,
-} from "@/features/pico/app-shell-sidebar-store"
+} from "@/features/smith/app-shell-sidebar-store"
 import type {
   AppShellDisplaySettingsState,
   AppShellDraftFlowState,
@@ -132,65 +132,65 @@ import type {
   AppShellUiState,
   CreateAgentOptions,
   SelectAgentNavigationOptions,
-} from "@/features/pico/app-shell-types"
+} from "@/features/smith/app-shell-types"
 import {
   AWAITING_FIRST_RESPONSE_WORKING_LABEL,
   COMPACT_CANCELLED_LABEL,
   COMPACT_WORKING_LABEL,
   sameWorkingState,
   type AppShellWorkingState,
-} from "@/features/pico/app-shell-working-state"
+} from "@/features/smith/app-shell-working-state"
 import {
   buildRequestUrl,
   fetchJson,
   isInlineImageFile,
   readFileAsPromptImage,
-} from "@/features/pico/app-shell-utils"
-import type { ComposerPanelHandle } from "@/features/pico/composer-panel"
+} from "@/features/smith/app-shell-utils"
+import type { ComposerPanelHandle } from "@/features/smith/composer-panel"
 import {
   parseComposerSkillMessage,
   serializeComposerDraft,
-} from "@/features/pico/composer-utils"
-import { showGitPushSuccessToast } from "@/features/pico/git-toast-utils"
+} from "@/features/smith/composer-utils"
+import { showGitPushSuccessToast } from "@/features/smith/git-toast-utils"
 import {
   appShortcut,
   formatShortcutLabel,
   pullShortcut,
   rightSidebarPaneShortcut,
   type RightSidebarShortcutPane,
-} from "@/features/pico/keyboard-shortcuts"
-import { picoQueryKeys } from "@/features/pico/query-keys"
+} from "@/features/smith/keyboard-shortcuts"
+import { smithQueryKeys } from "@/features/smith/query-keys"
 import type {
   GitCommitDialogControllerHandle,
   GitRemoteAction,
-} from "@/features/pico/right-sidebar-types"
+} from "@/features/smith/right-sidebar-types"
 import {
   getDesktopNotificationPermission,
   primeAgentDoneSound,
   requestDesktopNotificationPermission,
   type DesktopNotificationPermission,
-} from "@/features/pico/agent-done-notifications"
-import { useAppShellPromptMutations } from "@/features/pico/use-app-shell-prompt-mutations"
-import { usePicoTheme } from "@/features/pico/use-pico-theme"
+} from "@/features/smith/agent-done-notifications"
+import { useAppShellPromptMutations } from "@/features/smith/use-app-shell-prompt-mutations"
+import { useSmithTheme } from "@/features/smith/use-smith-theme"
 import {
   applyProjectIndexRename,
   updateAgentsEventProjectIndexes,
   useAppShellAgentMutations,
-} from "@/features/pico/use-app-shell-agent-mutations"
-import { useAppShellAgentSync } from "@/features/pico/use-app-shell-agent-sync"
+} from "@/features/smith/use-app-shell-agent-mutations"
+import { useAppShellAgentSync } from "@/features/smith/use-app-shell-agent-sync"
 import {
   useAppShellShortcuts,
   type AppShellShortcutState,
-} from "@/features/pico/use-app-shell-shortcuts"
+} from "@/features/smith/use-app-shell-shortcuts"
 import {
   applyStoreAction,
   batch,
-  createPicoStore,
+  createSmithStore,
   setStoreField,
   setStoreState,
   useSelector,
-  type PicoStore,
-} from "@/features/pico/tanstack-store-utils"
+  type SmithStore,
+} from "@/features/smith/tanstack-store-utils"
 import {
   AUTO_SCROLL_ENABLED_STORAGE_KEY,
   CENTER_MESSAGES_STORAGE_KEY,
@@ -224,7 +224,7 @@ import {
   safeLocalStorageSetItem,
   machineLocalStorageSetItem,
   agentListEntryKey,
-} from "@/lib/pico"
+} from "@/lib/smith"
 import type {
   ConversationItem,
   PromptImage,
@@ -232,7 +232,7 @@ import type {
   StreamingBehavior,
   ThemeColorMode,
   ThemeFamily,
-} from "@/lib/pico"
+} from "@/lib/smith"
 import type {
   ExtensionUiEvent,
   GitActionResponse,
@@ -241,8 +241,8 @@ import type {
   AgentHistoryResponse,
   AgentReadStateResponse,
   AgentStatusEvent,
-} from "@/lib/pico/api"
-import { useMachineId } from "@/lib/pico/machine-context"
+} from "@/lib/smith/api"
+import { useMachineId } from "@/lib/smith/machine-context"
 import { settle } from "@/lib/settle"
 
 const INITIAL_SIDEBAR_BOOTSTRAP_PROJECT_COUNT = 6
@@ -254,8 +254,8 @@ const INITIAL_SIDEBAR_BOOTSTRAP_PROJECT_COUNT = 6
  * state changes, and the hooks that get the callback run their effects again.
  */
 function refreshComposerPendingMessagesFrom(
-  composerStore: PicoStore<AppShellComposerSnapshot>,
-  pendingDraftFollowUpsStore: PicoStore<
+  composerStore: SmithStore<AppShellComposerSnapshot>,
+  pendingDraftFollowUpsStore: SmithStore<
     Array<{
       message: string
       images: Array<PromptImage>
@@ -263,7 +263,7 @@ function refreshComposerPendingMessagesFrom(
       optimisticId?: string
     }>
   >,
-  pendingMessagesStore: PicoStore<Array<PendingComposerMessage>>
+  pendingMessagesStore: SmithStore<Array<PendingComposerMessage>>
 ) {
   const pendingDraftFollowUpMessages = pendingDraftFollowUpsStore.state.map(
     (message, index) => ({
@@ -314,12 +314,12 @@ function useAppShellAgentWorkspaceView({
 }) {
   const machineId = useMachineId()
   const queryClient = useQueryClient()
-  const [agentStore] = React.useState<PicoStore<AgentState>>(() =>
-    createPicoStore(createInitialAgentState())
+  const [agentStore] = React.useState<SmithStore<AgentState>>(() =>
+    createSmithStore(createInitialAgentState())
   )
   const agentStateRef = React.useRef(agentStore.state)
-  const [appUiStore] = React.useState<PicoStore<AppShellUiState>>(() =>
-    createPicoStore<AppShellUiState>(
+  const [appUiStore] = React.useState<SmithStore<AppShellUiState>>(() =>
+    createSmithStore<AppShellUiState>(
       {
         currentTab: "conversation",
         gitPanelOpen: false,
@@ -331,8 +331,8 @@ function useAppShellAgentWorkspaceView({
     )
   )
   const [rightSidebarStore] = React.useState<
-    PicoStore<AppShellRightSidebarState>
-  >(() => createPicoStore(createInitialRightSidebarState()))
+    SmithStore<AppShellRightSidebarState>
+  >(() => createSmithStore(createInitialRightSidebarState()))
   const setCurrentTab: React.Dispatch<React.SetStateAction<string>> = (
     action
   ) => {
@@ -370,15 +370,15 @@ function useAppShellAgentWorkspaceView({
   }
   const previousRouteAgentIdRef = React.useRef(agentId)
   const [composerDraftSeedStore] = React.useState<
-    PicoStore<{ text: string; skillName?: string; syncNonce: number }>
+    SmithStore<{ text: string; skillName?: string; syncNonce: number }>
   >(() =>
-    createPicoStore({
+    createSmithStore({
       text: "",
       syncNonce: 0,
     })
   )
-  const [composerImagesStore] = React.useState<PicoStore<Array<PromptImage>>>(
-    () => createPicoStore<Array<PromptImage>>([])
+  const [composerImagesStore] = React.useState<SmithStore<Array<PromptImage>>>(
+    () => createSmithStore<Array<PromptImage>>([])
   )
   const composerImagesRef = React.useRef<Array<PromptImage>>([])
   const composerLineCommentsRef = React.useRef<Array<ComposerLineComment>>([])
@@ -386,9 +386,9 @@ function useAppShellAgentWorkspaceView({
     Array<ComposerLineComment>
   >([])
   const [displaySettingsStore] = React.useState<
-    PicoStore<AppShellDisplaySettingsState>
+    SmithStore<AppShellDisplaySettingsState>
   >(() =>
-    createPicoStore<AppShellDisplaySettingsState>(
+    createSmithStore<AppShellDisplaySettingsState>(
       {
         autoScrollEnabled: false,
         centerMessages: true,
@@ -435,11 +435,11 @@ function useAppShellAgentWorkspaceView({
     displaySettingsRef.current = next
     setStoreState(displaySettingsStore, next)
   }
-  const [awaitingFirstTurnStore] = React.useState<PicoStore<boolean>>(() =>
-    createPicoStore(false)
+  const [awaitingFirstTurnStore] = React.useState<SmithStore<boolean>>(() =>
+    createSmithStore(false)
   )
   const [pendingDraftPromptStore] = React.useState<
-    PicoStore<{
+    SmithStore<{
       ownerKey: string
       message: string
       images: Array<PromptImage>
@@ -448,7 +448,7 @@ function useAppShellAgentWorkspaceView({
       optimisticSidebarAgentId?: string
     } | null>
   >(() =>
-    createPicoStore<{
+    createSmithStore<{
       ownerKey: string
       message: string
       images: Array<PromptImage>
@@ -458,7 +458,7 @@ function useAppShellAgentWorkspaceView({
     } | null>(null)
   )
   const [pendingDraftFollowUpsStore] = React.useState<
-    PicoStore<
+    SmithStore<
       Array<{
         message: string
         images: Array<PromptImage>
@@ -467,7 +467,7 @@ function useAppShellAgentWorkspaceView({
       }>
     >
   >(() =>
-    createPicoStore<
+    createSmithStore<
       Array<{
         message: string
         images: Array<PromptImage>
@@ -476,16 +476,16 @@ function useAppShellAgentWorkspaceView({
       }>
     >([])
   )
-  const [isSubmittingStore] = React.useState<PicoStore<boolean>>(() =>
-    createPicoStore(false)
+  const [isSubmittingStore] = React.useState<SmithStore<boolean>>(() =>
+    createSmithStore(false)
   )
   const [pendingMessagesStore] = React.useState<
-    PicoStore<Array<PendingComposerMessage>>
-  >(() => createPicoStore<Array<PendingComposerMessage>>([]))
+    SmithStore<Array<PendingComposerMessage>>
+  >(() => createSmithStore<Array<PendingComposerMessage>>([]))
   const [notificationStore] = React.useState<
-    PicoStore<AppShellNotificationState>
+    SmithStore<AppShellNotificationState>
   >(() =>
-    createPicoStore<AppShellNotificationState>(
+    createSmithStore<AppShellNotificationState>(
       {
         desktopNotificationPermission: "unsupported",
         agentDoneDesktopNotificationsEnabled: true,
@@ -519,9 +519,9 @@ function useAppShellAgentWorkspaceView({
   > = (action) => {
     setStoreField(notificationStore, "desktopNotificationPermission", action)
   }
-  const [draftFlowStore] = React.useState<PicoStore<AppShellDraftFlowState>>(
+  const [draftFlowStore] = React.useState<SmithStore<AppShellDraftFlowState>>(
     () =>
-      createPicoStore<AppShellDraftFlowState>(
+      createSmithStore<AppShellDraftFlowState>(
         {
           draftAgentLoadingOwnerKey: null,
           storedDraftProject: "",
@@ -539,8 +539,8 @@ function useAppShellAgentWorkspaceView({
   ) => {
     setStoreField(draftFlowStore, "storedDraftProject", action)
   }
-  const [recentProjectsStore] = React.useState<PicoStore<Array<string>>>(() =>
-    createPicoStore<Array<string>>([], sameStringArray)
+  const [recentProjectsStore] = React.useState<SmithStore<Array<string>>>(() =>
+    createSmithStore<Array<string>>([], sameStringArray)
   )
   const setRecentProjects: React.Dispatch<
     React.SetStateAction<Array<string>>
@@ -554,9 +554,9 @@ function useAppShellAgentWorkspaceView({
     useSidebar()
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const composerPanelRef = React.useRef<ComposerPanelHandle | null>(null)
-  const [composerStore] = React.useState<PicoStore<AppShellComposerSnapshot>>(
+  const [composerStore] = React.useState<SmithStore<AppShellComposerSnapshot>>(
     () =>
-      createPicoStore(
+      createSmithStore(
         createInitialAppShellComposerSnapshot(viewerContextId),
         sameAppShellComposerSnapshot
       )
@@ -577,8 +577,8 @@ function useAppShellAgentWorkspaceView({
     })
   }
   const [contextUsageStore] = React.useState<
-    PicoStore<AgentState["contextUsage"]>
-  >(() => createPicoStore<AgentState["contextUsage"]>(undefined))
+    SmithStore<AgentState["contextUsage"]>
+  >(() => createSmithStore<AgentState["contextUsage"]>(undefined))
   const [contextUsageThrottler] = React.useState(
     () =>
       new Throttler(
@@ -586,7 +586,7 @@ function useAppShellAgentWorkspaceView({
           setStoreState(contextUsageStore, contextUsage)
         },
         {
-          key: "pico.composer.context-usage",
+          key: "smith.composer.context-usage",
           wait: 250,
           leading: true,
           trailing: true,
@@ -832,8 +832,8 @@ function useAppShellAgentWorkspaceView({
     setIsLoadingOlderHistory(false)
   }
   const [workingStateStore] = React.useState<
-    PicoStore<AppShellWorkingState | null>
-  >(() => createPicoStore<AppShellWorkingState | null>(null, sameWorkingState))
+    SmithStore<AppShellWorkingState | null>
+  >(() => createSmithStore<AppShellWorkingState | null>(null, sameWorkingState))
   const compactRunningRef = React.useRef(false)
   const compactAbortRequestedRef = React.useRef(false)
   const setCompactRunningState = (running: boolean) => {
@@ -1008,7 +1008,7 @@ function useAppShellAgentWorkspaceView({
     setThemeFamily,
     systemTheme,
     themeFamily: currentTheme,
-  } = usePicoTheme()
+  } = useSmithTheme()
   const { initialLoadingAgentId, loadingAgentId } = useSelector(
     appUiStore,
     (state) => ({
@@ -1128,7 +1128,7 @@ function useAppShellAgentWorkspaceView({
     })
   }
 
-  usePicoEvent("pico:open-sidebar-tab", (detail) => {
+  useSmithEvent("smith:open-sidebar-tab", (detail) => {
     openRightSidebarTab(detail.tab)
   })
 
@@ -1241,7 +1241,7 @@ function useAppShellAgentWorkspaceView({
   // each agent and port. Not on phones, where the tab would hide the agent.
   // A request of the user (`open`) shows it always.
   const shownPreviewsRef = React.useRef(new Set<string>())
-  usePicoEvent("pico:preview-available", (detail) => {
+  useSmithEvent("smith:preview-available", (detail) => {
     if (detail.machineId !== machineId) return
     const key = `${detail.agentId}:${detail.port}`
     if (!detail.open) {
@@ -1443,32 +1443,32 @@ function useAppShellAgentWorkspaceView({
   const invalidateGitActionQueries = async (cwd: string) => {
     await Promise.all([
       queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitStatus(viewerContextId, cwd),
+        queryKey: smithQueryKeys.gitStatus(viewerContextId, cwd),
         exact: true,
         refetchType: "active",
       }),
       queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitFiles(viewerContextId, cwd),
+        queryKey: smithQueryKeys.gitFiles(viewerContextId, cwd),
         exact: true,
         refetchType: "active",
       }),
       queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitBranches(viewerContextId, cwd),
+        queryKey: smithQueryKeys.gitBranches(viewerContextId, cwd),
         exact: true,
         refetchType: "active",
       }),
       queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitCommits(viewerContextId, cwd),
+        queryKey: smithQueryKeys.gitCommits(viewerContextId, cwd),
         exact: false,
         refetchType: "active",
       }),
       queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.projectFileTree(viewerContextId, cwd),
+        queryKey: smithQueryKeys.projectFileTree(viewerContextId, cwd),
         exact: true,
         refetchType: "active",
       }),
       queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitFileReviews(viewerContextId, cwd),
+        queryKey: smithQueryKeys.gitFileReviews(viewerContextId, cwd),
         exact: false,
         refetchType: "active",
       }),
@@ -1476,7 +1476,7 @@ function useAppShellAgentWorkspaceView({
   }
 
   const gitPushMutation = useMutation({
-    mutationKey: picoQueryKeys.gitAction(
+    mutationKey: smithQueryKeys.gitAction(
       viewerContextId,
       agentStore.state.cwd?.trim() || "",
       "push"
@@ -1495,7 +1495,7 @@ function useAppShellAgentWorkspaceView({
       ),
     onSuccess: async (response, cwd) => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitStatus(viewerContextId, cwd),
+        queryKey: smithQueryKeys.gitStatus(viewerContextId, cwd),
         exact: true,
         refetchType: "active",
       })
@@ -1508,7 +1508,7 @@ function useAppShellAgentWorkspaceView({
   })
 
   const gitForcePushMutation = useMutation({
-    mutationKey: picoQueryKeys.gitAction(
+    mutationKey: smithQueryKeys.gitAction(
       viewerContextId,
       agentStore.state.cwd?.trim() || "",
       "force-push"
@@ -1527,7 +1527,7 @@ function useAppShellAgentWorkspaceView({
       ),
     onSuccess: async (response, cwd) => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitStatus(viewerContextId, cwd),
+        queryKey: smithQueryKeys.gitStatus(viewerContextId, cwd),
         exact: true,
         refetchType: "active",
       })
@@ -1542,7 +1542,7 @@ function useAppShellAgentWorkspaceView({
   })
 
   const gitPullMutation = useMutation({
-    mutationKey: picoQueryKeys.gitAction(
+    mutationKey: smithQueryKeys.gitAction(
       viewerContextId,
       agentStore.state.cwd?.trim() || "",
       "pull"
@@ -1561,7 +1561,7 @@ function useAppShellAgentWorkspaceView({
       ),
     onSuccess: async (_response, cwd) => {
       await queryClient.invalidateQueries({
-        queryKey: picoQueryKeys.gitStatus(viewerContextId, cwd),
+        queryKey: smithQueryKeys.gitStatus(viewerContextId, cwd),
         exact: true,
         refetchType: "active",
       })
@@ -1627,7 +1627,7 @@ function useAppShellAgentWorkspaceView({
 
   const terminalsAvailable = useMachineFeature("native-pty")
 
-  usePicoEvent("pico:open-job-terminal", () => {
+  useSmithEvent("smith:open-job-terminal", () => {
     if (!terminalsAvailable) return
     if (isMobile) setCurrentTab("terminal")
     else setTerminalPanelOpen(true)
@@ -1635,7 +1635,7 @@ function useAppShellAgentWorkspaceView({
 
   const toggleTerminalPanel = () => {
     if (!terminalsAvailable) {
-      toast.info("This machine has no terminals. Update Pico on it.")
+      toast.info("This machine has no terminals. Update Smith on it.")
       return
     }
     if (isMobile) {
@@ -1830,10 +1830,10 @@ function useAppShellAgentWorkspaceView({
       }, 0)
     }
 
-    window.addEventListener("pico:dialog-closed", handleDialogClosed)
+    window.addEventListener("smith:dialog-closed", handleDialogClosed)
 
     return () => {
-      window.removeEventListener("pico:dialog-closed", handleDialogClosed)
+      window.removeEventListener("smith:dialog-closed", handleDialogClosed)
       if (promptFocusAfterDialogCloseTimeoutRef.current !== null) {
         window.clearTimeout(promptFocusAfterDialogCloseTimeoutRef.current)
         promptFocusAfterDialogCloseTimeoutRef.current = null
@@ -2019,8 +2019,8 @@ function useAppShellAgentWorkspaceView({
   const handleSelectAgentRef = useLatestRef(handleSelectAgent)
   // Another device changed the shared sidebar layout. The first projects
   // that the event stream loads stay the same, so the stream does not restart.
-  usePicoEvent(
-    "pico:sidebar-state",
+  useSmithEvent(
+    "smith:sidebar-state",
     ({ machineId: changedMachine, changed }) => {
       if (changedMachine !== machineId) return
       if (changed.includes("projects")) {
@@ -2038,7 +2038,7 @@ function useAppShellAgentWorkspaceView({
     }
   )
 
-  usePicoEvent("pico:open-agent", (detail) => {
+  useSmithEvent("smith:open-agent", (detail) => {
     handleSelectAgent(detail.agentId)
   })
 
@@ -2530,17 +2530,17 @@ function useAppShellAgentWorkspaceView({
         return
       case "open-terminal":
         if (!terminalsAvailable) {
-          toast.info("This machine has no terminals. Update Pico on it.")
+          toast.info("This machine has no terminals. Update Smith on it.")
           return
         }
         if (isMobile) setCurrentTab("terminal")
         else setTerminalPanelOpen(true)
         return
       case "open-resources":
-        emitPicoEvent("pico:open-resources", {})
+        emitSmithEvent("smith:open-resources", {})
         return
       case "open-archived-agents":
-        emitPicoEvent("pico:open-archived-agents", {})
+        emitSmithEvent("smith:open-archived-agents", {})
         return
       case "insert-prompt": {
         const current = composerTextRef.current
@@ -2907,7 +2907,7 @@ function useAppShellAgentWorkspaceView({
       return false
     }
     await queryClient.invalidateQueries({
-      queryKey: ["pico", "project-agents-index", viewerContextId],
+      queryKey: ["smith", "project-agents-index", viewerContextId],
       refetchType: "active",
     })
     toast.success(nextUnread ? "Marked agent unread" : "Marked agent read")
@@ -2958,7 +2958,7 @@ function useAppShellAgentWorkspaceView({
     })
 
     await queryClient.invalidateQueries({
-      queryKey: ["pico", "project-agents-index", viewerContextId],
+      queryKey: ["smith", "project-agents-index", viewerContextId],
       refetchType: "active",
     })
 
@@ -3301,7 +3301,7 @@ function useAppShellAgentWorkspaceView({
         title: "Show resources",
         description: "Memory of the server, terminals, jobs, and the browser",
         keywords: ["resources", "memory", "ram", "jobs", "processes"],
-        onSelect: () => emitPicoEvent("pico:open-resources", {}),
+        onSelect: () => emitSmithEvent("smith:open-resources", {}),
       },
       {
         id: "commit-changes",
@@ -3826,7 +3826,7 @@ function useAppShellAgentWorkspaceView({
   )
 }
 
-export function PicoAppShell({
+export function SmithAppShell({
   agentId,
   onSelectAgent,
 }: {

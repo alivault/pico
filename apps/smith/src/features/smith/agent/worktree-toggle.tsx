@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { PencilIcon } from "lucide-react"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import { Button } from "@/components/ui/button"
 import { Field, FieldLabel } from "@/components/ui/field"
@@ -13,11 +13,11 @@ import {
 } from "@/components/ui/popover"
 import { Switch } from "@/components/ui/switch"
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { errorText } from "@/features/pico/agent/shared"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { useMachineFeature } from "@/features/pico/machine-store"
+import { errorText } from "@/features/smith/agent/shared"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { useMachineFeature } from "@/features/smith/machine-store"
 import { cn } from "@/lib/utils"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 
 type DraftWorktree = {
   ok: true
@@ -41,7 +41,7 @@ function NewAgentWorktreeToggleView({
   // Each machine's app shell has a composer, so the ID must be unique.
   const branchFieldId = React.useId()
   const queryClient = useQueryClient()
-  const queryKey = ["pico", "draft-worktree", viewerContextId, cwd] as const
+  const queryKey = ["smith", "draft-worktree", viewerContextId, cwd] as const
   const query = useQuery({
     queryKey,
     queryFn: () =>

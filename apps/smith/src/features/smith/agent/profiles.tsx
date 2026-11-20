@@ -10,7 +10,7 @@ import {
   WrenchIcon,
   type LucideIcon,
 } from "lucide-react"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import {
   DropdownMenuItem,
@@ -18,19 +18,19 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu"
-import { agentExtensionsQueryKey } from "@/features/pico/agent/agent-extensions"
-import { errorText } from "@/features/pico/agent/shared"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { useMachineFeature } from "@/features/pico/machine-store"
+import { agentExtensionsQueryKey } from "@/features/smith/agent/agent-extensions"
+import { errorText } from "@/features/smith/agent/shared"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { useMachineFeature } from "@/features/smith/machine-store"
 import {
   registerSettingsPage,
   SettingsEditPage,
   SettingsListPage,
   useOpenSettingsPage,
   type SettingsPageProps,
-} from "@/features/pico/settings-pages"
+} from "@/features/smith/settings-pages"
 import { cn } from "@/lib/utils"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 import { settle, settleSync } from "@/lib/settle"
 
 type Profile = {
@@ -74,7 +74,7 @@ type ProfilesResponse = { ok: true; profiles: Array<Profile>; current: string }
 function useProfiles(viewerContextId: string, agentId?: string) {
   const machineId = useMachineId()
   return useQuery({
-    queryKey: ["pico", "profiles", viewerContextId, agentId ?? "draft"],
+    queryKey: ["smith", "profiles", viewerContextId, agentId ?? "draft"],
     queryFn: () =>
       fetchJson<ProfilesResponse>(
         buildRequestUrl("/api/profiles", {
@@ -114,7 +114,7 @@ function useProfileSelection({ cwd, agentId, viewerContextId }: ProfileTarget) {
       ),
     onSuccess: (data) => {
       queryClient.setQueryData(
-        ["pico", "profiles", viewerContextId, agentId ?? "draft"],
+        ["smith", "profiles", viewerContextId, agentId ?? "draft"],
         (current: ProfilesResponse | undefined) =>
           current ? { ...current, current: data.profile } : current
       )
@@ -287,7 +287,7 @@ function EditProfilesPage({ viewerContextId }: SettingsPageProps) {
         )
         if (!saved.ok) return errorText(saved.error)
         toast.success("Saved the profiles")
-        await queryClient.invalidateQueries({ queryKey: ["pico", "profiles"] })
+        await queryClient.invalidateQueries({ queryKey: ["smith", "profiles"] })
         return undefined
       }}
     />

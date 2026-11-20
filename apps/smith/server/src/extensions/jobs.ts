@@ -6,7 +6,7 @@
  * panel. Output also goes to `<data>/jobs/<id>.log` for the terminal output action.
  *
  * A job's process runs in the pty-host process (see `pty-backend.ts`), so it
- * survives a server restart. The `pico.jobs` document keeps each job, and a
+ * survives a server restart. The `smith.jobs` document keeps each job, and a
  * store-wide index (pi-durable scope `session`) lists the running ones. At startup, `recover` takes over
  * the jobs that the pty-host kept and records the jobs that ended while the
  * server was down. Jobs without a process become `lost` (for example after
@@ -136,7 +136,7 @@ export function jobNeedingUser(state: JobsState | null | undefined) {
 export type JobsState = { items: Record<string, Job> }
 
 export const JobsDoc = defineDoc<JobsState>({
-  kind: "pico.jobs",
+  kind: "smith.jobs",
   checkpointWhen: () => false,
   version: 1,
   scope: "conversation",
@@ -147,7 +147,7 @@ export const JobsDoc = defineDoc<JobsState>({
 
 /** Running jobs of every agent, so a restart can find the lost ones. */
 export const JobIndexDoc = defineDoc<{ running: Record<string, number> }>({
-  kind: "pico.jobs.index",
+  kind: "smith.jobs.index",
   checkpointWhen: () => false,
   version: 1,
   scope: "session",
@@ -375,7 +375,7 @@ function touchJobLog(dataDir: string, jobId: string) {
 
 /**
  * Delete job logs that did not change for `OLD_LOG_MS`, except the logs of
- * running jobs. This removes logs of pruned records from before Pico deleted
+ * running jobs. This removes logs of pruned records from before Smith deleted
  * them, and of deleted conversations. The end of a job sets its log's time,
  * so a job that ended in that time keeps its log.
  */
@@ -661,7 +661,7 @@ class JobRunner {
         `job:${job.id}:waiting:${live.episode}`
       )
     } catch (error) {
-      console.warn(`[pico] could not record that job ${job.id} waits:`, error)
+      console.warn(`[smith] could not record that job ${job.id} waits:`, error)
     }
   }
 
@@ -952,7 +952,7 @@ class JobRunner {
           services,
           conversationId,
           [
-            `[Job ${exit.exitCode === 0 ? "finished" : "failed"}] ${job.name} exited with code ${exit.exitCode} after ${formatDuration(Date.now() - job.startedAt)}${whileDown ? ", while the Pico server restarted" : ""}.`,
+            `[Job ${exit.exitCode === 0 ? "finished" : "failed"}] ${job.name} exited with code ${exit.exitCode} after ${formatDuration(Date.now() - job.startedAt)}${whileDown ? ", while the Smith server restarted" : ""}.`,
             `(job ${job.id}: ${job.command})`,
             "Last output:",
             clip(output, 4000) || "(no output)",
@@ -961,7 +961,7 @@ class JobRunner {
         )
       }
     } catch (error) {
-      console.warn(`[pico] could not record the end of job ${job.id}:`, error)
+      console.warn(`[smith] could not record the end of job ${job.id}:`, error)
     }
   }
 
@@ -992,7 +992,7 @@ class JobRunner {
       this.#dataDir,
       new Set(Object.keys(index?.running ?? {}))
     ).catch((error: unknown) =>
-      console.warn("[pico] could not delete old job logs:", error)
+      console.warn("[smith] could not delete old job logs:", error)
     )
     for (const [jobId, conversationNumber] of Object.entries(
       index?.running ?? {}
@@ -1049,13 +1049,13 @@ class JobRunner {
         conversationId,
         jobId,
         job,
-        "the Pico server restarted"
+        "the Smith server restarted"
       )
     }
     // Job ptys that the pty-host kept but no record took: nobody owns them.
     const dropped = services.terminals.dropUnadoptedJobs()
     if (dropped)
-      console.log(`[pico] stopped ${dropped} job(s) without a record`)
+      console.log(`[smith] stopped ${dropped} job(s) without a record`)
   }
 
   async #lost(
@@ -1073,7 +1073,7 @@ class JobRunner {
       BACKGROUND_CONTEXT,
       this.#dataDir
     ).catch((error: unknown) =>
-      console.warn(`[pico] could not record that job ${jobId} is lost:`, error)
+      console.warn(`[smith] could not record that job ${jobId} is lost:`, error)
     )
     services.terminals.forgetJob(jobId)
     // Children that ignore SIGHUP live on in the job's scope: stop it.
@@ -1122,7 +1122,7 @@ export async function stopJob(
 
 registerState({
   key: "jobs",
-  kinds: ["pico.jobs"],
+  kinds: ["smith.jobs"],
   async read(reader, conversationId, context) {
     const state = await reader.snapshot(JobsDoc, conversationId, context)
     const items = Object.values(state?.items ?? {}).sort(
@@ -1309,8 +1309,8 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
       return {
         error: [
           earlier
-            ? `Job ${startedBefore} (${earlier.name}) ${earlier.status === "exited" ? `exited with code ${earlier.exitCode}` : earlier.status === "running" ? "still runs" : `is ${earlier.status}`}. The call stopped when the Pico server restarted; it does not start the command again.`
-            : `Job ${startedBefore} is gone. The call stopped when the Pico server restarted.`,
+            ? `Job ${startedBefore} (${earlier.name}) ${earlier.status === "exited" ? `exited with code ${earlier.exitCode}` : earlier.status === "running" ? "still runs" : `is ${earlier.status}`}. The call stopped when the Smith server restarted; it does not start the command again.`
+            : `Job ${startedBefore} is gone. The call stopped when the Smith server restarted.`,
           output ? `Last output:\n${clip(output, 3000)}` : "",
         ]
           .filter(Boolean)
@@ -1673,7 +1673,7 @@ export function createJobsExtension(host: HostBridge, dataDir: string) {
     )
     runner.markFocused(job.id)
     return {
-      text: `Asked the user to type in the terminal of ${job.name}: "${text}". Pico shows the tab when the user opens this agent, and sends a notification. Use the wait action to see the result.`,
+      text: `Asked the user to type in the terminal of ${job.name}: "${text}". Smith shows the tab when the user opens this agent, and sends a notification. Use the wait action to see the result.`,
     }
   }
 

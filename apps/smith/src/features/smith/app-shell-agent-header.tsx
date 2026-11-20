@@ -1,8 +1,11 @@
 import * as React from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { picoQueryKeys } from "@/features/pico/query-keys"
-import { ProfileMenuSub } from "@/features/pico/agent/profiles"
-import { AgentLineage, useAgentInfo } from "@/features/pico/agent/agent-lineage"
+import { smithQueryKeys } from "@/features/smith/query-keys"
+import { ProfileMenuSub } from "@/features/smith/agent/profiles"
+import {
+  AgentLineage,
+  useAgentInfo,
+} from "@/features/smith/agent/agent-lineage"
 import {
   EllipsisIcon,
   PanelRightIcon,
@@ -25,46 +28,46 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
-import type { AppShellSidebarStore } from "@/features/pico/app-shell-sidebar-store"
+import type { AppShellSidebarStore } from "@/features/smith/app-shell-sidebar-store"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import {
   formatDisplayPath,
   formatFolderName,
   getCurrentAgentTitleFromState,
   shallowRecordEqual,
-} from "@/features/pico/app-shell-common"
-import type { AppShellDisplaySettingsState } from "@/features/pico/app-shell-types"
+} from "@/features/smith/app-shell-common"
+import type { AppShellDisplaySettingsState } from "@/features/smith/app-shell-types"
 import {
   appShortcut,
   formatShortcutLabel,
-} from "@/features/pico/keyboard-shortcuts"
-import { HeaderGitStatusText } from "@/features/pico/right-sidebar-git-header-actions"
+} from "@/features/smith/keyboard-shortcuts"
+import { HeaderGitStatusText } from "@/features/smith/right-sidebar-git-header-actions"
 import {
   useSelector,
-  type PicoStore,
-} from "@/features/pico/tanstack-store-utils"
-import type { AgentState } from "@/lib/pico"
+  type SmithStore,
+} from "@/features/smith/tanstack-store-utils"
+import type { AgentState } from "@/lib/smith"
 import { cn } from "@/lib/utils"
 import {
   useActiveMachine,
   useMachineFeature,
   useMachineReadOnly,
   useMachines,
-} from "@/features/pico/machine-store"
-import { shortModelLabel, thinkingLabel } from "@/features/pico/model-label"
-import { emitPicoEvent } from "@/features/pico/agent/events"
-import { copyAgentId } from "@/features/pico/copy-agent-id"
+} from "@/features/smith/machine-store"
+import { shortModelLabel, thinkingLabel } from "@/features/smith/model-label"
+import { emitSmithEvent } from "@/features/smith/agent/events"
+import { copyAgentId } from "@/features/smith/copy-agent-id"
 import {
   ContextUsageQuotaDetails,
   ContextUsageWindowDetails,
   useContextUsageView,
   type ComposerContextUsageStore,
-} from "@/features/pico/context-usage"
+} from "@/features/smith/context-usage"
 import {
   machineHasBusyAgents,
   machineHasUnreadAgents,
   useHasMachineGroups,
-} from "@/features/pico/machines"
+} from "@/features/smith/machines"
 
 export type AppShellAgentHeaderActions = {
   createAgent: (cwdOverride?: string) => void | Promise<unknown>
@@ -90,11 +93,11 @@ type AppShellAgentHeaderProps = {
   terminalPanelOpen: boolean
   loadingDisplayAgentTitle: string
   contextUsageStore: ComposerContextUsageStore
-  displaySettingsStore: PicoStore<AppShellDisplaySettingsState>
+  displaySettingsStore: SmithStore<AppShellDisplaySettingsState>
   isAgentViewLoading: boolean
   onToggleGitPanel: () => void
   onToggleTerminalPanel: () => void
-  agentStore: PicoStore<AgentState>
+  agentStore: SmithStore<AgentState>
   sidebarStore: AppShellSidebarStore
   viewerContextId: string
 }
@@ -246,7 +249,7 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
               // the menu gets them again when it opens.
               if (open)
                 void queryClient.invalidateQueries({
-                  queryKey: picoQueryKeys.providerUsageAll(),
+                  queryKey: smithQueryKeys.providerUsageAll(),
                 })
             }}
           >
@@ -265,7 +268,7 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
                   <DropdownMenuItem
                     className="block"
                     onClick={() =>
-                      emitPicoEvent("pico:open-agent-settings", {
+                      emitSmithEvent("smith:open-agent-settings", {
                         page: "agent-context",
                       })
                     }

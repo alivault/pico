@@ -7,14 +7,14 @@ import {
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { emitPicoEvent } from "@/features/pico/agent/events"
+import { emitSmithEvent } from "@/features/smith/agent/events"
 import {
   registerToolRenderer,
   toolArgs,
   toolDetails,
   type ToolRendererProps,
-} from "@/features/pico/tool-renderers/registry"
-import { DiffView } from "@/features/pico/tool-renderers/show"
+} from "@/features/smith/tool-renderers/registry"
+import { DiffView } from "@/features/smith/tool-renderers/show"
 import { cn } from "@/lib/utils"
 
 function argText(block: ToolRendererProps["block"], ...keys: Array<string>) {
@@ -76,7 +76,7 @@ registerToolRenderer("git_diff", {
             size="sm"
             variant="ghost"
             onClick={() =>
-              emitPicoEvent("pico:open-sidebar-tab", { tab: "review" })
+              emitSmithEvent("smith:open-sidebar-tab", { tab: "review" })
             }
           >
             <GitCompareIcon /> Open Changes

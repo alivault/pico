@@ -1,7 +1,7 @@
 import * as React from "react"
 import { AsyncDebouncer } from "@tanstack/pacer"
 
-import type { CompletionItem } from "@/lib/pico/api"
+import type { CompletionItem } from "@/lib/smith/api"
 
 import {
   Command,
@@ -330,10 +330,10 @@ function useAppShellAddProjectDialogView({
     selectedCommandValue,
   } = state
   const [pathCompletionDebouncer] = React.useState(() =>
-    createCompletionDebouncer("pico.add-project.path-completions", 80)
+    createCompletionDebouncer("smith.add-project.path-completions", 80)
   )
   const [directorySearchDebouncer] = React.useState(() =>
-    createCompletionDebouncer("pico.add-project.directory-search", 120)
+    createCompletionDebouncer("smith.add-project.directory-search", 120)
   )
   const directoryQuery = directoryInput.trim()
   const normalizedDirectoryQuery = directoryQuery.toLowerCase()
@@ -409,10 +409,10 @@ function useAppShellAddProjectDialogView({
       ? "Use for this new agent."
       : "Expand and show it in the sidebar."
   const currentDescription = useForMoveAgent
-    ? "Move this agent to the current Pico working directory."
+    ? "Move this agent to the current Smith working directory."
     : useForNewAgent
-      ? "Use the current Pico working directory for this new agent."
-      : "Use the current Pico working directory."
+      ? "Use the current Smith working directory for this new agent."
+      : "Use the current Smith working directory."
   const addKnownDescription = useForMoveAgent
     ? "Move this agent here."
     : useForNewAgent

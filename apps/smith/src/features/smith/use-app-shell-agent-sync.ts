@@ -1,49 +1,49 @@
 import * as React from "react"
-import { emitPicoEvent } from "@/features/pico/agent/events"
-import { showPreview } from "@/features/pico/agent/browser-preview"
-import { normalizeCwd } from "@/features/pico/right-sidebar-shared"
+import { emitSmithEvent } from "@/features/smith/agent/events"
+import { showPreview } from "@/features/smith/agent/browser-preview"
+import { normalizeCwd } from "@/features/smith/right-sidebar-shared"
 import {
   handleSidebarStateEvent,
   refreshSidebarState,
-} from "@/features/pico/sidebar-sync"
+} from "@/features/smith/sidebar-sync"
 import { Batcher } from "@tanstack/pacer"
 import { useQueryClient } from "@tanstack/react-query"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
-import type { SelectAgentNavigationOptions } from "@/features/pico/app-shell-types"
-import type { PromptImage, AgentState, StateSyncPayload } from "@/lib/pico"
+import type { SelectAgentNavigationOptions } from "@/features/smith/app-shell-types"
+import type { PromptImage, AgentState, StateSyncPayload } from "@/lib/smith"
 import type {
   ExtensionUiEvent,
-  PicoServerEvent,
+  SmithServerEvent,
   AgentDoneEvent,
   AgentListEntry,
   AgentStatusEvent,
   AgentsEvent,
   SimpleOkResponse,
-} from "@/lib/pico/api"
+} from "@/lib/smith/api"
 
 import {
   buildRequestUrl,
   fetchJson,
   updateStateFromSync,
-} from "@/features/pico/app-shell-utils"
-import { serializeComposerDraft } from "@/features/pico/composer-utils"
-import { picoQueryKeys } from "@/features/pico/query-keys"
-import { hasPendingNewAgentAction } from "@/lib/pico/machine"
+} from "@/features/smith/app-shell-utils"
+import { serializeComposerDraft } from "@/features/smith/composer-utils"
+import { smithQueryKeys } from "@/features/smith/query-keys"
+import { hasPendingNewAgentAction } from "@/lib/smith/machine"
 import {
   batch,
   useSelector,
-  type PicoStore,
-} from "@/features/pico/tanstack-store-utils"
+  type SmithStore,
+} from "@/features/smith/tanstack-store-utils"
 import {
   normalizePromptImage,
   promptDraftKey,
   promptDraftKeyMatchesOwner,
   readStoredPromptDraft,
   rememberStoredPromptDraft,
-} from "@/lib/pico"
-import { LOCAL_MACHINE_ID } from "@/lib/pico/machine"
-import { applyConversationDelta, sameContextUsage } from "@/lib/pico/sync"
+} from "@/lib/smith"
+import { LOCAL_MACHINE_ID } from "@/lib/smith/machine"
+import { applyConversationDelta, sameContextUsage } from "@/lib/smith/sync"
 import {
   isConversationDeltaEvent,
   isGitChangedEvent,
@@ -52,19 +52,19 @@ import {
   isAgentsEvent,
   isStateSyncEvent,
   uiRequestExpectsResponse,
-} from "@/lib/pico/api"
-import { useMachineId } from "@/lib/pico/machine-context"
+} from "@/lib/smith/api"
+import { useMachineId } from "@/lib/smith/machine-context"
 import {
   checkServerConnection,
   markServerOnline,
   onServerReconnect,
-} from "@/lib/pico/server-connection"
+} from "@/lib/smith/server-connection"
 
 const RESUME_RECONNECT_AFTER_MS = 30_000
 const EVENTS_RECONNECT_DELAYS_MS = [1000, 2000, 5000, 10_000]
 const SELECT_RETRY_DELAYS_MS = [1000, 2000, 5000, 10_000]
 const COMPACT_WORKING_LABEL = "Compacting context..."
-const EVENT_SOURCE_LAST_ID_STORAGE_PREFIX = "pico-events-last-id:"
+const EVENT_SOURCE_LAST_ID_STORAGE_PREFIX = "smith-events-last-id:"
 
 type PendingComposerMessage = {
   pendingId: string
@@ -73,7 +73,7 @@ type PendingComposerMessage = {
   streamingBehavior: "steer" | "followUp"
 }
 
-type AgentStateStore = PicoStore<AgentState>
+type AgentStateStore = SmithStore<AgentState>
 
 type SyncedWorkingState = {
   label: string
@@ -174,7 +174,7 @@ function normalizeEventSourceLastId(value: string | null | undefined) {
 }
 
 function normalizePendingMessages(
-  payload: PicoServerEvent
+  payload: SmithServerEvent
 ): Array<PendingComposerMessage> | undefined {
   if (!isStateSyncEvent(payload)) {
     return undefined
@@ -199,7 +199,7 @@ function normalizePendingMessages(
 }
 
 type AutoAgentNamingErrorPayload = Extract<
-  PicoServerEvent,
+  SmithServerEvent,
   { type: "auto_agent_naming_error" }
 >
 
@@ -839,7 +839,7 @@ export function useAppShellAgentSync({
       eventsLastIdRef.current = lastEventId
       rememberStoredEventsLastId(machineId, viewerContextId, lastEventId)
     }
-    const payload = JSON.parse(event.data) as PicoServerEvent
+    const payload = JSON.parse(event.data) as SmithServerEvent
 
     if (isConversationDeltaEvent(payload)) {
       const previousState = agentStateRef.current
@@ -1104,7 +1104,7 @@ export function useAppShellAgentSync({
 
     if (payload.type === "agent_extensions") {
       if (typeof payload.agentId === "string") {
-        emitPicoEvent("pico:agent-extensions", {
+        emitSmithEvent("smith:agent-extensions", {
           agentId: payload.agentId,
           ...(typeof payload.kind === "string" ? { kind: payload.kind } : {}),
         })
@@ -1113,7 +1113,7 @@ export function useAppShellAgentSync({
     }
 
     if (payload.type === "auto_agent_naming_error") {
-      console.warn("[pico] auto agent naming failed", payload)
+      console.warn("[smith] auto agent naming failed", payload)
       toast.warning("Could not name agent", {
         description: autoAgentNamingErrorDescription(payload),
       })
@@ -1183,7 +1183,7 @@ export function useAppShellAgentSync({
           if (scopes.has("status")) {
             invalidations.push(
               queryClient.invalidateQueries({
-                queryKey: picoQueryKeys.gitStatus(viewerContextId, cwd),
+                queryKey: smithQueryKeys.gitStatus(viewerContextId, cwd),
                 exact: true,
                 refetchType: "active",
               })
@@ -1192,17 +1192,17 @@ export function useAppShellAgentSync({
           if (scopes.has("files")) {
             invalidations.push(
               queryClient.invalidateQueries({
-                queryKey: picoQueryKeys.gitFiles(viewerContextId, cwd),
+                queryKey: smithQueryKeys.gitFiles(viewerContextId, cwd),
                 exact: true,
                 refetchType: "active",
               }),
               queryClient.invalidateQueries({
-                queryKey: picoQueryKeys.projectFileTree(viewerContextId, cwd),
+                queryKey: smithQueryKeys.projectFileTree(viewerContextId, cwd),
                 exact: true,
                 refetchType: "active",
               }),
               queryClient.invalidateQueries({
-                queryKey: picoQueryKeys.gitFileReviews(viewerContextId, cwd),
+                queryKey: smithQueryKeys.gitFileReviews(viewerContextId, cwd),
                 exact: false,
                 refetchType: "active",
               })
@@ -1211,12 +1211,12 @@ export function useAppShellAgentSync({
           if (scopes.has("refs")) {
             invalidations.push(
               queryClient.invalidateQueries({
-                queryKey: picoQueryKeys.gitBranches(viewerContextId, cwd),
+                queryKey: smithQueryKeys.gitBranches(viewerContextId, cwd),
                 exact: true,
                 refetchType: "active",
               }),
               queryClient.invalidateQueries({
-                queryKey: picoQueryKeys.gitCommits(viewerContextId, cwd),
+                queryKey: smithQueryKeys.gitCommits(viewerContextId, cwd),
                 exact: false,
                 refetchType: "active",
               })
@@ -1227,7 +1227,7 @@ export function useAppShellAgentSync({
         void Promise.all(invalidations).catch(() => undefined)
       },
       {
-        key: "pico.git.invalidations",
+        key: "smith.git.invalidations",
         wait: 100,
       }
     )

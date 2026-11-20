@@ -1,10 +1,10 @@
 /**
  * The `agents` extension: agents that start and talk to other agents.
  *
- * `spawn_subagent` makes a subagent: a normal Pico agent with a `parent`
+ * `spawn_subagent` makes a subagent: a normal Smith agent with a `parent`
  * link, which the user can open in the web client. It is ownerless, so it
  * outlives the call that made it. Without `wait`, a background
- * `pico.child-report` task waits for the subagent and puts its answer in the
+ * `smith.child-report` task waits for the subagent and puts its answer in the
  * parent's follow-up queue. The `agents` tool lists, reads, waits for, and
  * stops agents, and its `send` action sends a message to one. Its `queue`
  * and `unsend` actions show and remove the messages that wait in an agent's
@@ -68,9 +68,9 @@ import { JobsDoc } from "./jobs.ts"
 import { waitingLabel } from "./waiting.ts"
 import { clip, deniedAction, errorResult, json, textResult } from "./util.ts"
 
-/** An agent ID from `s123`, `123`, or `pico:s123`. */
+/** An agent ID from `s123`, `123`, or `smith:s123`. */
 export function normalizeAgentId(value: string) {
-  const trimmed = value.trim().replace(/^pico:/, "")
+  const trimmed = value.trim().replace(/^smith:/, "")
   return /^\d+$/.test(trimmed) ? `s${trimmed}` : trimmed
 }
 
@@ -169,7 +169,7 @@ export function answerKey(answer: string, id?: EntryId | number | string) {
  * send an answer that is here, so an answer comes to an agent one time.
  */
 export const DeliveredDoc = defineDoc<{ items: Record<string, string[]> }>({
-  kind: "pico.delivered",
+  kind: "smith.delivered",
   checkpointWhen: () => false,
   version: 1,
   scope: "conversation",
@@ -452,7 +452,7 @@ type ReportCheckpoint =
 function createReportTask(host: HostBridge) {
   return defineTask<ReportInput, ReportCheckpoint, null>({
     // Stored name: do not change.
-    name: "pico.child-report",
+    name: "smith.child-report",
     version: 1,
     initial: () => ({ phase: "wait" }),
     phases: {
@@ -631,7 +631,7 @@ function status(item: {
 const MACHINE_PARAMETER = Type.Optional(
   Type.String({
     description:
-      "Another machine of this Pico hub (label or ID). Without it, the tool works on this machine.",
+      "Another machine of this Smith hub (label or ID). Without it, the tool works on this machine.",
   })
 )
 
@@ -648,7 +648,9 @@ export function remoteTarget(
   const prefixed = id ? /^([^:\s]+):(.+)$/.exec(id.trim()) : null
   const name =
     machine?.trim() ||
-    (prefixed && prefixed[1] !== "pico" && services.machines?.find(prefixed[1]!)
+    (prefixed &&
+    prefixed[1] !== "smith" &&
+    services.machines?.find(prefixed[1]!)
       ? prefixed[1]
       : undefined)
   if (!name || name === "local") return undefined
@@ -656,7 +658,7 @@ export function remoteTarget(
   if (!connection) {
     const known = services.machines?.list().map((entry) => entry.label) ?? []
     throw new Error(
-      `Unknown machine: ${name}.${known.length ? ` Machines: ${known.join(", ")}.` : " This Pico has no other machines."}`
+      `Unknown machine: ${name}.${known.length ? ` Machines: ${known.join(", ")}.` : " This Smith has no other machines."}`
     )
   }
   if (!connection.online)
@@ -746,7 +748,7 @@ type RemoteReportCheckpoint =
 function createRemoteReportTask(host: HostBridge) {
   return defineTask<RemoteReportInput, RemoteReportCheckpoint, null>({
     // Stored name: do not change.
-    name: "pico.remote-child-report",
+    name: "smith.remote-child-report",
     version: 1,
     initial: () => ({ phase: "wait" }),
     phases: {
@@ -976,7 +978,7 @@ export function createAgentsExtension(host: HostBridge) {
       const services = await host.ready(context.abortSignal)
       const parent = agentIdOf(api.conversationId)
       if (!services.agents.has(parent))
-        return errorResult("spawn_subagent works only in a Pico agent")
+        return errorResult("spawn_subagent works only in a Smith agent")
       const remote = resolveRemote(services, args.machine)
       if (remote.error) return remote.error
       if (remote.target) {
@@ -2056,8 +2058,8 @@ export function createAgentsExtension(host: HostBridge) {
   ) => {
     if (!from) return "an unknown sender"
     if (from === "user") return "the user"
-    if (from === "external") return "the pico CLI, MCP, or a hub"
-    if (from === "pico") return "Pico (a notice)"
+    if (from === "external") return "the smith CLI, MCP, or a hub"
+    if (from === "smith") return "Smith (a notice)"
     if (from === self) return `you (${from})`
     const name = services.agents.has(from)
       ? services.agents.meta(from).name

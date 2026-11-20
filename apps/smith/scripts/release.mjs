@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Release Pico: check, bump the version, build, commit, tag, and push.
+// Release Smith: check, bump the version, build, commit, tag, and push.
 // The tag push starts .github/workflows/release.yml, which publishes to npm
 // and creates the GitHub release.
 //
@@ -70,5 +70,5 @@ if (!push) {
 }
 run("git", ["push", "--atomic", "origin", "main", tag])
 console.log(
-  `Pushed ${tag}. GitHub Actions publishes to npm and creates the release:\nhttps://github.com/alivault/pico/actions/workflows/release.yml`
+  `Pushed ${tag}. GitHub Actions publishes to npm and creates the release:\nhttps://github.com/alivault/smith/actions/workflows/release.yml`
 )

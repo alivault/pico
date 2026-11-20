@@ -90,12 +90,12 @@ const request = (headers: Record<string, string>) =>
 
 void test("remote requests need no token but reject foreign origins", () => {
   const security = new Security("0.0.0.0")
-  security.check(request({ host: "pico:3141" }))
-  security.check(request({ host: "pico:3141", origin: "http://pico:3141" }))
+  security.check(request({ host: "smith:3141" }))
+  security.check(request({ host: "smith:3141", origin: "http://smith:3141" }))
   assert.throws(
     () =>
       security.check(
-        request({ host: "pico:3141", origin: "https://evil.example" })
+        request({ host: "smith:3141", origin: "https://evil.example" })
       ),
     /Cross-origin/
   )
@@ -106,8 +106,8 @@ void test("local requests reject foreign hosts and origins", () => {
   security.check(request({ host: "127.0.0.1:3141" }))
   security.check(
     request({
-      host: "pico.tail1234.ts.net:3141",
-      origin: "https://pico.tail1234.ts.net:3141",
+      host: "smith.tail1234.ts.net:3141",
+      origin: "https://smith.tail1234.ts.net:3141",
     })
   )
   assert.throws(
@@ -184,7 +184,7 @@ void test("tool results keep their images as URLs", () => {
 })
 
 void test("read state is global and an open tab keeps its agent read", async () => {
-  const dir = await tempDir("pico-viewers-")
+  const dir = await tempDir("smith-viewers-")
   const file = join(dir, "viewers.json")
   const viewers = new Viewers(file)
   const changes: string[] = []
@@ -226,7 +226,7 @@ void test("read state is global and an open tab keeps its agent read", async () 
 })
 
 void test("viewer contexts from before global read state keep the newest unread list", async () => {
-  const dir = await tempDir("pico-viewers-")
+  const dir = await tempDir("smith-viewers-")
   const file = join(dir, "viewers.json")
   await writeFile(
     file,

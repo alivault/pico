@@ -5,7 +5,7 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-const url = process.env.PICO_SMOKE_URL ?? "http://127.0.0.1:3141/"
+const url = process.env.SMITH_SMOKE_URL ?? "http://127.0.0.1:3141/"
 const chromeBinary =
   process.env.CHROME_BIN ??
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
@@ -13,7 +13,7 @@ if (!existsSync(chromeBinary)) {
   throw new Error(`Chrome was not found at ${chromeBinary}`)
 }
 
-const profile = mkdtempSync(join(tmpdir(), "pico-browser-smoke-"))
+const profile = mkdtempSync(join(tmpdir(), "smith-browser-smoke-"))
 const chrome = spawn(
   chromeBinary,
   [
@@ -119,7 +119,7 @@ try {
     snapshot.bodyText.length <= 150
   ) {
     throw new Error(
-      `Pico browser shell did not render: ${JSON.stringify(snapshot)}`
+      `Smith browser shell did not render: ${JSON.stringify(snapshot)}`
     )
   }
   console.log(

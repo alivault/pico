@@ -12,8 +12,8 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 
 /**
- * The view that covers the page while the Pico server does not answer
- * (see `lib/pico/server-connection.ts`). The app shells stay mounted below
+ * The view that covers the page while the Smith server does not answer
+ * (see `lib/smith/server-connection.ts`). The app shells stay mounted below
  * it, so the page keeps its state and continues when the server is back.
  */
 export function ServerUnreachableOverlay() {
@@ -27,9 +27,9 @@ export function ServerUnreachableOverlay() {
           <EmptyMedia variant="icon">
             <ServerOffIcon />
           </EmptyMedia>
-          <EmptyTitle>Pico cannot reach its server</EmptyTitle>
+          <EmptyTitle>Smith cannot reach its server</EmptyTitle>
           <EmptyDescription>
-            The server is stopped or restarting. Pico tries again and continues
+            The server is stopped or restarting. Smith tries again and continues
             when the server answers.
           </EmptyDescription>
         </EmptyHeader>

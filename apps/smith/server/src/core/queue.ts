@@ -2,7 +2,7 @@
  * Who queued each prompt of an agent, and when: for the `queue` and `unsend`
  * actions of the `agents` tool.
  *
- * Durable submissions keep no sender and no time, so Pico writes them here
+ * Durable submissions keep no sender and no time, so Smith writes them here
  * when a prompt stays in the queue. A paused queue keeps them in its held
  * items, and a queue edit moves them to the new submissions. Without a
  * record, the sender comes from the request ID or the text of the message.
@@ -23,7 +23,7 @@ const ctx = BACKGROUND_CONTEXT
 
 /**
  * The sender of a queued prompt: `user` (the web client), `external` (the
- * pico CLI, MCP, or a hub), `pico` (a notice of Pico), or an agent ID.
+ * smith CLI, MCP, or a hub), `smith` (a notice of Smith), or an agent ID.
  */
 export type QueueOrigin = { from: string; at: number }
 
@@ -31,7 +31,7 @@ export type QueueOrigin = { from: string; at: number }
 export const QueueOriginsDoc = defineDoc<{
   items: Record<string, QueueOrigin>
 }>({
-  kind: "pico.queue-origins",
+  kind: "smith.queue-origins",
   checkpointWhen: () => false,
   version: 1,
   scope: "conversation",

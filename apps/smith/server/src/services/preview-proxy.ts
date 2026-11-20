@@ -4,19 +4,19 @@
  *
  *   iframe → http://<page host>:<listener>/<path>      (this module, hub)
  *          → http://localhost:<port>/<path>            (local machine)
- *          → <remote Pico>/api/preview-proxy/<port>/<path>
+ *          → <remote Smith>/api/preview-proxy/<port>/<path>
  *            → http://localhost:<port>/<path>          (remote machine)
  *
  * Each preview gets its own listener port on the hub, so the page of the
  * dev server has its own origin. Its paths stay as they are, so absolute
- * paths and hot reload sockets work, and Pico's origin check keeps it away
- * from the Pico API. Network access is the same as for Pico itself.
+ * paths and hot reload sockets work, and Smith's origin check keeps it away
+ * from the Smith API. Network access is the same as for Smith itself.
  *
- * When the user opens Pico over HTTPS through Tailscale Serve, the listener
+ * When the user opens Smith over HTTPS through Tailscale Serve, the listener
  * also gets a Serve entry on the same port (services/tailscale-serve.ts),
  * so the iframe loads `https://<machine>.ts.net:<listener>/<path>`.
  *
- * The listener puts a small script into HTML pages, which tells Pico the
+ * The listener puts a small script into HTML pages, which tells Smith the
  * page's background color (services/preview-background.ts).
  */
 import {
@@ -34,14 +34,14 @@ import type { Duplex } from "node:stream"
 
 import type { MachineManager } from "../machines/manager.ts"
 import type { Security } from "../security.ts"
-import { isPicoServer } from "./dev-server-url.ts"
+import { isSmithServer } from "./dev-server-url.ts"
 import { previewPage } from "./preview-background.ts"
 import { serveTarget, type TailscaleServe } from "./tailscale-serve.ts"
 
 /** The hub sets it on requests to `/api/preview-proxy/`. */
-export const PREVIEW_PROXY_HEADER = "x-pico-preview-proxy"
+export const PREVIEW_PROXY_HEADER = "x-smith-preview-proxy"
 /** The browser request had an Origin header (the hub removes it). */
-const PREVIEW_ORIGIN_HEADER = "x-pico-preview-origin"
+const PREVIEW_ORIGIN_HEADER = "x-smith-preview-origin"
 
 const LOCAL_MACHINE_ID = "local"
 const MAX_LISTENERS = 32
@@ -242,7 +242,7 @@ function forwardUpgrade(
 /**
  * The machine side: `/api/preview-proxy/<port>/<path>` from the hub, to the
  * dev server on this machine. Only the hub sends the header; a browser
- * cannot send it in a navigation, so the dev server never gets Pico's
+ * cannot send it in a navigation, so the dev server never gets Smith's
  * origin. False when the request is not one.
  */
 export function handlePreviewProxy(
@@ -252,7 +252,7 @@ export function handlePreviewProxy(
   const route = previewProxyRoute(request.url ?? "")
   if (!route) return false
   if (request.headers[PREVIEW_PROXY_HEADER] !== "1") {
-    sendText(response, 403, "Only the Pico hub can use the preview proxy.")
+    sendText(response, 403, "Only the Smith hub can use the preview proxy.")
     return true
   }
   forwardHttp(
@@ -337,10 +337,10 @@ export class PreviewProxy {
   ): Promise<OpenedPreview> {
     if (machineId !== LOCAL_MACHINE_ID && !this.#machines.get(machineId))
       throw new Error(`Unknown machine: ${machineId}`)
-    // Pico cannot show itself: its page would load in a broken frame.
-    if (machineId === LOCAL_MACHINE_ID && (await isPicoServer(port)))
+    // Smith cannot show itself: its page would load in a broken frame.
+    if (machineId === LOCAL_MACHINE_ID && (await isSmithServer(port)))
       throw new Error(
-        `Port ${port} is a Pico server, not a dev server. Enter the address of your dev server.`
+        `Port ${port} is a Smith server, not a dev server. Enter the address of your dev server.`
       )
     const key = `${machineId}:${port}`
     let listener = this.#listeners.get(key)
@@ -362,7 +362,7 @@ export class PreviewProxy {
     const serve = this.#serve
     if (!serve)
       throw new TailscalePreviewError(
-        "This Pico cannot share previews over Tailscale HTTPS."
+        "This Smith cannot share previews over Tailscale HTTPS."
       )
     if (!listener.serve) {
       const added = serve.add(
@@ -379,7 +379,7 @@ export class PreviewProxy {
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
       throw new TailscalePreviewError(
-        `Pico could not share the preview over Tailscale HTTPS: tailscale serve failed (${reason}).`
+        `Smith could not share the preview over Tailscale HTTPS: tailscale serve failed (${reason}).`
       )
     }
   }

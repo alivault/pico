@@ -39,21 +39,21 @@ import { styleTags, tags } from "@lezer/highlight"
 import { basicSetup } from "codemirror"
 import { createPortal } from "react-dom"
 
-import { useLatestRef } from "@/features/pico/app-shell-common"
+import { useLatestRef } from "@/features/smith/app-shell-common"
 import {
   fileLineCommentSnippet,
   formatComposerFileLineCommentReference,
-} from "@/features/pico/composer-utils"
-import { LineCommentForm } from "@/features/pico/line-comment-form"
+} from "@/features/smith/composer-utils"
+import { LineCommentForm } from "@/features/smith/line-comment-form"
 import {
   fileCommentsExtension,
   setFileCommentLayout,
   type FileCommentHandlers,
   type FileCommentRange,
-} from "@/features/pico/project-file-comments-extension"
+} from "@/features/smith/project-file-comments-extension"
 
 // Colors follow Shiki's CSS-variables theme (createCssVariablesTheme in
-// @shikijs/core) with Pico's values from PICO_SHIKI_VARIABLE_DEFAULTS, so
+// @shikijs/core) with Smith's values from SMITH_SHIKI_VARIABLE_DEFAULTS, so
 // files look like chat code blocks and diffs. Lezer tags are not TextMate
 // scopes, so some tokens still differ (for example primitive types).
 const code = {
@@ -68,7 +68,7 @@ const code = {
 
 // Do not style propertyName or content here: the language styles below set
 // them for JSON, YAML, and CSS, and two styles for one token would conflict.
-const picoHighlightStyle = HighlightStyle.define([
+const smithHighlightStyle = HighlightStyle.define([
   // comment
   {
     tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment],
@@ -243,12 +243,12 @@ const PRIMITIVE_TYPES = new Set([
   "void",
 ])
 const ALL_CAPS_NAME = /^[A-Z][A-Z0-9_]*[A-Z0-9]$/
-const constantMark = Decoration.mark({ class: "cm-pico-constant" })
+const constantMark = Decoration.mark({ class: "cm-smith-constant" })
 // entity.name.function for `const f = () => …`, plain for `let` and `var`
 // names (Lezer tags them like `const` names), storage.type for constructor.
-const functionMark = Decoration.mark({ class: "cm-pico-function" })
-const plainMark = Decoration.mark({ class: "cm-pico-plain" })
-const keywordMark = Decoration.mark({ class: "cm-pico-keyword" })
+const functionMark = Decoration.mark({ class: "cm-smith-function" })
+const plainMark = Decoration.mark({ class: "cm-smith-plain" })
+const keywordMark = Decoration.mark({ class: "cm-smith-keyword" })
 
 type SyntaxNode = ReturnType<typeof syntaxTree>["topNode"]
 
@@ -321,8 +321,8 @@ const JAVASCRIPT_LANGUAGE_NAMES = new Set([
   "TSX",
 ])
 
-/** Add Pico's style rules to a language that CodeMirror loaded. */
-function withPicoStyleTags(
+/** Add Smith's style rules to a language that CodeMirror loaded. */
+function withSmithStyleTags(
   description: LanguageDescription,
   support: LanguageSupport
 ): Extension {
@@ -369,7 +369,7 @@ const cssHighlightStyle = HighlightStyle.define(
   { scope: cssLanguage }
 )
 
-const picoEditorTheme = EditorView.theme({
+const smithEditorTheme = EditorView.theme({
   "&": {
     height: "100%",
     color: "var(--code-fg)",
@@ -396,16 +396,16 @@ const picoEditorTheme = EditorView.theme({
       "1px solid color-mix(in oklab, var(--border) 70%, transparent)",
   },
   // Two classes, so the mark wins over the syntax class inside or around it.
-  ".cm-content .cm-pico-constant, .cm-content .cm-pico-constant *": {
+  ".cm-content .cm-smith-constant, .cm-content .cm-smith-constant *": {
     color: code.constant,
   },
-  ".cm-content .cm-pico-function, .cm-content .cm-pico-function *": {
+  ".cm-content .cm-smith-function, .cm-content .cm-smith-function *": {
     color: code.function,
   },
-  ".cm-content .cm-pico-plain, .cm-content .cm-pico-plain *": {
+  ".cm-content .cm-smith-plain, .cm-content .cm-smith-plain *": {
     color: "var(--code-fg)",
   },
-  ".cm-content .cm-pico-keyword, .cm-content .cm-pico-keyword *": {
+  ".cm-content .cm-smith-keyword, .cm-content .cm-smith-keyword *": {
     color: code.keyword,
   },
   ".cm-activeLine": {
@@ -519,7 +519,7 @@ function createCommentContainers() {
       let element = elements.get(key)
       if (!element) {
         element = document.createElement("div")
-        element.className = "cm-pico-comment-block"
+        element.className = "cm-smith-comment-block"
         elements.set(key, element)
       }
       return element
@@ -594,8 +594,8 @@ export default function ProjectFileEditor({
           syntaxHighlighting(jsonHighlightStyle),
           syntaxHighlighting(yamlHighlightStyle),
           syntaxHighlighting(cssHighlightStyle),
-          syntaxHighlighting(picoHighlightStyle),
-          picoEditorTheme,
+          syntaxHighlighting(smithHighlightStyle),
+          smithEditorTheme,
           EditorView.lineWrapping,
           fileCommentsExtension(commentHandlers),
           EditorView.updateListener.of((update) => {
@@ -638,7 +638,7 @@ export default function ProjectFileEditor({
       if (cancelled) return
       viewRef.current?.dispatch({
         effects: languageCompartment.reconfigure(
-          withPicoStyleTags(description, support)
+          withSmithStyleTags(description, support)
         ),
       })
     })

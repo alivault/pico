@@ -6,7 +6,7 @@ import {
   registerToolRenderer,
   toolArgs,
   type ToolRendererProps,
-} from "@/features/pico/tool-renderers/registry"
+} from "@/features/smith/tool-renderers/registry"
 
 function watchSummary(block: ToolRendererProps["block"]) {
   const args = toolArgs(block)

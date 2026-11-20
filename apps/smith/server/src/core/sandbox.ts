@@ -8,7 +8,7 @@
  *   call ends. `/tmp` is a new, empty tmpfs; a working directory in it is
  *   mounted again on top. bwrap reads overlay sources from the host, so an
  *   overlay in /tmp works too.
- * - There is no network. This also blocks Pico's own API on localhost, which
+ * - There is no network. This also blocks Smith's own API on localhost, which
  *   has no login and could start an agent without the sandbox.
  * - `/run/user/<uid>` is hidden, so the command cannot reach the user's
  *   systemd, D-Bus, the pty-host, or the ssh-agent, and start a process
@@ -29,7 +29,7 @@ import { promisify } from "node:util"
 const run = promisify(execFile)
 
 /** The environment variable that carries the script into the sandbox. */
-export const SANDBOX_SCRIPT_ENV = "PICO_SANDBOX_SCRIPT"
+export const SANDBOX_SCRIPT_ENV = "SMITH_SANDBOX_SCRIPT"
 
 /** Caches that commands such as test runners and package managers write. */
 const CACHE_DIRS = [".cache", ".local/state", ".npm"]

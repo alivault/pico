@@ -6,14 +6,14 @@ import {
   XIcon,
 } from "lucide-react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import type {
   AgentJob,
   ArchivedAgentEntry,
   ArchivedAgentsResponse,
   RestoreAgentResponse,
-} from "@/lib/pico/api"
+} from "@/lib/smith/api"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -38,12 +38,12 @@ import {
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { postAgentJson } from "@/features/pico/agent/agent-extensions"
-import { errorText } from "@/features/pico/agent/shared"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
-import { picoQueryKeys } from "@/features/pico/query-keys"
+import { postAgentJson } from "@/features/smith/agent/agent-extensions"
+import { errorText } from "@/features/smith/agent/shared"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { smithQueryKeys } from "@/features/smith/query-keys"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 import { cn } from "@/lib/utils"
 import { settle } from "@/lib/settle"
 
@@ -112,7 +112,7 @@ export function ArchivedAgentsDialog({
   }, [open, initialView])
 
   const archivedQuery = useQuery({
-    queryKey: picoQueryKeys.archivedAgents(viewerContextId),
+    queryKey: smithQueryKeys.archivedAgents(viewerContextId),
     queryFn: () =>
       fetchJson<ArchivedAgentsData>(
         buildRequestUrl("/api/agents/archived", {
@@ -151,7 +151,7 @@ export function ArchivedAgentsDialog({
       return
     }
     await queryClient.invalidateQueries({
-      queryKey: picoQueryKeys.archivedAgents(viewerContextId),
+      queryKey: smithQueryKeys.archivedAgents(viewerContextId),
     })
   }
 
@@ -172,10 +172,10 @@ export function ArchivedAgentsDialog({
       onRestored?.(result)
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: picoQueryKeys.archivedAgents(viewerContextId),
+          queryKey: smithQueryKeys.archivedAgents(viewerContextId),
         }),
         queryClient.invalidateQueries({
-          queryKey: picoQueryKeys.projectAgentsIndex(
+          queryKey: smithQueryKeys.projectAgentsIndex(
             viewerContextId,
             result.project
           ),

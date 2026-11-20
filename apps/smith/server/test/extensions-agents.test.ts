@@ -49,7 +49,7 @@ function lastUser(messages: readonly Message[]) {
         .join("")
 }
 
-/** A small agent store on the Harness, in place of Pico's `Agents`. */
+/** A small agent store on the Harness, in place of Smith's `Agents`. */
 function fakeAgents(harness: Harness) {
   const metas = new Map<string, HostAgentMeta & { createdAt: number }>()
   const unread = new Set<string>()
@@ -161,7 +161,7 @@ function fakeAgents(harness: Harness) {
       id: string,
       message: string,
       requestId: string,
-      from = "pico"
+      from = "smith"
     ) {
       await submit(
         id,
@@ -258,7 +258,7 @@ async function eventually<T>(read: () => Promise<T | undefined>, ms = 8000) {
 
 void test("agent IDs normalize", () => {
   assert.equal(normalizeAgentId("12"), "s12")
-  assert.equal(normalizeAgentId("pico:s12"), "s12")
+  assert.equal(normalizeAgentId("smith:s12"), "s12")
   assert.equal(normalizeAgentId(" s3 "), "s3")
 })
 
@@ -625,7 +625,7 @@ void test("a worktree is made outside the repository and removed when clean", as
     name: "Fix login bug",
   })
   assert.ok(worktree.path.startsWith(join(dir, "data", "worktrees", "repo")))
-  assert.match(worktree.branch, /^pico\/fix-login-bug-/)
+  assert.match(worktree.branch, /^smith\/fix-login-bug-/)
   assert.ok(existsSync(join(worktree.path, "README.md")))
   assert.deepEqual(worktree.copied, [".env"])
   assert.equal(await repoRoot(worktree.path), await repoRoot(repo))

@@ -1,5 +1,5 @@
 /**
- * The pty-host: a small process that owns the pseudo-terminals of one Pico
+ * The pty-host: a small process that owns the pseudo-terminals of one Smith
  * data directory, so terminals and jobs keep running while the server
  * restarts. See docs/plans/pty-host.md and ./protocol.ts.
  *
@@ -49,10 +49,10 @@ const BACKLOG_MAX_BYTES = 512 * 1024
 const MAX_VIEWERS = 64
 /** Exited ptys stay this long for a server to read them. */
 const EXITED_TTL_MS = 30 * 60 * 1000
-const IDLE_MS = Number(process.env.PICO_PTY_HOST_IDLE_MS) || 10 * 60 * 1000
+const IDLE_MS = Number(process.env.SMITH_PTY_HOST_IDLE_MS) || 10 * 60 * 1000
 /** End idle shells after this long without a server. */
 const IDLE_SHELL_MS =
-  Number(process.env.PICO_PTY_HOST_IDLE_SHELL_MS) || 12 * 60 * 60 * 1000
+  Number(process.env.SMITH_PTY_HOST_IDLE_SHELL_MS) || 12 * 60 * 60 * 1000
 
 type Pty = {
   ptyId: string
@@ -89,7 +89,7 @@ if (!dataDir) {
   process.exit(2)
 }
 const paths = ptyHostPaths(dataDir)
-process.title = `pico-pty-host ${dataDir}`
+process.title = `smith-pty-host ${dataDir}`
 
 /** Take the pid file; false when another host runs. */
 function lock() {
@@ -425,7 +425,7 @@ function stop(code: number) {
   setTimeout(() => process.exit(code), 200).unref()
 }
 
-// The host outlives the terminal or SSH session that started Pico.
+// The host outlives the terminal or SSH session that started Smith.
 process.on("SIGHUP", () => undefined)
 // An error in one request or one pty must not end every terminal.
 process.on("uncaughtException", (error) => {

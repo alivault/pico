@@ -1,17 +1,17 @@
 import * as React from "react"
 
-import type { AgentJob } from "@/lib/pico/api"
-import { useMachineId } from "@/lib/pico/machine-context"
+import type { AgentJob } from "@/lib/smith/api"
+import { useMachineId } from "@/lib/smith/machine-context"
 import {
   hubUrl,
   isRemoteMachine,
   setMachineOfflineLabels,
-} from "@/lib/pico/machine"
+} from "@/lib/smith/machine"
 import {
   checkServerConnection,
   markServerOnline,
   onServerReconnect,
-} from "@/lib/pico/server-connection"
+} from "@/lib/smith/server-connection"
 
 /**
  * The machines of the hub: the local runtime and the SSH machines. The hub
@@ -114,7 +114,7 @@ function connect() {
   }
 }
 
-/** Tell `lib/pico/machine.ts` which remote machines are not online. */
+/** Tell `lib/smith/machine.ts` which remote machines are not online. */
 function syncMachineOffline() {
   const labels = new Map<string, string>()
   for (const machine of snapshot.machines) {
@@ -205,7 +205,7 @@ export function MachineFeatureGate({
 /** The viewer context of this browser; the same on every machine. */
 export function viewerContextIdForSummaries() {
   try {
-    return window.localStorage.getItem("pico-context-id") ?? ""
+    return window.localStorage.getItem("smith-context-id") ?? ""
   } catch {
     return ""
   }

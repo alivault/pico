@@ -12,9 +12,9 @@ import { AgentMetaDoc, publicId } from "../src/core/agents.ts"
 import { tempDir } from "./support.ts"
 
 void test("tree navigation keeps the subagents under the agent", async () => {
-  const data = await tempDir("pico-tree-subagents-test-")
+  const data = await tempDir("smith-tree-subagents-test-")
   const harness = await Harness.open(
-    await openNodeSqliteStorage(join(data, "pico.sqlite")),
+    await openNodeSqliteStorage(join(data, "smith.sqlite")),
     { models: createModels(), registry: createRegistry() },
     ctx
   )
@@ -68,7 +68,7 @@ void test("tree navigation keeps the subagents under the agent", async () => {
   const server = spawn(
     process.execPath,
     [
-      "dist/pico-server.mjs",
+      "dist/smith-server.mjs",
       "serve",
       "--port",
       "0",

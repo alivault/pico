@@ -35,7 +35,7 @@ const ImportDoc = defineDoc<{
     }
   >
 }>({
-  kind: "pico.pi-imports",
+  kind: "smith.pi-imports",
   checkpointWhen: () => false,
   version: 1,
   scope: "session",
@@ -159,7 +159,7 @@ function draftFor(
   originals: Map<string, SessionEntry>
 ): EntryDraft {
   const bookkeeping: EntryDraft = {
-    kind: `pico.legacy.${entry.type}`,
+    kind: `smith.legacy.${entry.type}`,
     data: json(entry),
   }
   if (entry.type === "message") {

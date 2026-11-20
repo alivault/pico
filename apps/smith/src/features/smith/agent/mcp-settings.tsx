@@ -1,20 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { RotateCwIcon } from "lucide-react"
-import { toast } from "@/lib/pico/toast"
+import { toast } from "@/lib/smith/toast"
 
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { TitleTooltip } from "@/components/ui/tooltip"
-import { errorText } from "@/features/pico/agent/shared"
-import { buildRequestUrl, fetchJson } from "@/features/pico/app-shell-utils"
+import { errorText } from "@/features/smith/agent/shared"
+import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
 import {
   registerSettingsPage,
   SettingsListPage,
   useOpenSettingsPage,
   type SettingsPageProps,
-} from "@/features/pico/settings-pages"
+} from "@/features/smith/settings-pages"
 import { cn } from "@/lib/utils"
-import { useMachineId } from "@/lib/pico/machine-context"
+import { useMachineId } from "@/lib/smith/machine-context"
 import { settle } from "@/lib/settle"
 
 type McpServer = {
@@ -55,7 +55,7 @@ function StatusDot({ server }: { server: McpServer }) {
 function useMcpServers(viewerContextId: string) {
   const machineId = useMachineId()
   const queryClient = useQueryClient()
-  const queryKey = ["pico", "mcp-servers", machineId, viewerContextId]
+  const queryKey = ["smith", "mcp-servers", machineId, viewerContextId]
   const query = useQuery({
     queryKey,
     queryFn: () =>

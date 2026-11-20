@@ -459,7 +459,7 @@ export async function writeProjectFile(
   }
   const temporary = join(
     dirname(resolved),
-    `.${basename(resolved)}.${randomBytes(6).toString("hex")}.pico-tmp`
+    `.${basename(resolved)}.${randomBytes(6).toString("hex")}.smith-tmp`
   )
   try {
     await writeFile(temporary, bytes, { flag: "wx", mode: info.mode & 0o7777 })

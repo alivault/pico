@@ -107,7 +107,7 @@ void test("a new subscription replaces the older ones from the same browser", as
   )
   notifier.subscribe(
     { endpoint: "https://push.example/phone", keys },
-    { label: "Safari on iOS", origin: "https://pico.ts.net", userAgent: phone }
+    { label: "Safari on iOS", origin: "https://smith.ts.net", userAgent: phone }
   )
   notifier.subscribe(
     { endpoint: "https://push.example/dev", keys },
@@ -165,8 +165,8 @@ void test(
       const snapshot = await browser.snapshot(page)
       assert.match(formatSnapshot(snapshot), /\[1\] input:text "User name"/)
       assert.match(formatSnapshot(snapshot), /\[2\] button "Sign in"/)
-      await page.locator('[data-pico-ref="1"]').fill("ann")
-      await page.locator('[data-pico-ref="2"]').click()
+      await page.locator('[data-smith-ref="1"]').fill("ann")
+      await page.locator('[data-smith-ref="2"]').click()
       await page.waitForLoadState("domcontentloaded")
       assert.match((await browser.snapshot(page)).text, /cookie=session=abc/)
       const tabs = (await browser.tabs(7)).tabs

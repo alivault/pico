@@ -1,6 +1,6 @@
 import * as React from "react"
 
-import type { AgentListEntry } from "@/lib/pico/api"
+import type { AgentListEntry } from "@/lib/smith/api"
 
 /**
  * A filter of the sidebar agents by their state. A click on a count in a

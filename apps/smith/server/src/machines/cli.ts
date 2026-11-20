@@ -1,5 +1,5 @@
 /**
- * `pico-app machine …`: add and manage the SSH machines of a hub.
+ * `smith machine …`: add and manage the SSH machines of a hub.
  *
  *   machine add <target> [--label L] [--data-dir D] [--yes]
  *   machine list [--json]
@@ -9,7 +9,7 @@
  *   machine enable|disable|remove <id-or-label>
  *
  * `add` and `reconnect` run in a terminal, so SSH can ask for a password or
- * a host-key approval. Only `add` installs Pico, and only after the user
+ * a host-key approval. Only `add` installs Smith, and only after the user
  * says yes. A running hub reads `machines.json` again within one second.
  */
 import { readFileSync } from "node:fs"
@@ -39,7 +39,7 @@ import {
   installRemote,
   MIN_API_CONTRACT_VERSION,
   MIN_NODE,
-  picoCommand,
+  smithCommand,
   remoteStatus,
   remoteSupportsHub,
   remoteVersion,
@@ -51,17 +51,17 @@ import type { MachineTransport } from "./transport.ts"
 type Options = Map<string, string | boolean>
 
 const USAGE = `Usage:
-  pico-app machine add <target> [--label L] [--data-dir D] [--yes]
-  pico-app machine list [--json]
-  pico-app machine status [<id-or-label>] [--json]
-  pico-app machine reconnect <id-or-label>
-  pico-app machine rename <id-or-label> --label L
-  pico-app machine enable|disable|remove <id-or-label>
+  smith machine add <target> [--label L] [--data-dir D] [--yes]
+  smith machine list [--json]
+  smith machine status [<id-or-label>] [--json]
+  smith machine reconnect <id-or-label>
+  smith machine rename <id-or-label> --label L
+  smith machine enable|disable|remove <id-or-label>
 
 <target> is what you give to ssh: a host alias, user@host, a Tailscale
-MagicDNS name, or ssh://user@host:2222. Pico uses your SSH config, keys, and
+MagicDNS name, or ssh://user@host:2222. Smith uses your SSH config, keys, and
 agent. It does not store passwords or keys.
---data-dir is the Pico data directory on the remote machine (default ~/.pico).
+--data-dir is the Smith data directory on the remote machine (default ~/.smith).
 Use --hub-dir for the data directory of this hub.`
 
 function parse(argv: string[]) {
@@ -177,7 +177,7 @@ type SetupOptions = {
 }
 
 /**
- * Connect in the terminal, find node and pico-app, start Pico if it does
+ * Connect in the terminal, find node and smith, start Smith if it does
  * not run, and check its manifest. Install and update only for `add`.
  */
 async function setup(
@@ -213,46 +213,46 @@ async function setup(
     const confirm = (question: string) =>
       options.assumeYes ? Promise.resolve(true) : ask(question)
 
-    let installedVersion = cache.picoPath
+    let installedVersion = cache.smithPath
       ? await remoteVersion(transport, cache)
       : undefined
     const tooOld =
       installedVersion !== undefined &&
       !(await remoteSupportsHub(transport, cache))
-    if (!cache.picoPath || !installedVersion || tooOld) {
+    if (!cache.smithPath || !installedVersion || tooOld) {
       if (!options.install)
         throw new Error(
-          `${tooOld ? `pico-app ${installedVersion} is too old` : "pico-app was not found"} on ${profile.label}. Run: pico-app machine add ${profile.target}`
+          `${tooOld ? `smith ${installedVersion} is too old` : "smith was not found"} on ${profile.label}. Run: smith machine add ${profile.target}`
         )
       if (
         !(await confirm(
-          `${tooOld ? `pico-app ${installedVersion} on ${profile.label} is too old. Install` : "Install"} @alivault/pico@${VERSION} on ${profile.label} with npm (into ~/.local)?`
+          `${tooOld ? `smith ${installedVersion} on ${profile.label} is too old. Install` : "Install"} @alivault/smith@${VERSION} on ${profile.label} with npm (into ~/.local)?`
         ))
       )
-        throw new Error("Canceled. Pico is not installed.")
+        throw new Error("Canceled. Smith is not installed.")
       log("Installing…")
       await installRemote(transport, nodeDir, VERSION)
       cache = cacheFromDiscovery(await discover(transport), cache)
-      installedVersion = cache.picoPath
+      installedVersion = cache.smithPath
         ? await remoteVersion(transport, cache)
         : undefined
-      if (!cache.picoPath || !installedVersion)
+      if (!cache.smithPath || !installedVersion)
         throw new Error(
-          `pico-app is still not found on ${profile.label}. Add ~/.local/bin to PATH there.`
+          `smith is still not found on ${profile.label}. Add ~/.local/bin to PATH there.`
         )
     }
-    log(`pico-app ${installedVersion} at ${cache.picoPath}`)
+    log(`smith ${installedVersion} at ${cache.smithPath}`)
     writeCache(dir, cache)
 
     let status = await remoteStatus(transport, cache, profile)
     if (!status) {
-      log(`Starting Pico on ${profile.label}…`)
+      log(`Starting Smith on ${profile.label}…`)
       await startRemote(transport, cache, profile)
       status = await remoteStatus(transport, cache, profile)
-      if (!status) throw new Error(`Pico did not start on ${profile.label}.`)
+      if (!status) throw new Error(`Smith did not start on ${profile.label}.`)
     } else if (!isLoopback(status.host)) {
       log(
-        `Warning: Pico on ${profile.label} listens on ${status.host}, not only on 127.0.0.1. The hub uses SSH; you can restart it with --host 127.0.0.1.`
+        `Warning: Smith on ${profile.label} listens on ${status.host}, not only on 127.0.0.1. The hub uses SSH; you can restart it with --host 127.0.0.1.`
       )
     }
     await transport.attach(status.port)
@@ -268,14 +268,14 @@ async function setup(
     if (!compatible(manifest)) {
       if (!options.install)
         throw new Error(
-          `Pico ${versionOf(manifest) ?? "(unknown version)"} on ${profile.label} is too old for this hub. Update it, or run: pico-app machine add ${profile.target}`
+          `Smith ${versionOf(manifest) ?? "(unknown version)"} on ${profile.label} is too old for this hub. Update it, or run: smith machine add ${profile.target}`
         )
       if (
         !(await confirm(
-          `Pico ${versionOf(manifest) ?? "(unknown version)"} on ${profile.label} is too old. Update it to ${VERSION} with npm and restart it? Agents continue after the restart.`
+          `Smith ${versionOf(manifest) ?? "(unknown version)"} on ${profile.label} is too old. Update it to ${VERSION} with npm and restart it? Agents continue after the restart.`
         ))
       )
-        throw new Error("Canceled. Pico on the remote machine is not updated.")
+        throw new Error("Canceled. Smith on the remote machine is not updated.")
       await installRemote(transport, nodeDir, VERSION)
       cache = cacheFromDiscovery(await discover(transport), cache)
       writeCache(dir, cache)
@@ -283,21 +283,21 @@ async function setup(
       // launcher or systemd unit. Only servers without a restart route
       // are stopped and started again in the background.
       const restarted = await transport.exec(
-        picoCommand(cache, profile, ["restart"]),
+        smithCommand(cache, profile, ["restart"]),
         { timeoutMs: 13 * 60_000 }
       )
       if (restarted.code !== 0) {
-        await transport.exec(picoCommand(cache, profile, ["stop", "--wait"]), {
+        await transport.exec(smithCommand(cache, profile, ["stop", "--wait"]), {
           timeoutMs: 11 * 60_000,
         })
         await startRemote(transport, cache, profile)
       }
       status = await remoteStatus(transport, cache, profile)
-      if (!status) throw new Error(`Pico did not start on ${profile.label}.`)
+      if (!status) throw new Error(`Smith did not start on ${profile.label}.`)
       await transport.attach(status.port)
       manifest = await remoteJson(transport, "/api/client/manifest")
       if (!compatible(manifest))
-        throw new Error(`Pico on ${profile.label} is still not compatible.`)
+        throw new Error(`Smith on ${profile.label} is still not compatible.`)
     }
     writeCache(dir, {
       ...cache,
@@ -305,7 +305,7 @@ async function setup(
       version: versionOf(manifest) ?? status.version,
     })
     log(
-      `Pico ${versionOf(manifest) ?? "(unknown version)"} runs on ${profile.label} (port ${status.port}).`
+      `Smith ${versionOf(manifest) ?? "(unknown version)"} runs on ${profile.label} (port ${status.port}).`
     )
   } finally {
     process.off("SIGINT", interrupt)
@@ -320,7 +320,7 @@ function versionOf(manifest: Record<string, unknown>) {
 
 function printMachines(machines: MachineInfo[]) {
   if (machines.length === 0) {
-    log("No machines. Add one with: pico-app machine add <ssh-target>")
+    log("No machines. Add one with: smith machine add <ssh-target>")
     return
   }
   for (const machine of machines) {
@@ -447,7 +447,7 @@ export async function machineCommand(argv: string[], hubDir: string) {
       log(
         retried
           ? `The hub connects to ${profile.label} now.`
-          : `${profile.label} is ready. Start the hub with: pico-app`
+          : `${profile.label} is ready. Start the hub with: smith`
       )
       return
     }
@@ -478,7 +478,7 @@ export async function machineCommand(argv: string[], hubDir: string) {
         profiles().filter((entry) => entry.id !== profile.id)
       )
       log(
-        `Removed ${profile.label}. Pico and its agents keep running on that machine.`
+        `Removed ${profile.label}. Smith and its agents keep running on that machine.`
       )
       return
     }

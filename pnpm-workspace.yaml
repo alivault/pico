@@ -1,6 +1,6 @@
 packages:
   - apps/*
-  - apps/pico/server
+  - apps/smith/server
 
 catalog:
   vite: npm:@voidzero-dev/vite-plus-core@1.4.0

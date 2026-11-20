@@ -1,5 +1,5 @@
 /**
- * The `queue` and `unsend` actions of the agents tool on Pico's real
+ * The `queue` and `unsend` actions of the agents tool on Smith's real
  * `Agents` class: senders of the user's prompts and of agent messages, the
  * permission rule, a paused queue, and the composer's queue in `state_sync`.
  */
@@ -52,8 +52,8 @@ async function eventually<T>(read: () => Promise<T | undefined>, ms = 8000) {
   throw new Error("Timed out")
 }
 
-void test("agents queue and unsend work on Pico's agents", async () => {
-  const dir = await tempDir("pico-queue-test-")
+void test("agents queue and unsend work on Smith's agents", async () => {
+  const dir = await tempDir("smith-queue-test-")
   const host = new HostBridge()
   let release = false
   const script: Script = (messages) => {
@@ -83,7 +83,7 @@ void test("agents queue and unsend work on Pico's agents", async () => {
   const { NodeExecutionEnv } =
     await import("@earendil-works/pi-durable/env/node")
   const harness = await Harness.open(
-    await openNodeSqliteStorage(join(dir, "pico.sqlite")),
+    await openNodeSqliteStorage(join(dir, "smith.sqlite")),
     {
       models: scriptedModels(script),
       registry,
