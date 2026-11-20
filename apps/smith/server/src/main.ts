@@ -17,6 +17,13 @@
  *   smith-server machine add|list|status|reconnect|rename|enable|disable|remove …
  *   smith-server agent list|start|send|show|wait|stop …   (see control/cli.ts)
  *   smith-server mcp      the MCP URL (see control/mcp.ts)
+ *   smith-server move-project <old-path> <new-path>
+ *     After a project folder moved, rewrite the stored paths and repair its
+ *     worktrees (see services/data-migration.ts).
+ *
+ * The first `serve` on the default data directory moves an old `~/.pico`
+ * to `~/.smith` (see services/data-migration.ts), before it opens the
+ * database.
  *
  * Only one server may own a data directory: the durable database has no
  * locking across processes. A second `serve` finds the running server and
@@ -57,6 +64,16 @@ import { agentCommand, mcpCommand } from "./control/cli.ts"
 import { machineCommand } from "./machines/cli.ts"
 import { startServer, type SmithServer } from "./server.ts"
 import { stopPtyHost } from "./pty-host/client.ts"
+import {
+  applyQueuedProjectMoves,
+  finishLegacyMigration,
+  legacyDataDirFor,
+  legacyMigrationInProgress,
+  logMoveResult,
+  moveLegacyDataDir,
+  moveProjectPaths,
+  projectMoveResult,
+} from "./services/data-migration.ts"
 import {
   compareVersions,
   detectInstall,
@@ -141,6 +158,76 @@ async function health(state: ServerState) {
   }
 }
 
+/** Remove the lock file when this process still owns it. */
+function lockReleaser(lockFile: string) {
+  return () => {
+    try {
+      if (readFileSync(lockFile, "utf8").trim() === String(process.pid))
+        unlinkSync(lockFile)
+    } catch {
+      // Already gone.
+    }
+  }
+}
+
+function dataLog(message: string) {
+  console.log(`[smith] data: ${message}`)
+}
+
+/**
+ * Stop a command that would make the default data directory while an old
+ * `~/.pico` still waits for its move: the move happens only when no
+ * `~/.smith` exists.
+ */
+function refuseBeforeLegacyMove(dataDir: string) {
+  const legacy = legacyDataDirFor(dataDir)
+  if (legacy)
+    throw new Error(
+      `Start Smith one time first (smith serve): it moves the old data in ${legacy} to ${dataDir}.`
+    )
+}
+
+/**
+ * Take the data directory's lock for a server. First move an old `~/.pico`
+ * there when needed, and finish an interrupted move and the queued project
+ * moves, before anything opens the database.
+ */
+async function takeDataDir(paths: ServerPaths): Promise<() => void> {
+  const legacy = legacyDataDirFor(paths.dataDir)
+  let release: () => void
+  if (legacy) {
+    dataLog(`moving the old Pico data directory ${legacy} to ${paths.dataDir}`)
+    let releaseLegacy: () => void
+    try {
+      releaseLegacy = await acquireLock(serverPaths(legacy))
+    } catch (error) {
+      throw new Error(
+        `Cannot move ${legacy} to ${paths.dataDir}: ${error instanceof Error ? error.message : String(error)} Stop the old Pico first (pico-app stop).`,
+        { cause: error }
+      )
+    }
+    try {
+      await moveLegacyDataDir(legacy, paths.dataDir, dataLog)
+    } catch (error) {
+      releaseLegacy()
+      throw error
+    }
+    // The lock file moved with the folder.
+    release = lockReleaser(paths.lockFile)
+  } else {
+    release = await acquireLock(paths)
+  }
+  try {
+    if (legacyMigrationInProgress(paths.dataDir))
+      finishLegacyMigration(paths.dataDir, dataLog)
+    applyQueuedProjectMoves(paths.dataDir, dataLog)
+  } catch (error) {
+    release()
+    throw error
+  }
+  return release
+}
+
 /** Take the data directory's lock, or report the server that holds it. */
 async function acquireLock(paths: ServerPaths): Promise<() => void> {
   mkdirSync(paths.dataDir, { recursive: true })
@@ -160,17 +247,7 @@ async function acquireLock(paths: ServerPaths): Promise<() => void> {
         const fd = openSync(paths.lockFile, "wx")
         writeSync(fd, String(process.pid))
         closeSync(fd)
-        return () => {
-          try {
-            if (
-              readFileSync(paths.lockFile, "utf8").trim() ===
-              String(process.pid)
-            )
-              unlinkSync(paths.lockFile)
-          } catch {
-            // Already gone.
-          }
-        }
+        return lockReleaser(paths.lockFile)
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
         const owner = Number(readFileSync(paths.lockFile, "utf8").trim())
@@ -295,8 +372,11 @@ async function serveDetached(options: Map<string, string | boolean>) {
     )
     return
   }
-  mkdirSync(paths.dataDir, { recursive: true })
-  const log = openSync(paths.logFile, "a")
+  // Before the server moves an old ~/.pico here, log into it: the open
+  // file moves with the folder.
+  const legacy = legacyDataDirFor(paths.dataDir)
+  if (!legacy) mkdirSync(paths.dataDir, { recursive: true })
+  const log = openSync(legacy ? join(legacy, "server.log") : paths.logFile, "a")
   const args = process.argv
     .slice(2)
     .filter((arg) => arg !== "--detach" && arg !== "--detach=true")
@@ -353,7 +433,7 @@ async function serve(options: Map<string, string | boolean>) {
     )
     return
   }
-  const release = await acquireLock(paths)
+  const release = await takeDataDir(paths)
   let server: SmithServer
   let requestStop: (drain: boolean) => void = () => undefined
   let requestRestart: () => void = () => undefined
@@ -641,8 +721,84 @@ function channelCommand(
   process.exitCode = 2
 }
 
+/**
+ * `smith-server move-project <old-path> <new-path>`: after the user moved a
+ * project folder, rewrite the stored paths (agent and project cwd values,
+ * sidebar, settings) and repair the project's worktrees in the data
+ * directory. A running server applies it in a restart, before it opens
+ * the database; else this process does it with the lock.
+ */
+async function moveProjectCommand(
+  argv: string[],
+  options: Map<string, string | boolean>
+) {
+  const [fromArg, toArg] = positional(argv, ["data-dir"])
+  if (!fromArg || !toArg) {
+    console.error("Usage: smith move-project <old-path> <new-path>")
+    process.exitCode = 2
+    return
+  }
+  const expand = (path: string) =>
+    resolve(path.replace(/^~(?=$|\/)/, homedir()))
+  const from = expand(fromArg)
+  const to = expand(toArg)
+  if (from === to) throw new Error("The old and the new path are the same.")
+  if (!existsSync(to))
+    throw new Error(`${to} does not exist. Move the folder first.`)
+  const paths = serverPaths(dataDirOption(options))
+  refuseBeforeLegacyMove(paths.dataDir)
+  const state = readState(paths)
+  if (state && alive(state.pid) && (await health(state))) {
+    const host =
+      state.host === "0.0.0.0" || state.host === "::" ? "127.0.0.1" : state.host
+    const response = await fetch(
+      `http://${host}:${state.port}/api/system/move-project`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ from, to }),
+      }
+    )
+    const result = (await response.json().catch(() => ({}))) as {
+      id?: string
+      error?: string
+    }
+    if (!response.ok || !result.id)
+      throw new Error(result.error ?? `Move failed: ${response.status}`)
+    console.log("Smith restarts to rewrite the paths…")
+    const deadline = Date.now() + 120_000
+    while (Date.now() < deadline) {
+      await new Promise((resolveWait) => setTimeout(resolveWait, 500))
+      const moved = projectMoveResult(paths.dataDir, result.id)
+      const next = readState(paths)
+      if (
+        moved &&
+        next &&
+        next.pid !== state.pid &&
+        alive(next.pid) &&
+        (await health(next))
+      ) {
+        logMoveResult(moved, (line) => console.log(line))
+        return
+      }
+    }
+    throw new Error(
+      `Smith did not finish the move in time. See ${paths.logFile}`
+    )
+  }
+  const release = await acquireLock(paths)
+  try {
+    logMoveResult(moveProjectPaths(paths.dataDir, from, to), (line) =>
+      console.log(line)
+    )
+  } finally {
+    release()
+  }
+}
+
 async function importCommand(options: Map<string, string | boolean>) {
   const paths = serverPaths(dataDirOption(options))
+  refuseBeforeLegacyMove(paths.dataDir)
   const source = resolve(
     String(
       options.get("source-dir") ?? join(homedir(), ".pi", "agent", "sessions")
@@ -688,12 +844,12 @@ async function main() {
   const argv = process.argv.slice(2)
   if (argv[0] === "machine") {
     const hubIndex = argv.indexOf("--hub-dir")
-    await machineCommand(
-      argv.slice(1),
+    const hubDir =
       hubIndex >= 0 && argv[hubIndex + 1]
         ? resolve(argv[hubIndex + 1]!)
         : defaultDataDir()
-    )
+    refuseBeforeLegacyMove(hubDir)
+    await machineCommand(argv.slice(1), hubDir)
     return
   }
   const { command, options } = parseArgs(argv)
@@ -729,12 +885,16 @@ async function main() {
       await updateCommand(argv.slice(1), options)
       break
     case "channel":
+      refuseBeforeLegacyMove(dataDirOption(options))
       channelCommand(argv.slice(1), options)
+      break
+    case "move-project":
+      await moveProjectCommand(argv.slice(1), options)
       break
     default:
       console.error(`Unknown command: ${command}`)
       console.error(
-        "Usage: smith-server serve|status|stop|restart|update|channel|import-pi|machine|agent|mcp [--port N] [--host H] [--data-dir D] [--web-dir D] [--source-dir D] [--detach] [--json]"
+        "Usage: smith-server serve|status|stop|restart|update|channel|import-pi|move-project|machine|agent|mcp [--port N] [--host H] [--data-dir D] [--web-dir D] [--source-dir D] [--detach] [--json]"
       )
       process.exitCode = 2
   }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process"
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -13,17 +13,19 @@ const ownArgs = ["agent", "mcp"].includes(args[0])
 if (!ownArgs && args.includes("--help")) {
   console.log(`Smith — durable Pi sessions in your browser
 Usage: smith [serve|status|stop|restart|import-pi] [--port N] [--host H]
-                 [--data-dir D] [--web-dir D] [--open|--no-open] [--wait]
-                 [--source-dir D] [--detach] [--json] [--no-pty-host]
-                 [--pty-host]
+             [--data-dir D] [--web-dir D] [--open|--no-open] [--wait]
+             [--source-dir D] [--detach] [--json] [--no-pty-host]
+             [--pty-host]
        smith update [version] [--check] [--channel stable|preview]
-                 [--no-restart]
+             [--no-restart]
        smith channel [show | set stable|preview]
        smith machine add|list|status|reconnect|rename|enable|disable|remove
        smith agent list|start|send|show|wait|stop
        smith mcp
+       smith move-project <old-path> <new-path>
 The default address is 127.0.0.1:3141. Data is stored in ~/.smith.
-Use a separate --data-dir for development.
+Use a separate --data-dir for development. Smith was called Pico: the first
+start moves ~/.pico to ~/.smith.
 serve --detach starts Smith in the background. The server output also goes
 to <data>/server.log.
 restart stops Smith at once and starts it again with the same options, for
@@ -41,7 +43,10 @@ Show sessions of other machines over SSH with smith machine add <target>.
 Run smith machine help for details.
 Control agents from a shell or a script with smith agent; run
 smith agent help for details. smith mcp prints the address of Smith's
-MCP server, for Claude Code, Codex, and other MCP clients.`)
+MCP server, for Claude Code, Codex, and other MCP clients.
+After you move a project folder, run smith move-project <old-path>
+<new-path>: it rewrites the paths that Smith stored and repairs the
+project's worktrees.`)
   process.exit(0)
 }
 if (!ownArgs && args.includes("--version")) {
@@ -100,9 +105,21 @@ const supervise = command === "serve" && !forwarded.includes("--detach")
 // background, so that `smith restart` can point to it when the server
 // does not come back.
 const logFile = join(dataDir, "server.log")
+// The server moves an old ~/.pico to ~/.smith on its first start (see
+// server/src/services/data-migration.ts). Until then, log into the old
+// folder, and do not make ~/.smith: the move happens only when it is
+// missing.
+const legacyDir = join(homedir(), ".pico")
+const moving =
+  dataDir === join(homedir(), ".smith") &&
+  !existsSync(dataDir) &&
+  existsSync(legacyDir)
 function writeLog(text) {
   try {
-    appendFileSync(logFile, text)
+    appendFileSync(
+      moving && !existsSync(dataDir) ? join(legacyDir, "server.log") : logFile,
+      text
+    )
   } catch {
     /* The terminal still shows it. */
   }
@@ -112,7 +129,7 @@ function note(text) {
   writeLog(`[smith] ${new Date().toISOString()} ${text}\n`)
 }
 if (supervise) {
-  mkdirSync(dataDir, { recursive: true })
+  if (!moving) mkdirSync(dataDir, { recursive: true })
   // A closed terminal must not stop the copy of the output.
   process.stdout.on("error", () => undefined)
   process.stderr.on("error", () => undefined)

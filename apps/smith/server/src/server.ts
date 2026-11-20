@@ -4,8 +4,9 @@
  */
 import { createServer, type IncomingMessage, type Server } from "node:http"
 import { homedir } from "node:os"
-import { join } from "node:path"
+import { isAbsolute, join } from "node:path"
 import type { Duplex } from "node:stream"
+import { queueProjectMove } from "./services/data-migration.ts"
 
 import { WebSocketServer, type WebSocket } from "ws"
 
@@ -421,6 +422,29 @@ export async function startServer(options: {
     // client's `now` does not matter.
     setImmediate(() => onRestart())
     return { ok: true }
+  })
+  // `smith move-project`: the open database cannot change under the
+  // server, so a restart applies the move before it opens the database.
+  router.post("/api/system/move-project", async (request) => {
+    const remote = request.raw.socket.remoteAddress ?? ""
+    if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(remote))
+      throw new ApiError(403, "Only a local client may move a project")
+    const body = await request.body<{ from?: unknown; to?: unknown }>()
+    const from = typeof body.from === "string" ? body.from : ""
+    const to = typeof body.to === "string" ? body.to : ""
+    if (!isAbsolute(from) || !isAbsolute(to) || from === to)
+      throw new ApiError(400, "from and to must be two absolute paths")
+    const onRestart = options.onRestartRequest
+    if (!onRestart)
+      throw new ApiError(501, "This Smith server cannot restart itself")
+    if (updater.status().installing)
+      throw new ApiError(
+        409,
+        "An update is installing. Try again when it is done."
+      )
+    const id = queueProjectMove(options.paths.dataDir, from, to)
+    setImmediate(() => onRestart())
+    return { ok: true, id }
   })
   // Updates of Smith itself (services/self-update.ts).
   router.get("/api/system/update", () => ({ ok: true, ...updater.status() }))
