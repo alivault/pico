@@ -6,6 +6,8 @@
  * Writes into apps/smith/public and apps/website/site:
  * - favicon.svg: the mark in a square, black, and white in dark mode
  *   (prefers-color-scheme), so the tab icon follows the system theme.
+ * - favicon-light.svg (black) and favicon-dark.svg (white): the icons that
+ *   the pages link, each with media="(prefers-color-scheme: …)".
  * - favicon.png (32 px) and favicon.ico: fallbacks, black on white.
  * - apple-touch-icon.png (180 px): black on white.
  * - icon-192.png, icon-512.png: PWA icons, black on white.
@@ -59,8 +61,16 @@ const favicon = squareSvg({
   style:
     "<style>@media (prefers-color-scheme: dark){path{fill:#fff}}</style>\n",
 })
-for (const dir of [join(app, "public"), website])
+// One color each. The pages link both, with media="(prefers-color-scheme: …)":
+// the browser checks a link's media also when the scheme changes, but reads
+// the media query inside an SVG only when it loads the file.
+const faviconLight = squareSvg({ size: 32, fill: "#000" })
+const faviconDark = squareSvg({ size: 32, fill: "#fff" })
+for (const dir of [join(app, "public"), website]) {
   writeFileSync(join(dir, "favicon.svg"), favicon)
+  writeFileSync(join(dir, "favicon-light.svg"), faviconLight)
+  writeFileSync(join(dir, "favicon-dark.svg"), faviconDark)
+}
 
 const work = mkdtempSync(join(tmpdir(), "smith-icons-"))
 function png(name, svg, pixels, dirs) {

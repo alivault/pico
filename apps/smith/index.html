@@ -7,8 +7,20 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <title>Smith</title>
-    <link rel="icon" href="/favicon.ico" sizes="32x32" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- A black mark on a light tab strip, a white one on a dark strip. The
+         browser checks media itself, also when the system scheme changes. -->
+    <link
+      rel="icon"
+      href="/favicon-light.svg"
+      type="image/svg+xml"
+      media="(prefers-color-scheme: light)"
+    />
+    <link
+      rel="icon"
+      href="/favicon-dark.svg"
+      type="image/svg+xml"
+      media="(prefers-color-scheme: dark)"
+    />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
   </head>
