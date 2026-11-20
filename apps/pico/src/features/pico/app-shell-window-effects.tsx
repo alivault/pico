@@ -41,6 +41,11 @@ function showDoneNotification(
   })
 }
 
+// While the shown agent works, the window title starts with a moon that
+// goes through its phases.
+const TITLE_WORKING_FRAMES = ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"]
+const TITLE_WORKING_INTERVAL_MS = 500
+
 function getIsPageForeground() {
   if (typeof document === "undefined") return true
 
@@ -65,13 +70,20 @@ function getWindowTitleUnreadCount(
 function setPicoDocumentTitle({
   backgroundCurrentAgentUnreadKey,
   currentPageTitle,
+  agentWorking,
   sidebarUnreadVersion,
+  titleWorkingFrameIndex,
 }: {
   backgroundCurrentAgentUnreadKey: string
   currentPageTitle: string
+  agentWorking: boolean
   sidebarUnreadVersion: string
+  titleWorkingFrameIndex: number
 }) {
-  const nextTitle = currentPageTitle
+  const workingPrefix = agentWorking
+    ? `${TITLE_WORKING_FRAMES[titleWorkingFrameIndex]} `
+    : ""
+  const nextTitle = `${workingPrefix}${currentPageTitle}`
   const unreadAgentCount = getWindowTitleUnreadCount(
     sidebarUnreadVersion,
     backgroundCurrentAgentUnreadKey
@@ -106,6 +118,7 @@ export function AppShellWindowEffectsHost({
       }),
       agentCwd: agentState.cwd,
       agentName: agentState.agentName,
+      agentWorking: agentState.streaming,
       firstMessage: agentState.firstMessage,
       uiTitle: agentState.uiState.title?.trim() || "",
     }),
@@ -151,6 +164,7 @@ export function AppShellWindowEffectsHost({
       }
       agentDoneSoundEnabled={notificationState.agentDoneSoundEnabled}
       agentDoneEvents={notificationState.agentDoneEvents}
+      agentWorking={agentWindowState.agentWorking}
       sidebarStore={sidebarStore}
       onConsumeAgentDoneEvents={onConsumeAgentDoneEvents}
       onSelectAgent={onSelectAgent}
@@ -166,6 +180,7 @@ function AppShellWindowEffects({
   agentDoneDesktopNotificationsEnabled,
   agentDoneSoundEnabled,
   agentDoneEvents,
+  agentWorking,
   sidebarStore,
   onConsumeAgentDoneEvents,
   onSelectAgent,
@@ -177,6 +192,7 @@ function AppShellWindowEffects({
   agentDoneDesktopNotificationsEnabled: boolean
   agentDoneSoundEnabled: boolean
   agentDoneEvents: Array<AgentDoneEvent>
+  agentWorking: boolean
   sidebarStore: AppShellSidebarStore
   onConsumeAgentDoneEvents: (ids: Array<string>) => void
   onSelectAgent: (nextAgentId?: string) => void
@@ -193,8 +209,10 @@ function AppShellWindowEffects({
   )
   const isPageForegroundRef = React.useRef(getIsPageForeground())
   const backgroundCurrentAgentUnreadKeyRef = React.useRef("")
+  const titleWorkingFrameIndexRef = React.useRef(0)
   const titleSnapshotRef = React.useRef({
     currentPageTitle,
+    agentWorking,
     sidebarUnreadVersion,
   })
   const processedAgentDoneEventIdsRef = React.useRef<Set<string>>(new Set())
@@ -204,16 +222,36 @@ function AppShellWindowEffects({
       ...titleSnapshotRef.current,
       backgroundCurrentAgentUnreadKey:
         backgroundCurrentAgentUnreadKeyRef.current,
+      titleWorkingFrameIndex: titleWorkingFrameIndexRef.current,
     })
   }
 
   React.useEffect(() => {
     titleSnapshotRef.current = {
       currentPageTitle,
+      agentWorking,
       sidebarUnreadVersion,
     }
     updateDocumentTitle()
-  }, [currentPageTitle, sidebarUnreadVersion])
+  }, [currentPageTitle, agentWorking, sidebarUnreadVersion])
+
+  React.useEffect(() => {
+    if (!agentWorking) {
+      titleWorkingFrameIndexRef.current = 0
+      updateDocumentTitle()
+      return
+    }
+
+    const intervalId = window.setInterval(() => {
+      titleWorkingFrameIndexRef.current =
+        (titleWorkingFrameIndexRef.current + 1) % TITLE_WORKING_FRAMES.length
+      updateDocumentTitle()
+    }, TITLE_WORKING_INTERVAL_MS)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [agentWorking])
 
   React.useEffect(() => {
     const syncPageForeground = () => {
