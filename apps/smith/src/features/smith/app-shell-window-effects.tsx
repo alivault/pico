@@ -41,8 +41,9 @@ function showDoneNotification(
   })
 }
 
-// While the shown agent works, the window title starts with a moon that
-// goes through its phases.
+// While any agent of the shown machine works (runs a turn), the window
+// title starts with a moon that goes through its phases. Waiting on a job,
+// a timer, or a watch does not count.
 const TITLE_WORKING_FRAMES = ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"]
 const TITLE_WORKING_INTERVAL_MS = 500
 
@@ -164,7 +165,7 @@ export function AppShellWindowEffectsHost({
       }
       agentDoneSoundEnabled={notificationState.agentDoneSoundEnabled}
       agentDoneEvents={notificationState.agentDoneEvents}
-      agentWorking={agentWindowState.agentWorking}
+      currentAgentWorking={agentWindowState.agentWorking}
       sidebarStore={sidebarStore}
       onConsumeAgentDoneEvents={onConsumeAgentDoneEvents}
       onSelectAgent={onSelectAgent}
@@ -180,7 +181,7 @@ function AppShellWindowEffects({
   agentDoneDesktopNotificationsEnabled,
   agentDoneSoundEnabled,
   agentDoneEvents,
-  agentWorking,
+  currentAgentWorking,
   sidebarStore,
   onConsumeAgentDoneEvents,
   onSelectAgent,
@@ -192,7 +193,7 @@ function AppShellWindowEffects({
   agentDoneDesktopNotificationsEnabled: boolean
   agentDoneSoundEnabled: boolean
   agentDoneEvents: Array<AgentDoneEvent>
-  agentWorking: boolean
+  currentAgentWorking: boolean
   sidebarStore: AppShellSidebarStore
   onConsumeAgentDoneEvents: (ids: Array<string>) => void
   onSelectAgent: (nextAgentId?: string) => void
@@ -207,6 +208,11 @@ function AppShellWindowEffects({
       .sort()
       .join("\n")
   )
+  const anyAgentWorking = useSelector(sidebarStore, (snapshot) =>
+    snapshot.derived.sidebarAgents.some((agent) => agent.streaming)
+  )
+  // The open agent's own state comes first, so its moon starts at once.
+  const agentWorking = currentAgentWorking || anyAgentWorking
   const isPageForegroundRef = React.useRef(getIsPageForeground())
   const backgroundCurrentAgentUnreadKeyRef = React.useRef("")
   const titleWorkingFrameIndexRef = React.useRef(0)
