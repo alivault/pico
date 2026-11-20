@@ -1,4 +1,5 @@
 import * as React from "react"
+import { StatusEmoji } from "@/features/smith/status-emoji"
 import { copyAgentId } from "@/features/smith/copy-agent-id"
 import { createPortal } from "react-dom"
 
@@ -30,9 +31,7 @@ import {
   FolderPlusIcon,
   FolderTreeIcon,
   GitForkIcon,
-  HourglassIcon,
   ListTodoIcon,
-  MessageCircleQuestionIcon,
   PinIcon,
   Rows2Icon,
   SearchIcon,
@@ -883,10 +882,10 @@ function SidebarAgentItem({
       {entry.needsInput ? (
         <TitleTooltip title="The agent waits for your answer" side="right">
           <span className={AGENT_STATUS_ICON_CLASS}>
-            <MessageCircleQuestionIcon
-              className="size-3.5 text-red-500"
-              aria-label="The agent waits for your answer"
-            />
+            {/* The same symbols as in the window title. */}
+            <StatusEmoji label="The agent waits for your answer">
+              ❓
+            </StatusEmoji>
           </span>
         </TitleTooltip>
       ) : entry.streaming ? (
@@ -898,10 +897,7 @@ function SidebarAgentItem({
           <span className={AGENT_STATUS_ICON_CLASS}>
             {/* An hourglass: the agent is not done. It goes on when the
                 job ends. The job's green dot is at the end of the row. */}
-            <HourglassIcon
-              className="size-3.5 text-sidebar-foreground/70"
-              aria-label={`Waiting on ${entry.waiting}`}
-            />
+            <StatusEmoji label={`Waiting on ${entry.waiting}`}>⏳</StatusEmoji>
           </span>
         </TitleTooltip>
       ) : showUnread ? (
@@ -1657,7 +1653,7 @@ function ProjectCounts({
         title="Waiting for you"
         className="text-red-500 hover:text-red-500"
       >
-        <MessageCircleQuestionIcon className="size-3" />
+        <StatusEmoji className="text-[11px]">❓</StatusEmoji>
       </ProjectCountButton>
       <ProjectCountButton
         {...shared}
@@ -3257,10 +3253,9 @@ function SplitProjectCounts({
   if (counts.waiting > 0)
     parts.push(
       <span key="waiting" className="flex items-center gap-1 text-red-500">
-        <MessageCircleQuestionIcon
-          className="size-3"
-          aria-label="Waiting for you"
-        />
+        <StatusEmoji label="Waiting for you" className="text-[11px]">
+          ❓
+        </StatusEmoji>
         {counts.waiting}
       </span>
     )

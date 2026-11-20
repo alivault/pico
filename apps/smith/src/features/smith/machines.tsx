@@ -1,4 +1,5 @@
 import * as React from "react"
+import { StatusEmoji } from "@/features/smith/status-emoji"
 import {
   closestCenter,
   DndContext,
@@ -17,12 +18,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-  MessageCircleQuestionIcon,
-  RefreshCwIcon,
-} from "lucide-react"
+import { ChevronDownIcon, ChevronRightIcon, RefreshCwIcon } from "lucide-react"
 import { toast } from "@/lib/smith/toast"
 
 import {
@@ -307,7 +303,7 @@ function MachineCounts({
         title="Waiting for you"
         className="text-red-500 hover:text-red-500"
       >
-        <MessageCircleQuestionIcon className="size-3" />
+        <StatusEmoji className="text-[11px]">❓</StatusEmoji>
       </MachineCountButton>
       <MachineCountButton
         machine={machine}
