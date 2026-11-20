@@ -23,6 +23,9 @@ import {
 import { AppShellSidebarController } from "@/features/smith/app-shell-sidebar-controller"
 import { AppShellWindowEffectsHost } from "@/features/smith/app-shell-window-effects"
 import { setBrowserMode } from "@/features/smith/agent/browser-preview"
+import { requestFileReveal } from "@/features/smith/file-reveal"
+import { useRememberedFileTabs } from "@/features/smith/app-shell-file-tabs-memory"
+import { formatFileReference } from "@/lib/smith/file-references"
 import type { AppShellAddProjectDialogHandle } from "@/features/smith/app-shell-add-project-dialog"
 import type { AppShellAuthDialogHandle } from "@/features/smith/app-shell-auth-dialog"
 import {
@@ -101,7 +104,6 @@ import {
   openRightSidebarFile,
   pinRightSidebarFile,
   reorderRightSidebarFiles,
-  resetRightSidebarFiles,
   selectRightSidebarVisibleFileTabs,
   setRightSidebarActiveTab,
   type AppShellRightSidebarState,
@@ -1166,14 +1168,13 @@ function useAppShellAgentWorkspaceView({
     toggleRightSidebarPane("review")
   }
 
-  React.useEffect(() => {
-    resetRightSidebarFiles(rightSidebarStore)
-  }, [rightSidebarStore, agentState.cwd])
-
-  React.useEffect(() => {
-    if (!agentState.draft) return
-    resetRightSidebarFiles(rightSidebarStore)
-  }, [rightSidebarStore, agentState.draft])
+  // Each folder keeps its own file tabs; the sidebar layout stays.
+  useRememberedFileTabs({
+    store: rightSidebarStore,
+    machineId,
+    viewerContextId,
+    cwd: normalizeCwd(agentState.cwd),
+  })
 
   const sidebarWorkspaceVersion = useAppShellSidebarValue(
     sidebarStore,
@@ -1251,6 +1252,71 @@ function useAppShellAgentWorkspaceView({
     shownPreviewsRef.current.add(key)
     setBrowserMode(machineId, "preview")
     openRightSidebarTab("browser")
+  })
+
+  // Open a file of the shown agent in the file viewer and show its lines.
+  const showAgentFile = (file: {
+    path: string
+    line?: number
+    endLine?: number
+    pin?: boolean
+  }) => {
+    if (file.line)
+      requestFileReveal(
+        machineId,
+        normalizeCwd(agentStateRef.current.cwd),
+        file.path,
+        {
+          line: file.line,
+          endLine: file.endLine,
+        }
+      )
+    // The sidebar is open but hidden because the window is too narrow.
+    if (!isMobile && gitPanelOpen && !getShellLayout().rightShown)
+      focusShellSide("right")
+    openFileViewTab(file.path, file.pin ? { pin: true } : undefined)
+  }
+
+  // A click on a path in the conversation.
+  useSmithEvent("smith:open-file", (detail) => {
+    if (detail.machineId !== machineId || detail.agentId !== activeAgentId)
+      return
+    showAgentFile(detail)
+  })
+
+  // The agent called open_file. When the Files tab shows, open the file
+  // there. Else do not take the user's view: a toast offers to show it.
+  const openedAgentFilesRef = React.useRef(new Set<string>())
+  useSmithEvent("smith:agent-open-file", (detail) => {
+    if (detail.machineId !== machineId || detail.agentId !== activeAgentId)
+      return
+    // A reconnect replays the events that this page already got.
+    if (openedAgentFilesRef.current.has(detail.callId)) return
+    openedAgentFilesRef.current.add(detail.callId)
+    const filesShown =
+      rightSidebarStore.state.activeTab === "files" &&
+      (isMobile
+        ? appUiStore.state.currentTab === "git"
+        : gitPanelOpen && getShellLayout().rightShown)
+    if (filesShown) {
+      showAgentFile(detail)
+      return
+    }
+    toast(`${detail.agentId} opened ${formatFileReference(detail)}`, {
+      id: `open-file:${detail.callId}`,
+      ...(detail.note ? { description: detail.note } : {}),
+      action: {
+        label: "Show",
+        onClick: () => {
+          // The user went to another agent: its Open button opens the file.
+          if (agentStateRef.current.agentId !== detail.agentId) {
+            emitSmithEvent("smith:open-agent", { agentId: detail.agentId })
+            return
+          }
+          showAgentFile(detail)
+        },
+      },
+    })
   })
   const currentAgentQueryScope = agentScrollKey(agentState)
   const contextUsageAgentScopeRef = React.useRef("")

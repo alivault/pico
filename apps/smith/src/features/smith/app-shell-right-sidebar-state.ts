@@ -69,18 +69,6 @@ export function selectRightSidebarHasVisibleFiles(
   return selectRightSidebarVisibleFileTabs(state).length > 0
 }
 
-export function resetRightSidebarFiles(
-  store: SmithStore<AppShellRightSidebarState>
-) {
-  setStoreState(store, (state) => ({
-    ...state,
-    fileActivePath: "",
-    filePreviewPath: "",
-    fileTabs: [],
-    fileTreeCollapsed: true,
-  }))
-}
-
 export function openRightSidebarFile(
   store: SmithStore<AppShellRightSidebarState>,
   path: string,

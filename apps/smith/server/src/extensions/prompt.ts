@@ -28,6 +28,9 @@ const TOOL_GUIDELINES: Record<string, string[]> = {
   watch: [
     "To wait for something (CI, a deploy, a published version, a file, a command that must succeed), use watch, not sleep or a polling loop in bash.",
   ],
+  open_file: [
+    "To show the user a specific file or lines (the change you made, a log line), use open_file. Do not open every file you read.",
+  ],
   ask_user: [
     "When you need an answer, a choice, or a confirmation from the user, ask with ask_user. This includes an offer at the end of a report, such as 'Should I fix X?'. Write the report, then call ask_user. Do not end your turn with a question in plain text.",
   ],

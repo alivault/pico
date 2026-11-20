@@ -204,6 +204,7 @@ export function createApi(api: ApiContext) {
         "git_changed",
         "agent_extensions",
         "preview_available",
+        "open_file",
       ],
       endpoints: [],
       features: [
@@ -838,6 +839,25 @@ export function createApi(api: ApiContext) {
     if (!requested) throw badRequest("cwd is required")
     const cwd = await files.resolveDirectory(requested, baseCwd(request))
     return { ok: true, cwd, ...(await files.readProjectFile(cwd, path)) }
+  })
+
+  // Which paths are files inside cwd, for links to files in the
+  // conversation. One request checks a batch of paths.
+  router.post("/api/files/exists", async (request) => {
+    const body = await request.body<{ cwd?: unknown; paths?: unknown }>()
+    const requested = stringField(body.cwd)
+    if (!requested) throw badRequest("cwd is required")
+    if (
+      !Array.isArray(body.paths) ||
+      !body.paths.every((path) => typeof path === "string")
+    )
+      throw badRequest("paths must be a list of strings")
+    const cwd = await files.resolveDirectory(requested, baseCwd(request))
+    return {
+      ok: true,
+      cwd,
+      files: await files.projectFilesExist(cwd, body.paths as string[]),
+    }
   })
 
   // The favicon of a project, for the sidebar. The client loads its bytes

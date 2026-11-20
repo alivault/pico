@@ -886,6 +886,19 @@ export type PreviewAvailableEvent = {
   path: string
 }
 
+/** An agent called `open_file` (server extensions/open-file.ts). */
+export type OpenFileEvent = {
+  type: "open_file"
+  agentId: string
+  cwd: string
+  /** Relative to `cwd`. */
+  path: string
+  line?: number
+  endLine?: number
+  note?: string
+  callId: string
+}
+
 /** The sidebar layout that all devices share. */
 export type SidebarStateSnapshot = {
   projects: Array<string>
@@ -917,6 +930,7 @@ export type SmithServerEvent =
   | AgentExtensionsEvent
   | SidebarStateEvent
   | PreviewAvailableEvent
+  | OpenFileEvent
 
 export function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
   return Boolean(

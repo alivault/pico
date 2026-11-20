@@ -9,8 +9,18 @@ import remarkGfm from "remark-gfm"
 import { CheckIcon, CopyIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import {
+  FILE_LINK_CLASS,
+  useFileLinkProps,
+  useFileLinkScope,
+} from "@/features/smith/file-links"
 import { HighlightedCode } from "@/features/smith/highlighted-code"
 import type { HighlightResponse } from "@/lib/smith/api"
+import {
+  parseFileLinkHref,
+  parseFileReference,
+  type FileReference,
+} from "@/lib/smith/file-references"
 import { hubUrl } from "@/lib/smith/machine"
 import { cn } from "@/lib/utils"
 
@@ -69,7 +79,45 @@ type MarkdownAnchorProps = React.ComponentProps<"a"> & {
   node?: unknown
 }
 
-function MarkdownAnchor({
+function MarkdownAnchor(props: MarkdownAnchorProps) {
+  const scope = useFileLinkScope()
+  const reference = React.useMemo(
+    () => (scope ? parseFileLinkHref(props.href) : undefined),
+    [props.href, scope]
+  )
+  return reference ? (
+    <FileAnchor {...props} reference={reference} />
+  ) : (
+    <PlainAnchor {...props} />
+  )
+}
+
+/**
+ * A link to a path, as `[app](src/app.ts#L10)`. It opens the file viewer
+ * when the file exists, else it is a plain link.
+ */
+function FileAnchor({
+  reference,
+  ...props
+}: MarkdownAnchorProps & { reference: FileReference }) {
+  const { streaming } = React.use(MarkdownRenderingContext)
+  const link = useFileLinkProps(reference, { enabled: !streaming })
+  if (!link) return <PlainAnchor {...props} />
+  const { children, href, node: _node, ...rest } = props
+  return (
+    <a
+      {...rest}
+      href={href}
+      title={link.title}
+      data-file-link="true"
+      onClick={link.onClick}
+    >
+      {children}
+    </a>
+  )
+}
+
+function PlainAnchor({
   children,
   href,
   node: _node,
@@ -94,20 +142,52 @@ type MarkdownCodeProps = React.ComponentProps<"code"> & {
   node?: unknown
 }
 
-function MarkdownCode({
+const INLINE_CODE_CLASS =
+  "rounded bg-muted px-1 py-0.5 font-mono text-[0.92em] text-[var(--inline-code-foreground)] before:content-none after:content-none"
+
+/**
+ * Inline code. Code that is a path to a file of the agent, as
+ * `src/app.ts:10`, becomes a link to the file viewer when the file exists.
+ */
+function MarkdownCode(props: MarkdownCodeProps) {
+  const scope = useFileLinkScope()
+  const text = typeof props.children === "string" ? props.children : undefined
+  const reference = React.useMemo(
+    () => (scope && text ? parseFileReference(text) : undefined),
+    [scope, text]
+  )
+  return reference ? (
+    <FileCode {...props} reference={reference} />
+  ) : (
+    <PlainCode {...props} />
+  )
+}
+
+function FileCode({
+  reference,
+  ...props
+}: MarkdownCodeProps & { reference: FileReference }) {
+  const { streaming } = React.use(MarkdownRenderingContext)
+  const link = useFileLinkProps(reference, { enabled: !streaming })
+  const { className, ...rest } = props
+  // The same element before and after the check, so the text does not move.
+  return (
+    <PlainCode
+      {...rest}
+      {...link}
+      className={cn(link && FILE_LINK_CLASS, className)}
+    />
+  )
+}
+
+function PlainCode({
   children,
   className,
   node: _node,
   ...props
 }: MarkdownCodeProps) {
   return (
-    <code
-      className={cn(
-        "rounded bg-muted px-1 py-0.5 font-mono text-[0.92em] text-[var(--inline-code-foreground)] before:content-none after:content-none",
-        className
-      )}
-      {...props}
-    >
+    <code className={cn(INLINE_CODE_CLASS, className)} {...props}>
       {children}
     </code>
   )

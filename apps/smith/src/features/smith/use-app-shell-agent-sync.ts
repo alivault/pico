@@ -1102,6 +1102,22 @@ export function useAppShellAgentSync({
       return
     }
 
+    if (payload.type === "open_file") {
+      if (typeof payload.path === "string" && payload.path) {
+        emitSmithEvent("smith:agent-open-file", {
+          machineId,
+          agentId: payload.agentId,
+          cwd: normalizeCwd(payload.cwd),
+          path: payload.path,
+          ...(payload.line ? { line: payload.line } : {}),
+          ...(payload.endLine ? { endLine: payload.endLine } : {}),
+          ...(payload.note ? { note: payload.note } : {}),
+          callId: payload.callId,
+        })
+      }
+      return
+    }
+
     if (payload.type === "agent_extensions") {
       if (typeof payload.agentId === "string") {
         emitSmithEvent("smith:agent-extensions", {

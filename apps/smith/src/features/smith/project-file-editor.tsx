@@ -24,6 +24,8 @@ import {
   Compartment,
   EditorState,
   RangeSetBuilder,
+  StateEffect,
+  StateField,
   Transaction,
   type Extension,
 } from "@codemirror/state"
@@ -40,6 +42,7 @@ import { basicSetup } from "codemirror"
 import { createPortal } from "react-dom"
 
 import { useLatestRef } from "@/features/smith/app-shell-common"
+import type { FileReveal } from "@/features/smith/file-reveal"
 import {
   fileLineCommentSnippet,
   formatComposerFileLineCommentReference,
@@ -439,6 +442,42 @@ const smithEditorTheme = EditorView.theme({
   },
 })
 
+// Lines that a link or the open_file tool asked to show. The highlight
+// stays until the user clicks in the file or new lines are asked for.
+const setRevealLines = StateEffect.define<{
+  start: number
+  end: number
+} | null>()
+const revealLineMark = Decoration.line({ class: "cm-smith-reveal-line" })
+
+const revealLinesField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(value, transaction) {
+    let next = value.map(transaction.changes)
+    for (const effect of transaction.effects) {
+      if (!effect.is(setRevealLines)) continue
+      if (!effect.value) {
+        next = Decoration.none
+        continue
+      }
+      const builder = new RangeSetBuilder<Decoration>()
+      const doc = transaction.state.doc
+      for (let line = effect.value.start; line <= effect.value.end; line += 1)
+        builder.add(doc.line(line).from, doc.line(line).from, revealLineMark)
+      next = builder.finish()
+    }
+    if (transaction.isUserEvent("select.pointer")) next = Decoration.none
+    return next
+  },
+  provide: (field) => EditorView.decorations.from(field),
+})
+
+const revealLinesTheme = EditorView.theme({
+  ".cm-line.cm-smith-reveal-line": {
+    backgroundColor: "color-mix(in oklab, var(--warning) 18%, transparent)",
+  },
+})
+
 function fileNameFromPath(path: string) {
   return path.split("/").filter(Boolean).at(-1) || path
 }
@@ -479,6 +518,10 @@ export type ProjectFileEditorProps = {
     snippet: string
   ) => void
   onRemoveComment?: (id: string) => void
+  /** Lines to scroll to and highlight. */
+  reveal?: FileReveal
+  /** The editor showed the lines of `reveal`. */
+  onRevealShown?: (nonce: number) => void
 }
 
 function FileCommentNote({
@@ -548,6 +591,8 @@ export default function ProjectFileEditor({
   commentDisabledReason,
   onAddComment,
   onRemoveComment,
+  reveal,
+  onRevealShown,
 }: ProjectFileEditorProps) {
   const [pendingComment, setPendingComment] =
     React.useState<FileCommentRange | null>(null)
@@ -598,6 +643,8 @@ export default function ProjectFileEditor({
           smithEditorTheme,
           EditorView.lineWrapping,
           fileCommentsExtension(commentHandlers),
+          revealLinesField,
+          revealLinesTheme,
           EditorView.updateListener.of((update) => {
             if (update.docChanged)
               callbacks.current.onChange(update.state.doc.toString())
@@ -674,6 +721,32 @@ export default function ProjectFileEditor({
       annotations: Transaction.addToHistory.of(false),
     })
   }, [docVersion])
+
+  // Scroll to the asked lines and highlight them. Wait one frame, so the
+  // editor has its size when it opens with the file.
+  const onRevealShownRef = useLatestRef(onRevealShown)
+  React.useEffect(() => {
+    if (!reveal) return
+    const frame = window.requestAnimationFrame(() => {
+      const view = viewRef.current
+      if (!view) return
+      const doc = view.state.doc
+      const start = Math.min(Math.max(1, reveal.line), doc.lines)
+      const end = Math.min(Math.max(start, reveal.endLine ?? start), doc.lines)
+      view.dispatch({
+        effects: [
+          setRevealLines.of({ start, end }),
+          EditorView.scrollIntoView(doc.line(start).from, {
+            // A long range starts at the top; a short one is in the middle.
+            y: end - start > 10 ? "start" : "center",
+            yMargin: 48,
+          }),
+        ],
+      })
+      onRevealShownRef.current?.(reveal.nonce)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [onRevealShownRef, reveal])
 
   // Comments are off with unsaved changes: close an open form.
   const commentsOn = canComment && Boolean(onAddComment)
