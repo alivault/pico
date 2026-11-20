@@ -42,8 +42,8 @@ function showDoneNotification(
 }
 
 // While any agent of the shown machine works (runs a turn), the window
-// title starts with a moon that goes through its phases. Waiting on a job,
-// a timer, or a watch does not count.
+// title starts with a moon that goes through its phases. Waiting for the
+// user (a question) or on a job, a timer, or a watch does not count.
 const TITLE_WORKING_FRAMES = ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"]
 const TITLE_WORKING_INTERVAL_MS = 500
 
@@ -119,7 +119,8 @@ export function AppShellWindowEffectsHost({
       }),
       agentCwd: agentState.cwd,
       agentName: agentState.agentName,
-      agentWorking: agentState.streaming,
+      // A question to the user keeps the turn open, but the agent waits.
+      agentWorking: agentState.streaming && !agentState.uiRequest,
       firstMessage: agentState.firstMessage,
       uiTitle: agentState.uiState.title?.trim() || "",
     }),
@@ -209,7 +210,9 @@ function AppShellWindowEffects({
       .join("\n")
   )
   const anyAgentWorking = useSelector(sidebarStore, (snapshot) =>
-    snapshot.derived.sidebarAgents.some((agent) => agent.streaming)
+    snapshot.derived.sidebarAgents.some(
+      (agent) => agent.streaming && !agent.needsInput
+    )
   )
   // The open agent's own state comes first, so its moon starts at once.
   const agentWorking = currentAgentWorking || anyAgentWorking
