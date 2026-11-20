@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import { createServer, type Server } from "node:http"
 import type { AddressInfo } from "node:net"
 import { test } from "node:test"
+import { Script } from "node:vm"
 import { brotliCompressSync, deflateRawSync, gzipSync } from "node:zlib"
 
 import { WebSocket, WebSocketServer } from "ws"
@@ -256,5 +257,6 @@ void test("the preview sends other replies as they are", async () => {
 })
 
 void test("the background script parses", () => {
-  assert.doesNotThrow(() => new Function(PREVIEW_BACKGROUND_SCRIPT))
+  // Compiles the script without running it.
+  assert.doesNotThrow(() => new Script(PREVIEW_BACKGROUND_SCRIPT))
 })
