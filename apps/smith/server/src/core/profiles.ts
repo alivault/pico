@@ -58,6 +58,8 @@ const WRITE_TOOLS = [
   "bash",
   "job_start",
   "terminal",
+  // A command watch runs a shell command outside the bash sandbox.
+  "watch.command",
   "browser.act",
   "browser.eval",
   "spawn_subagent",
@@ -95,8 +97,10 @@ export const BUILTIN_PROFILES: readonly Profile[] = [
       "scratchpad",
       "browser",
       "todo",
+      "schedule",
+      "watch",
     ],
-    removeTools: ["write", "edit", "bash", "browser.eval"],
+    removeTools: ["write", "edit", "bash", "browser.eval", "watch.command"],
     instructions:
       "You are a researcher: find and read sources, then report with links. Do not change files.",
   },
@@ -293,7 +297,7 @@ function subagentInstructions(
     `Bash refuses: ${deny.join(", ")}.`,
     "If you need a tool, a command, or a decision, do not wait and do not work around the limit. End your turn with a message that starts with `Question:`. Give the question, the options, and your recommendation. Your parent reads it and answers you, and it can give you more tools.",
     "When the work is done, end your turn with a short report of what you did. Your parent gets the end of your turn as a message, so do not also send the report with agents send.",
-    "If you end your turn to wait on a job, your parent gets no message: it gets one when you end with a question or with done.",
+    "If you end your turn to wait on a timer, a watch, or a job, your parent gets no message: it gets one when you end with a question or with done.",
   ]
     .filter(Boolean)
     .join(" ")

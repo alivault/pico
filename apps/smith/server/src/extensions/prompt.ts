@@ -25,6 +25,9 @@ const TOOL_GUIDELINES: Record<string, string[]> = {
   web_search: [
     "Use web_search when current, external, or linked information could help",
   ],
+  watch: [
+    "To wait for something (CI, a deploy, a published version, a file, a command that must succeed), use watch, not sleep or a polling loop in bash.",
+  ],
   ask_user: [
     "When you need an answer, a choice, or a confirmation from the user, ask with ask_user. This includes an offer at the end of a report, such as 'Should I fix X?'. Write the report, then call ask_user. Do not end your turn with a question in plain text.",
   ],

@@ -40,6 +40,7 @@ import {
   type UserMessageActions,
 } from "@/features/smith/conversation-view"
 import { ToolRenderContext } from "@/features/smith/tool-renderers/registry"
+import { TimersChip } from "@/features/smith/agent/timers"
 import { WaitingCardChip } from "@/features/smith/agent/waiting-cards"
 import { settle } from "@/lib/settle"
 
@@ -215,6 +216,10 @@ export function AppShellAgentContent({
             )}
           >
             <WaitingCardChip
+              agentId={toolRenderContext.agentId}
+              viewerContextId={viewerContextId}
+            />
+            <TimersChip
               agentId={toolRenderContext.agentId}
               viewerContextId={viewerContextId}
             />
