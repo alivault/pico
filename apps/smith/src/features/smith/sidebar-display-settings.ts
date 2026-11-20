@@ -141,11 +141,11 @@ export const SIDEBAR_LAYOUT_STORAGE_KEY = "smith-sidebar-layout"
 const layoutListeners = new Set<() => void>()
 let sidebarLayout: SidebarLayout | undefined
 
-// "split" when the user did not choose a layout.
+// "groups" (by project) when the user did not choose a layout.
 function readSidebarLayout(): SidebarLayout {
-  return safeLocalStorageGetItem(SIDEBAR_LAYOUT_STORAGE_KEY) === "groups"
-    ? "groups"
-    : "split"
+  return safeLocalStorageGetItem(SIDEBAR_LAYOUT_STORAGE_KEY) === "split"
+    ? "split"
+    : "groups"
 }
 
 function getSidebarLayout() {
@@ -174,12 +174,12 @@ function subscribeLayout(listener: () => void) {
   }
 }
 
-/** The layout of the sidebar. Split by default. */
+/** The layout of the sidebar. Groups by default, so agents show by project. */
 export function useSidebarLayout() {
   return React.useSyncExternalStore(
     subscribeLayout,
     getSidebarLayout,
-    () => "split" as const
+    () => "groups" as const
   )
 }
 
@@ -197,9 +197,9 @@ export function setSidebarLayout(layout: SidebarLayout) {
 export type SidebarView = SidebarGroupBy | "split"
 
 export const SIDEBAR_VIEWS: ReadonlyArray<SidebarView> = [
-  "split",
   "project",
   "status",
+  "split",
 ]
 
 export function sidebarViewLabel(view: SidebarView) {
