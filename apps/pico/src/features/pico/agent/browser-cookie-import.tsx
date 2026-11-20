@@ -344,7 +344,9 @@ function ChooseSitesStep({
           This profile has no cookies to import.
         </p>
       ) : (
-        <div className="flex min-h-0 flex-col gap-2">
+        // min-w-0: a long site name must not make the dialog's grid column
+        // wider than the dialog. The name truncates in its row.
+        <div className="flex min-h-0 min-w-0 flex-col gap-2">
           <div className="relative">
             <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -369,7 +371,7 @@ function ChooseSitesStep({
             >
               Select all
             </label>
-            <span className="text-xs text-muted-foreground tabular-nums">
+            <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
               {selected.size} of {result.sites.length} selected
             </span>
           </div>
