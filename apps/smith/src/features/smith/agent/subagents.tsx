@@ -79,7 +79,7 @@ function SubagentStatus({ subagent }: { subagent: Subagent }) {
   if (subagent.needsInput)
     return (
       <MessageCircleQuestionIcon
-        className="size-4 shrink-0 text-amber-500"
+        className="size-4 shrink-0 text-red-500"
         aria-label="Waiting for you"
       />
     )

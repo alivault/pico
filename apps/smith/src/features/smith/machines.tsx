@@ -305,7 +305,7 @@ function MachineCounts({
         filter="waiting"
         count={waiting}
         title="Waiting for you"
-        className="text-amber-500 hover:text-amber-500"
+        className="text-red-500 hover:text-red-500"
       >
         <MessageCircleQuestionIcon className="size-3" />
       </MachineCountButton>

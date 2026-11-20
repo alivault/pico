@@ -41,11 +41,49 @@ function showDoneNotification(
   })
 }
 
-// While any agent of the shown machine works (runs a turn), the window
-// title starts with a moon that goes through its phases. Waiting for the
-// user (a question) or on a job, a timer, or a watch does not count.
+/**
+ * What the agents of the shown machine do, for one symbol in front of the
+ * window title. The most urgent state wins:
+ * - "question" (❓): an agent waits for the user's answer. Only this needs
+ *   the user, so it shows also while other agents work.
+ * - "working" (a moon that goes through its phases): an agent runs a turn.
+ * - "waiting" (⏳): an agent waits on a job, a timer, or a watch, and no
+ *   agent works: work continues later by itself.
+ * - "idle": no symbol.
+ */
+export type TitleActivity = "question" | "working" | "waiting" | "idle"
+
 const TITLE_WORKING_FRAMES = ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"]
 const TITLE_WORKING_INTERVAL_MS = 500
+
+export function titleActivity(
+  agents: ReadonlyArray<{
+    streaming?: boolean
+    needsInput?: boolean
+    waiting?: string
+  }>,
+  currentAgent: { question: boolean; working: boolean }
+): TitleActivity {
+  if (currentAgent.question || agents.some((agent) => agent.needsInput))
+    return "question"
+  if (currentAgent.working || agents.some((agent) => agent.streaming))
+    return "working"
+  if (agents.some((agent) => agent.waiting)) return "waiting"
+  return "idle"
+}
+
+function titleActivityPrefix(activity: TitleActivity, frameIndex: number) {
+  switch (activity) {
+    case "question":
+      return "❓ "
+    case "working":
+      return `${TITLE_WORKING_FRAMES[frameIndex]} `
+    case "waiting":
+      return "⏳ "
+    case "idle":
+      return ""
+  }
+}
 
 function getIsPageForeground() {
   if (typeof document === "undefined") return true
@@ -71,20 +109,17 @@ function getWindowTitleUnreadCount(
 function setSmithDocumentTitle({
   backgroundCurrentAgentUnreadKey,
   currentPageTitle,
-  agentWorking,
+  activity,
   sidebarUnreadVersion,
   titleWorkingFrameIndex,
 }: {
   backgroundCurrentAgentUnreadKey: string
   currentPageTitle: string
-  agentWorking: boolean
+  activity: TitleActivity
   sidebarUnreadVersion: string
   titleWorkingFrameIndex: number
 }) {
-  const workingPrefix = agentWorking
-    ? `${TITLE_WORKING_FRAMES[titleWorkingFrameIndex]} `
-    : ""
-  const nextTitle = `${workingPrefix}${currentPageTitle}`
+  const nextTitle = `${titleActivityPrefix(activity, titleWorkingFrameIndex)}${currentPageTitle}`
   const unreadAgentCount = getWindowTitleUnreadCount(
     sidebarUnreadVersion,
     backgroundCurrentAgentUnreadKey
@@ -120,6 +155,7 @@ export function AppShellWindowEffectsHost({
       agentCwd: agentState.cwd,
       agentName: agentState.agentName,
       // A question to the user keeps the turn open, but the agent waits.
+      agentQuestion: Boolean(agentState.uiRequest),
       agentWorking: agentState.streaming && !agentState.uiRequest,
       firstMessage: agentState.firstMessage,
       uiTitle: agentState.uiState.title?.trim() || "",
@@ -166,6 +202,7 @@ export function AppShellWindowEffectsHost({
       }
       agentDoneSoundEnabled={notificationState.agentDoneSoundEnabled}
       agentDoneEvents={notificationState.agentDoneEvents}
+      currentAgentQuestion={agentWindowState.agentQuestion}
       currentAgentWorking={agentWindowState.agentWorking}
       sidebarStore={sidebarStore}
       onConsumeAgentDoneEvents={onConsumeAgentDoneEvents}
@@ -182,6 +219,7 @@ function AppShellWindowEffects({
   agentDoneDesktopNotificationsEnabled,
   agentDoneSoundEnabled,
   agentDoneEvents,
+  currentAgentQuestion,
   currentAgentWorking,
   sidebarStore,
   onConsumeAgentDoneEvents,
@@ -194,6 +232,7 @@ function AppShellWindowEffects({
   agentDoneDesktopNotificationsEnabled: boolean
   agentDoneSoundEnabled: boolean
   agentDoneEvents: Array<AgentDoneEvent>
+  currentAgentQuestion: boolean
   currentAgentWorking: boolean
   sidebarStore: AppShellSidebarStore
   onConsumeAgentDoneEvents: (ids: Array<string>) => void
@@ -209,19 +248,20 @@ function AppShellWindowEffects({
       .sort()
       .join("\n")
   )
-  const anyAgentWorking = useSelector(sidebarStore, (snapshot) =>
-    snapshot.derived.sidebarAgents.some(
-      (agent) => agent.streaming && !agent.needsInput
-    )
+  // The open agent's own state counts too, so its symbol changes at once.
+  const activity = useSelector(sidebarStore, (snapshot) =>
+    titleActivity(snapshot.derived.sidebarAgents, {
+      question: currentAgentQuestion,
+      working: currentAgentWorking,
+    })
   )
-  // The open agent's own state comes first, so its moon starts at once.
-  const agentWorking = currentAgentWorking || anyAgentWorking
+  const agentWorking = activity === "working"
   const isPageForegroundRef = React.useRef(getIsPageForeground())
   const backgroundCurrentAgentUnreadKeyRef = React.useRef("")
   const titleWorkingFrameIndexRef = React.useRef(0)
   const titleSnapshotRef = React.useRef({
     currentPageTitle,
-    agentWorking,
+    activity,
     sidebarUnreadVersion,
   })
   const processedAgentDoneEventIdsRef = React.useRef<Set<string>>(new Set())
@@ -238,11 +278,11 @@ function AppShellWindowEffects({
   React.useEffect(() => {
     titleSnapshotRef.current = {
       currentPageTitle,
-      agentWorking,
+      activity,
       sidebarUnreadVersion,
     }
     updateDocumentTitle()
-  }, [currentPageTitle, agentWorking, sidebarUnreadVersion])
+  }, [currentPageTitle, activity, sidebarUnreadVersion])
 
   React.useEffect(() => {
     if (!agentWorking) {

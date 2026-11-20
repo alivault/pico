@@ -884,7 +884,7 @@ function SidebarAgentItem({
         <TitleTooltip title="The agent waits for your answer" side="right">
           <span className={AGENT_STATUS_ICON_CLASS}>
             <MessageCircleQuestionIcon
-              className="size-3.5 text-amber-500"
+              className="size-3.5 text-red-500"
               aria-label="The agent waits for your answer"
             />
           </span>
@@ -1655,7 +1655,7 @@ function ProjectCounts({
         filter="waiting"
         count={counts.waiting}
         title="Waiting for you"
-        className="text-amber-500 hover:text-amber-500"
+        className="text-red-500 hover:text-red-500"
       >
         <MessageCircleQuestionIcon className="size-3" />
       </ProjectCountButton>
@@ -3256,7 +3256,7 @@ function SplitProjectCounts({
   const parts: Array<React.ReactNode> = []
   if (counts.waiting > 0)
     parts.push(
-      <span key="waiting" className="flex items-center gap-1 text-amber-500">
+      <span key="waiting" className="flex items-center gap-1 text-red-500">
         <MessageCircleQuestionIcon
           className="size-3"
           aria-label="Waiting for you"

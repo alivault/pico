@@ -995,7 +995,7 @@ function useAppShellAgentsDialogView({
               <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
                 {agent.needsInput ? (
                   <MessageCircleQuestionIcon
-                    className="size-3.5 text-amber-500"
+                    className="size-3.5 text-red-500"
                     aria-label="The agent waits for your answer"
                   />
                 ) : agent.busy ? (
