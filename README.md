@@ -1,6 +1,6 @@
 # Smith
 
-A web workspace for durable [Pi](https://www.npmjs.com/package/@earendil-works/pi-durable)
+Smith (formerly Pico) is a web workspace for durable [Pi](https://www.npmjs.com/package/@earendil-works/pi-durable)
 coding agents. One Node server hosts the agent runtime and serves the
 React web app.
 
@@ -43,6 +43,7 @@ smith restart              # restart at once; cut-off turns continue
 smith --port 3141 --no-open
 smith --data-dir PATH      # default: ~/.smith
 smith import-pi            # import Pi sessions as agents (stop Smith first)
+smith move-project OLD NEW # after you move a project folder
 ```
 
 Smith does not start again after a reboot. Run `smith serve --detach`
@@ -64,6 +65,43 @@ Settings, Server can install it. There you can also turn on preview releases
 (`smith channel set preview`, the npm tag `next`) or turn off the check.
 Smith that runs from source, or that pnpm or npx installed, shows the command to
 run instead.
+
+### Upgrade from Pico
+
+Smith was called Pico (the npm package `@alivault/pico`, the command
+`pico-app`). Smith 3 is a new package with a new command:
+
+```sh
+pico-app stop --wait
+npm uninstall -g @alivault/pico
+npm install -g @alivault/smith
+smith
+```
+
+The first start of `smith` moves your data from `~/.pico` to `~/.smith`. It
+renames the folder (it does not copy it, so both must be on the same disk),
+renames the database to `smith.sqlite`, changes the stored paths under
+`~/.pico` to `~/.smith`, and runs `git worktree repair` for the agent
+worktrees. The server log (`~/.smith/server.log`) lists each step. The move
+happens only when `~/.smith` does not exist yet and you did not set
+`--data-dir` or `SMITH_HOME`. Old terminals and jobs end; settings in the
+browser (theme, sidebar layout, drafts) start again from the defaults.
+Environment variables are now `SMITH_*`, not `PICO_*`.
+
+### Move a project folder
+
+Smith stores the folder of each project and agent. After you move or rename
+a project folder, tell Smith:
+
+```sh
+mv ~/code/old-name ~/code/new-name
+smith move-project ~/code/old-name ~/code/new-name
+```
+
+It changes the stored paths that start with the old path (agents, the
+sidebar, settings), and repairs the project's agent worktrees in
+`~/.smith/worktrees` with `git worktree repair`. When Smith runs, it
+restarts to make the change; turns that the restart cuts off continue.
 
 ## Run from source
 
