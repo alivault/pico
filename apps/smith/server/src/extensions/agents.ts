@@ -55,7 +55,7 @@ import {
 } from "../core/agent-search.ts"
 import { bashCalls, commandLine, formatDuration } from "../core/bash-calls.ts"
 import type { QueuedItem } from "../core/queue.ts"
-import { createWorktree } from "../services/worktree.ts"
+import { createWorktree, discardWorktree } from "../services/worktree.ts"
 import {
   conversationOf,
   agentIdOf,
@@ -1127,7 +1127,12 @@ export function createAgentsExtension(host: HostBridge) {
         // own cwd, so it shows at once, nested under its parent.
         const group = parentMeta.group ?? parentMeta.cwd
         let worktree:
-          | { repoRoot: string; path: string; branch: string }
+          | {
+              repoRoot: string
+              path: string
+              branch: string
+              createdBranch?: boolean
+            }
           | undefined
         if (args.worktree) {
           const options = typeof args.worktree === "object" ? args.worktree : {}
@@ -1143,6 +1148,7 @@ export function createAgentsExtension(host: HostBridge) {
               repoRoot: created.repoRoot,
               path: created.path,
               branch: created.branch,
+              createdBranch: created.createdBranch,
             }
             cwd = created.cwd
           } catch (error) {
@@ -1151,29 +1157,44 @@ export function createAgentsExtension(host: HostBridge) {
             )
           }
         }
-        subagent = await services.agents.create(cwd, {
-          parent,
-          spawnedByCall: api.callId,
-          ...(model ? { model } : {}),
-          ...(args.thinking ? { thinkingLevel: args.thinking } : {}),
-          ...(args.profile
-            ? {
-                profile:
-                  findProfile(args.profile, settings.profiles)?.name ??
-                  args.profile,
-              }
-            : {}),
-          limits: {
-            ...(nameList(args.add) ? { add: nameList(args.add) } : {}),
-            ...(nameList(args.remove) ? { remove: nameList(args.remove) } : {}),
-            ...(nameList(args.deny_commands)
-              ? { denyCommands: nameList(args.deny_commands) }
+        subagent = await services.agents
+          .create(cwd, {
+            parent,
+            spawnedByCall: api.callId,
+            ...(model ? { model } : {}),
+            ...(args.thinking ? { thinkingLevel: args.thinking } : {}),
+            ...(args.profile
+              ? {
+                  profile:
+                    findProfile(args.profile, settings.profiles)?.name ??
+                    args.profile,
+                }
               : {}),
-          },
-          ...(args.name ? { name: args.name } : {}),
-          ...(group ? { group } : {}),
-          ...(worktree ? { worktree } : {}),
-        })
+            limits: {
+              ...(nameList(args.add) ? { add: nameList(args.add) } : {}),
+              ...(nameList(args.remove)
+                ? { remove: nameList(args.remove) }
+                : {}),
+              ...(nameList(args.deny_commands)
+                ? { denyCommands: nameList(args.deny_commands) }
+                : {}),
+            },
+            ...(args.name ? { name: args.name } : {}),
+            ...(group ? { group } : {}),
+            ...(worktree
+              ? {
+                  worktree: {
+                    repoRoot: worktree.repoRoot,
+                    path: worktree.path,
+                    branch: worktree.branch,
+                  },
+                }
+              : {}),
+          })
+          .catch(async (error: unknown) => {
+            if (worktree) await discardWorktree(worktree)
+            throw error
+          })
       }
       await api.details(
         { agentId: subagent, status: "running", wait: Boolean(args.wait) },

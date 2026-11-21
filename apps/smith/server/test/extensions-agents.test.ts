@@ -27,6 +27,7 @@ import {
 import { JobsDoc } from "../src/extensions/jobs.ts"
 import {
   createWorktree,
+  discardWorktree,
   removeWorktree,
   repoRoot,
 } from "../src/services/worktree.ts"
@@ -633,6 +634,39 @@ void test("a worktree is made outside the repository and removed when clean", as
   await assert.rejects(removeWorktree(worktree), /uncommitted changes/)
   await removeWorktree(worktree, { force: true })
   assert.equal(existsSync(worktree.path), false)
+})
+
+void test("a discarded worktree frees its branch for the next try", async () => {
+  const dir = await tempDir()
+  const repo = join(dir, "repo")
+  execFileSync("git", ["init", "-q", "-b", "main", repo])
+  execFileSync("git", ["-C", repo, "config", "user.email", "t@example.com"])
+  execFileSync("git", ["-C", repo, "config", "user.name", "Test"])
+  await writeFile(join(repo, "README.md"), "hi\n")
+  execFileSync("git", ["-C", repo, "add", "."])
+  execFileSync("git", ["-C", repo, "commit", "-qm", "init"])
+  const branches = () =>
+    execFileSync("git", ["-C", repo, "branch", "--format=%(refname:short)"])
+      .toString()
+      .trim()
+      .split("\n")
+  const options = { dataDir: join(dir, "data"), branch: "feature/x" }
+  // A new branch: the agent could not be made, so the worktree and the
+  // branch go. Before, the branch stayed checked out in the left worktree,
+  // and the next try failed with "already used by worktree".
+  const first = await createWorktree(repo, options)
+  assert.equal(first.createdBranch, true)
+  await discardWorktree(first)
+  assert.equal(existsSync(first.path), false)
+  assert.deepEqual(branches(), ["main"])
+  const second = await createWorktree(repo, options)
+  assert.equal(second.branch, "feature/x")
+  // A branch that was there before stays.
+  await removeWorktree(second, { force: true })
+  const third = await createWorktree(repo, options)
+  assert.equal(third.createdBranch, false)
+  await discardWorktree(third)
+  assert.deepEqual(branches().sort(), ["feature/x", "main"])
 })
 
 void test("the answer of a stopped run is not an earlier answer", async () => {

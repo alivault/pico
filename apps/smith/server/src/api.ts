@@ -46,7 +46,11 @@ import * as git from "./services/git.ts"
 import * as github from "./services/github.ts"
 import * as githubPrs from "./services/github-prs.ts"
 import type { Notifier } from "./services/notify.ts"
-import { createWorktree, repoRoot } from "./services/worktree.ts"
+import {
+  createWorktree,
+  discardWorktree,
+  repoRoot,
+} from "./services/worktree.ts"
 import type { HighlightService } from "./services/highlight.ts"
 import { looseNumber, type Terminals } from "./services/terminal.ts"
 import { jobLogParts, readLogTailRaw } from "./services/job-log.ts"
@@ -496,26 +500,31 @@ export function createApi(api: ApiContext) {
           }
           agentCwd = worktree.cwd
         }
-        id = await agents.create(agentCwd, {
-          ...(draft?.profile ? { profile: draft.profile } : {}),
-          ...(worktree
-            ? {
-                group: cwd,
-                worktree: {
-                  repoRoot: worktree.repoRoot,
-                  path: worktree.path,
-                  branch: worktree.branch,
-                },
-              }
-            : {}),
-          ...(draft?.model ? { model: draft.model } : {}),
-          ...((stringField(body.thinkingLevel) ?? draft?.thinkingLevel)
-            ? {
-                thinkingLevel:
-                  stringField(body.thinkingLevel) ?? draft?.thinkingLevel,
-              }
-            : {}),
-        })
+        id = await agents
+          .create(agentCwd, {
+            ...(draft?.profile ? { profile: draft.profile } : {}),
+            ...(worktree
+              ? {
+                  group: cwd,
+                  worktree: {
+                    repoRoot: worktree.repoRoot,
+                    path: worktree.path,
+                    branch: worktree.branch,
+                  },
+                }
+              : {}),
+            ...(draft?.model ? { model: draft.model } : {}),
+            ...((stringField(body.thinkingLevel) ?? draft?.thinkingLevel)
+              ? {
+                  thinkingLevel:
+                    stringField(body.thinkingLevel) ?? draft?.thinkingLevel,
+                }
+              : {}),
+          })
+          .catch(async (error: unknown) => {
+            if (worktree) await discardWorktree(worktree)
+            throw error
+          })
         viewers.selectAgent(contextId, id)
       }
       const result = await agents.prompt(id, {
