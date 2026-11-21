@@ -1195,6 +1195,7 @@ function FilesSection({
   pr,
   active,
   review,
+  onStartReview,
 }: {
   viewerContextId: string
   cwd: string
@@ -1202,6 +1203,8 @@ function FilesSection({
   active: boolean
   /** The draft review; absent when line comments are off. */
   review?: ReviewDraftApi
+  /** Shows "Start review"; absent while a review is in progress. */
+  onStartReview?: () => void
 }) {
   const themeOptions = useSmithDiffThemeOptions()
   const [target, setTarget] = React.useState<LineTarget | null>(null)
@@ -1293,6 +1296,15 @@ function FilesSection({
               }
             >
               {allOpen ? "Collapse all" : "Expand all"}
+            </button>
+          ) : null}
+          {onStartReview ? (
+            <button
+              type="button"
+              className="rounded-sm font-medium text-primary hover:underline"
+              onClick={onStartReview}
+            >
+              Start review
             </button>
           ) : null}
         </span>
@@ -1442,6 +1454,7 @@ function PrDetail({
   const prQuery = usePr({ viewerContextId, cwd, number, enabled: active })
   const pr = prQuery.data
   const review = useReviewDraft(cwd, number)
+  const [reviewing, setReviewing] = React.useState(false)
   const handOffAgent = useHandOffAgent({
     viewerContextId,
     cwd,
@@ -1671,6 +1684,13 @@ function PrDetail({
                   pr={pr}
                   active={active}
                   review={canReview ? review : undefined}
+                  onStartReview={
+                    canReview &&
+                    !reviewing &&
+                    review.draft.comments.length === 0
+                      ? () => setReviewing(true)
+                      : undefined
+                  }
                 />
               </>
             )}
@@ -1682,6 +1702,9 @@ function PrDetail({
           {...scope}
           pr={pr}
           review={review}
+          reviewing={reviewing}
+          onReviewingChange={setReviewing}
+          isAuthor={Boolean(repo.viewerLogin && repo.viewerLogin === pr.author)}
           buttonClassName={buttonSize}
         />
       ) : null}

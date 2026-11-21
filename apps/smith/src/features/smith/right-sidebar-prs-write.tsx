@@ -8,11 +8,10 @@ import { useMutation, useQuery } from "@tanstack/react-query"
 import {
   ArrowUpIcon,
   BotIcon,
-  CheckIcon,
+  ChevronDownIcon,
   CircleCheckIcon,
   CircleMinusIcon,
   CircleXIcon,
-  FileDiffIcon,
   GitMergeIcon,
   MessageCircleQuestionIcon,
   MessageSquareIcon,
@@ -37,6 +36,11 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -336,29 +340,49 @@ export function ThreadActions({
 // Comment box and review bar
 
 const REVIEW_EVENTS = [
-  { event: "COMMENT", label: "Comment", icon: <MessageSquareIcon /> },
-  { event: "APPROVE", label: "Approve", icon: <CheckIcon /> },
+  {
+    event: "COMMENT",
+    label: "Comment",
+    detail: "Send the comments without a verdict.",
+  },
+  { event: "APPROVE", label: "Approve", detail: "Approve the changes." },
   {
     event: "REQUEST_CHANGES",
     label: "Request changes",
-    icon: <FileDiffIcon />,
+    detail: "Ask for changes before a merge.",
   },
 ] as const
 
+type ReviewEvent = (typeof REVIEW_EVENTS)[number]["event"]
+
+/**
+ * The bottom of a pull request: a comment field over the full width, or,
+ * while a review draft exists, a one-line review bar. A review starts from
+ * Files changed (a line comment or "Start review"), not from here.
+ */
 export function PrFooter({
   viewerContextId,
   cwd,
   pr,
   review,
+  reviewing,
+  onReviewingChange,
+  isAuthor,
   buttonClassName,
 }: Scope & {
   pr: ShownPr
   review: ReviewDraftApi
+  /** True after "Start review", also with no line comments yet. */
+  reviewing: boolean
+  onReviewingChange: (reviewing: boolean) => void
+  /** GitHub does not let the author approve or request changes. */
+  isAuthor: boolean
   buttonClassName?: string
 }) {
   const { post, refresh } = usePrPost(viewerContextId, cwd)
   const [comment, setComment] = React.useState("")
-  const [reviewing, setReviewing] = React.useState(false)
+  const [finishOpen, setFinishOpen] = React.useState(false)
+  const [event, setEvent] = React.useState<ReviewEvent>("COMMENT")
   const count = review.draft.comments.length
   const reviewMode = reviewing || count > 0
   const commentMutation = useMutation({
@@ -371,10 +395,10 @@ export function PrFooter({
     },
   })
   const reviewMutation = useMutation({
-    mutationFn: (event: (typeof REVIEW_EVENTS)[number]["event"]) =>
+    mutationFn: (chosen: ReviewEvent) =>
       post<GhWriteResponse>("/api/gh-pr/review", {
         number: pr.number,
-        event,
+        event: chosen,
         body: review.draft.body,
         comments: review.draft.comments.map((item) => ({
           path: item.path,
@@ -386,7 +410,9 @@ export function PrFooter({
       }),
     onSuccess: () => {
       review.clear()
-      setReviewing(false)
+      onReviewingChange(false)
+      setFinishOpen(false)
+      setEvent("COMMENT")
       toast.success("Sent the review")
       void refresh()
     },
@@ -395,68 +421,128 @@ export function PrFooter({
   })
   if (pr.partial) return null
   if (reviewMode) {
+    const chosen = isAuthor ? "COMMENT" : event
+    const empty = !review.draft.body.trim() && count === 0
+    const submitDisabled =
+      reviewMutation.isPending || (chosen !== "APPROVE" && empty)
     return (
-      <div className="grid shrink-0 gap-2 border-t border-border/60 bg-background px-3 py-2">
-        <div className="flex items-center gap-2 text-xs">
-          <span className="font-semibold">Review</span>
-          <span className="text-muted-foreground">
-            {count === 0
-              ? "Click a line number in Files changed to comment on it."
-              : `${count} line comment${count === 1 ? "" : "s"}`}
-          </span>
-          <Button
-            type="button"
-            size="xs"
-            variant="ghost"
-            className="ml-auto"
-            disabled={reviewMutation.isPending}
-            onClick={() => {
-              review.clear()
-              setReviewing(false)
-            }}
-          >
-            Discard
-          </Button>
-        </div>
-        <Textarea
-          aria-label="Review summary"
-          placeholder="Summary (optional for an approval)"
-          rows={2}
-          value={review.draft.body}
+      <div className="flex shrink-0 items-center gap-1.5 border-t border-border/60 bg-background px-3 py-2 text-xs">
+        <span className="font-semibold">Review</span>
+        <span className="min-w-0 truncate text-muted-foreground">
+          {count === 0
+            ? "Click a line to comment"
+            : `${count} comment${count === 1 ? "" : "s"}`}
+        </span>
+        <span className="flex-1" />
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className={buttonClassName}
           disabled={reviewMutation.isPending}
-          className="field-sizing-content max-h-40 min-h-9 resize-none text-sm"
-          onChange={(event) => review.setBody(event.target.value)}
-        />
-        <div className="flex flex-wrap justify-end gap-1.5">
-          {REVIEW_EVENTS.map((item) => (
+          onClick={() => {
+            review.clear()
+            onReviewingChange(false)
+          }}
+        >
+          Discard
+        </Button>
+        <Popover open={finishOpen} onOpenChange={setFinishOpen}>
+          <PopoverTrigger
+            render={
+              <Button
+                type="button"
+                size="sm"
+                className={cn("shrink-0", buttonClassName)}
+              />
+            }
+          >
+            Finish
+            <ChevronDownIcon data-icon="inline-end" />
+          </PopoverTrigger>
+          <PopoverContent side="top" align="end" className="w-72 gap-3">
+            <Textarea
+              aria-label="Review summary"
+              placeholder="Summary"
+              rows={3}
+              value={review.draft.body}
+              disabled={reviewMutation.isPending}
+              className="field-sizing-content max-h-48 min-h-16 resize-none text-sm"
+              onChange={(change) => review.setBody(change.target.value)}
+              onKeyDown={(key) => {
+                if (key.key === "Enter" && (key.metaKey || key.ctrlKey)) {
+                  key.preventDefault()
+                  if (!submitDisabled) reviewMutation.mutate(chosen)
+                }
+              }}
+            />
+            <div
+              role="radiogroup"
+              aria-label="Verdict"
+              className="grid gap-0.5"
+            >
+              {REVIEW_EVENTS.map((item) => {
+                const off = isAuthor && item.event !== "COMMENT"
+                const row = (
+                  <button
+                    key={item.event}
+                    type="button"
+                    role="radio"
+                    aria-checked={chosen === item.event}
+                    disabled={off || reviewMutation.isPending}
+                    className="flex w-full items-start gap-2 rounded-md px-1.5 py-1.5 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+                    onClick={() => setEvent(item.event)}
+                  >
+                    <span
+                      className={cn(
+                        "mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full border border-foreground/40",
+                        chosen === item.event && "border-primary"
+                      )}
+                    >
+                      {chosen === item.event ? (
+                        <span className="size-2 rounded-full bg-primary" />
+                      ) : null}
+                    </span>
+                    <span className="grid gap-0.5">
+                      <span
+                        className={cn(
+                          "font-medium",
+                          item.event === "REQUEST_CHANGES" &&
+                            "text-red-600 dark:text-red-400"
+                        )}
+                      >
+                        {item.label}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {item.detail}
+                      </span>
+                    </span>
+                  </button>
+                )
+                return off ? (
+                  <TitleTooltip
+                    key={item.event}
+                    title="GitHub does not let you do this on your own pull request"
+                  >
+                    <span className="block">{row}</span>
+                  </TitleTooltip>
+                ) : (
+                  row
+                )
+              })}
+            </div>
             <Button
-              key={item.event}
               type="button"
               size="sm"
-              variant={item.event === "COMMENT" ? "outline" : "default"}
-              className={cn(
-                buttonClassName,
-                item.event === "REQUEST_CHANGES" &&
-                  "bg-red-600 text-white hover:bg-red-600/90"
-              )}
-              disabled={
-                reviewMutation.isPending ||
-                (item.event !== "APPROVE" &&
-                  !review.draft.body.trim() &&
-                  count === 0)
-              }
-              onClick={() => reviewMutation.mutate(item.event)}
+              className="self-end"
+              disabled={submitDisabled}
+              onClick={() => reviewMutation.mutate(chosen)}
             >
-              {reviewMutation.isPending &&
-              reviewMutation.variables === item.event ? (
-                <Spinner />
-              ) : (
-                item.icon
-              )}
-              {item.label}
+              {reviewMutation.isPending ? <Spinner /> : null}
+              Submit review
             </Button>
-          ))}
-        </div>
+          </PopoverContent>
+        </Popover>
       </div>
     )
   }
@@ -468,47 +554,38 @@ export function PrFooter({
   }
   return (
     <form
-      className="flex shrink-0 items-end gap-2 border-t border-border/60 bg-background px-3 py-2"
-      onSubmit={(event) => {
-        event.preventDefault()
+      className="shrink-0 border-t border-border/60 bg-background px-3 py-2"
+      onSubmit={(submit) => {
+        submit.preventDefault()
         sendComment()
       }}
     >
-      <Textarea
-        data-pr-comment-input
-        aria-label="Comment"
-        placeholder="Comment"
-        rows={1}
-        value={comment}
-        className="field-sizing-content max-h-40 min-h-9 resize-none rounded-[18px] px-3.5 py-2"
-        onChange={(event) => setComment(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-            event.preventDefault()
-            sendComment()
-          }
-        }}
-      />
-      <TitleTooltip title="Start a review">
+      <div className="relative">
+        <Textarea
+          data-pr-comment-input
+          aria-label="Comment"
+          placeholder="Comment"
+          rows={1}
+          value={comment}
+          className="field-sizing-content max-h-40 min-h-9 resize-none rounded-[18px] py-2 pr-11 pl-3.5"
+          onChange={(change) => setComment(change.target.value)}
+          onKeyDown={(key) => {
+            if (key.key === "Enter" && (key.metaKey || key.ctrlKey)) {
+              key.preventDefault()
+              sendComment()
+            }
+          }}
+        />
         <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className={cn("shrink-0", buttonClassName)}
-          onClick={() => setReviewing(true)}
+          type="submit"
+          size="icon"
+          aria-label="Send the comment (⌘Enter)"
+          className="absolute right-1 bottom-1 size-7 rounded-full"
+          disabled={!comment.trim() || commentMutation.isPending}
         >
-          Review…
+          {commentMutation.isPending ? <Spinner /> : <ArrowUpIcon />}
         </Button>
-      </TitleTooltip>
-      <Button
-        type="submit"
-        size="icon"
-        aria-label="Send the comment (⌘Enter)"
-        className={cn("shrink-0 rounded-full", buttonClassName ?? "size-9")}
-        disabled={!comment.trim() || commentMutation.isPending}
-      >
-        {commentMutation.isPending ? <Spinner /> : <ArrowUpIcon />}
-      </Button>
+      </div>
     </form>
   )
 }
