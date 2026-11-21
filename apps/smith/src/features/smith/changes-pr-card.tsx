@@ -168,6 +168,16 @@ export function ChangesPrCard({
   }
 
   const open = summary.state === "OPEN"
+  // The full pull request, when it has loaded, so that the counts match the
+  // buttons.
+  const shown = full
+    ? {
+        checks: full.checks,
+        reviewDecision: full.reviewDecision,
+        unresolvedThreads: full.threads.filter((thread) => !thread.isResolved)
+          .length,
+      }
+    : summary
   const canWrite = writesAvailable && repo.viewerCanWrite
   const failedChecks = open
     ? (full?.checkRuns ?? []).filter(
@@ -203,16 +213,19 @@ export function ChangesPrCard({
         </Button>
       </TitleTooltip>
     ) : null
-  const createButton = !open ? (
-    <CreatePrButton
-      viewerContextId={viewerContextId}
-      cwd={normalizedCwd}
-      active={active}
-      branch={branch}
-      ahead={ahead}
-      layout="inline"
-    />
-  ) : null
+  // A merged pull request that still shows has all commits of the branch
+  // (`closedPrIsCurrent`), so a new one has nothing to show.
+  const createButton =
+    summary.state === "CLOSED" ? (
+      <CreatePrButton
+        viewerContextId={viewerContextId}
+        cwd={normalizedCwd}
+        active={active}
+        branch={branch}
+        ahead={ahead}
+        layout="inline"
+      />
+    ) : null
 
   return (
     <section
@@ -249,15 +262,15 @@ export function ChangesPrCard({
       </div>
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
         <StatePill pr={summary} />
-        {open ? <ChecksText checks={summary.checks} /> : null}
-        {open && summary.unresolvedThreads > 0 ? (
+        {open ? <ChecksText checks={shown.checks} /> : null}
+        {open && shown.unresolvedThreads > 0 ? (
           <span className="inline-flex items-center gap-1 tabular-nums">
             <MessageSquareIcon className="size-3" />
-            {summary.unresolvedThreads} thread
-            {summary.unresolvedThreads === 1 ? "" : "s"}
+            {shown.unresolvedThreads} thread
+            {shown.unresolvedThreads === 1 ? "" : "s"}
           </span>
         ) : null}
-        {open ? <ReviewChip decision={summary.reviewDecision} /> : null}
+        {open ? <ReviewChip decision={shown.reviewDecision} /> : null}
       </div>
       {failedChecks.length > 0 ? (
         <ul className="grid min-w-0 gap-0.5 text-[11px] text-muted-foreground">

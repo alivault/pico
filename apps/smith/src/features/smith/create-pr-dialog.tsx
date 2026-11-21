@@ -346,9 +346,7 @@ export function CreatePrButton({
           )}
         >
           <GitPullRequestIcon className="size-3.5 shrink-0" />
-          <span className="min-w-0 flex-1 truncate">
-            No pull request for this branch
-          </span>
+          <span className="min-w-0 flex-1 truncate">No pull request</span>
           {button}
         </div>
       ) : (
