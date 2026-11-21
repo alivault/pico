@@ -1673,16 +1673,12 @@ export function createApi(api: ApiContext) {
   router.post("/api/gh-recipes", async (request) => {
     const { body, cwd } = await prBody(request)
     const saved = await recipeStore.save(cwd, body.recipes)
-    // Other browsers load the recipes again.
-    await api.githubWatcher.changed(cwd)
     return { ok: true, cwd, recipes: saved }
   })
 
   router.post("/api/gh-recipes/reset", async (request) => {
     const { cwd } = await prBody(request)
-    const saved = await recipeStore.reset(cwd)
-    await api.githubWatcher.changed(cwd)
-    return { ok: true, cwd, recipes: saved }
+    return { ok: true, cwd, recipes: await recipeStore.reset(cwd) }
   })
 
   // Render a template against a pull request, for the editor. On-demand

@@ -64,15 +64,7 @@ import { emitSmithEvent } from "@/features/smith/agent/events"
 import { LineCommentForm } from "@/features/smith/line-comment-form"
 import { useMachineFeature } from "@/features/smith/machine-store"
 import { MarkdownBlock } from "@/features/smith/markdown-renderer"
-import { useGitHubLive, WakeMenu } from "@/features/smith/github-live"
-import {
-  RecipeBar,
-  recipeApplies,
-  RecipesDialog,
-  useRecipeRunner,
-  useRecipes,
-  type RecipeRunner,
-} from "@/features/smith/right-sidebar-prs-recipes"
+import { useGitHubLive } from "@/features/smith/github-live"
 import {
   useHandOffAgent,
   useReviewDraft,
@@ -109,7 +101,6 @@ import {
   type ShownPr,
 } from "@/features/smith/right-sidebar-prs-data"
 import {
-  prKey,
   prKeyAction,
   PrShortcutsDialog,
 } from "@/features/smith/right-sidebar-prs-keys"
@@ -134,7 +125,6 @@ import { useSmithDiffThemeOptions } from "@/features/smith/smith-diff-theme"
 import { useIsMobile } from "@/hooks/use-mobile"
 import type {
   GhCheckSummary,
-  GhRecipe,
   GhPrCheck,
   GhPrReview,
   GhPrSummary,
@@ -1428,9 +1418,6 @@ function PrDetail({
   agents,
   actions,
   command,
-  recipes,
-  runner,
-  onManageRecipes,
   onBack,
 }: {
   viewerContextId: string
@@ -1439,10 +1426,6 @@ function PrDetail({
   number: number
   active: boolean
   agents: Map<string, BranchAgent>
-  /** The recipes of the project; absent on an older server. */
-  recipes?: Array<GhRecipe>
-  runner: RecipeRunner
-  onManageRecipes: () => void
   /** The quick actions, for the ⋯ menu; absent on an older server. */
   actions?: PrQuickActions
   /** A key of the tab asked for the merge dialog or the comment box. */
@@ -1630,32 +1613,7 @@ function PrDetail({
                 ))}
               </div>
               {writesAvailable && !pr.partial ? (
-                recipes ? (
-                  <RecipeBar
-                    pr={pr}
-                    agent={handOffAgent ?? agent}
-                    recipes={recipes}
-                    runner={runner}
-                    onManage={onManageRecipes}
-                    wake={
-                      (handOffAgent ?? agent) ? (
-                        <WakeMenu
-                          viewerContextId={viewerContextId}
-                          agentId={(handOffAgent ?? agent)!.id}
-                          number={pr.number}
-                          label
-                          className="ml-1 text-[11px] before:mr-1 before:content-['·']"
-                        />
-                      ) : null
-                    }
-                  />
-                ) : (
-                  <HandOffBar
-                    {...scope}
-                    pr={pr}
-                    agent={handOffAgent ?? agent}
-                  />
-                )
+                <HandOffBar {...scope} pr={pr} agent={handOffAgent ?? agent} />
               ) : null}
             </header>
             {pr.partial ? (
@@ -1788,10 +1746,6 @@ export function PrsPanel({
   const queryClient = useQueryClient()
   const scope = { viewerContextId, cwd }
   const prs = listQuery.data ?? []
-  const recipesQuery = useRecipes(scope, active)
-  const recipes = recipesQuery.data?.recipes ?? []
-  const { runner, element: runnerElement } = useRecipeRunner(scope)
-  const [manageOpen, setManageOpen] = React.useState(false)
 
   React.useEffect(() => {
     if (requested) setOpenNumber(requested.number)
@@ -1826,23 +1780,7 @@ export function PrsPanel({
   }
 
   const onKeyDown = (event: React.KeyboardEvent) => {
-    const key = prKey(event, rootRef.current)
-    const action = prKeyAction(key)
-    const recipe = action
-      ? undefined
-      : recipes.find((item) => item.key === key && !item.hidden)
-    if (recipe) {
-      const pr = target()
-      if (!pr || pr.state !== "OPEN") return
-      if ("threads" in pr && !recipeApplies(recipe, pr)) {
-        toast.info(`${recipe.name} does not apply to #${pr.number}`)
-      } else {
-        runner.run({ recipe, number: pr.number, title: pr.title })
-      }
-      event.preventDefault()
-      event.stopPropagation()
-      return
-    }
+    const action = prKeyAction(event, rootRef.current)
     if (!action) return
     const pr = target()
     const write = actionsAvailable && repo.viewerCanWrite
@@ -1979,10 +1917,6 @@ export function PrsPanel({
                 repo={repo}
                 actions={actions}
                 onOpen={() => setOpenNumber(pr.number)}
-                recipes={recipes}
-                onRunRecipe={(recipe, item) =>
-                  runner.run({ recipe, number: item.number, title: item.title })
-                }
               />
             )
           : undefined
@@ -2009,9 +1943,6 @@ export function PrsPanel({
         agents={agents}
         actions={actionsAvailable ? actions : undefined}
         command={command}
-        recipes={recipesQuery.data?.recipes}
-        runner={runner}
-        onManageRecipes={() => setManageOpen(true)}
         onBack={split ? undefined : () => setOpenNumber(null)}
       />
     ) : null
@@ -2036,22 +1967,7 @@ export function PrsPanel({
           rootRef.current?.focus()
         }}
       />
-      <PrShortcutsDialog
-        open={helpOpen}
-        onOpenChange={setHelpOpen}
-        recipes={recipes.flatMap((recipe) =>
-          recipe.key && !recipe.hidden
-            ? [{ key: recipe.key, name: recipe.name }]
-            : []
-        )}
-      />
-      {runnerElement}
-      <RecipesDialog
-        scope={scope}
-        open={manageOpen}
-        onOpenChange={setManageOpen}
-        previewNumber={openNumber ?? focusedNumber ?? prs[0]?.number ?? null}
-      />
+      <PrShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />
       {split ? (
         <div className="flex h-full min-h-0">
           <div className="h-full w-[clamp(260px,38%,380px)] shrink-0 border-r border-border/60">

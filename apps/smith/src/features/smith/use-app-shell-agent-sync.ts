@@ -1089,7 +1089,7 @@ export function useAppShellAgentSync({
 
     if (isGitHubChangedEvent(payload)) {
       // Rare (only on a real change), so load all GitHub data that shows.
-      for (const key of ["gh-prs", "gh-branch-prs", "gh-wake", "gh-recipes"])
+      for (const key of ["gh-prs", "gh-branch-prs", "gh-wake"])
         void queryClient
           .invalidateQueries({
             queryKey: ["smith", key, viewerContextId],
