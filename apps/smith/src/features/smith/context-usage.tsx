@@ -16,15 +16,15 @@ const contextUsageNumberFormatter = new Intl.NumberFormat("en-US")
 // The rings fill a 32 px icon button and leave the middle for its icon.
 const CONTEXT_USAGE_CIRCLE_CENTER = 16
 const CONTEXT_USAGE_RING_GEOMETRY = {
-  1: [{ radius: 11.5, strokeWidth: 2.4 }],
+  1: [{ radius: 11.5, strokeWidth: 3.6 }],
   2: [
-    { radius: 12, strokeWidth: 2 },
-    { radius: 9, strokeWidth: 2 },
+    { radius: 12, strokeWidth: 2.3 },
+    { radius: 9, strokeWidth: 2.3 },
   ],
   3: [
-    { radius: 12.5, strokeWidth: 1.8 },
-    { radius: 9.75, strokeWidth: 1.8 },
-    { radius: 7, strokeWidth: 1.8 },
+    { radius: 12.5, strokeWidth: 2 },
+    { radius: 9.75, strokeWidth: 2 },
+    { radius: 7, strokeWidth: 2 },
   ],
 } satisfies Record<number, Array<{ radius: number; strokeWidth: number }>>
 
@@ -396,7 +396,7 @@ function TooltipUsageProgress({
   )
 }
 
-/** The point on the context ring where compaction starts. */
+/** The point at a percent of a ring, clockwise from the top. */
 function compactionRingPoint(
   percent: number,
   radius: number
@@ -708,17 +708,26 @@ export function ContextUsageRings({
   className?: string
 }) {
   const geometry = getContextUsageRingGeometry(view.rings.length)
-  const compactionPoint =
-    view.compactAtPercent == null || !geometry[0]
+  const outer = geometry[0]
+  // A short line across the outer ring, as the marks on the usage bars.
+  const ringMark = (percent: number | null | undefined) =>
+    percent == null || !outer
       ? null
-      : compactionRingPoint(view.compactAtPercent, geometry[0].radius)
+      : {
+          inner: compactionRingPoint(
+            percent,
+            outer.radius - outer.strokeWidth / 2 - 0.5
+          ),
+          outer: compactionRingPoint(
+            percent,
+            outer.radius + outer.strokeWidth / 2 + 0.5
+          ),
+        }
+  const compactionMark = ringMark(view.compactAtPercent)
   // A single 5h or week ring also marks how much of its window passed:
-  // usage before the dot is on pace. The merged rings have no room for it.
+  // usage before the line is on pace. The merged rings have no room for it.
   const singleRing = view.rings.length === 1 ? view.rings[0] : undefined
-  const pacePoint =
-    singleRing?.pacePercent == null || !geometry[0]
-      ? null
-      : compactionRingPoint(singleRing.pacePercent, geometry[0].radius)
+  const paceMark = ringMark(singleRing?.pacePercent)
 
   return (
     <svg
@@ -739,20 +748,12 @@ export function ContextUsageRings({
             stroke="var(--border)"
             strokeWidth={ringGeometry.strokeWidth}
             strokeOpacity="0.75"
-            vectorEffect="non-scaling-stroke"
           />
         )
       })}
       {view.rings.map((ring, index) => {
         const ringGeometry = geometry[index]
         if (!ringGeometry || ring.percent == null) return null
-        // The round caps add half the stroke width at each end. Make the
-        // dash shorter by one stroke width, so that the arc ends where the
-        // percent is. Without this, 91% on the inner ring looks full.
-        const capPercent =
-          (ringGeometry.strokeWidth / (2 * Math.PI * ringGeometry.radius)) * 100
-        const dashPercent = Math.max(0, ring.percent - capPercent)
-        const dashOffset = -Math.min(ring.percent, capPercent) / 2
         return (
           <circle
             key={ring.key}
@@ -762,32 +763,28 @@ export function ContextUsageRings({
             pathLength={100}
             stroke={contextUsageStroke(ring.percent, ring.pacePercent)}
             strokeWidth={ringGeometry.strokeWidth}
-            strokeDasharray={`${dashPercent.toFixed(2)} 100`}
-            strokeDashoffset={dashOffset.toFixed(2)}
-            strokeLinecap="round"
-            vectorEffect="non-scaling-stroke"
+            // Square ends, as on the usage bars: a round cap reaches past
+            // the percent and covers the pace mark. No non-scaling stroke:
+            // with it, the dash ignores pathLength and the arc draws too long.
+            strokeDasharray={`${ring.percent.toFixed(2)} 100`}
             className="origin-center -rotate-90"
           />
         )
       })}
-      {compactionPoint ? (
-        <circle
-          cx={compactionPoint.x}
-          cy={compactionPoint.y}
-          r={1.3}
-          fill="var(--foreground)"
-          fillOpacity="0.7"
-        />
-      ) : null}
-      {pacePoint ? (
-        <circle
-          cx={pacePoint.x}
-          cy={pacePoint.y}
-          r={1.3}
-          fill="var(--foreground)"
-          fillOpacity="0.7"
-        />
-      ) : null}
+      {[compactionMark, paceMark].map((mark, index) =>
+        mark ? (
+          <line
+            key={index}
+            x1={mark.inner.x}
+            y1={mark.inner.y}
+            x2={mark.outer.x}
+            y2={mark.outer.y}
+            stroke="var(--foreground)"
+            strokeOpacity="0.7"
+            strokeWidth={1}
+          />
+        ) : null
+      )}
     </svg>
   )
 }
