@@ -802,11 +802,15 @@ export function ContextUsageBars({
       aria-hidden="true"
     >
       {view.rings.map((ring) => (
-        <span key={ring.key} className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">
+        // Each bar grows to share the width of the row.
+        <span
+          key={ring.key}
+          className="flex min-w-0 flex-1 items-center gap-1.5"
+        >
+          <span className="shrink-0 text-muted-foreground">
             {contextUsageBarLabel(ring)}
           </span>
-          <span className="relative h-1 w-10 overflow-hidden rounded-full bg-foreground/15">
+          <span className="relative h-1 min-w-10 flex-1 overflow-hidden rounded-full bg-foreground/15">
             {ring.percent == null ? null : (
               <span
                 className="absolute inset-y-0 left-0"
@@ -838,7 +842,7 @@ export function ContextUsageBars({
               />
             )}
           </span>
-          <span className="text-foreground/80 tabular-nums">
+          <span className="shrink-0 text-foreground/80 tabular-nums">
             {ring.percent == null
               ? "–"
               : `${formatContextUsagePercent(ring.percent)}%`}

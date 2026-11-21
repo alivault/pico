@@ -186,7 +186,7 @@ export const ComposerContextUsage = React.memo(function ComposerContextUsage({
               size="xs"
               // Labeled bars when the row below the composer has room,
               // rings when it does not (see its container in the composer).
-              className="h-7 shrink-0 cursor-pointer px-0 @[34rem]/composer-controls:px-2"
+              className="h-7 shrink-0 cursor-pointer px-0 @[34rem]/composer-controls:min-w-0 @[34rem]/composer-controls:flex-1 @[34rem]/composer-controls:justify-start @[34rem]/composer-controls:px-2"
               aria-label={view.ariaLabel}
             />
           }
@@ -197,7 +197,7 @@ export const ComposerContextUsage = React.memo(function ComposerContextUsage({
           />
           <ContextUsageBars
             view={view}
-            className="hidden @[34rem]/composer-controls:flex"
+            className="hidden w-full @[34rem]/composer-controls:flex"
           />
         </DropdownMenuTrigger>
       </TitleTooltip>
