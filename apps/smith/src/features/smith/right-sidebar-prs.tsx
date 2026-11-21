@@ -13,6 +13,7 @@ import {
   type SelectedLineRange,
 } from "@pierre/diffs"
 import { FileDiff } from "@pierre/diffs/react"
+import { useQueryClient } from "@tanstack/react-query"
 import {
   BotIcon,
   CheckIcon,
@@ -25,6 +26,7 @@ import {
   CircleXIcon,
   ClockIcon,
   CopyIcon,
+  EllipsisIcon,
   ExternalLinkIcon,
   FileDiffIcon,
   GitMergeIcon,
@@ -39,6 +41,16 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   InputGroup,
   InputGroupAddon,
@@ -67,6 +79,8 @@ import {
 } from "@/features/smith/right-sidebar-prs-write"
 import { copyRightSidebarTextToClipboard } from "@/features/smith/right-sidebar-git-data"
 import {
+  CONTEXT_MENU_PARTS,
+  DROPDOWN_MENU_PARTS,
   EmptyState,
   LabelDot,
   SPLIT_VIEW_MIN_WIDTH,
@@ -86,6 +100,21 @@ import {
   type PrFilter,
   type ShownPr,
 } from "@/features/smith/right-sidebar-prs-data"
+import {
+  prKeyAction,
+  PrShortcutsDialog,
+} from "@/features/smith/right-sidebar-prs-keys"
+import {
+  PrMenuItems,
+  PrQuickDialogs,
+  PrRowMenuItems,
+  usePrQuickActions,
+  useRebaseAllowed,
+  type PrQuickActions,
+  type QuickDialog,
+  type QuickPr,
+} from "@/features/smith/right-sidebar-prs-quick"
+import { smithQueryKeys } from "@/features/smith/query-keys"
 import { GitSectionNote } from "@/features/smith/right-sidebar-section-note"
 import { getErrorMessage } from "@/features/smith/right-sidebar-shared"
 import {
@@ -381,19 +410,35 @@ function readFilter(): PrFilter {
 function PrRow({
   pr,
   selected,
+  focused,
   agent,
+  menu,
   onOpen,
+  onFocusRow,
 }: {
   pr: GhPrSummary
   selected: boolean
+  /** The row of the keyboard (j and k). */
+  focused: boolean
   agent?: BranchAgent
+  /** The items of its context menu. */
+  menu?: React.ReactNode
   onOpen: () => void
+  onFocusRow: () => void
 }) {
-  return (
+  const ref = React.useRef<HTMLDivElement>(null)
+  React.useEffect(() => {
+    if (focused) ref.current?.scrollIntoView({ block: "nearest" })
+  }, [focused])
+  const row = (
     <div
+      ref={ref}
+      data-pr-row={pr.number}
+      onFocus={onFocusRow}
       className={cn(
         "flex min-h-11 w-full min-w-0 items-start gap-0.5 rounded-lg pl-1",
-        selected ? "bg-primary/10" : "hover:bg-muted/70"
+        selected ? "bg-primary/10" : "hover:bg-muted/70",
+        focused && "ring-2 ring-ring/50 ring-inset"
       )}
     >
       <span className="flex size-8 shrink-0 items-center justify-center pt-1">
@@ -451,6 +496,13 @@ function PrRow({
       </div>
     </div>
   )
+  if (!menu) return row
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger render={row} />
+      <ContextMenuContent className="w-60">{menu}</ContextMenuContent>
+    </ContextMenu>
+  )
 }
 
 function PrList({
@@ -463,11 +515,14 @@ function PrList({
   search,
   searchInput,
   selectedNumber,
+  focusedNumber,
   agents,
+  renderMenu,
   onFilterChange,
   onSearchInputChange,
   onRefresh,
   onOpen,
+  onFocusRow,
 }: {
   repo: AvailableRepo
   prs: Array<GhPrSummary> | undefined
@@ -478,11 +533,14 @@ function PrList({
   search: string
   searchInput: string
   selectedNumber: number | null
+  focusedNumber: number | null
   agents: Map<string, BranchAgent>
+  renderMenu?: (pr: GhPrSummary) => React.ReactNode
   onFilterChange: (filter: PrFilter) => void
   onSearchInputChange: (value: string) => void
   onRefresh: () => void
   onOpen: (number: number) => void
+  onFocusRow: (number: number) => void
 }) {
   const isMobile = useIsMobile()
   const buttonSize = useToolbarButtonSize()
@@ -494,6 +552,7 @@ function PrList({
             <SearchIcon />
           </InputGroupAddon>
           <InputGroupInput
+            data-pr-search
             type="search"
             autoComplete="off"
             className="[&::-webkit-search-cancel-button]:appearance-none"
@@ -594,8 +653,11 @@ function PrList({
               key={pr.number}
               pr={pr}
               selected={selectedNumber === pr.number}
+              focused={focusedNumber === pr.number}
               agent={agents.get(pr.headRefName)}
+              menu={renderMenu?.(pr)}
               onOpen={() => onOpen(pr.number)}
+              onFocusRow={() => onFocusRow(pr.number)}
             />
           ))
         ) : (
@@ -1354,6 +1416,8 @@ function PrDetail({
   number,
   active,
   agents,
+  actions,
+  command,
   onBack,
 }: {
   viewerContextId: string
@@ -1362,9 +1426,14 @@ function PrDetail({
   number: number
   active: boolean
   agents: Map<string, BranchAgent>
+  /** The quick actions, for the ⋯ menu; absent on an older server. */
+  actions?: PrQuickActions
+  /** A key of the tab asked for the merge dialog or the comment box. */
+  command: { kind: "merge" | "comment"; at: number } | null
   onBack?: () => void
 }) {
   const buttonSize = useToolbarButtonSize()
+  const rootRef = React.useRef<HTMLDivElement>(null)
   const writesAvailable = useMachineFeature("github-pr-writes")
   const prQuery = usePr({ viewerContextId, cwd, number, enabled: active })
   const pr = prQuery.data
@@ -1380,12 +1449,32 @@ function PrDetail({
   const canWrite = writesAvailable && repo.viewerCanWrite
   const canReview = writesAvailable && pr?.state === "OPEN"
   const agent = pr ? agents.get(pr.headRefName) : undefined
+  const rebaseAllowed = useRebaseAllowed(
+    { viewerContextId, cwd },
+    number,
+    Boolean(actions && pr?.state === "OPEN" && repo.viewerCanWrite && active)
+  )
+  const loaded = Boolean(pr && !pr.partial)
+  // Run a command of the keyboard when the pull request has loaded.
+  const doneCommand = React.useRef(0)
+  React.useEffect(() => {
+    if (!command || !loaded || doneCommand.current === command.at) return
+    doneCommand.current = command.at
+    if (command.kind === "merge") {
+      if (canWrite && pr?.state !== "CLOSED") setMergeOpen(true)
+      return
+    }
+    const input = rootRef.current?.querySelector<HTMLTextAreaElement>(
+      "[data-pr-comment-input]"
+    )
+    input?.focus()
+  }, [command, loaded, canWrite, pr?.state])
   const head =
     pr && pr.isCrossRepository && pr.headRepositoryOwner
       ? `${pr.headRepositoryOwner}:${pr.headRefName}`
       : pr?.headRefName
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div ref={rootRef} className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex h-11 shrink-0 items-center gap-1 border-b border-border/60 px-1.5">
         {onBack ? (
           <Button
@@ -1433,7 +1522,35 @@ function PrDetail({
             <RefreshCwIcon />
           </Button>
         </TitleTooltip>
-        {pr?.url ? (
+        {pr && actions ? (
+          <DropdownMenu>
+            <TitleTooltip title="More actions">
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label="More actions"
+                    className={buttonSize}
+                  />
+                }
+              >
+                {actions.pendingKey ? <Spinner size="xs" /> : <EllipsisIcon />}
+              </DropdownMenuTrigger>
+            </TitleTooltip>
+            <DropdownMenuContent align="end" className="w-60">
+              <PrMenuItems
+                parts={DROPDOWN_MENU_PARTS}
+                pr={pr as QuickPr}
+                repo={repo}
+                actions={actions}
+                rebaseAllowed={rebaseAllowed}
+              />
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
+        {pr?.url && !actions ? (
           <TitleTooltip title="Open on GitHub">
             <Button
               type="button"
@@ -1601,6 +1718,7 @@ export function PrsPanel({
     requested?.number ?? null
   )
   const { ref: panelRef, width } = useElementWidth()
+  const rootRef = React.useRef<HTMLDivElement | null>(null)
   const split = width >= SPLIT_VIEW_MIN_WIDTH
   const agents = useBranchAgents(cwd)
   useGitHubLive({ viewerContextId, cwd, enabled: active })
@@ -1611,6 +1729,23 @@ export function PrsPanel({
     search,
     enabled: active,
   })
+  const actionsAvailable = useMachineFeature("github-pr-actions")
+  const [dialog, setDialog] = React.useState<QuickDialog>(null)
+  const [helpOpen, setHelpOpen] = React.useState(false)
+  const [focusedNumber, setFocusedNumber] = React.useState<number | null>(null)
+  const [command, setCommand] = React.useState<{
+    kind: "merge" | "comment"
+    at: number
+  } | null>(null)
+  const actions = usePrQuickActions({
+    viewerContextId,
+    cwd,
+    repo,
+    openDialog: setDialog,
+  })
+  const queryClient = useQueryClient()
+  const scope = { viewerContextId, cwd }
+  const prs = listQuery.data ?? []
 
   React.useEffect(() => {
     if (requested) setOpenNumber(requested.number)
@@ -1626,6 +1761,138 @@ export function PrsPanel({
     safeLocalStorageSetItem(FILTER_STORAGE_KEY, value)
   }
 
+  /** The pull request that a key acts on: the open one, or the row. */
+  const target = (): QuickPr | undefined => {
+    const number = openNumber ?? focusedNumber
+    if (number === null) return undefined
+    const full = queryClient.getQueryData<ShownPr>(
+      smithQueryKeys.ghPr(viewerContextId, cwd, number)
+    )
+    if (full && !full.partial) return full
+    return prs.find((pr) => pr.number === number)
+  }
+
+  const showDetail = (kind: "merge" | "comment") => {
+    const pr = target()
+    if (!pr) return
+    if (openNumber !== pr.number) setOpenNumber(pr.number)
+    setCommand({ kind, at: Date.now() })
+  }
+
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    const action = prKeyAction(event, rootRef.current)
+    if (!action) return
+    const pr = target()
+    const write = actionsAvailable && repo.viewerCanWrite
+    const move = (step: number) => {
+      if (prs.length === 0) return
+      const from = prs.findIndex(
+        (item) => item.number === (focusedNumber ?? openNumber)
+      )
+      const index =
+        from < 0
+          ? step > 0
+            ? 0
+            : prs.length - 1
+          : Math.min(prs.length - 1, Math.max(0, from + step))
+      const next = prs[index]!.number
+      setFocusedNumber(next)
+      // In the split view, the detail follows the row.
+      if (split) setOpenNumber(next)
+    }
+    switch (action) {
+      case "next":
+        move(1)
+        break
+      case "previous":
+        move(-1)
+        break
+      case "open":
+        if (focusedNumber === null) return
+        setOpenNumber(focusedNumber)
+        break
+      case "back":
+        if (openNumber === null) return
+        setFocusedNumber(openNumber)
+        setOpenNumber(null)
+        break
+      case "search": {
+        setOpenNumber((current) => (split ? current : null))
+        window.requestAnimationFrame(() =>
+          rootRef.current
+            ?.querySelector<HTMLInputElement>("[data-pr-search]")
+            ?.focus()
+        )
+        break
+      }
+      case "refresh":
+        void listQuery.refetch()
+        if (openNumber !== null)
+          void queryClient.invalidateQueries({
+            queryKey: smithQueryKeys.ghPr(viewerContextId, cwd, openNumber),
+          })
+        break
+      case "filter-mine":
+        setFilter("mine")
+        break
+      case "filter-review":
+        setFilter("review")
+        break
+      case "filter-open":
+        setFilter("open")
+        break
+      case "help":
+        setHelpOpen(true)
+        break
+      case "browser":
+        if (!pr) return
+        window.open(pr.url, "_blank", "noopener,noreferrer")
+        break
+      case "comment":
+        if (!pr || pr.state !== "OPEN") return
+        showDetail("comment")
+        break
+      case "merge":
+        if (!pr || !write || pr.state === "CLOSED") return
+        showDetail("merge")
+        break
+      case "assign":
+        if (!pr || !write || pr.state === "MERGED") return
+        actions.toggleAssignMe(pr)
+        break
+      case "rerun":
+        if (!pr || !write || pr.state !== "OPEN") return
+        if (pr.checks.failed === 0) {
+          toast.info(`#${pr.number} has no failed checks`)
+          break
+        }
+        actions.rerunFailed(pr)
+        break
+      case "update":
+        if (!pr || !write || pr.state !== "OPEN") return
+        actions.updateBranch(pr, false)
+        break
+      case "draft":
+        if (!pr || !write || pr.state !== "OPEN") return
+        actions.toggleDraft(pr)
+        break
+      case "close":
+        if (!pr || !write || pr.state === "MERGED") return
+        actions.toggleOpen(pr)
+        break
+      case "labels":
+        if (!pr || !write || pr.state === "MERGED") return
+        setDialog({ kind: "labels", number: pr.number })
+        break
+      case "reviewers":
+        if (!pr || !write || pr.state !== "OPEN") return
+        setDialog({ kind: "reviewers", number: pr.number })
+        break
+    }
+    event.preventDefault()
+    event.stopPropagation()
+  }
+
   const list = (
     <PrList
       repo={repo}
@@ -1637,11 +1904,31 @@ export function PrsPanel({
       search={search}
       searchInput={searchInput}
       selectedNumber={split ? openNumber : null}
+      focusedNumber={focusedNumber}
       agents={agents}
+      renderMenu={
+        actionsAvailable
+          ? (pr) => (
+              <PrRowMenuItems
+                parts={CONTEXT_MENU_PARTS}
+                scope={scope}
+                number={pr.number}
+                summary={pr}
+                repo={repo}
+                actions={actions}
+                onOpen={() => setOpenNumber(pr.number)}
+              />
+            )
+          : undefined
+      }
       onFilterChange={setFilter}
       onSearchInputChange={setSearchInput}
       onRefresh={() => void listQuery.refetch()}
-      onOpen={setOpenNumber}
+      onOpen={(number) => {
+        setFocusedNumber(number)
+        setOpenNumber(number)
+      }}
+      onFocusRow={setFocusedNumber}
     />
   )
   const detail =
@@ -1654,12 +1941,33 @@ export function PrsPanel({
         number={openNumber}
         active={active}
         agents={agents}
+        actions={actionsAvailable ? actions : undefined}
+        command={command}
         onBack={split ? undefined : () => setOpenNumber(null)}
       />
     ) : null
 
   return (
-    <div ref={panelRef} className="h-full min-h-0">
+    <div
+      ref={(node) => {
+        panelRef(node)
+        rootRef.current = node
+      }}
+      // Focusable, so that a click in the tab gives it the keyboard.
+      tabIndex={-1}
+      className="h-full min-h-0 outline-none"
+      onKeyDown={onKeyDown}
+    >
+      <PrQuickDialogs
+        scope={scope}
+        dialog={dialog}
+        actions={actions}
+        onClose={() => {
+          setDialog(null)
+          rootRef.current?.focus()
+        }}
+      />
+      <PrShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />
       {split ? (
         <div className="flex h-full min-h-0">
           <div className="h-full w-[clamp(260px,38%,380px)] shrink-0 border-r border-border/60">

@@ -274,32 +274,48 @@ export function checksTitle(checks: GhCheckSummary) {
 // ---------------------------------------------------------------------------
 // Open a pull request in the GitHub tab from elsewhere (the agent header)
 
-let pendingOpenPr: { machineId: string; number: number } | null = null
+let pendingOpenPr: { machineId: string; number: number; at: number } | null =
+  null
+/** A request that no shown tab took in this time is old. */
+const OPEN_PR_TTL_MS = 10_000
 
 /**
- * Show the GitHub tab with a pull request. The tab may mount after this
- * call, so the request also waits until the tab reads it.
+ * Show the GitHub tab with a pull request. The tab may mount or show after
+ * this call, so the request also waits until a shown tab takes it.
  */
 export function openGitHubPullRequest(machineId: string, number: number) {
-  pendingOpenPr = { machineId, number }
+  pendingOpenPr = { machineId, number, at: Date.now() }
   emitSmithEvent("smith:open-sidebar-tab", { tab: "issues" })
   emitSmithEvent("smith:open-github-pr", { machineId, number })
 }
 
-/** The pull request that the GitHub tab must open, with a new value per request. */
+/**
+ * The pull request that the GitHub tab must open, with a new value per
+ * request. Only effects take a request: a tab in a hidden Activity (a
+ * closed sidebar, another tab) renders but runs no effects, and a render
+ * can be thrown away. Effects run again each time the tab shows.
+ */
 export function useRequestedPr() {
   const machineId = useMachineId()
+  const [requested, setRequested] = React.useState<{
+    number: number
+    at: number
+  } | null>(null)
   const take = React.useCallback(() => {
-    if (pendingOpenPr?.machineId !== machineId) return null
-    const number = pendingOpenPr.number
+    const pending = pendingOpenPr
+    if (!pending || pending.machineId !== machineId) return
+    // Read the fields before the reset: the minifier inlines `pending` as
+    // `pendingOpenPr`.
+    const { number, at } = pending
     pendingOpenPr = null
-    return { number, at: Date.now() }
+    if (Date.now() - at > OPEN_PR_TTL_MS) return
+    setRequested({ number, at })
   }, [machineId])
-  const [requested, setRequested] = React.useState(take)
+  React.useEffect(() => {
+    take()
+  }, [take])
   useSmithEvent("smith:open-github-pr", (detail) => {
-    if (detail.machineId !== machineId) return
-    const next = take()
-    if (next) setRequested(next)
+    if (detail.machineId === machineId) take()
   })
   return requested
 }

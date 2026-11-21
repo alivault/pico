@@ -314,6 +314,10 @@ export type GhPr = GhPrSummary & {
   checkRuns: Array<GhPrCheck>
   threads: Array<GhPrThread>
   files: Array<GhPrFile>
+  /** Logins; absent from an older server. */
+  assignees?: Array<string>
+  /** Logins of users and `org/team` of teams; absent from an older server. */
+  reviewRequests?: Array<string>
 }
 
 export type GhBranchPr = {
@@ -468,6 +472,57 @@ export type GhHandOffResponse =
   | ApiErrorResponse
 
 export type GhWriteResponse = { ok: true; cwd: string } | ApiErrorResponse
+
+export type GhRerunResponse =
+  | {
+      ok: true
+      cwd: string
+      rerun: Array<string>
+      links: Array<{ name: string; link: string }>
+      errors: Array<string>
+    }
+  | ApiErrorResponse
+
+export type GhPrPerson = { login: string; name: string }
+
+export type GhPrPeopleResponse =
+  | {
+      ok: true
+      cwd: string
+      people: {
+        viewer: string
+        assignable: Array<GhPrPerson>
+        suggested: Array<GhPrPerson>
+      }
+    }
+  | ApiErrorResponse
+
+export type GhCheckoutInfoResponse =
+  | {
+      ok: true
+      cwd: string
+      info: {
+        root: string
+        current: string
+        branch: string
+        dirty: boolean
+        worktree: string
+      }
+    }
+  | ApiErrorResponse
+
+export type GhCheckoutResponse =
+  | {
+      ok: true
+      cwd: string
+      mode: "switch" | "worktree"
+      root: string
+      branch: string
+      agentId?: string
+      agentPath?: string
+      note?: string
+    }
+  | ApiErrorResponse
 
 /** What wakes an agent on its pull request (server github-watch.ts). */
 export type GhWakeEvents = { ci: boolean; comments: boolean; state: boolean }

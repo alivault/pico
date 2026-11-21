@@ -120,6 +120,10 @@ export type GhPr = GhPrSummary & {
   checkRuns: Array<GhPrCheck>
   threads: Array<GhPrThread>
   files: Array<GhPrFile>
+  /** Logins. */
+  assignees: Array<string>
+  /** Logins of users, and `org/team` slugs of teams. */
+  reviewRequests: Array<string>
 }
 
 export type GhBranchPr = {
@@ -302,6 +306,14 @@ type RawPr = {
     url?: string
   }>
   labels?: Array<RawLabel>
+  assignees?: Array<{ login?: string }>
+  reviewRequests?: Array<{
+    __typename?: string
+    login?: string
+    slug?: string
+    name?: string
+    organization?: { login?: string }
+  }>
   body?: string
   reviews?: Array<{
     id?: string
@@ -592,7 +604,7 @@ export async function prThreads(cwd: string, number: number) {
   })
 }
 
-const VIEW_FIELDS = `${LIST_FIELDS},createdAt,body,reviews,files,mergeStateStatus,headRepositoryOwner,headRepository,isCrossRepository,additions,deletions,changedFiles`
+const VIEW_FIELDS = `${LIST_FIELDS},createdAt,body,reviews,files,mergeStateStatus,headRepositoryOwner,headRepository,isCrossRepository,additions,deletions,changedFiles,assignees,reviewRequests`
 
 export async function viewPr(cwd: string, number: number): Promise<GhPr> {
   const [raw, checkRuns, threads] = await Promise.all([
@@ -637,6 +649,21 @@ export async function viewPr(cwd: string, number: number): Promise<GhPr> {
       deletions: file.deletions ?? 0,
       changeType: file.changeType ?? "",
     })),
+    assignees: (raw.assignees ?? [])
+      .map((user) => user.login ?? "")
+      .filter(Boolean),
+    reviewRequests: (raw.reviewRequests ?? [])
+      .map((request) =>
+        request.login
+          ? request.login
+          : request.slug
+            ? `${request.organization?.login ?? ""}/${request.slug}`.replace(
+                /^\//,
+                ""
+              )
+            : (request.name ?? "")
+      )
+      .filter(Boolean),
   }
 }
 

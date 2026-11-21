@@ -442,6 +442,7 @@ export function PrFooter({
       }}
     >
       <Textarea
+        data-pr-comment-input
         aria-label="Comment"
         placeholder="Comment"
         rows={1}
