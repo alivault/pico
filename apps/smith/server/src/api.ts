@@ -47,6 +47,7 @@ import * as git from "./services/git.ts"
 import * as github from "./services/github.ts"
 import * as githubPrs from "./services/github-prs.ts"
 import * as prWrites from "./services/github-pr-writes.ts"
+import * as prActions from "./services/github-pr-actions.ts"
 import type { GitHubWatcher, WakeEvents } from "./services/github-watch.ts"
 import type { Notifier } from "./services/notify.ts"
 import {
@@ -269,6 +270,7 @@ export function createApi(api: ApiContext) {
         "github-prs",
         "github-pr-writes",
         "github-live",
+        "github-pr-actions",
       ],
     },
   }))
@@ -1128,6 +1130,15 @@ export function createApi(api: ApiContext) {
     archiveAgents?: unknown
     wake?: unknown
     events?: unknown
+    rebase?: unknown
+    open?: unknown
+    mode?: unknown
+    addAssignees?: unknown
+    removeAssignees?: unknown
+    addReviewers?: unknown
+    removeReviewers?: unknown
+    addLabels?: unknown
+    removeLabels?: unknown
   }
 
   const prBody = async (request: Request) => {
@@ -1315,6 +1326,115 @@ export function createApi(api: ApiContext) {
       ok: true,
       cwd,
       ...(await prWrites.commentPr(cwd, number, body.body)),
+    }
+  })
+
+  // Quick actions. Each write tells all clients (`github_changed`).
+
+  const flag = (value: unknown, name: string) => {
+    if (typeof value !== "boolean")
+      throw badRequest(`${name} must be true or false`)
+    return value
+  }
+
+  router.post("/api/gh-pr/rerun-failed", async (request) => {
+    const { body, cwd } = await prBody(request)
+    const number = githubPrs.prNumber(body.number)
+    const result = await prActions.rerunFailed(cwd, number)
+    await api.githubWatcher.changed(cwd)
+    return { ok: true, cwd, ...result }
+  })
+
+  router.post("/api/gh-pr/update-branch", async (request) => {
+    const { body, cwd } = await prBody(request)
+    const number = githubPrs.prNumber(body.number)
+    await prActions.updateBranch(
+      cwd,
+      number,
+      body.rebase === undefined ? false : flag(body.rebase, "rebase")
+    )
+    await api.githubWatcher.changed(cwd)
+    return { ok: true, cwd }
+  })
+
+  router.post("/api/gh-pr/draft", async (request) => {
+    const { body, cwd } = await prBody(request)
+    const number = githubPrs.prNumber(body.number)
+    await prActions.setDraft(cwd, number, flag(body.draft, "draft"))
+    await api.githubWatcher.changed(cwd)
+    return { ok: true, cwd }
+  })
+
+  router.post("/api/gh-pr/state", async (request) => {
+    const { body, cwd } = await prBody(request)
+    const number = githubPrs.prNumber(body.number)
+    await prActions.setOpen(cwd, number, flag(body.open, "open"))
+    await api.githubWatcher.changed(cwd)
+    return { ok: true, cwd }
+  })
+
+  router.post("/api/gh-pr/edit", async (request) => {
+    const { body, cwd } = await prBody(request)
+    const number = githubPrs.prNumber(body.number)
+    await prActions.editPr(cwd, number, body)
+    await api.githubWatcher.changed(cwd)
+    return { ok: true, cwd }
+  })
+
+  router.get("/api/gh-pr/people", async (request) => {
+    const cwd = await ghCwd(request, request.query.get("cwd"))
+    const number = githubPrs.prNumber(request.query.get("number"))
+    return { ok: true, cwd, people: await prActions.prPeople(cwd, number) }
+  })
+
+  router.get("/api/gh-pr/checkout-info", async (request) => {
+    const cwd = await ghCwd(request, request.query.get("cwd"))
+    const number = githubPrs.prNumber(request.query.get("number"))
+    return { ok: true, cwd, info: await prActions.checkoutInfo(cwd, number) }
+  })
+
+  // Check out the branch: in the main checkout ("switch", only when it is
+  // clean), or in a new worktree with a new agent ("worktree").
+  router.post("/api/gh-pr/checkout", async (request) => {
+    const { body, cwd } = await prBody(request)
+    const number = githubPrs.prNumber(body.number)
+    if (body.mode === "switch") {
+      const result = await prActions.checkoutPr(cwd, number)
+      api.gitWatcher.mutated(result.root)
+      await api.githubWatcher.changed(cwd)
+      return { ok: true, cwd, mode: "switch", ...result }
+    }
+    if (body.mode !== "worktree")
+      throw badRequest("mode must be switch or worktree")
+    ensureAcceptingWork()
+    const project = await projectOfCwd(cwd)
+    const worktree = await prWrites.prWorktree(project, number, {
+      dataDir: api.dataDir,
+      copy: runtime.settings.data.worktreeCopy,
+    })
+    const agentId = await agents
+      .create(worktree.cwd, {
+        group: project,
+        name: `PR #${number}: ${worktree.title}`,
+        worktree: {
+          repoRoot: worktree.repoRoot,
+          path: worktree.path,
+          branch: worktree.branch,
+        },
+      })
+      .catch(async (error: unknown) => {
+        await prWrites.discardWorktree(worktree)
+        throw error
+      })
+    return {
+      ok: true,
+      cwd,
+      mode: "worktree",
+      root: worktree.repoRoot,
+      branch: worktree.branch,
+      agentId,
+      agentPath: agentPath(agentId),
+      ...(worktree.note ? { note: worktree.note } : {}),
     }
   })
 

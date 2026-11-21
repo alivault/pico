@@ -149,7 +149,7 @@ export function LabelDot({ label }: { label: GhLabel }) {
 }
 
 /** A label as a chip, for the pickers. */
-function LabelChip({ label }: { label: GhLabel }) {
+export function LabelChip({ label }: { label: GhLabel }) {
   const color = labelColor(label)
   return (
     <span
@@ -427,7 +427,7 @@ type MenuItemProps = {
 }
 
 /** The parts of a menu: the same items go in a context menu and a ⋯ menu. */
-type MenuParts = {
+export type MenuParts = {
   Item: React.ComponentType<MenuItemProps>
   Separator: React.ComponentType
   Sub: React.ComponentType<{ children?: React.ReactNode }>
@@ -438,7 +438,7 @@ type MenuParts = {
   }>
 }
 
-const CONTEXT_MENU_PARTS: MenuParts = {
+export const CONTEXT_MENU_PARTS: MenuParts = {
   Item: ContextMenuItem,
   Separator: ContextMenuSeparator,
   Sub: ContextMenuSub,
@@ -446,7 +446,7 @@ const CONTEXT_MENU_PARTS: MenuParts = {
   SubContent: ContextMenuSubContent,
 }
 
-const DROPDOWN_MENU_PARTS: MenuParts = {
+export const DROPDOWN_MENU_PARTS: MenuParts = {
   Item: DropdownMenuItem,
   Separator: DropdownMenuSeparator,
   Sub: DropdownMenuSub,

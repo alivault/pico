@@ -343,6 +343,20 @@ export class GitHubWatcher {
     return repo ? { nextAt: repo.nextAt, failures: repo.failures } : undefined
   }
 
+  /** Smith changed a pull request of `cwd`: tell all clients at once. */
+  async changed(cwd: string) {
+    const root = (await repoRoot(cwd).catch(() => undefined)) ?? cwd
+    const repo = this.#repo(root)
+    repo.cwds.add(cwd)
+    clearBranchPrCache()
+    this.#hub.push({
+      type: "github_changed",
+      root,
+      cwds: [...repo.cwds],
+      changedAt: this.#now(),
+    })
+  }
+
   get(agentId: string) {
     const sub = this.#store.subs[agentId]
     return sub
