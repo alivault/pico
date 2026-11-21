@@ -37,6 +37,7 @@ import {
 } from "@/features/smith/context-usage"
 import { useMachineReadOnly } from "@/features/smith/machine-store"
 import { smithQueryKeys } from "@/features/smith/query-keys"
+import { cn } from "@/lib/utils"
 
 /** The model and reasoning buttons of the composer. */
 export const ComposerModelControls = React.memo(function ComposerModelControls({
@@ -152,6 +153,16 @@ export const ComposerContextUsage = React.memo(function ComposerContextUsage({
     modelProvider,
     viewerContextId,
   })
+  const triggerRef = React.useRef<HTMLButtonElement>(null)
+  const separateRef = React.useRef<HTMLSpanElement>(null)
+  const compactRef = React.useRef<HTMLSpanElement>(null)
+  const fit = useSeparateRingsFit(
+    triggerRef,
+    separateRef,
+    compactRef,
+    view?.rings.length ?? 0
+  )
+  const separateFits = fit !== "merged"
   if (!view) return null
 
   return (
@@ -173,10 +184,7 @@ export const ComposerContextUsage = React.memo(function ComposerContextUsage({
         }
         // The labeled rings say the same, so the tooltip shows only for the
         // merged rings, where the row has no room for the labels.
-        openWhen={(trigger) => {
-          const separate = trigger.querySelector("[data-usage-separate-rings]")
-          return !separate || getComputedStyle(separate).display === "none"
-        }}
+        openWhen={() => fit !== "labeled"}
       >
         <DropdownMenuTrigger
           render={
@@ -184,20 +192,32 @@ export const ComposerContextUsage = React.memo(function ComposerContextUsage({
               type="button"
               variant="ghost"
               size="xs"
-              // Separate labeled rings when the row below the composer has
-              // room, merged rings when it does not (see its container in the composer).
-              className="h-7 shrink-0 cursor-pointer px-0 @[34rem]/composer-controls:px-2"
+              ref={triggerRef}
+              // Separate labeled rings when they fit in the row below the
+              // composer (also on a phone), merged rings when they do not.
+              className={cn(
+                "relative h-7 shrink-0 cursor-pointer",
+                separateFits ? "px-2" : "px-0"
+              )}
               aria-label={view.ariaLabel}
             />
           }
         >
-          <ContextUsageRings
+          {separateFits ? null : (
+            <ContextUsageRings view={view} className="size-7" />
+          )}
+          {/* Both always rendered, so their widths can be measured; out of
+              the layout and invisible while not chosen. */}
+          <ContextUsageSeparateRings
+            ref={separateRef}
             view={view}
-            className="size-7 @[34rem]/composer-controls:hidden"
+            className={fit === "labeled" ? "flex" : MEASURE_ONLY}
           />
           <ContextUsageSeparateRings
+            ref={compactRef}
             view={view}
-            className="hidden @[34rem]/composer-controls:flex"
+            labels={false}
+            className={fit === "compact" ? "flex" : MEASURE_ONLY}
           />
         </DropdownMenuTrigger>
       </TitleTooltip>
@@ -217,3 +237,61 @@ export const ComposerContextUsage = React.memo(function ComposerContextUsage({
     </DropdownMenu>
   )
 })
+
+const MEASURE_ONLY = "invisible absolute top-0 left-0 flex"
+
+/**
+ * How the usage rings fit in the row of the composer controls: separate
+ * with labels, separate without labels, or merged into one. It compares the
+ * row width less the other controls with the natural widths of the two
+ * separate forms (plus the trigger padding).
+ */
+function useSeparateRingsFit(
+  triggerRef: React.RefObject<HTMLButtonElement | null>,
+  labeledRef: React.RefObject<HTMLSpanElement | null>,
+  compactRef: React.RefObject<HTMLSpanElement | null>,
+  ringCount: number
+) {
+  const [fit, setFit] = React.useState<"labeled" | "compact" | "merged">(
+    "merged"
+  )
+  React.useLayoutEffect(() => {
+    const trigger = triggerRef.current
+    const labeled = labeledRef.current
+    const compact = compactRef.current
+    const row = trigger?.parentElement
+    if (!trigger || !labeled || !compact || !row) return
+    const measure = () => {
+      const style = getComputedStyle(row)
+      const gap = parseFloat(style.columnGap) || 0
+      let others = 0
+      let count = 0
+      for (const child of Array.from(row.children)) {
+        if (child === trigger || !(child instanceof HTMLElement)) continue
+        others += child.getBoundingClientRect().width
+        count += 1
+      }
+      const available =
+        row.clientWidth -
+        (parseFloat(style.paddingLeft) || 0) -
+        (parseFloat(style.paddingRight) || 0) -
+        others -
+        gap * count
+      // 16 px: the trigger's padding when it shows separate rings.
+      setFit(
+        labeled.scrollWidth + 16 <= available
+          ? "labeled"
+          : compact.scrollWidth + 16 <= available
+            ? "compact"
+            : "merged"
+      )
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(row)
+    observer.observe(labeled)
+    observer.observe(compact)
+    return () => observer.disconnect()
+  }, [triggerRef, labeledRef, compactRef, ringCount])
+  return fit
+}

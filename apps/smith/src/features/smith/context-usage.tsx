@@ -1,3 +1,4 @@
+import type { Ref } from "react"
 import { useQuery } from "@tanstack/react-query"
 
 import type { AgentState } from "@/lib/smith"
@@ -800,12 +801,18 @@ function contextUsageBarLabel(ring: ContextUsageRing) {
 export function ContextUsageSeparateRings({
   view,
   className,
+  ref,
+  labels = true,
 }: {
   view: ContextUsageView
   className?: string
+  ref?: Ref<HTMLSpanElement>
+  /** False on a narrow row: only each ring and its percent. */
+  labels?: boolean
 }) {
   return (
     <span
+      ref={ref}
       data-usage-separate-rings=""
       className={cn("flex items-center gap-3 text-xs", className)}
       aria-hidden="true"
@@ -821,9 +828,11 @@ export function ContextUsageSeparateRings({
             }}
             className="size-5 shrink-0"
           />
-          <span className="text-muted-foreground">
-            {contextUsageBarLabel(ring)}
-          </span>
+          {labels ? (
+            <span className="text-muted-foreground">
+              {contextUsageBarLabel(ring)}
+            </span>
+          ) : null}
           <span className="text-foreground/80 tabular-nums">
             {ring.percent == null
               ? "–"
