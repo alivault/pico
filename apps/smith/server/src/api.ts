@@ -48,7 +48,6 @@ import * as github from "./services/github.ts"
 import * as githubPrs from "./services/github-prs.ts"
 import * as prWrites from "./services/github-pr-writes.ts"
 import * as prActions from "./services/github-pr-actions.ts"
-import * as recipes from "./services/pr-recipes.ts"
 import type { GitHubWatcher, WakeEvents } from "./services/github-watch.ts"
 import type { Notifier } from "./services/notify.ts"
 import {
@@ -272,7 +271,6 @@ export function createApi(api: ApiContext) {
         "github-pr-writes",
         "github-live",
         "github-pr-actions",
-        "github-pr-recipes",
       ],
     },
   }))
@@ -1132,12 +1130,6 @@ export function createApi(api: ApiContext) {
     archiveAgents?: unknown
     wake?: unknown
     events?: unknown
-    recipes?: unknown
-    template?: unknown
-    load?: unknown
-    question?: unknown
-    recipeId?: unknown
-    target?: unknown
     rebase?: unknown
     open?: unknown
     mode?: unknown
@@ -1548,34 +1540,12 @@ export function createApi(api: ApiContext) {
     return { ok: true, cwd, steps }
   })
 
-  /**
-   * Send a prompt about a pull request to the agent on its branch, or start
-   * an agent in a new worktree on it. `target: "new"` always starts one.
-   */
-  const handOff = async (input: {
-    cwd: string
-    number: number
-    message: string
-    agentId?: unknown
-    target?: "branch" | "new"
-    /** Wake events of a new agent (see `github-watch.ts`). */
-    wake?: { ci: boolean; comments: boolean; state: boolean }
-    model?: { provider: string; modelId: string }
-    thinking?: string
-  }) => {
-    const { cwd, number, message } = input
+  router.post("/api/gh-pr/hand-off", async (request) => {
+    const { body, cwd } = await prBody(request)
+    const number = githubPrs.prNumber(body.number)
+    const message = typeof body.message === "string" ? body.message : ""
     if (!message.trim()) throw badRequest("message is required")
     ensureAcceptingWork()
-    if (
-      input.model &&
-      !runtime.models.getModel(input.model.provider, input.model.modelId)
-    )
-      throw badRequest(
-        `Unknown model: ${input.model.provider}/${input.model.modelId}`
-      )
-    const thinking = input.thinking
-      ? agents.validateThinkingLevel(input.thinking)
-      : undefined
     const info = await prWrites.mergeInfo(cwd, number)
     const local = `pr-${number}-${info.headRefName}`
     const { project, ids } = await agentsOnBranch(cwd, [
@@ -1583,10 +1553,10 @@ export function createApi(api: ApiContext) {
       local,
     ])
     const requested =
-      typeof input.agentId === "string" && ids.includes(input.agentId)
-        ? input.agentId
+      typeof body.agentId === "string" && ids.includes(body.agentId)
+        ? body.agentId
         : undefined
-    let id = input.target === "new" ? undefined : (requested ?? ids[0])
+    let id = requested ?? ids[0]
     let created = false
     let note = ""
     if (!id) {
@@ -1604,8 +1574,6 @@ export function createApi(api: ApiContext) {
             path: worktree.path,
             branch: worktree.branch,
           },
-          ...(input.model ? { model: input.model } : {}),
-          ...(thinking ? { thinkingLevel: thinking } : {}),
         })
         .catch(async (error: unknown) => {
           await prWrites.discardWorktree(worktree)
@@ -1618,15 +1586,15 @@ export function createApi(api: ApiContext) {
       images: [],
       streamingBehavior: "followUp",
       requestId: `gh-pr:${number}:${Date.now()}`,
-      ...(thinking && !created ? { thinkingLevel: thinking } : {}),
     })
-    const wake = input.wake
-    if (created && wake && (wake.ci || wake.comments || wake.state))
+    // An agent that this hand-off starts to fix CI or to address comments
+    // hears of the next failure or comment (see `github-watch.ts`).
+    if (created && body.wake === true)
       await api.githubWatcher.subscribe({
         agentId: id,
         cwd: agents.meta(id).cwd,
         number,
-        events: wake,
+        events: { ci: true, comments: true, state: true },
       })
     await agents.publishState(id)
     return {
@@ -1638,102 +1606,6 @@ export function createApi(api: ApiContext) {
       queued: result.queued,
       ...(note ? { note } : {}),
     }
-  }
-
-  router.post("/api/gh-pr/hand-off", async (request) => {
-    const { body, cwd } = await prBody(request)
-    return await handOff({
-      cwd,
-      number: githubPrs.prNumber(body.number),
-      message: typeof body.message === "string" ? body.message : "",
-      agentId: body.agentId,
-      // Fix CI and Address comments of older clients.
-      ...(body.wake === true
-        ? { wake: { ci: true, comments: true, state: true } }
-        : {}),
-    })
-  })
-
-  // Recipes: prompt templates for pull requests, per project.
-  const recipeStore = new recipes.RecipeStore(api.dataDir)
-
-  router.get("/api/gh-recipes", async (request) => {
-    const cwd = await ghCwd(request, request.query.get("cwd"))
-    return {
-      ok: true,
-      cwd,
-      recipes: await recipeStore.list(cwd),
-      builtins: recipes.BUILTIN_RECIPES,
-      variables: recipes.RECIPE_VARIABLES,
-      reservedKeys: recipes.RESERVED_KEYS,
-      models: agents.availableModels(),
-    }
-  })
-
-  router.post("/api/gh-recipes", async (request) => {
-    const { body, cwd } = await prBody(request)
-    const saved = await recipeStore.save(cwd, body.recipes)
-    return { ok: true, cwd, recipes: saved }
-  })
-
-  router.post("/api/gh-recipes/reset", async (request) => {
-    const { cwd } = await prBody(request)
-    return { ok: true, cwd, recipes: await recipeStore.reset(cwd) }
-  })
-
-  // Render a template against a pull request, for the editor. On-demand
-  // values are placeholders unless `load` is true.
-  router.post("/api/gh-recipes/preview", async (request) => {
-    const { body, cwd } = await prBody(request)
-    const number = githubPrs.prNumber(body.number)
-    const template = typeof body.template === "string" ? body.template : ""
-    const { used, unknown } = recipes.templateVariables(template)
-    if (unknown.length > 0)
-      return { ok: true, cwd, text: "", unknown, used: [...used] }
-    const { values } = await recipes.recipeValues(cwd, number, template, {
-      load: body.load === true,
-      ...(typeof body.question === "string" ? { question: body.question } : {}),
-    })
-    return {
-      ok: true,
-      cwd,
-      text: recipes.renderTemplate(template, values),
-      unknown,
-      used: [...used],
-    }
-  })
-
-  router.post("/api/gh-pr/recipe-run", async (request) => {
-    const { body, cwd } = await prBody(request)
-    const number = githubPrs.prNumber(body.number)
-    const recipe = await recipeStore.get(
-      cwd,
-      typeof body.recipeId === "string" ? body.recipeId : ""
-    )
-    const { used } = recipes.templateVariables(recipe.template)
-    const question = typeof body.question === "string" ? body.question : ""
-    if (used.has("question") && !question.trim())
-      throw badRequest("This recipe needs a question")
-    const target = recipes.runTarget(recipe, body.target)
-    const { values } = await recipes.recipeValues(
-      cwd,
-      number,
-      recipe.template,
-      {
-        load: true,
-        question,
-      }
-    )
-    return await handOff({
-      cwd,
-      number,
-      message: recipes.renderTemplate(recipe.template, values),
-      agentId: body.agentId,
-      target,
-      wake: recipe.wake,
-      ...(recipe.model ? { model: recipe.model } : {}),
-      ...(recipe.thinking ? { thinking: recipe.thinking } : {}),
-    })
   })
 
   // ---------------------------------------------------------------------------
