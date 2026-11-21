@@ -28,7 +28,7 @@ import {
 } from "@/features/smith/tanstack-store-utils"
 import { emitSmithEvent } from "@/features/smith/agent/events"
 import {
-  ContextUsageBars,
+  ContextUsageSeparateRings,
   ContextUsageQuotaDetails,
   ContextUsageRings,
   ContextUsageWindowDetails,
@@ -171,11 +171,11 @@ export const ComposerContextUsage = React.memo(function ComposerContextUsage({
             ? "Context usage"
             : `${view.displayPercent} of the context used`
         }
-        // The labeled bars say the same, so the tooltip shows only for the
-        // rings, where the row has no room for the bars.
+        // The labeled rings say the same, so the tooltip shows only for the
+        // merged rings, where the row has no room for the labels.
         openWhen={(trigger) => {
-          const bars = trigger.querySelector("[data-usage-bars]")
-          return !bars || getComputedStyle(bars).display === "none"
+          const separate = trigger.querySelector("[data-usage-separate-rings]")
+          return !separate || getComputedStyle(separate).display === "none"
         }}
       >
         <DropdownMenuTrigger
@@ -184,9 +184,9 @@ export const ComposerContextUsage = React.memo(function ComposerContextUsage({
               type="button"
               variant="ghost"
               size="xs"
-              // Labeled bars when the row below the composer has room,
-              // rings when it does not (see its container in the composer).
-              className="h-7 shrink-0 cursor-pointer px-0 @[34rem]/composer-controls:min-w-0 @[34rem]/composer-controls:flex-1 @[34rem]/composer-controls:justify-start @[34rem]/composer-controls:px-2"
+              // Separate labeled rings when the row below the composer has
+              // room, merged rings when it does not (see its container in the composer).
+              className="h-7 shrink-0 cursor-pointer px-0 @[34rem]/composer-controls:px-2"
               aria-label={view.ariaLabel}
             />
           }
@@ -195,9 +195,9 @@ export const ComposerContextUsage = React.memo(function ComposerContextUsage({
             view={view}
             className="size-7 @[34rem]/composer-controls:hidden"
           />
-          <ContextUsageBars
+          <ContextUsageSeparateRings
             view={view}
-            className="hidden w-full @[34rem]/composer-controls:flex"
+            className="hidden @[34rem]/composer-controls:flex"
           />
         </DropdownMenuTrigger>
       </TitleTooltip>

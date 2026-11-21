@@ -712,6 +712,13 @@ export function ContextUsageRings({
     view.compactAtPercent == null || !geometry[0]
       ? null
       : compactionRingPoint(view.compactAtPercent, geometry[0].radius)
+  // A single 5h or week ring also marks how much of its window passed:
+  // usage before the dot is on pace. The merged rings have no room for it.
+  const singleRing = view.rings.length === 1 ? view.rings[0] : undefined
+  const pacePoint =
+    singleRing?.pacePercent == null || !geometry[0]
+      ? null
+      : compactionRingPoint(singleRing.pacePercent, geometry[0].radius)
 
   return (
     <svg
@@ -772,11 +779,20 @@ export function ContextUsageRings({
           fillOpacity="0.7"
         />
       ) : null}
+      {pacePoint ? (
+        <circle
+          cx={pacePoint.x}
+          cy={pacePoint.y}
+          r={1.3}
+          fill="var(--foreground)"
+          fillOpacity="0.7"
+        />
+      ) : null}
     </svg>
   )
 }
 
-/** The short label of a usage bar. */
+/** The short label of a usage ring. */
 function contextUsageBarLabel(ring: ContextUsageRing) {
   if (ring.key === "context") return "Context"
   if (ring.key === "five-hour") return "5h"
@@ -784,11 +800,11 @@ function contextUsageBarLabel(ring: ContextUsageRing) {
 }
 
 /**
- * The usage as small labeled bars in one line: the context window, then
- * the 5h and the weekly usage. The rings show the same where there is no
- * room for this.
+ * The usage as separate labeled rings in one line: the context window, then
+ * the 5h and the weekly usage. The merged rings show the same where there
+ * is no room for this.
  */
-export function ContextUsageBars({
+export function ContextUsageSeparateRings({
   view,
   className,
 }: {
@@ -797,52 +813,25 @@ export function ContextUsageBars({
 }) {
   return (
     <span
-      data-usage-bars=""
+      data-usage-separate-rings=""
       className={cn("flex items-center gap-3 text-xs", className)}
       aria-hidden="true"
     >
       {view.rings.map((ring) => (
-        // Each bar grows to share the width of the row.
-        <span
-          key={ring.key}
-          className="flex min-w-0 flex-1 items-center gap-1.5"
-        >
-          <span className="shrink-0 text-muted-foreground">
+        <span key={ring.key} className="flex items-center gap-1">
+          <ContextUsageRings
+            view={{
+              ...view,
+              rings: [ring],
+              compactAtPercent:
+                ring.key === "context" ? view.compactAtPercent : null,
+            }}
+            className="size-5 shrink-0"
+          />
+          <span className="text-muted-foreground">
             {contextUsageBarLabel(ring)}
           </span>
-          <span className="relative h-1 min-w-10 flex-1 overflow-hidden rounded-full bg-foreground/15">
-            {ring.percent == null ? null : (
-              <span
-                className="absolute inset-y-0 left-0"
-                style={{
-                  width: `${ring.percent}%`,
-                  backgroundColor: contextUsageStroke(
-                    ring.percent,
-                    ring.pacePercent
-                  ),
-                }}
-              />
-            )}
-            {ring.key === "context" && view.compactAtPercent != null ? (
-              <span
-                className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-foreground/60"
-                style={{
-                  left: `${Math.max(0, Math.min(100, view.compactAtPercent))}%`,
-                }}
-              />
-            ) : null}
-            {/* How much of the 5h or week window passed, as in the menu:
-                usage left of the mark is on pace. */}
-            {ring.pacePercent == null ? null : (
-              <span
-                className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-foreground/60"
-                style={{
-                  left: `${Math.max(0, Math.min(100, ring.pacePercent))}%`,
-                }}
-              />
-            )}
-          </span>
-          <span className="shrink-0 text-foreground/80 tabular-nums">
+          <span className="text-foreground/80 tabular-nums">
             {ring.percent == null
               ? "–"
               : `${formatContextUsagePercent(ring.percent)}%`}
