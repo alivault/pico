@@ -241,7 +241,15 @@ function AppShellWindowEffects({
   const sidebarUnreadVersion = useSelector(sidebarStore, (snapshot) =>
     snapshot.derived.sidebarAgents
       .flatMap((agent) => {
-        if (!agent.unread) return []
+        // Count only what the sidebar shows as unread: its row shows one
+        // state, and a question, work, or a wait hides the unread dot.
+        if (
+          !agent.unread ||
+          agent.needsInput ||
+          agent.streaming ||
+          agent.waiting
+        )
+          return []
         const key = agentNotificationKey(agent)
         return key ? [key] : []
       })
