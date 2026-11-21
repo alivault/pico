@@ -827,6 +827,16 @@ export function ContextUsageBars({
                 }}
               />
             ) : null}
+            {/* How much of the 5h or week window passed, as in the menu:
+                usage left of the mark is on pace. */}
+            {ring.pacePercent == null ? null : (
+              <span
+                className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-foreground/60"
+                style={{
+                  left: `${Math.max(0, Math.min(100, ring.pacePercent))}%`,
+                }}
+              />
+            )}
           </span>
           <span className="text-foreground/80 tabular-nums">
             {ring.percent == null
