@@ -311,3 +311,44 @@ void test("github prs: gh is not installed", async () => {
     process.env.PATH = saved
   }
 })
+
+void test("github prs: a closed PR shows only while its branch has no newer commits", async () => {
+  const { execFileSync } = await import("node:child_process")
+  const cwd = await tempDir("smith-gh-prs-git-")
+  const git = (...args: Array<string>) =>
+    execFileSync("git", args, { cwd, encoding: "utf8" }).trim()
+  git("init", "-q", "-b", "fuji")
+  git(
+    "-c",
+    "user.name=t",
+    "-c",
+    "user.email=t@t",
+    "commit",
+    "-q",
+    "--allow-empty",
+    "-m",
+    "one"
+  )
+  const first = git("rev-parse", "HEAD")
+  assert.equal(await prs.closedPrIsCurrent(cwd, "fuji", first), true)
+  git(
+    "-c",
+    "user.name=t",
+    "-c",
+    "user.email=t@t",
+    "commit",
+    "-q",
+    "--allow-empty",
+    "-m",
+    "two"
+  )
+  const second = git("rev-parse", "HEAD")
+  // The branch moved on after the PR: the old PR is not shown.
+  assert.equal(await prs.closedPrIsCurrent(cwd, "fuji", first), false)
+  // The local branch is behind the PR: still the same work.
+  git("branch", "-f", "old", first)
+  assert.equal(await prs.closedPrIsCurrent(cwd, "old", second), true)
+  // No such branch, or no head commit: keep the PR.
+  assert.equal(await prs.closedPrIsCurrent(cwd, "gone", first), true)
+  assert.equal(await prs.closedPrIsCurrent(cwd, "fuji", ""), true)
+})

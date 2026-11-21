@@ -2,6 +2,7 @@
  * GitHub pull requests of a project, through `gh` (read only). The runner,
  * the login and the error texts are those of the issues in `github.ts`.
  */
+import { execFile } from "node:child_process"
 import { badRequest } from "../http.ts"
 import {
   GhError,
@@ -128,6 +129,8 @@ export type GhBranchPr = {
   isDraft: boolean
   url: string
   headRefName: string
+  /** The last commit of the pull request. */
+  headRefOid: string
   baseRefName: string
   reviewDecision: string
   checks: GhCheckSummary
@@ -744,8 +747,8 @@ export async function prCheckLog(
 // Pull requests of branches, for the agent header
 
 const BRANCH_PR_FIELDS = `
-  number title state isDraft url headRefName baseRefName updatedAt reviewDecision
-  isCrossRepository headRepositoryOwner { login }
+  number title state isDraft url headRefName headRefOid baseRefName updatedAt
+  reviewDecision isCrossRepository headRepositoryOwner { login }
   reviewThreads(first: 100) { nodes { isResolved } }
   commits(last: 1) {
     nodes {
@@ -767,6 +770,7 @@ type RawBranchPr = Pick<RawListPr, "commits"> & {
   isDraft?: boolean
   url?: string
   headRefName?: string
+  headRefOid?: string
   baseRefName?: string
   updatedAt?: string
   reviewDecision?: string | null
@@ -802,6 +806,7 @@ function pickBranchPr(
     isDraft: Boolean(raw.isDraft),
     url: raw.url ?? "",
     headRefName: raw.headRefName ?? "",
+    headRefOid: raw.headRefOid ?? "",
     baseRefName: raw.baseRefName ?? "",
     reviewDecision: raw.reviewDecision ?? "",
     checks: rollupCounts(raw),
@@ -849,13 +854,63 @@ async function loadBranchPrs(cwd: string, branches: Array<string>) {
   }>(cwd, query, values)
   const viewer = data.viewer?.login ?? ""
   const result: Record<string, GhBranchPr | null> = {}
-  branches.forEach((branch, index) => {
-    result[branch] = pickBranchPr(
-      data.repository?.[`b${index}`]?.nodes ?? [],
-      viewer
+  await Promise.all(
+    branches.map(async (branch, index) => {
+      const picked = pickBranchPr(
+        data.repository?.[`b${index}`]?.nodes ?? [],
+        viewer
+      )
+      result[branch] =
+        picked &&
+        (picked.state === "OPEN" ||
+          (await closedPrIsCurrent(cwd, branch, picked.headRefOid)))
+          ? picked
+          : null
+    })
+  )
+  return result
+}
+
+function git(cwd: string, args: Array<string>) {
+  return new Promise<{ ok: boolean; stdout: string }>((resolve) => {
+    execFile(
+      "git",
+      args,
+      { cwd, timeout: 10_000, encoding: "utf8" },
+      (error, stdout) => resolve({ ok: !error, stdout: stdout.trim() })
     )
   })
-  return result
+}
+
+/**
+ * Whether a merged or closed pull request still describes its branch: the
+ * branch has no commits after the pull request. A long-lived branch (for
+ * example a release branch with a merged release PR) moves on, and then its
+ * old pull request is not shown. When git cannot tell, the PR stays.
+ */
+export async function closedPrIsCurrent(
+  cwd: string,
+  branch: string,
+  headOid: string
+) {
+  if (!headOid) return true
+  let tip = ""
+  for (const ref of [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`]) {
+    const result = await git(cwd, [
+      "rev-parse",
+      "--verify",
+      "--quiet",
+      `${ref}^{commit}`,
+    ])
+    if (result.ok && result.stdout) {
+      tip = result.stdout
+      break
+    }
+  }
+  if (!tip) return true
+  if (tip === headOid) return true
+  // The branch tip is in the pull request (an older local copy).
+  return (await git(cwd, ["merge-base", "--is-ancestor", tip, headOid])).ok
 }
 
 const branchCache = new Map<
