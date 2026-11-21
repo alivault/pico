@@ -4,6 +4,7 @@
  * provider auth. Request and response shapes follow the client's contract.
  */
 import { createReadStream } from "node:fs"
+import { realpath } from "node:fs/promises"
 import { homedir } from "node:os"
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context"
@@ -1129,12 +1130,19 @@ export function createApi(api: ApiContext) {
     return { body, cwd }
   }
 
-  /** The sidebar project of `cwd`: the group of an agent there, or `cwd`. */
-  const projectOfCwd = (cwd: string) => {
+  /**
+   * The sidebar project of `cwd`: the project itself, or the project of an
+   * agent there. Paths are compared after symlinks (/tmp and /private/tmp
+   * on macOS), because an agent can keep the path it was given.
+   */
+  const projectOfCwd = async (cwd: string) => {
+    const real = (dir: string) => realpath(dir).catch(() => dir)
+    const target = await real(cwd)
     for (const project of agents.projects()) {
-      if (project === cwd) return project
+      if ((await real(project)) === target) return project
       for (const id of agents.projectAgents(project)) {
-        if (agents.meta(id).cwd === cwd) return project
+        const meta = agents.meta(id)
+        if ((await real(meta.cwd)) === target) return project
       }
     }
     return cwd
@@ -1142,7 +1150,7 @@ export function createApi(api: ApiContext) {
 
   /** Visible agents of the project of `cwd` that work on `branch`. */
   const agentsOnBranch = async (cwd: string, branches: Array<string>) => {
-    const project = projectOfCwd(cwd)
+    const project = await projectOfCwd(cwd)
     const found: Array<string> = []
     const cwdBranches = new Map<string, Promise<string>>()
     const branchOf = (dir: string) => {
@@ -1163,6 +1171,22 @@ export function createApi(api: ApiContext) {
     }
     return { project, ids: found }
   }
+
+  // The agents that work on a branch: in a worktree on it, or in a folder
+  // that has it checked out. A hand-off goes to the first one.
+  router.get("/api/gh-branch-agents", async (request) => {
+    const cwd = await ghCwd(request, request.query.get("cwd"))
+    const branches = githubPrs.branchList(request.query.get("branches"))
+    const { ids } = await agentsOnBranch(cwd, branches)
+    return {
+      ok: true,
+      cwd,
+      agents: ids.map((id) => ({
+        id,
+        title: agents.summary(id, new Set()).title,
+      })),
+    }
+  })
 
   router.get("/api/gh-pr/create-info", async (request) => {
     const cwd = await ghCwd(request, request.query.get("cwd"))
@@ -1332,12 +1356,12 @@ export function createApi(api: ApiContext) {
       })
     }
     steps.push(
-      ...(await prWrites.cleanupBranch(cwd, info, {
+      ...(await prWrites.cleanupBranch(info, {
         removeLocal,
         deleteRemote: body.deleteRemoteBranch === true,
       }))
     )
-    api.gitWatcher.mutated(cwd)
+    api.gitWatcher.mutated(info.root)
     return { ok: true, cwd, steps }
   })
 

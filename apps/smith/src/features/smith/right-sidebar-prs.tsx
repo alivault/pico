@@ -53,6 +53,7 @@ import { LineCommentForm } from "@/features/smith/line-comment-form"
 import { useMachineFeature } from "@/features/smith/machine-store"
 import { MarkdownBlock } from "@/features/smith/markdown-renderer"
 import {
+  useHandOffAgent,
   useReviewDraft,
   type DraftComment,
   type ReviewDraftApi,
@@ -1309,6 +1310,16 @@ function FilesSection({
                                     "additions") as AnnotationSide,
                                 })
                               },
+                              onLineNumberClick: (props: {
+                                lineNumber: number
+                                annotationSide: AnnotationSide
+                              }) => {
+                                setTarget({
+                                  path: file.path,
+                                  line: props.lineNumber,
+                                  side: props.annotationSide,
+                                })
+                              },
                             }
                           : {}),
                       }}
@@ -1357,6 +1368,12 @@ function PrDetail({
   const prQuery = usePr({ viewerContextId, cwd, number, enabled: active })
   const pr = prQuery.data
   const review = useReviewDraft(cwd, number)
+  const handOffAgent = useHandOffAgent({
+    viewerContextId,
+    cwd,
+    pr: pr?.partial ? undefined : pr,
+    enabled: active && writesAvailable,
+  })
   const [mergeOpen, setMergeOpen] = React.useState(false)
   const scope = { viewerContextId, cwd }
   const canWrite = writesAvailable && repo.viewerCanWrite
@@ -1383,12 +1400,13 @@ function PrDetail({
         ) : null}
         <span
           className={cn(
-            "min-w-0 flex-1 truncate text-sm font-semibold tabular-nums",
+            "shrink-0 text-sm font-semibold tabular-nums",
             !onBack && "pl-1.5"
           )}
         >
           #{number}
         </span>
+        <span className="min-w-0 flex-1" />
         {prQuery.isFetching ? <Spinner size="xs" /> : null}
         {pr && !pr.partial && canWrite && pr.state !== "CLOSED" ? (
           <Button
@@ -1477,7 +1495,7 @@ function PrDetail({
                 ))}
               </div>
               {writesAvailable && !pr.partial ? (
-                <HandOffBar {...scope} pr={pr} agent={agent} />
+                <HandOffBar {...scope} pr={pr} agent={handOffAgent ?? agent} />
               ) : null}
             </header>
             {pr.partial ? (

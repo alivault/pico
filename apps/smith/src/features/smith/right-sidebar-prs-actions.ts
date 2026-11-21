@@ -5,7 +5,7 @@
  * again after a write.
  */
 import * as React from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { emitSmithEvent } from "@/features/smith/agent/events"
 import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
@@ -154,6 +154,46 @@ export function askPrompt(pr: ShownPr, question: string) {
     "",
     question.trim(),
   ].join("\n")
+}
+
+/**
+ * The agent that a hand-off goes to: the server looks at worktrees and at
+ * the branches that agent folders have checked out.
+ */
+export function useHandOffAgent({
+  viewerContextId,
+  cwd,
+  pr,
+  enabled,
+}: {
+  viewerContextId: string
+  cwd: string
+  pr: ShownPr | undefined
+  enabled: boolean
+}) {
+  const machineId = useMachineId()
+  const branches = pr
+    ? [pr.headRefName, `pr-${pr.number}-${pr.headRefName}`].join(",")
+    : ""
+  const query = useQuery({
+    queryKey: ["smith", "gh-branch-agents", viewerContextId, cwd, branches],
+    queryFn: async () =>
+      (
+        await fetchJson<{
+          ok: true
+          agents: Array<{ id: string; title: string }>
+        }>(
+          buildRequestUrl(
+            `/api/gh-branch-agents?${new URLSearchParams({ cwd, branches }).toString()}`,
+            { machineId, contextId: viewerContextId }
+          )
+        )
+      ).agents,
+    enabled: Boolean(enabled && pr && pr.state === "OPEN"),
+    staleTime: 30_000,
+    retry: false,
+  })
+  return query.data?.[0]
 }
 
 /**

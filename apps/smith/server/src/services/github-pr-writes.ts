@@ -556,6 +556,8 @@ export type BranchWorktree = {
 }
 
 export type CleanupInfo = {
+  /** The main checkout; the clean-up runs there, as a worktree can go. */
+  root: string
   branch: string
   state: string
   isCrossRepository: boolean
@@ -637,6 +639,7 @@ export async function cleanupInfo(
     }
   }
   return {
+    root,
     branch,
     state: info.state,
     isCrossRepository: info.isCrossRepository,
@@ -679,12 +682,12 @@ export function localWorkReason(info: CleanupInfo) {
  * archived before this, by the route.
  */
 export async function cleanupBranch(
-  cwd: string,
   info: CleanupInfo,
   options: { removeLocal: boolean; deleteRemote: boolean }
 ) {
   const steps: Array<CleanupStep> = []
-  const root = (await repoRoot(cwd)) ?? cwd
+  // Not `cwd`: it can be a worktree that this clean-up removes.
+  const root = info.root
   const branch = info.branch
   if (info.state !== "MERGED") {
     throw badRequest("Clean up only after the pull request is merged")
@@ -781,7 +784,7 @@ export async function cleanupBranch(
       })
     } else {
       try {
-        await gh(cwd, [
+        await gh(root, [
           "api",
           "--method",
           "DELETE",
@@ -823,11 +826,18 @@ export async function prWorktree(
   const info = await mergeInfo(project, number)
   if (!info.headRefName) throw badRequest(`No pull request #${number}`)
   const root = (await repoRoot(project)) ?? project
-  await git(
-    root,
-    ["fetch", "--quiet", "origin", `pull/${number}/head`],
-    120_000
-  )
+  try {
+    await git(
+      root,
+      ["fetch", "--quiet", "origin", `pull/${number}/head`],
+      120_000
+    )
+  } catch (error) {
+    // GitHub makes pull/<n>/head a moment after the pull request; a branch
+    // of this repository is there at once.
+    if (info.isCrossRepository) throw error
+    await git(root, ["fetch", "--quiet", "origin", info.headRefName], 120_000)
+  }
   const sha = await git(root, ["rev-parse", "FETCH_HEAD"])
   const local =
     info.isCrossRepository || info.headRefName === info.defaultBranch

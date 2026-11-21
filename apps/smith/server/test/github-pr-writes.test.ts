@@ -366,7 +366,7 @@ void test("pr writes: clean-up keeps a branch with unpushed commits", async () =
 
       let info = await writes.cleanupInfo(repo, 7)
       await assert.rejects(
-        writes.cleanupBranch(repo, info, {
+        writes.cleanupBranch(info, {
           removeLocal: true,
           deleteRemote: true,
         }),
@@ -380,7 +380,7 @@ void test("pr writes: clean-up keeps a branch with unpushed commits", async () =
         info.worktrees.map((item) => item.path.endsWith("wt")),
         [true]
       )
-      let steps = await writes.cleanupBranch(repo, info, {
+      let steps = await writes.cleanupBranch(info, {
         removeLocal: true,
         deleteRemote: true,
       })
@@ -405,9 +405,11 @@ void test("pr writes: clean-up keeps a branch with unpushed commits", async () =
       // Without the extra commit, all of it goes. The remote is gone already.
       sh(worktree, "reset", "-q", "--hard", headOid)
       await setState({ remoteGone: true })
-      info = await writes.cleanupInfo(repo, 7)
+      // Read from the worktree: the steps run in the main checkout, because
+      // the route can remove the worktree of an agent before them.
+      info = await writes.cleanupInfo(worktree, 7)
       assert.equal(info.localBranch.unpushed, 0)
-      steps = await writes.cleanupBranch(repo, info, {
+      steps = await writes.cleanupBranch(info, {
         removeLocal: true,
         deleteRemote: true,
       })
@@ -436,7 +438,7 @@ void test("pr writes: a remote branch with newer commits stays", async () => {
     { prState: "MERGED", headOid, remoteSha: "other" },
     async (_dir, log) => {
       const info = await writes.cleanupInfo(repo, 7)
-      const steps = await writes.cleanupBranch(repo, info, {
+      const steps = await writes.cleanupBranch(info, {
         removeLocal: false,
         deleteRemote: true,
       })
