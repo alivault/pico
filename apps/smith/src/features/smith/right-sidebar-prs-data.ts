@@ -11,6 +11,8 @@ import { emitSmithEvent, useSmithEvent } from "@/features/smith/agent/events"
 import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
 import { useMachineFeature } from "@/features/smith/machine-store"
 import { smithQueryKeys } from "@/features/smith/query-keys"
+import { gitStatusQueryOptions } from "@/features/smith/right-sidebar-git-data"
+import { useGitHubRepo } from "@/features/smith/right-sidebar-issues-data"
 import type {
   GhBranchPrsResponse,
   GhCheckSummary,
@@ -259,6 +261,54 @@ export function useBranchPrs({
     refetchInterval: live ? BRANCH_PRS_LIVE_REFRESH_MS : BRANCH_PRS_REFRESH_MS,
     retry: false,
   })
+}
+
+/**
+ * The pull request of the current branch of `cwd`: the branch of the
+ * agent's own worktree, else the branch that `cwd` has checked out. For the
+ * agent header and the Changes tab. Nothing (no error) when the server is
+ * older, the folder is not a GitHub repository, or `gh` cannot read it.
+ */
+export function useCurrentBranchPr({
+  viewerContextId,
+  cwd,
+  worktreeBranch,
+  enabled = true,
+}: {
+  viewerContextId: string
+  cwd: string
+  worktreeBranch?: string
+  enabled?: boolean
+}) {
+  const machineId = useMachineId()
+  const available = useMachineFeature("github-prs")
+  const on = Boolean(enabled && available && viewerContextId && cwd)
+  const statusBranch = useQuery({
+    ...gitStatusQueryOptions({ machineId, viewerContextId, cwd }),
+    enabled: on && !worktreeBranch,
+    select: (data) => data.gitStatus?.branch ?? "",
+    notifyOnChangeProps: ["data"],
+  }).data
+  const branch = worktreeBranch || statusBranch || ""
+  const repoQuery = useGitHubRepo({
+    viewerContextId,
+    cwd,
+    enabled: on && Boolean(branch),
+  })
+  const repo = repoQuery.data?.available === true ? repoQuery.data : undefined
+  const prs = useBranchPrs({
+    viewerContextId,
+    cwd,
+    branches: branch ? [branch] : [],
+    enabled: on && Boolean(repo),
+  })
+  return {
+    branch,
+    repo,
+    /** The pull request; null when the branch has none; undefined while it loads. */
+    pr:
+      repo && branch && prs.isSuccess ? (prs.data[branch] ?? null) : undefined,
+  }
 }
 
 export function checksTitle(checks: GhCheckSummary) {

@@ -82,6 +82,7 @@ import {
   invalidateGitQueries,
   selectGitFiles,
 } from "@/features/smith/right-sidebar-git-data"
+import { ChangesPrCard } from "@/features/smith/changes-pr-card"
 import { GitPanelToolbar } from "@/features/smith/right-sidebar-git-toolbar"
 import { GitSectionNote } from "@/features/smith/right-sidebar-section-note"
 import {
@@ -806,6 +807,11 @@ function useFileReviewContentView({
       <div className="flex min-h-12 shrink-0 flex-col justify-center gap-2 border-b border-border/70 bg-background p-2">
         <fieldset disabled={machineReadOnly} className="contents">
           <GitPanelToolbar
+            viewerContextId={viewerContextId}
+            cwd={normalizedCwd}
+            active={active}
+          />
+          <ChangesPrCard
             viewerContextId={viewerContextId}
             cwd={normalizedCwd}
             active={active}

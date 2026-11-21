@@ -72,12 +72,37 @@ type Scope = { viewerContextId: string; cwd: string }
 // ---------------------------------------------------------------------------
 // Hand to an agent
 
+const ALL_HAND_OFFS: ReadonlyArray<HandOffKind> = [
+  "fix-ci",
+  "address",
+  "review",
+  "ask",
+]
+
+/**
+ * The hand-off buttons of a pull request. Fix CI shows only with failed
+ * checks, and Address comments only with unresolved threads.
+ */
 export function HandOffBar({
   viewerContextId,
   cwd,
   pr,
   agent,
-}: Scope & { pr: ShownPr; agent?: BranchAgent }) {
+  kinds = ALL_HAND_OFFS,
+  compact = false,
+  buttonSize = "xs",
+  children,
+}: Scope & {
+  pr: ShownPr
+  agent?: BranchAgent
+  /** The buttons to show; all by default. */
+  kinds?: ReadonlyArray<HandOffKind>
+  /** Without the line that names the agent and its wake bell. */
+  compact?: boolean
+  buttonSize?: "xs" | "sm"
+  /** More buttons at the end of the row. */
+  children?: React.ReactNode
+}) {
   const handOff = useHandOff(viewerContextId, cwd)
   const [askOpen, setAskOpen] = React.useState(false)
   const [question, setQuestion] = React.useState("")
@@ -105,7 +130,7 @@ export function HandOffBar({
     <TitleTooltip title={`${title} ${target}`}>
       <Button
         type="button"
-        size="xs"
+        size={buttonSize}
         variant="outline"
         disabled={handOff.isPending}
         onClick={() => (kind === "ask" ? setAskOpen(true) : send(kind))}
@@ -116,10 +141,11 @@ export function HandOffBar({
     </TitleTooltip>
   )
   if (pr.state !== "OPEN") return null
+  const shows = (kind: HandOffKind) => kinds.includes(kind)
   return (
     <div className="grid gap-1">
-      <div className="flex flex-wrap items-center gap-1">
-        {failed > 0
+      <div className="flex flex-wrap items-center gap-1 empty:hidden">
+        {failed > 0 && shows("fix-ci")
           ? button(
               "fix-ci",
               "Fix CI",
@@ -127,7 +153,7 @@ export function HandOffBar({
               `Send the ${failed} failed check${failed === 1 ? "" : "s"} with their logs.`
             )
           : null}
-        {unresolved > 0
+        {unresolved > 0 && shows("address")
           ? button(
               "address",
               `Address comments (${unresolved})`,
@@ -135,32 +161,39 @@ export function HandOffBar({
               "Send the unresolved threads."
             )
           : null}
-        {button(
-          "review",
-          "Review",
-          <SearchCheckIcon />,
-          "Ask for a review with proposed line comments."
-        )}
-        {button(
-          "ask",
-          "Ask…",
-          <MessageCircleQuestionIcon />,
-          "Ask about this pull request."
-        )}
+        {shows("review")
+          ? button(
+              "review",
+              "Review",
+              <SearchCheckIcon />,
+              "Ask for a review with proposed line comments."
+            )
+          : null}
+        {shows("ask")
+          ? button(
+              "ask",
+              "Ask…",
+              <MessageCircleQuestionIcon />,
+              "Ask about this pull request."
+            )
+          : null}
+        {children}
       </div>
-      <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-        <BotIcon className="size-3" />
-        {agent ? `To ${agent.title}` : "To a new agent in a new worktree"}
-        {agent ? (
-          <WakeMenu
-            viewerContextId={viewerContextId}
-            agentId={agent.id}
-            number={pr.number}
-            label
-            className="ml-1 text-[11px] before:mr-1 before:content-['·']"
-          />
-        ) : null}
-      </span>
+      {compact ? null : (
+        <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+          <BotIcon className="size-3" />
+          {agent ? `To ${agent.title}` : "To a new agent in a new worktree"}
+          {agent ? (
+            <WakeMenu
+              viewerContextId={viewerContextId}
+              agentId={agent.id}
+              number={pr.number}
+              label
+              className="ml-1 text-[11px] before:mr-1 before:content-['·']"
+            />
+          ) : null}
+        </span>
+      )}
       <Dialog
         open={askOpen}
         focusPromptOnClose={false}

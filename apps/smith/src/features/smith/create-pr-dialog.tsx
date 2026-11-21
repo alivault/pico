@@ -278,7 +278,9 @@ function CreatePrDialog({
 /**
  * The Create PR button of the Changes tab. It shows when the branch is
  * pushed (nothing ahead), is not the default branch, and has no open pull
- * request.
+ * request. `layout`: "row" is a small card with a note (the place of the
+ * pull request card when the branch has none); "inline" is a small button
+ * (in the card of a closed pull request).
  */
 export function CreatePrButton({
   viewerContextId,
@@ -286,11 +288,13 @@ export function CreatePrButton({
   active,
   branch,
   ahead,
+  layout = "row",
   className,
 }: Scope & {
   active: boolean
   branch: string | undefined
   ahead: number
+  layout?: "row" | "inline"
   className?: string
 }) {
   const isMobile = useIsMobile()
@@ -318,20 +322,38 @@ export function CreatePrButton({
   })
   const pr = branch ? prs.data?.[branch] : undefined
   if (!candidate || prs.isPending || pr?.state === "OPEN") return null
+  const button = (
+    <TitleTooltip title={`Create a pull request for ${branch}`}>
+      <Button
+        type="button"
+        variant="outline"
+        size={isMobile ? "sm" : "xs"}
+        className={cn("shrink-0", layout === "inline" && className)}
+        onClick={() => setOpen(true)}
+      >
+        <GitPullRequestIcon />
+        Create PR
+      </Button>
+    </TitleTooltip>
+  )
   return (
     <>
-      <TitleTooltip title={`Create a pull request for ${branch}`}>
-        <Button
-          type="button"
-          variant="outline"
-          size={isMobile ? "default" : "sm"}
-          className={cn("shrink-0", className)}
-          onClick={() => setOpen(true)}
+      {layout === "row" ? (
+        <div
+          className={cn(
+            "flex min-w-0 items-center gap-2 rounded-lg border border-border/70 py-1 pr-1 pl-2 text-xs text-muted-foreground",
+            className
+          )}
         >
-          <GitPullRequestIcon />
-          <span className="@max-[20rem]/git-toolbar:sr-only">Create PR</span>
-        </Button>
-      </TitleTooltip>
+          <GitPullRequestIcon className="size-3.5 shrink-0" />
+          <span className="min-w-0 flex-1 truncate">
+            No pull request for this branch
+          </span>
+          {button}
+        </div>
+      ) : (
+        button
+      )}
       <CreatePrDialog
         viewerContextId={viewerContextId}
         cwd={cwd}

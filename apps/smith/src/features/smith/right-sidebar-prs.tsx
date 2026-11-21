@@ -190,7 +190,11 @@ function prStateTitle(pr: Pick<GhPrSummary, "state" | "isDraft">) {
   return pr.isDraft ? "Draft" : "Open"
 }
 
-function StatePill({ pr }: { pr: Pick<GhPrSummary, "state" | "isDraft"> }) {
+export function StatePill({
+  pr,
+}: {
+  pr: Pick<GhPrSummary, "state" | "isDraft">
+}) {
   const title = prStateTitle(pr)
   return (
     <span
@@ -275,7 +279,7 @@ const REVIEW_TITLES: Record<string, string> = {
   REVIEW_REQUIRED: "Review required",
 }
 
-function ReviewChip({ decision }: { decision: string }) {
+export function ReviewChip({ decision }: { decision: string }) {
   const title = REVIEW_TITLES[decision]
   if (!title) return null
   return (
