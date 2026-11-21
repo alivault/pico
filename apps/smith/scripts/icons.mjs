@@ -28,8 +28,8 @@ const app = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const website = resolve(app, "..", "website", "site")
 
 /**
- * The icon mark, 20 × 11: two offset wedges. The in-app mark
- * (src/components/smith-mark.tsx) is a different drawing.
+ * The mark, 20 × 11: two offset wedges. Keep it the same as
+ * src/components/smith-mark.tsx and the nav of apps/website/site/index.html.
  */
 const MARK_PATHS = [
   "M7.354.854A.5.5 0 0 1 7.707 0h11.086a.5.5 0 0 1 .353.854l-3 3a.5.5 0 0 0-.146.353v4.086a.5.5 0 0 1-.854.353zm5.292 9.292a.5.5 0 0 1-.353.854H1.207a.5.5 0 0 1-.353-.854l3-3A.5.5 0 0 0 4 6.793V2.707a.5.5 0 0 1 .854-.353z",
