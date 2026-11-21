@@ -1,6 +1,6 @@
 {
   "name": "@alivault/smith",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "A local browser workspace for durable Pi coding-agent sessions.",
   "license": "AGPL-3.0-only",
   "type": "module",
