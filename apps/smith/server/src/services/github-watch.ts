@@ -138,6 +138,7 @@ type RawAnswer = {
             commit?: { statusCheckRollup?: { state?: string } | null }
           }>
         }
+        reviewThreads?: { nodes?: Array<{ isResolved?: boolean }> }
       }>
     }
   } & Record<string, unknown>
@@ -165,7 +166,7 @@ export function pollQuery(numbers: Array<number>) {
   rateLimit { remaining resetAt }
   repository(owner: $owner, name: $repo) {
     pullRequests(states: OPEN, first: 50, orderBy: { field: UPDATED_AT, direction: DESC }) {
-      nodes { number updatedAt state headRefOid commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } }
+      nodes { number updatedAt state headRefOid commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } reviewThreads(first: 100) { nodes { isResolved } } }
     }
     ${subs}
   }
@@ -482,6 +483,9 @@ export class GitHubWatcher {
         pr.updatedAt,
         pr.headRefOid,
         pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state ?? "",
+        // Resolving a thread does not change updatedAt, so count them.
+        (pr.reviewThreads?.nodes ?? []).filter((thread) => !thread.isResolved)
+          .length,
       ].join(":")
     )
     const subs = Object.keys(data.repository ?? {})

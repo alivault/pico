@@ -37,7 +37,7 @@ type Pr = {
 /** A poll answer with open PR 7 (and its details, when it is subscribed). */
 function answer(
   pr: Pr,
-  extra: { updatedAt?: string; remaining?: number } = {}
+  extra: { updatedAt?: string; remaining?: number; openThreads?: number } = {}
 ) {
   return {
     viewer: { login: "me" },
@@ -55,6 +55,12 @@ function answer(
                   updatedAt: extra.updatedAt ?? "2024-01-01T00:00:00Z",
                   state: "OPEN",
                   headRefOid: "abc",
+                  reviewThreads: {
+                    nodes: Array.from(
+                      { length: extra.openThreads ?? 0 },
+                      () => ({ isResolved: false })
+                    ),
+                  },
                   commits: {
                     nodes: [
                       {
@@ -229,11 +235,19 @@ void test("github watch: a change of the pull requests sends one event", async (
     clock.now += POLL_INTERVAL_MS
     await live.tick()
     assert.equal(events.length, 1)
+    // A thread opens or is resolved without a new updatedAt: an event.
+    await live.viewing(dir)
+    await setState({
+      answer: answer({}, { updatedAt: "2024-02-02T00:00:00Z", openThreads: 1 }),
+    })
+    clock.now += POLL_INTERVAL_MS
+    await live.tick()
+    assert.equal(events.length, 2)
     // The client went away: the poll stops after the view time.
     clock.now += 10 * POLL_INTERVAL_MS
     await setState({ answer: answer({ failed: [9] }) })
     await live.tick()
-    assert.equal(events.length, 1)
+    assert.equal(events.length, 2)
   })
 })
 
