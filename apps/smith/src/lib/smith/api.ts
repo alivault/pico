@@ -524,6 +524,54 @@ export type GhCheckoutResponse =
     }
   | ApiErrorResponse
 
+/** A prompt template for pull requests (server pr-recipes.ts). */
+export type GhRecipe = {
+  id: string
+  name: string
+  template: string
+  target: "branch" | "new" | "ask"
+  wake: { ci: boolean; comments: boolean; state: boolean }
+  key?: string
+  model?: { provider: string; modelId: string }
+  thinking?: string
+  showIn: "detail" | "row" | "both"
+  when: "always" | "failed-checks" | "threads"
+  hidden: boolean
+  builtin?: "fix-ci" | "address" | "review" | "ask"
+}
+
+export type GhRecipeVariable = {
+  name: string
+  description: string
+  onDemand?: boolean
+}
+
+export type GhRecipesResponse =
+  | {
+      ok: true
+      cwd: string
+      recipes: Array<GhRecipe>
+      builtins: Array<GhRecipe>
+      variables: Array<GhRecipeVariable>
+      reservedKeys: Array<string>
+      models: Array<{ id: string; provider?: string; name?: string }>
+    }
+  | ApiErrorResponse
+
+export type GhRecipesSaveResponse =
+  | { ok: true; cwd: string; recipes: Array<GhRecipe> }
+  | ApiErrorResponse
+
+export type GhRecipePreviewResponse =
+  | {
+      ok: true
+      cwd: string
+      text: string
+      unknown: Array<string>
+      used: Array<string>
+    }
+  | ApiErrorResponse
+
 /** What wakes an agent on its pull request (server github-watch.ts). */
 export type GhWakeEvents = { ci: boolean; comments: boolean; state: boolean }
 

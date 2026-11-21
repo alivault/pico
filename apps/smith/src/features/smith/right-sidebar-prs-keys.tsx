@@ -116,15 +116,20 @@ function isTextTarget(target: EventTarget | null) {
   return !["button", "checkbox", "radio", "submit", "reset"].includes(type)
 }
 
+/** The action of a key of the tab, or null. */
+export function prKeyAction(key: string | null): PrKeyAction | null {
+  return key === null ? null : (BY_KEY.get(key) ?? null)
+}
+
 /**
- * The action of a key press in the tab, or null. `container` is the tab:
- * a key in a dialog or a menu (portals, out of the tab in the DOM) does
- * not count, though React sends it up through the tab.
+ * The key of a key press for the tab, or null. `container` is the tab: a
+ * key in a dialog or a menu (portals, out of the tab in the DOM) does not
+ * count, though React sends it up through the tab.
  */
-export function prKeyAction(
+export function prKey(
   event: React.KeyboardEvent,
   container: HTMLElement | null
-): PrKeyAction | null {
+): string | null {
   if (event.defaultPrevented || event.nativeEvent.isComposing) return null
   if (event.metaKey || event.ctrlKey || event.altKey) return null
   if (!container || !(event.target instanceof Node)) return null
@@ -138,20 +143,23 @@ export function prKeyAction(
     !event.target.closest("[data-pr-row]")
   )
     return null
-  return BY_KEY.get(event.key) ?? null
+  return event.key
 }
 
 export function PrShortcutsDialog({
   open,
   onOpenChange,
+  recipes = [],
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Recipes with a key. */
+  recipes?: Array<{ key: string; name: string }>
 }) {
   const groups = ["Move", "List", "Pull request"] as const
   return (
     <Dialog open={open} focusPromptOnClose={false} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="flex max-h-[85svh] flex-col sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Pull Request Keys</DialogTitle>
           <DialogDescription>
@@ -160,7 +168,7 @@ export function PrShortcutsDialog({
             selected row.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-3">
+        <div className="-mx-1 grid min-h-0 gap-3 overflow-y-auto px-1">
           {groups.map((group) => (
             <section key={group} className="grid gap-1">
               <h3 className="text-xs font-medium text-muted-foreground">
@@ -187,6 +195,22 @@ export function PrShortcutsDialog({
               )}
             </section>
           ))}
+          {recipes.length > 0 ? (
+            <section className="grid gap-1">
+              <h3 className="text-xs font-medium text-muted-foreground">
+                Recipes
+              </h3>
+              {recipes.map((recipe) => (
+                <div
+                  key={recipe.key}
+                  className="flex items-center justify-between gap-3 text-sm"
+                >
+                  <span>{recipe.name}</span>
+                  <Kbd>{recipe.key}</Kbd>
+                </div>
+              ))}
+            </section>
+          ) : null}
         </div>
       </DialogContent>
     </Dialog>

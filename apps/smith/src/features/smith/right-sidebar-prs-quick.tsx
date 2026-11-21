@@ -57,6 +57,10 @@ import {
   type AvailableRepo,
 } from "@/features/smith/right-sidebar-issues-data"
 import { usePrPost } from "@/features/smith/right-sidebar-prs-actions"
+import {
+  recipeApplies,
+  recipeIcon,
+} from "@/features/smith/right-sidebar-prs-recipes"
 import { usePr, type ShownPr } from "@/features/smith/right-sidebar-prs-data"
 import { GitSectionNote } from "@/features/smith/right-sidebar-section-note"
 import { getErrorMessage } from "@/features/smith/right-sidebar-shared"
@@ -66,6 +70,7 @@ import type {
   GhMergeInfoResponse,
   GhPrPeopleResponse,
   GhPrSummary,
+  GhRecipe,
   GhRerunResponse,
   GhWriteResponse,
 } from "@/lib/smith/api"
@@ -77,7 +82,9 @@ type Scope = { viewerContextId: string; cwd: string }
 
 /** A pull request from the list, or the full one with its people. */
 export type QuickPr = GhPrSummary &
-  Partial<Pick<ShownPr, "assignees" | "reviewRequests">>
+  Partial<
+    Pick<ShownPr, "assignees" | "reviewRequests" | "threads" | "checkRuns">
+  >
 
 export type QuickDialogKind =
   | "assignees"
@@ -267,6 +274,8 @@ export function PrMenuItems({
   actions,
   rebaseAllowed,
   onOpen,
+  recipes = [],
+  onRunRecipe,
 }: {
   parts: MenuParts
   pr: QuickPr
@@ -275,12 +284,24 @@ export function PrMenuItems({
   rebaseAllowed: boolean
   /** Show "Open" (in the list). */
   onOpen?: () => void
+  /** Recipes for the row menu. */
+  recipes?: Array<GhRecipe>
+  onRunRecipe?: (recipe: GhRecipe, pr: QuickPr) => void
 }) {
   const { Item, Separator, Sub, SubTrigger, SubContent } = parts
   const open = pr.state === "OPEN"
   const canWrite = repo.viewerCanWrite
   const dialog = (kind: QuickDialogKind) =>
     actions.openDialog({ kind, number: pr.number })
+  const rowRecipes =
+    onRunRecipe && open
+      ? recipes.filter(
+          (recipe) =>
+            !recipe.hidden &&
+            recipe.showIn !== "detail" &&
+            recipeApplies(recipe, pr)
+        )
+      : []
   return (
     <>
       {onOpen ? (
@@ -289,6 +310,13 @@ export function PrMenuItems({
           Open
         </Item>
       ) : null}
+      {rowRecipes.map((recipe) => (
+        <Item key={recipe.id} onClick={() => onRunRecipe?.(recipe, pr)}>
+          {recipeIcon(recipe)}
+          {recipe.name}
+        </Item>
+      ))}
+      {rowRecipes.length > 0 ? <Separator /> : null}
       {open && canWrite ? (
         <>
           {pr.checks.failed > 0 ? (
