@@ -709,25 +709,15 @@ export function ContextUsageRings({
 }) {
   const geometry = getContextUsageRingGeometry(view.rings.length)
   const outer = geometry[0]
-  // A short line across the outer ring, as the marks on the usage bars.
-  const ringMark = (percent: number | null | undefined) =>
+  const ringPoint = (percent: number | null | undefined) =>
     percent == null || !outer
       ? null
-      : {
-          inner: compactionRingPoint(
-            percent,
-            outer.radius - outer.strokeWidth / 2 - 0.5
-          ),
-          outer: compactionRingPoint(
-            percent,
-            outer.radius + outer.strokeWidth / 2 + 0.5
-          ),
-        }
-  const compactionMark = ringMark(view.compactAtPercent)
+      : compactionRingPoint(percent, outer.radius)
+  const compactionPoint = ringPoint(view.compactAtPercent)
   // A single 5h or week ring also marks how much of its window passed:
-  // usage before the line is on pace. The merged rings have no room for it.
+  // usage before the dot is on pace. The merged rings have no room for it.
   const singleRing = view.rings.length === 1 ? view.rings[0] : undefined
-  const paceMark = ringMark(singleRing?.pacePercent)
+  const pacePoint = ringPoint(singleRing?.pacePercent)
 
   return (
     <svg
@@ -754,6 +744,10 @@ export function ContextUsageRings({
       {view.rings.map((ring, index) => {
         const ringGeometry = geometry[index]
         if (!ringGeometry || ring.percent == null) return null
+        const capPercent =
+          (ringGeometry.strokeWidth / (2 * Math.PI * ringGeometry.radius)) * 100
+        const dashPercent = Math.max(0, ring.percent - capPercent)
+        const dashOffset = -Math.min(ring.percent, capPercent) / 2
         return (
           <circle
             key={ring.key}
@@ -763,25 +757,27 @@ export function ContextUsageRings({
             pathLength={100}
             stroke={contextUsageStroke(ring.percent, ring.pacePercent)}
             strokeWidth={ringGeometry.strokeWidth}
-            // Square ends, as on the usage bars: a round cap reaches past
-            // the percent and covers the pace mark. No non-scaling stroke:
-            // with it, the dash ignores pathLength and the arc draws too long.
-            strokeDasharray={`${ring.percent.toFixed(2)} 100`}
+            // The round caps reach half the stroke width past each end, so
+            // the dash is one stroke width shorter and starts half a width
+            // later: the arc then ends at the percent. No non-scaling
+            // stroke: with it, the dash ignores pathLength and the arc
+            // draws too long on a small ring.
+            strokeDasharray={`${dashPercent.toFixed(2)} 100`}
+            strokeDashoffset={dashOffset.toFixed(2)}
+            strokeLinecap="round"
             className="origin-center -rotate-90"
           />
         )
       })}
-      {[compactionMark, paceMark].map((mark, index) =>
-        mark ? (
-          <line
+      {[compactionPoint, pacePoint].map((point, index) =>
+        point ? (
+          <circle
             key={index}
-            x1={mark.inner.x}
-            y1={mark.inner.y}
-            x2={mark.outer.x}
-            y2={mark.outer.y}
-            stroke="var(--foreground)"
-            strokeOpacity="0.7"
-            strokeWidth={1}
+            cx={point.x}
+            cy={point.y}
+            r={1.3}
+            fill="var(--foreground)"
+            fillOpacity="0.7"
           />
         ) : null
       )}
