@@ -52,7 +52,9 @@ export type SmithEventMap = {
     callId: string
   }
   /** Show a right sidebar tab. */
-  "smith:open-sidebar-tab": { tab: "agent" | "review" | "browser" }
+  "smith:open-sidebar-tab": { tab: "agent" | "review" | "browser" | "issues" }
+  /** Open a pull request in the GitHub tab (see `right-sidebar-prs-data.ts`). */
+  "smith:open-github-pr": { machineId: string; number: number }
   /** Show a background job in the terminal panel. */
   "smith:open-job-terminal": { jobId: string }
   /** Another device changed the shared sidebar layout in local storage. */

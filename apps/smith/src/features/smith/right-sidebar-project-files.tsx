@@ -1432,7 +1432,7 @@ export function RightSidebarTabStrip({
   browserIndicator?: string
   showFiles?: boolean
   showHistory?: boolean
-  /** The Issues tab: the GitHub issues of the project. */
+  /** The GitHub tab: the issues and pull requests of the project. */
   showIssues?: boolean
   showReview?: boolean
 }) {
@@ -1563,7 +1563,7 @@ export function RightSidebarTabStrip({
           })
         : null}
       {showHistory ? renderTab({ label: "History", value: "history" }) : null}
-      {showIssues ? renderTab({ label: "Issues", value: "issues" }) : null}
+      {showIssues ? renderTab({ label: "GitHub", value: "issues" }) : null}
       {showAgent
         ? renderTab({
             extra: agentTabExtra,

@@ -91,6 +91,27 @@ export const smithQueryKeys = {
     ] as const,
   ghIssue: (viewerContextId: string, cwd: string, number: number) =>
     ["smith", "gh-issues", viewerContextId, cwd, "issue", number] as const,
+  ghPrs: (viewerContextId: string, cwd: string) =>
+    ["smith", "gh-prs", viewerContextId, cwd] as const,
+  ghPrList: (
+    viewerContextId: string,
+    cwd: string,
+    filter: string,
+    search: string
+  ) =>
+    ["smith", "gh-prs", viewerContextId, cwd, "list", filter, search] as const,
+  ghPr: (viewerContextId: string, cwd: string, number: number) =>
+    ["smith", "gh-prs", viewerContextId, cwd, "pr", number] as const,
+  ghPrDiff: (viewerContextId: string, cwd: string, number: number) =>
+    ["smith", "gh-prs", viewerContextId, cwd, "diff", number] as const,
+  ghPrCheckLog: (
+    viewerContextId: string,
+    cwd: string,
+    number: number,
+    check: string
+  ) => ["smith", "gh-prs", viewerContextId, cwd, "log", number, check] as const,
+  ghBranchPrs: (viewerContextId: string, cwd: string, branches: string) =>
+    ["smith", "gh-branch-prs", viewerContextId, cwd, branches] as const,
   gitCommitFiles: (viewerContextId: string, cwd: string, commit: string) =>
     ["smith", "git-commit-files", viewerContextId, cwd, commit] as const,
   gitAction: (

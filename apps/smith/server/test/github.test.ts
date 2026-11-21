@@ -85,6 +85,7 @@ void test("github: repo, list, view, create, comment, state, labels", async () =
     assert.deepEqual(await github.repo(cwd), {
       available: true,
       viewerLogin: "me",
+      issuesEnabled: true,
       nameWithOwner: "me/proj",
       url: "https://github.com/me/proj",
       viewerCanWrite: true,

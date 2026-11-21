@@ -42,6 +42,7 @@ import {
   formatShortcutLabel,
 } from "@/features/smith/keyboard-shortcuts"
 import { HeaderGitStatusText } from "@/features/smith/right-sidebar-git-header-actions"
+import { HeaderPrChip } from "@/features/smith/header-pr-chip"
 import {
   useSelector,
   type SmithStore,
@@ -233,6 +234,12 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
               onOpenTab={(tab) => {
                 actionsRef.current.onOpenRightSidebarTab(tab)
               }}
+            />
+            <HeaderPrChip
+              viewerContextId={viewerContextId}
+              cwd={displayAgentCwd}
+              worktreeBranch={agentInfo?.worktree?.branch}
+              className="before:content-['·']"
             />
             <span className="ml-1 inline-flex shrink-0 items-center gap-x-2 empty:hidden">
               <AgentLineage

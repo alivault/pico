@@ -44,6 +44,7 @@ import {
 import * as files from "./services/files.ts"
 import * as git from "./services/git.ts"
 import * as github from "./services/github.ts"
+import * as githubPrs from "./services/github-prs.ts"
 import type { Notifier } from "./services/notify.ts"
 import { createWorktree, repoRoot } from "./services/worktree.ts"
 import type { HighlightService } from "./services/highlight.ts"
@@ -256,6 +257,7 @@ export function createApi(api: ApiContext) {
         "tool-profiles",
         "machine-hub",
         "github-issues",
+        "github-prs",
       ],
     },
   }))
@@ -1044,6 +1046,47 @@ export function createApi(api: ApiContext) {
       body.removeLabels
     )
     return { ok: true, cwd, ...(labels ? { labels } : {}) }
+  })
+
+  // GitHub pull requests (read only)
+
+  router.get("/api/gh-prs", async (request) => {
+    const cwd = await ghCwd(request, request.query.get("cwd"))
+    const prs = await githubPrs.listPrs(cwd, {
+      filter: stringField(request.query.get("filter")),
+      search: stringField(request.query.get("search")),
+      limit: queryNumber(request, "limit"),
+    })
+    return { ok: true, cwd, prs }
+  })
+
+  router.get("/api/gh-pr", async (request) => {
+    const cwd = await ghCwd(request, request.query.get("cwd"))
+    const number = githubPrs.prNumber(request.query.get("number"))
+    return { ok: true, cwd, pr: await githubPrs.viewPr(cwd, number) }
+  })
+
+  router.get("/api/gh-pr/diff", async (request) => {
+    const cwd = await ghCwd(request, request.query.get("cwd"))
+    const number = githubPrs.prNumber(request.query.get("number"))
+    return { ok: true, cwd, ...(await githubPrs.prDiff(cwd, number)) }
+  })
+
+  router.get("/api/gh-pr/check-log", async (request) => {
+    const cwd = await ghCwd(request, request.query.get("cwd"))
+    const number = githubPrs.prNumber(request.query.get("number"))
+    const check = await githubPrs.prCheckLog(
+      cwd,
+      number,
+      request.query.get("check") ?? ""
+    )
+    return { ok: true, cwd, check }
+  })
+
+  router.get("/api/gh-branch-prs", async (request) => {
+    const cwd = await ghCwd(request, request.query.get("cwd"))
+    const branches = githubPrs.branchList(request.query.get("branches"))
+    return { ok: true, cwd, prs: await githubPrs.branchPrs(cwd, branches) }
   })
 
   // ---------------------------------------------------------------------------
