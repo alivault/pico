@@ -94,14 +94,14 @@ import { toast } from "@/lib/smith/toast"
 import { cn } from "@/lib/utils"
 
 /** From this panel width, the list and the issue show side by side. */
-const SPLIT_VIEW_MIN_WIDTH = 640
+export const SPLIT_VIEW_MIN_WIDTH = 640
 /** How far a row slides to show its swipe actions, in pixels. */
 const SWIPE_ACTION_WIDTH = 76
 
 // ---------------------------------------------------------------------------
 // Small parts
 
-function formatAge(value: string) {
+export function formatAge(value: string) {
   const time = Date.parse(value)
   if (!Number.isFinite(time)) return ""
   const seconds = Math.max(0, Math.round((Date.now() - time) / 1000))
@@ -117,12 +117,12 @@ function formatAge(value: string) {
   return `${Math.round(days / 365)}y`
 }
 
-function ageText(value: string) {
+export function ageText(value: string) {
   const age = formatAge(value)
   return age === "now" || !age ? age : `${age} ago`
 }
 
-function formatFullDate(value: string) {
+export function formatFullDate(value: string) {
   const time = Date.parse(value)
   return Number.isFinite(time) ? new Date(time).toLocaleString() : ""
 }
@@ -132,7 +132,7 @@ function labelColor(label: GhLabel) {
 }
 
 /** A label as a colored dot and its name: light enough for rows. */
-function LabelDot({ label }: { label: GhLabel }) {
+export function LabelDot({ label }: { label: GhLabel }) {
   return (
     <span
       title={label.description || label.name}
@@ -344,7 +344,7 @@ function StateMenu({
 }
 
 /** A centered message for an empty list or an empty detail. */
-function EmptyState({
+export function EmptyState({
   icon,
   title,
   description,
@@ -370,7 +370,7 @@ function EmptyState({
 }
 
 /** Toolbar buttons are at least 44 pt on touch screens (HIG). */
-function useToolbarButtonSize() {
+export function useToolbarButtonSize() {
   return useIsMobile() ? "size-11" : undefined
 }
 
@@ -1502,7 +1502,7 @@ function IssueDetail({
 // The panel
 
 /** The width of an element, kept current. */
-function useElementWidth() {
+export function useElementWidth() {
   const [element, setElement] = React.useState<HTMLElement | null>(null)
   const [width, setWidth] = React.useState(0)
   React.useLayoutEffect(() => {
@@ -1545,7 +1545,7 @@ export function IssuesPanel({
   const labelsQuery = useGitHubLabels(
     viewerContextId,
     cwd,
-    Boolean(active && repo)
+    Boolean(active && repo && repo.issuesEnabled !== false)
   )
   const labels = labelsQuery.data ?? []
   const actions = useIssueActions({
@@ -1561,7 +1561,7 @@ export function IssuesPanel({
     state,
     label,
     search,
-    enabled: Boolean(active && repo),
+    enabled: Boolean(active && repo?.issuesEnabled !== false && repo),
   })
 
   React.useEffect(() => {
@@ -1604,6 +1604,14 @@ export function IssuesPanel({
       <GitSectionNote className="px-3 py-2.5">
         <Spinner /> Looking for the GitHub repository…
       </GitSectionNote>
+    )
+  } else if (repo && repo.issuesEnabled === false) {
+    content = (
+      <EmptyState
+        icon={<CircleSlashIcon />}
+        title="Issues Are Off"
+        description={`${repo.nameWithOwner} does not use GitHub issues.`}
+      />
     )
   } else if (repoQuery.error || !repo) {
     content = (

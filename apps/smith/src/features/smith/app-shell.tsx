@@ -83,6 +83,7 @@ import {
   FileLineCommentsProvider,
   type FileLineCommentsValue,
 } from "@/features/smith/file-line-comments"
+import { SidebarStoreProvider } from "@/features/smith/sidebar-store-context"
 import {
   isHeldPendingId,
   type PendingQueueSaveRow,
@@ -1112,7 +1113,7 @@ function useAppShellAgentWorkspaceView({
   }
 
   const openRightSidebarTab = (
-    tab: "agent" | "review" | "history" | "browser"
+    tab: "agent" | "review" | "history" | "browser" | "issues"
   ) => {
     if (isMobile && tab === "agent") {
       setCurrentTab("agent")
@@ -3676,7 +3677,10 @@ function useAppShellAgentWorkspaceView({
   )
 
   return (
-    <FileLineCommentsProvider value={fileLineComments}>
+    <ShellContextProviders
+      fileLineComments={fileLineComments}
+      sidebarStore={sidebarStore}
+    >
       <AppShellWindowEffectsHost
         isAgentViewLoading={isAgentViewLoading}
         loadingDisplayAgentTitle={loadingDisplayAgentTitle}
@@ -3822,6 +3826,25 @@ function useAppShellAgentWorkspaceView({
           void setModel(value)
         }}
       />
+    </ShellContextProviders>
+  )
+}
+
+/** The contexts that parts of the shell read. */
+function ShellContextProviders({
+  fileLineComments,
+  sidebarStore,
+  children,
+}: {
+  fileLineComments: FileLineCommentsValue
+  sidebarStore: AppShellSidebarStore
+  children: React.ReactNode
+}) {
+  return (
+    <FileLineCommentsProvider value={fileLineComments}>
+      <SidebarStoreProvider value={sidebarStore}>
+        {children}
+      </SidebarStoreProvider>
     </FileLineCommentsProvider>
   )
 }

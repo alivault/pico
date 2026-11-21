@@ -216,8 +216,149 @@ export type GhRepo =
       /** The GitHub login of `gh`; empty when unknown. */
       viewerLogin: string
       viewerCanWrite: boolean
+      /** False when the repository has its issues off. */
+      issuesEnabled?: boolean
     }
   | { available: false; reason: string }
+
+export type GhCheckSummary = {
+  state: "success" | "failure" | "pending" | "none"
+  passed: number
+  failed: number
+  pending: number
+  skipped: number
+}
+
+export type GhPrState = "OPEN" | "CLOSED" | "MERGED"
+
+export type GhPrSummary = {
+  number: number
+  title: string
+  state: GhPrState
+  isDraft: boolean
+  author: string
+  headRefName: string
+  baseRefName: string
+  updatedAt: string
+  url: string
+  /** APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED, or empty. */
+  reviewDecision: string
+  /** MERGEABLE, CONFLICTING, or UNKNOWN. */
+  mergeable: string
+  checks: GhCheckSummary
+  commentCount: number
+  labels: Array<GhLabel>
+}
+
+export type GhPrCheck = {
+  name: string
+  /** pass, fail, pending, skipping, or cancel. */
+  bucket: string
+  state: string
+  link: string
+  workflow: string
+  description: string
+  startedAt: string
+  completedAt: string
+  runId?: string
+  jobId?: string
+}
+
+export type GhPrReview = {
+  id: string
+  author: string
+  state: string
+  body: string
+  submittedAt: string
+}
+
+export type GhPrComment = {
+  id: string
+  author: string
+  body: string
+  createdAt: string
+  url: string
+}
+
+export type GhPrThread = {
+  id: string
+  isResolved: boolean
+  isOutdated: boolean
+  path: string
+  line: number | null
+  startLine: number | null
+  diffHunk: string
+  comments: Array<GhPrComment>
+}
+
+export type GhPrFile = {
+  path: string
+  additions: number
+  deletions: number
+  changeType: string
+}
+
+export type GhPr = GhPrSummary & {
+  body: string
+  createdAt: string
+  mergeStateStatus: string
+  headRepositoryOwner: string
+  headRepository: string
+  isCrossRepository: boolean
+  additions: number
+  deletions: number
+  changedFiles: number
+  reviews: Array<GhPrReview>
+  comments: Array<GhPrComment>
+  checkRuns: Array<GhPrCheck>
+  threads: Array<GhPrThread>
+  files: Array<GhPrFile>
+}
+
+export type GhBranchPr = {
+  number: number
+  title: string
+  state: GhPrState
+  isDraft: boolean
+  url: string
+  headRefName: string
+  baseRefName: string
+  reviewDecision: string
+  checks: GhCheckSummary
+  unresolvedThreads: number
+}
+
+export type GhCheckLog =
+  | {
+      kind: "actions"
+      name: string
+      link: string
+      runId: string
+      jobId: string
+      log: string
+      truncated: boolean
+    }
+  | { kind: "link"; name: string; link: string }
+
+export type GhPrsResponse =
+  | { ok: true; cwd: string; prs: Array<GhPrSummary> }
+  | ApiErrorResponse
+
+export type GhPrResponse =
+  | { ok: true; cwd: string; pr: GhPr }
+  | ApiErrorResponse
+
+export type GhPrDiffResponse =
+  | { ok: true; cwd: string; patch: string; truncated: boolean; limit: number }
+  | ApiErrorResponse
+
+export type GhPrCheckLogResponse =
+  | { ok: true; cwd: string; check: GhCheckLog }
+  | ApiErrorResponse
+
+export type GhBranchPrsResponse =
+  | { ok: true; cwd: string; prs: Record<string, GhBranchPr | null> }
+  | ApiErrorResponse
 
 export type GhIssueSummary = {
   number: number

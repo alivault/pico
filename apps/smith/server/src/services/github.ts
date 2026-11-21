@@ -1,7 +1,8 @@
 /**
  * GitHub issues of a project, through the `gh` command on this machine. `gh`
  * finds the repository from the git remote of `cwd` and uses its own login,
- * so Smith keeps no token.
+ * so Smith keeps no token. The pull requests are in `github-prs.ts`; they
+ * use the runner of this file.
  */
 import { execFile } from "node:child_process"
 
@@ -48,26 +49,49 @@ export type GhRepo =
       /** The GitHub login of `gh`; empty when unknown. */
       viewerLogin: string
       viewerCanWrite: boolean
+      /** False when the repository has its issues off. */
+      issuesEnabled: boolean
     }
   | { available: false; reason: string }
 
-class GhError extends Error {
+export class GhError extends Error {
   readonly missing: boolean
-  constructor(message: string, missing = false) {
+  /** The output that gh wrote before it failed. */
+  readonly stdout: string
+  /** True when the output was more than the limit; `stdout` has the start. */
+  readonly overflow: boolean
+  constructor(message: string, missing = false, stdout = "", overflow = false) {
     super(message)
     this.missing = missing
+    this.stdout = stdout
+    this.overflow = overflow
   }
 }
 
-function run(cwd: string, args: Array<string>, input?: string) {
+export type RunOptions = {
+  input?: string
+  timeoutMs?: number
+  maxBuffer?: number
+}
+
+export function run(
+  cwd: string,
+  args: Array<string>,
+  inputOrOptions?: string | RunOptions
+) {
+  const options: RunOptions =
+    typeof inputOrOptions === "string"
+      ? { input: inputOrOptions }
+      : (inputOrOptions ?? {})
+  const input = options.input
   return new Promise<string>((resolve, reject) => {
     const child = execFile(
       "gh",
       args,
       {
         cwd,
-        timeout: DEFAULT_TIMEOUT_MS,
-        maxBuffer: OUTPUT_LIMIT,
+        timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        maxBuffer: options.maxBuffer ?? OUTPUT_LIMIT,
         encoding: "utf8",
         env: {
           ...process.env,
@@ -87,14 +111,20 @@ function run(cwd: string, args: Array<string>, input?: string) {
           reject(new GhError("The GitHub CLI (gh) is not installed", true))
           return
         }
-        const timedOut = (error as { killed?: boolean }).killed
+        const overflow = code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
+        const timedOut = !overflow && (error as { killed?: boolean }).killed
         reject(
           new GhError(
             timedOut
               ? "gh command timed out"
-              : String(stderr ?? "").trim() ||
+              : overflow
+                ? "gh output is too large"
+                : String(stderr ?? "").trim() ||
                   error.message ||
-                  "gh command failed"
+                  "gh command failed",
+            false,
+            String(stdout ?? ""),
+            overflow
           )
         )
       }
@@ -104,21 +134,46 @@ function run(cwd: string, args: Array<string>, input?: string) {
   })
 }
 
-async function gh(cwd: string, args: Array<string>, input?: string) {
+/** A gh failure as a request error, with a clear text for common causes. */
+export function ghRequestError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/auth login|not logged/i.test(message)) {
+    return badRequest("gh is not logged in. Run `gh auth login`.")
+  }
+  if (
+    /not a git repository|no git remotes|none of the git remotes/i.test(message)
+  ) {
+    return badRequest("No GitHub repository for this folder")
+  }
+  return badRequest(message)
+}
+
+export async function gh(
+  cwd: string,
+  args: Array<string>,
+  inputOrOptions?: string | RunOptions
+) {
   try {
-    return await run(cwd, args, input)
+    return await run(cwd, args, inputOrOptions)
   } catch (error) {
-    throw badRequest(error instanceof Error ? error.message : String(error))
+    throw ghRequestError(error)
   }
 }
 
-async function ghJson<T>(cwd: string, args: Array<string>) {
-  const output = await gh(cwd, args)
+export function parseJson<T>(output: string) {
   try {
     return JSON.parse(output) as T
   } catch {
     throw badRequest("gh returned output that is not JSON")
   }
+}
+
+export async function ghJson<T>(
+  cwd: string,
+  args: Array<string>,
+  options?: RunOptions
+) {
+  return parseJson<T>(await gh(cwd, args, options))
 }
 
 /** The repository from the git remote of `cwd`, or why there is none. */
@@ -141,13 +196,11 @@ export async function repo(cwd: string): Promise<GhRepo> {
     if (!data.nameWithOwner) {
       return { available: false, reason: "No GitHub repository" }
     }
-    if (data.hasIssuesEnabled === false) {
-      return { available: false, reason: "Issues are off for this repository" }
-    }
     const viewerLogin = (await login).trim()
     return {
       available: true,
       viewerLogin,
+      issuesEnabled: data.hasIssuesEnabled !== false,
       nameWithOwner: data.nameWithOwner,
       url: data.url ?? `https://github.com/${data.nameWithOwner}`,
       viewerCanWrite: ["ADMIN", "MAINTAIN", "WRITE", "TRIAGE"].includes(

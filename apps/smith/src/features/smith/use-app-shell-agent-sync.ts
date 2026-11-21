@@ -1219,6 +1219,13 @@ export function useAppShellAgentSync({
                 queryKey: smithQueryKeys.gitCommits(viewerContextId, cwd),
                 exact: false,
                 refetchType: "active",
+              }),
+              // A push or a new branch can change the pull request of a
+              // branch (the chip in the agent header).
+              queryClient.invalidateQueries({
+                queryKey: ["smith", "gh-branch-prs", viewerContextId, cwd],
+                exact: false,
+                refetchType: "active",
               })
             )
           }

@@ -75,7 +75,7 @@ import { AgentPanel, useAgentBusy } from "@/features/smith/agent/agent-panel"
 import { useAgentExtensions } from "@/features/smith/agent/agent-extensions"
 import { BrowserPanel } from "@/features/smith/agent/browser-panel"
 import { usePreviewAddress } from "@/features/smith/agent/browser-preview"
-import { IssuesPanel } from "@/features/smith/right-sidebar-issues"
+import { GitHubPanel } from "@/features/smith/right-sidebar-github"
 import { useGitHubRepo } from "@/features/smith/right-sidebar-issues-data"
 import { TodoTabProgress } from "@/features/smith/agent/todo"
 import type { GitCommitDiffMode, GitCommitDiffResponse } from "@/lib/smith/api"
@@ -1282,7 +1282,7 @@ export function RightSidebar({
         </div>
         {activeTab === "issues" ? (
           <div className="min-h-0 flex-1 overflow-hidden bg-background">
-            <IssuesPanel
+            <GitHubPanel
               viewerContextId={viewerContextId}
               cwd={normalizedCwd}
               active={active}
