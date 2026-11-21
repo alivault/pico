@@ -45,6 +45,7 @@ import * as files from "./services/files.ts"
 import * as git from "./services/git.ts"
 import * as github from "./services/github.ts"
 import * as githubPrs from "./services/github-prs.ts"
+import * as prWrites from "./services/github-pr-writes.ts"
 import type { Notifier } from "./services/notify.ts"
 import {
   createWorktree,
@@ -262,6 +263,7 @@ export function createApi(api: ApiContext) {
         "machine-hub",
         "github-issues",
         "github-prs",
+        "github-pr-writes",
       ],
     },
   }))
@@ -1096,6 +1098,306 @@ export function createApi(api: ApiContext) {
     const cwd = await ghCwd(request, request.query.get("cwd"))
     const branches = githubPrs.branchList(request.query.get("branches"))
     return { ok: true, cwd, prs: await githubPrs.branchPrs(cwd, branches) }
+  })
+
+  // GitHub pull requests: writes
+
+  type GhPrBody = {
+    cwd?: string
+    number?: unknown
+    base?: unknown
+    title?: unknown
+    body?: unknown
+    draft?: unknown
+    event?: unknown
+    comments?: unknown
+    threadId?: unknown
+    resolved?: unknown
+    method?: unknown
+    admin?: unknown
+    subject?: unknown
+    message?: unknown
+    agentId?: unknown
+    removeWorktree?: unknown
+    deleteRemoteBranch?: unknown
+    archiveAgents?: unknown
+  }
+
+  const prBody = async (request: Request) => {
+    const body = await request.body<GhPrBody>()
+    const cwd = await ghCwd(request, body.cwd)
+    return { body, cwd }
+  }
+
+  /** The sidebar project of `cwd`: the group of an agent there, or `cwd`. */
+  const projectOfCwd = (cwd: string) => {
+    for (const project of agents.projects()) {
+      if (project === cwd) return project
+      for (const id of agents.projectAgents(project)) {
+        if (agents.meta(id).cwd === cwd) return project
+      }
+    }
+    return cwd
+  }
+
+  /** Visible agents of the project of `cwd` that work on `branch`. */
+  const agentsOnBranch = async (cwd: string, branches: Array<string>) => {
+    const project = projectOfCwd(cwd)
+    const found: Array<string> = []
+    const cwdBranches = new Map<string, Promise<string>>()
+    const branchOf = (dir: string) => {
+      let value = cwdBranches.get(dir)
+      if (!value) {
+        value = git
+          .status(dir)
+          .then((status) => status?.branch ?? "")
+          .catch(() => "")
+        cwdBranches.set(dir, value)
+      }
+      return value
+    }
+    for (const id of agents.projectAgents(project)) {
+      const meta = agents.meta(id)
+      const branch = meta.worktree?.branch ?? (await branchOf(meta.cwd))
+      if (branch && branches.includes(branch)) found.push(id)
+    }
+    return { project, ids: found }
+  }
+
+  router.get("/api/gh-pr/create-info", async (request) => {
+    const cwd = await ghCwd(request, request.query.get("cwd"))
+    return { ok: true, cwd, info: await prWrites.createPrInfo(cwd) }
+  })
+
+  router.post("/api/gh-pr/text", async (request) => {
+    const { body, cwd } = await prBody(request)
+    const base = prWrites.branchName(body.base, "base branch")
+    const { subjects, context } = await prWrites.prTextContext(cwd, base)
+    const branch = (await git.status(cwd))?.branch ?? ""
+    if (subjects.length === 0) throw badRequest(`No commits since ${base}`)
+    try {
+      const answer = await completeText(
+        api,
+        `Write a GitHub pull request for these commits. On the first line, write the title: concise, imperative, at most 72 characters. Then an empty line, then the description in GitHub Markdown: one short paragraph on what changes and why, then a "Changes" list. Return only the title and the description, with no code fence.\n\n${context}`
+      )
+      const text = prWrites.parsePrText(answer)
+      if (!text.title) throw new Error("The model returned no title")
+      return { ok: true, cwd, ...text, source: "ai" }
+    } catch (error) {
+      return {
+        ok: true,
+        cwd,
+        ...prWrites.heuristicPrText(branch, subjects),
+        source: "heuristic",
+        reason: error instanceof Error ? error.message : String(error),
+      }
+    }
+  })
+
+  router.post("/api/gh-pr/create", async (request) => {
+    const { body, cwd } = await prBody(request)
+    const created = await prWrites.createPr(cwd, body)
+    api.gitWatcher.mutated(cwd)
+    return { ok: true, cwd, ...created }
+  })
+
+  router.post("/api/gh-pr/review", async (request) => {
+    const { body, cwd } = await prBody(request)
+    const number = githubPrs.prNumber(body.number)
+    return {
+      ok: true,
+      cwd,
+      review: await prWrites.submitReview(cwd, number, body),
+    }
+  })
+
+  router.post("/api/gh-pr/thread-reply", async (request) => {
+    const { body, cwd } = await prBody(request)
+    return {
+      ok: true,
+      cwd,
+      comment: await prWrites.replyToThread(cwd, body.threadId, body.body),
+    }
+  })
+
+  router.post("/api/gh-pr/thread-resolve", async (request) => {
+    const { body, cwd } = await prBody(request)
+    return {
+      ok: true,
+      cwd,
+      ...(await prWrites.setThreadResolved(cwd, body.threadId, body.resolved)),
+    }
+  })
+
+  router.post("/api/gh-pr/comment", async (request) => {
+    const { body, cwd } = await prBody(request)
+    const number = githubPrs.prNumber(body.number)
+    return {
+      ok: true,
+      cwd,
+      ...(await prWrites.commentPr(cwd, number, body.body)),
+    }
+  })
+
+  router.get("/api/gh-pr/merge-info", async (request) => {
+    const cwd = await ghCwd(request, request.query.get("cwd"))
+    const number = githubPrs.prNumber(request.query.get("number"))
+    return { ok: true, cwd, info: await prWrites.mergeInfo(cwd, number) }
+  })
+
+  router.post("/api/gh-pr/merge", async (request) => {
+    const { body, cwd } = await prBody(request)
+    const number = githubPrs.prNumber(body.number)
+    const result = await prWrites.mergePr(cwd, number, body)
+    api.gitWatcher.mutated(cwd)
+    return { ok: true, cwd, ...result }
+  })
+
+  router.get("/api/gh-pr/cleanup-info", async (request) => {
+    const cwd = await ghCwd(request, request.query.get("cwd"))
+    const number = githubPrs.prNumber(request.query.get("number"))
+    const info = await prWrites.cleanupInfo(cwd, number)
+    const { ids } = info.branch
+      ? await agentsOnBranch(cwd, [info.branch])
+      : { ids: [] }
+    return {
+      ok: true,
+      cwd,
+      info,
+      keepLocalReason: prWrites.localWorkReason(info),
+      agents: ids.map((id) => ({
+        id,
+        title: agents.summary(id, new Set()).title,
+        worktree: agents.meta(id).worktree?.path ?? "",
+        busy: agents.isBusy(id),
+      })),
+    }
+  })
+
+  router.post("/api/gh-pr/cleanup", async (request) => {
+    const { body, cwd } = await prBody(request)
+    const number = githubPrs.prNumber(body.number)
+    const info = await prWrites.cleanupInfo(cwd, number)
+    if (info.state !== "MERGED") {
+      throw badRequest("Clean up only after the pull request is merged")
+    }
+    const removeLocal = body.removeWorktree === true
+    const keepLocal = prWrites.localWorkReason(info)
+    const steps: Array<prWrites.CleanupStep> = []
+    // Only agents that are on this branch, whatever the client sends.
+    const { ids } = await agentsOnBranch(cwd, [info.branch])
+    const wanted = Array.isArray(body.archiveAgents)
+      ? body.archiveAgents.filter(
+          (id): id is string => typeof id === "string" && ids.includes(id)
+        )
+      : []
+    for (const id of wanted) {
+      const title = agents.summary(id, new Set()).title
+      const worktree = agents.meta(id).worktree
+      if (agents.isBusy(id)) {
+        steps.push({
+          step: "agent",
+          target: title,
+          ok: false,
+          skipped: true,
+          message: "Kept the agent: it is working.",
+        })
+        continue
+      }
+      if (removeLocal && worktree && !keepLocal) {
+        try {
+          await agents.removeWorktree(id, false)
+          steps.push({
+            step: "worktree",
+            target: worktree.path,
+            ok: true,
+            message: "Removed the worktree of the agent.",
+          })
+        } catch (error) {
+          steps.push({
+            step: "worktree",
+            target: worktree.path,
+            ok: false,
+            skipped: true,
+            message: `Kept the worktree: ${error instanceof Error ? error.message : String(error)}`,
+          })
+        }
+      }
+      agents.archive(id)
+      steps.push({
+        step: "agent",
+        target: title,
+        ok: true,
+        message: "Archived the agent.",
+      })
+    }
+    steps.push(
+      ...(await prWrites.cleanupBranch(cwd, info, {
+        removeLocal,
+        deleteRemote: body.deleteRemoteBranch === true,
+      }))
+    )
+    api.gitWatcher.mutated(cwd)
+    return { ok: true, cwd, steps }
+  })
+
+  router.post("/api/gh-pr/hand-off", async (request) => {
+    const { body, cwd } = await prBody(request)
+    const number = githubPrs.prNumber(body.number)
+    const message = typeof body.message === "string" ? body.message : ""
+    if (!message.trim()) throw badRequest("message is required")
+    ensureAcceptingWork()
+    const info = await prWrites.mergeInfo(cwd, number)
+    const local = `pr-${number}-${info.headRefName}`
+    const { project, ids } = await agentsOnBranch(cwd, [
+      info.headRefName,
+      local,
+    ])
+    const requested =
+      typeof body.agentId === "string" && ids.includes(body.agentId)
+        ? body.agentId
+        : undefined
+    let id = requested ?? ids[0]
+    let created = false
+    let note = ""
+    if (!id) {
+      const worktree = await prWrites.prWorktree(project, number, {
+        dataDir: api.dataDir,
+        copy: runtime.settings.data.worktreeCopy,
+      })
+      note = worktree.note
+      id = await agents
+        .create(worktree.cwd, {
+          group: project,
+          name: `PR #${number}: ${info.title}`,
+          worktree: {
+            repoRoot: worktree.repoRoot,
+            path: worktree.path,
+            branch: worktree.branch,
+          },
+        })
+        .catch(async (error: unknown) => {
+          await prWrites.discardWorktree(worktree)
+          throw error
+        })
+      created = true
+    }
+    const result = await agents.prompt(id, {
+      message,
+      images: [],
+      streamingBehavior: "followUp",
+      requestId: `gh-pr:${number}:${Date.now()}`,
+    })
+    await agents.publishState(id)
+    return {
+      ok: true,
+      cwd,
+      agentId: id,
+      agentPath: agentPath(id),
+      created,
+      queued: result.queued,
+      ...(note ? { note } : {}),
+    }
   })
 
   // ---------------------------------------------------------------------------
@@ -2173,6 +2475,18 @@ function ensureDraft(api: ApiContext, contextId: string, cwd: string) {
 async function generateCommitMessage(api: ApiContext, cwd: string) {
   const diff = await git.commitMessageContext(cwd)
   if (!diff.trim()) throw badRequest("No changes to commit")
+  const text = await completeText(
+    api,
+    `Write one concise imperative git commit subject, at most 72 characters. Return only the subject with no quotes or markdown.\n\n${diff}`
+  )
+  return (text.split("\n").find((line) => line.trim()) ?? "")
+    .trim()
+    .replace(/^[`"']+|[`"']+$/g, "")
+    .slice(0, 72)
+}
+
+/** One answer of the default model, with low reasoning. */
+async function completeText(api: ApiContext, prompt: string) {
   const ref = api.agents.defaultModel()
   const model = ref
     ? api.runtime.models.getModel(ref.provider, ref.modelId)
@@ -2184,7 +2498,7 @@ async function generateCommitMessage(api: ApiContext, cwd: string) {
       messages: [
         {
           role: "user",
-          content: `Write one concise imperative git commit subject, at most 72 characters. Return only the subject with no quotes or markdown.\n\n${diff}`,
+          content: prompt,
           timestamp: Date.now(),
         },
       ],
@@ -2192,18 +2506,14 @@ async function generateCommitMessage(api: ApiContext, cwd: string) {
     { reasoning: "low", signal: AbortSignal.timeout(90_000) }
   )
   if (response.stopReason === "error" || response.stopReason === "aborted") {
-    throw new Error(response.errorMessage || "commit message generation failed")
+    throw new Error(response.errorMessage || "text generation failed")
   }
-  const text = response.content
+  return response.content
     .filter(
       (part): part is { type: "text"; text: string } => part.type === "text"
     )
     .map((part) => part.text)
     .join("\n")
-  return (text.split("\n").find((line) => line.trim()) ?? "")
-    .trim()
-    .replace(/^[`"']+|[`"']+$/g, "")
-    .slice(0, 72)
 }
 
 // -----------------------------------------------------------------------------
