@@ -5,7 +5,13 @@
  * data is in `right-sidebar-prs-data.ts`.
  */
 import * as React from "react"
-import { parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs"
+import {
+  parsePatchFiles,
+  type AnnotationSide,
+  type DiffLineAnnotation,
+  type FileDiffMetadata,
+  type SelectedLineRange,
+} from "@pierre/diffs"
 import { FileDiff } from "@pierre/diffs/react"
 import {
   BotIcon,
@@ -43,7 +49,21 @@ import { Spinner } from "@/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { emitSmithEvent } from "@/features/smith/agent/events"
+import { LineCommentForm } from "@/features/smith/line-comment-form"
+import { useMachineFeature } from "@/features/smith/machine-store"
 import { MarkdownBlock } from "@/features/smith/markdown-renderer"
+import {
+  useHandOffAgent,
+  useReviewDraft,
+  type DraftComment,
+  type ReviewDraftApi,
+} from "@/features/smith/right-sidebar-prs-actions"
+import {
+  HandOffBar,
+  MergeDialog,
+  PrFooter,
+  ThreadActions,
+} from "@/features/smith/right-sidebar-prs-write"
 import { copyRightSidebarTextToClipboard } from "@/features/smith/right-sidebar-git-data"
 import {
   EmptyState,
@@ -922,7 +942,14 @@ function threadPlace(thread: GhPrThread) {
     : `${thread.path}:${thread.line}`
 }
 
-function ThreadItem({ thread }: { thread: GhPrThread }) {
+function ThreadItem({
+  thread,
+  scope,
+}: {
+  thread: GhPrThread
+  /** Absent without write access: no reply and no resolve. */
+  scope?: { viewerContextId: string; cwd: string }
+}) {
   const [open, setOpen] = React.useState(!thread.isResolved)
   const first = thread.comments[0]
   return (
@@ -968,6 +995,7 @@ function ThreadItem({ thread }: { thread: GhPrThread }) {
               <Comment key={comment.id} {...comment} />
             ))}
           </div>
+          {scope ? <ThreadActions {...scope} thread={thread} /> : null}
         </>
       ) : first ? (
         <p className="truncate pl-[1.125rem] text-xs text-muted-foreground">
@@ -978,7 +1006,13 @@ function ThreadItem({ thread }: { thread: GhPrThread }) {
   )
 }
 
-function ThreadsSection({ threads }: { threads: Array<GhPrThread> }) {
+function ThreadsSection({
+  threads,
+  scope,
+}: {
+  threads: Array<GhPrThread>
+  scope?: { viewerContextId: string; cwd: string }
+}) {
   const [showResolved, setShowResolved] = React.useState(false)
   const unresolved = threads.filter((thread) => !thread.isResolved)
   const resolved = threads.filter((thread) => thread.isResolved)
@@ -999,12 +1033,12 @@ function ThreadsSection({ threads }: { threads: Array<GhPrThread> }) {
       ) : (
         <div className="grid gap-2">
           {unresolved.map((thread) => (
-            <ThreadItem key={thread.id} thread={thread} />
+            <ThreadItem key={thread.id} thread={thread} scope={scope} />
           ))}
           {resolved.length > 0 ? (
             showResolved ? (
               resolved.map((thread) => (
-                <ThreadItem key={thread.id} thread={thread} />
+                <ThreadItem key={thread.id} thread={thread} scope={scope} />
               ))
             ) : (
               <button
@@ -1037,18 +1071,112 @@ function fileDiffsByPath(patch: string) {
   return byPath
 }
 
+type LineTarget = {
+  path: string
+  line: number
+  startLine?: number
+  side: AnnotationSide
+}
+
+type LineAnnotationData =
+  | { kind: "draft"; comment: DraftComment; onRemove: () => void }
+  | {
+      kind: "pending"
+      target: LineTarget
+      onCancel: () => void
+      onSubmit: (text: string) => void
+    }
+
+function LineAnnotation({
+  annotation,
+}: {
+  annotation: DiffLineAnnotation<LineAnnotationData>
+}) {
+  const data = annotation.metadata
+  if (!data) return null
+  if (data.kind === "pending") {
+    const { target } = data
+    return (
+      <LineCommentForm
+        title={`Comment on ${target.path}:${target.startLine ? `${target.startLine}-` : ""}${target.line} (${target.side === "deletions" ? "old" : "new"})`}
+        onCancel={data.onCancel}
+        onSubmit={data.onSubmit}
+      />
+    )
+  }
+  return (
+    <div className="my-1 ml-2 inline-flex max-w-[min(32rem,90%)] items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 py-0.5 pr-0.5 pl-2 font-sans text-[11px] text-amber-800 dark:text-amber-200">
+      <MessageSquareIcon className="size-3 shrink-0" />
+      <span className="truncate" title={data.comment.body}>
+        {data.comment.body}
+      </span>
+      <button
+        type="button"
+        aria-label="Remove the draft comment"
+        className="inline-flex size-5 shrink-0 items-center justify-center rounded-full hover:bg-amber-500/20"
+        onClick={data.onRemove}
+      >
+        <XIcon className="size-3" />
+      </button>
+    </div>
+  )
+}
+
 function FilesSection({
   viewerContextId,
   cwd,
   pr,
   active,
+  review,
 }: {
   viewerContextId: string
   cwd: string
   pr: ShownPr
   active: boolean
+  /** The draft review; absent when line comments are off. */
+  review?: ReviewDraftApi
 }) {
   const themeOptions = useSmithDiffThemeOptions()
+  const [target, setTarget] = React.useState<LineTarget | null>(null)
+  const annotationsFor = (
+    path: string
+  ): Array<DiffLineAnnotation<LineAnnotationData>> => {
+    const result: Array<DiffLineAnnotation<LineAnnotationData>> = (
+      review?.draft.comments ?? []
+    )
+      .filter((comment) => comment.path === path)
+      .map((comment) => ({
+        lineNumber: comment.line,
+        side: comment.side === "LEFT" ? "deletions" : "additions",
+        metadata: {
+          kind: "draft",
+          comment,
+          onRemove: () => review?.removeComment(comment.id),
+        },
+      }))
+    if (target && target.path === path && review) {
+      result.push({
+        lineNumber: target.line,
+        side: target.side,
+        metadata: {
+          kind: "pending",
+          target,
+          onCancel: () => setTarget(null),
+          onSubmit: (text) => {
+            review.addComment({
+              path: target.path,
+              line: target.line,
+              side: target.side === "deletions" ? "LEFT" : "RIGHT",
+              ...(target.startLine ? { startLine: target.startLine } : {}),
+              body: text,
+            })
+            setTarget(null)
+          },
+        },
+      })
+    }
+    return result
+  }
   const [opened, setOpened] = React.useState<Set<string>>(
     () =>
       new Set(
@@ -1151,9 +1279,13 @@ function FilesSection({
               {open ? (
                 <div className="border-t text-xs" style={DIFF_STYLE}>
                   {fileDiff ? (
-                    <FileDiff
+                    <FileDiff<LineAnnotationData>
                       fileDiff={fileDiff}
                       disableWorkerPool
+                      lineAnnotations={annotationsFor(file.path)}
+                      renderAnnotation={(annotation) => (
+                        <LineAnnotation annotation={annotation} />
+                      )}
                       options={{
                         ...themeOptions,
                         diffStyle: "unified",
@@ -1161,6 +1293,35 @@ function FilesSection({
                         lineDiffType: "word-alt",
                         maxLineDiffLength: 1000,
                         overflow: "wrap",
+                        ...(review
+                          ? {
+                              enableGutterUtility: true,
+                              onGutterUtilityClick: (
+                                range: SelectedLineRange
+                              ) => {
+                                const start = Math.min(range.start, range.end)
+                                const end = Math.max(range.start, range.end)
+                                setTarget({
+                                  path: file.path,
+                                  line: end,
+                                  ...(start < end ? { startLine: start } : {}),
+                                  side: (range.endSide ||
+                                    range.side ||
+                                    "additions") as AnnotationSide,
+                                })
+                              },
+                              onLineNumberClick: (props: {
+                                lineNumber: number
+                                annotationSide: AnnotationSide
+                              }) => {
+                                setTarget({
+                                  path: file.path,
+                                  line: props.lineNumber,
+                                  side: props.annotationSide,
+                                })
+                              },
+                            }
+                          : {}),
                       }}
                     />
                   ) : diffQuery.isPending ? (
@@ -1188,6 +1349,7 @@ function FilesSection({
 function PrDetail({
   viewerContextId,
   cwd,
+  repo,
   number,
   active,
   agents,
@@ -1195,14 +1357,27 @@ function PrDetail({
 }: {
   viewerContextId: string
   cwd: string
+  repo: AvailableRepo
   number: number
   active: boolean
   agents: Map<string, BranchAgent>
   onBack?: () => void
 }) {
   const buttonSize = useToolbarButtonSize()
+  const writesAvailable = useMachineFeature("github-pr-writes")
   const prQuery = usePr({ viewerContextId, cwd, number, enabled: active })
   const pr = prQuery.data
+  const review = useReviewDraft(cwd, number)
+  const handOffAgent = useHandOffAgent({
+    viewerContextId,
+    cwd,
+    pr: pr?.partial ? undefined : pr,
+    enabled: active && writesAvailable,
+  })
+  const [mergeOpen, setMergeOpen] = React.useState(false)
+  const scope = { viewerContextId, cwd }
+  const canWrite = writesAvailable && repo.viewerCanWrite
+  const canReview = writesAvailable && pr?.state === "OPEN"
   const agent = pr ? agents.get(pr.headRefName) : undefined
   const head =
     pr && pr.isCrossRepository && pr.headRepositoryOwner
@@ -1225,13 +1400,26 @@ function PrDetail({
         ) : null}
         <span
           className={cn(
-            "min-w-0 flex-1 truncate text-sm font-semibold tabular-nums",
+            "shrink-0 text-sm font-semibold tabular-nums",
             !onBack && "pl-1.5"
           )}
         >
           #{number}
         </span>
+        <span className="min-w-0 flex-1" />
         {prQuery.isFetching ? <Spinner size="xs" /> : null}
+        {pr && !pr.partial && canWrite && pr.state !== "CLOSED" ? (
+          <Button
+            type="button"
+            size="sm"
+            variant={pr.state === "OPEN" ? "default" : "outline"}
+            className={cn(buttonSize && "h-11")}
+            onClick={() => setMergeOpen(true)}
+          >
+            <GitMergeIcon data-icon="inline-start" />
+            {pr.state === "OPEN" ? "Merge…" : "Clean Up…"}
+          </Button>
+        ) : null}
         <TitleTooltip title="Refresh">
           <Button
             type="button"
@@ -1306,6 +1494,9 @@ function PrDetail({
                   </span>
                 ))}
               </div>
+              {writesAvailable && !pr.partial ? (
+                <HandOffBar {...scope} pr={pr} agent={handOffAgent ?? agent} />
+              ) : null}
             </header>
             {pr.partial ? (
               <GitSectionNote>
@@ -1335,7 +1526,10 @@ function PrDetail({
                     ))}
                   </Section>
                 ) : null}
-                <ThreadsSection threads={pr.threads} />
+                <ThreadsSection
+                  threads={pr.threads}
+                  scope={writesAvailable ? scope : undefined}
+                />
                 {pr.comments.length > 0 ? (
                   <Section
                     title="Comments"
@@ -1354,12 +1548,30 @@ function PrDetail({
                   cwd={cwd}
                   pr={pr}
                   active={active}
+                  review={canReview ? review : undefined}
                 />
               </>
             )}
           </article>
         ) : null}
       </div>
+      {pr && canReview ? (
+        <PrFooter
+          {...scope}
+          pr={pr}
+          review={review}
+          buttonClassName={buttonSize}
+        />
+      ) : null}
+      {pr && canWrite ? (
+        <MergeDialog
+          {...scope}
+          pr={pr}
+          open={mergeOpen}
+          startAt={pr.state === "MERGED" ? "cleanup" : "merge"}
+          onOpenChange={setMergeOpen}
+        />
+      ) : null}
     </div>
   )
 }
@@ -1436,6 +1648,7 @@ export function PrsPanel({
         key={openNumber}
         viewerContextId={viewerContextId}
         cwd={cwd}
+        repo={repo}
         number={openNumber}
         active={active}
         agents={agents}

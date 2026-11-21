@@ -51,6 +51,7 @@ export type GhRepo =
       viewerCanWrite: boolean
       /** False when the repository has its issues off. */
       issuesEnabled: boolean
+      defaultBranch: string
     }
   | { available: false; reason: string }
 
@@ -185,13 +186,14 @@ export async function repo(cwd: string): Promise<GhRepo> {
       "repo",
       "view",
       "--json",
-      "nameWithOwner,url,hasIssuesEnabled,viewerPermission",
+      "nameWithOwner,url,hasIssuesEnabled,viewerPermission,defaultBranchRef",
     ])
     const data = JSON.parse(output) as {
       nameWithOwner?: string
       url?: string
       hasIssuesEnabled?: boolean
       viewerPermission?: string
+      defaultBranchRef?: { name?: string } | null
     }
     if (!data.nameWithOwner) {
       return { available: false, reason: "No GitHub repository" }
@@ -201,6 +203,7 @@ export async function repo(cwd: string): Promise<GhRepo> {
       available: true,
       viewerLogin,
       issuesEnabled: data.hasIssuesEnabled !== false,
+      defaultBranch: data.defaultBranchRef?.name ?? "",
       nameWithOwner: data.nameWithOwner,
       url: data.url ?? `https://github.com/${data.nameWithOwner}`,
       viewerCanWrite: ["ADMIN", "MAINTAIN", "WRITE", "TRIAGE"].includes(

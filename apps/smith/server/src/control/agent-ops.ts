@@ -41,7 +41,7 @@ import {
 import { badRequest, notFound } from "../http.ts"
 import { findProfile } from "../core/profiles.ts"
 import * as files from "../services/files.ts"
-import { createWorktree } from "../services/worktree.ts"
+import { createWorktree, discardWorktree } from "../services/worktree.ts"
 
 /**
  * The state of a run:
@@ -478,7 +478,12 @@ export class LocalAgentOps implements AgentBackend {
       )
       const group = this.#projectFor(cwd)
       let worktree:
-        | { repoRoot: string; path: string; branch: string }
+        | {
+            repoRoot: string
+            path: string
+            branch: string
+            createdBranch?: boolean
+          }
         | undefined
       if (input.worktree) {
         const options = typeof input.worktree === "object" ? input.worktree : {}
@@ -497,21 +502,35 @@ export class LocalAgentOps implements AgentBackend {
           repoRoot: created.repoRoot,
           path: created.path,
           branch: created.branch,
+          createdBranch: created.createdBranch,
         }
         cwd = created.cwd
       }
       const profile = input.profile
         ? findProfile(input.profile, settings.profiles)?.name
         : undefined
-      id = await agents.create(cwd, {
-        spawnedByCall: marker,
-        group,
-        ...(model ? { model } : {}),
-        ...(thinking ? { thinkingLevel: thinking } : {}),
-        ...(profile ? { profile } : {}),
-        ...(input.name?.trim() ? { name: input.name.trim() } : {}),
-        ...(worktree ? { worktree } : {}),
-      })
+      id = await agents
+        .create(cwd, {
+          spawnedByCall: marker,
+          group,
+          ...(model ? { model } : {}),
+          ...(thinking ? { thinkingLevel: thinking } : {}),
+          ...(profile ? { profile } : {}),
+          ...(input.name?.trim() ? { name: input.name.trim() } : {}),
+          ...(worktree
+            ? {
+                worktree: {
+                  repoRoot: worktree.repoRoot,
+                  path: worktree.path,
+                  branch: worktree.branch,
+                },
+              }
+            : {}),
+        })
+        .catch(async (error: unknown) => {
+          if (worktree) await discardWorktree(worktree)
+          throw error
+        })
     }
     const request = `spawn:${marker}`
     await agents.prompt(id, { message: goal, images: [], requestId: request })

@@ -424,7 +424,7 @@ function listSummary(raw: RawListPr): GhPrSummary {
 
 /** The owner and name of the repository of `cwd`, kept for 10 minutes. */
 const repoNames = new Map<string, { at: number; name: Promise<string> }>()
-async function repoName(cwd: string) {
+export async function repoName(cwd: string) {
   const cached = repoNames.get(cwd)
   if (cached && Date.now() - cached.at < 10 * 60_000) return await cached.name
   const name = graphql<{ repository?: { nameWithOwner?: string } }>(
@@ -539,12 +539,16 @@ type RawThread = {
 type GraphqlAnswer<T> = { data?: T; errors?: Array<{ message?: string }> }
 
 /** A GraphQL query; `{owner}` and `{repo}` come from the git remote. */
-async function graphql<T>(
+export async function graphql<T>(
   cwd: string,
   query: string,
-  fields: Record<string, string | number>
+  fields: Record<string, string | number>,
+  /** owner: false for a query without $owner and $repo (a mutation by ID). */
+  options: { owner?: boolean } = {}
 ) {
-  const args = ["api", "graphql", "-F", "owner={owner}", "-F", "repo={repo}"]
+  const args = ["api", "graphql"]
+  if (options.owner !== false)
+    args.push("-F", "owner={owner}", "-F", "repo={repo}")
   for (const [key, value] of Object.entries(fields)) {
     // -F makes numbers; -f keeps text, so a branch named "123" stays text.
     args.push(typeof value === "number" ? "-F" : "-f", `${key}=${value}`)

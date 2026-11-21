@@ -49,6 +49,7 @@ import type {
   GitScopedProps,
 } from "@/features/smith/right-sidebar-types"
 import type { GitActionResponse } from "@/lib/smith/api"
+import { CreatePrButton } from "@/features/smith/create-pr-dialog"
 import { useMachineId } from "@/lib/smith/machine-context"
 
 // Hide a button label when the git toolbar is narrow. The label stays for
@@ -416,6 +417,13 @@ export function GitPanelToolbar({
         {active && refreshing ? (
           <Spinner size="xs" className="shrink-0 text-primary" />
         ) : null}
+        <CreatePrButton
+          viewerContextId={viewerContextId}
+          cwd={normalizedCwd}
+          active={active}
+          branch={gitStatus?.detached ? undefined : gitStatus?.branch}
+          ahead={gitStatus?.ahead ?? 0}
+        />
       </div>
 
       {showActions ? (

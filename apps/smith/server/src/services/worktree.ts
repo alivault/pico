@@ -105,7 +105,9 @@ export async function createWorktree(
     copy?: readonly string[]
     name?: string
   }
-): Promise<Worktree & { cwd: string; copied: string[] }> {
+): Promise<
+  Worktree & { cwd: string; copied: string[]; createdBranch: boolean }
+> {
   const root = await repoRoot(cwd)
   if (!root) throw new Error(`${cwd} is not in a git repository`)
   const suffix = randomBytes(3).toString("hex")
@@ -119,7 +121,8 @@ export async function createWorktree(
     `${slug.replace(/\//g, "-")}-${suffix}`
   )
   await mkdir(join(path, ".."), { recursive: true })
-  if (await branchExists(root, branch)) {
+  const existing = await branchExists(root, branch)
+  if (existing) {
     await git(root, ["worktree", "add", path, branch], 120_000)
   } else {
     await git(
@@ -135,7 +138,36 @@ export async function createWorktree(
       ? join(path, inside)
       : path
   await mkdir(agentCwd, { recursive: true })
-  return { repoRoot: root, path, branch, cwd: agentCwd, copied }
+  return {
+    repoRoot: root,
+    path,
+    branch,
+    cwd: agentCwd,
+    copied,
+    createdBranch: !existing,
+  }
+}
+
+/**
+ * Undo `createWorktree` when a later step fails, for example when the agent
+ * cannot be created: remove the worktree, and the branch when
+ * `createWorktree` made it. Else the branch stays checked out in a
+ * worktree that nothing uses, and the next try with the same branch name
+ * fails with "already used by worktree".
+ */
+export async function discardWorktree(
+  created: Worktree & { createdBranch?: boolean }
+) {
+  await git(
+    created.repoRoot,
+    ["worktree", "remove", "--force", created.path],
+    120_000
+  ).catch(() => undefined)
+  if (created.createdBranch) {
+    await git(created.repoRoot, ["branch", "-D", created.branch]).catch(
+      () => undefined
+    )
+  }
 }
 
 export async function worktreeClean(path: string) {
