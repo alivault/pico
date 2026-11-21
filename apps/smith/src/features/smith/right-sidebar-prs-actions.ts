@@ -250,6 +250,9 @@ export function useHandOff(viewerContextId: string, cwd: string) {
         {
           number: pr.number,
           message,
+          // A new agent that fixes CI or addresses comments hears of the
+          // next failure or comment (server github-watch.ts).
+          wake: kind === "fix-ci" || kind === "address",
           ...(input.agentId ? { agentId: input.agentId } : {}),
         }
       )

@@ -469,6 +469,17 @@ export type GhHandOffResponse =
 
 export type GhWriteResponse = { ok: true; cwd: string } | ApiErrorResponse
 
+/** What wakes an agent on its pull request (server github-watch.ts). */
+export type GhWakeEvents = { ci: boolean; comments: boolean; state: boolean }
+
+export type GhWakeResponse =
+  | {
+      ok: true
+      agentId: string
+      wake: { number: number; events: GhWakeEvents } | null
+    }
+  | ApiErrorResponse
+
 export type GhIssueSummary = {
   number: number
   title: string
@@ -1121,6 +1132,16 @@ export type GitChangedEvent = {
   scopes?: Array<GitChangedScope>
 }
 
+/** The pull requests of a repository changed on GitHub (server github-watch.ts). */
+export type GitHubChangedEvent = {
+  type: "github_changed"
+  root: string
+  cwds?: Array<string>
+  changedAt: number
+  /** An agent whose wake subscription changed. */
+  wake?: string
+}
+
 export type AgentExtensionsEvent = {
   type: "agent_extensions"
   agentId: string
@@ -1232,6 +1253,16 @@ export function isAgentDoneEvent(value: unknown): value is AgentDoneEvent {
     typeof value === "object" &&
     (value as { type?: unknown }).type === "agent_done" &&
     typeof (value as { id?: unknown }).id === "string"
+  )
+}
+
+export function isGitHubChangedEvent(
+  value: unknown
+): value is GitHubChangedEvent {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    (value as { type?: unknown }).type === "github_changed"
   )
 }
 

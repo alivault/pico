@@ -47,6 +47,7 @@ import { applyConversationDelta, sameContextUsage } from "@/lib/smith/sync"
 import {
   isConversationDeltaEvent,
   isGitChangedEvent,
+  isGitHubChangedEvent,
   isAgentDoneEvent,
   isAgentStatusEvent,
   isAgentsEvent,
@@ -1083,6 +1084,18 @@ export function useAppShellAgentSync({
           scopes: new Set(payload.scopes ?? ["status", "files", "refs"]),
         })
       }
+      return
+    }
+
+    if (isGitHubChangedEvent(payload)) {
+      // Rare (only on a real change), so load all GitHub data that shows.
+      for (const key of ["gh-prs", "gh-branch-prs", "gh-wake"])
+        void queryClient
+          .invalidateQueries({
+            queryKey: ["smith", key, viewerContextId],
+            refetchType: "active",
+          })
+          .catch(() => undefined)
       return
     }
 

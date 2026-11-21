@@ -42,6 +42,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { TitleTooltip } from "@/components/ui/tooltip"
 import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { WakeMenu } from "@/features/smith/github-live"
 import {
   useHandOff,
   usePrPost,
@@ -150,6 +151,15 @@ export function HandOffBar({
       <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
         <BotIcon className="size-3" />
         {agent ? `To ${agent.title}` : "To a new agent in a new worktree"}
+        {agent ? (
+          <WakeMenu
+            viewerContextId={viewerContextId}
+            agentId={agent.id}
+            number={pr.number}
+            label
+            className="ml-1 text-[11px] before:mr-1 before:content-['·']"
+          />
+        ) : null}
       </span>
       <Dialog
         open={askOpen}

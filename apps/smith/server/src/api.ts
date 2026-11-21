@@ -47,6 +47,7 @@ import * as git from "./services/git.ts"
 import * as github from "./services/github.ts"
 import * as githubPrs from "./services/github-prs.ts"
 import * as prWrites from "./services/github-pr-writes.ts"
+import type { GitHubWatcher, WakeEvents } from "./services/github-watch.ts"
 import type { Notifier } from "./services/notify.ts"
 import {
   createWorktree,
@@ -73,6 +74,7 @@ export type ApiContext = {
   auth: Auth
   ui: UiRequests
   gitWatcher: git.GitWatcher
+  githubWatcher: GitHubWatcher
   terminals: Terminals
   highlight: HighlightService
   startedAt: number
@@ -209,6 +211,7 @@ export function createApi(api: ApiContext) {
         "extension_ui_request",
         "extension_ui_dismiss",
         "git_changed",
+        "github_changed",
         "agent_extensions",
         "preview_available",
         "open_file",
@@ -265,6 +268,7 @@ export function createApi(api: ApiContext) {
         "github-issues",
         "github-prs",
         "github-pr-writes",
+        "github-live",
       ],
     },
   }))
@@ -1122,6 +1126,8 @@ export function createApi(api: ApiContext) {
     removeWorktree?: unknown
     deleteRemoteBranch?: unknown
     archiveAgents?: unknown
+    wake?: unknown
+    events?: unknown
   }
 
   const prBody = async (request: Request) => {
@@ -1186,6 +1192,55 @@ export function createApi(api: ApiContext) {
         title: agents.summary(id, new Set()).title,
       })),
     }
+  })
+
+  // Live refresh: a client that shows GitHub data of `cwd` says so about
+  // every minute, and gets `github_changed` events while it does.
+  router.post("/api/gh-watch/view", async (request) => {
+    const body = await request.body<{ cwd?: unknown }>()
+    const cwd = await ghCwd(request, body.cwd)
+    await api.githubWatcher.viewing(cwd)
+    return { ok: true, cwd }
+  })
+
+  // Wake an agent on events of the pull request of its branch.
+  const wakeAgent = (value: unknown) => {
+    const id = typeof value === "string" ? agents.current(value) : undefined
+    if (!id || !agents.isVisible(id)) throw badRequest("Unknown agent")
+    return id
+  }
+
+  router.get("/api/gh-wake", async (request) => {
+    const agentId = wakeAgent(request.query.get("agentId"))
+    await api.githubWatcher.load()
+    return { ok: true, agentId, wake: api.githubWatcher.get(agentId) }
+  })
+
+  router.post("/api/gh-wake", async (request) => {
+    const body = await request.body<GhPrBody>()
+    const agentId = wakeAgent(body.agentId)
+    const raw = (
+      body.events && typeof body.events === "object" ? body.events : {}
+    ) as Record<string, unknown>
+    const events: WakeEvents = {
+      ci: raw.ci === true,
+      comments: raw.comments === true,
+      state: raw.state === true,
+    }
+    const wake = await api.githubWatcher.subscribe({
+      agentId,
+      cwd: agents.meta(agentId).cwd,
+      number: githubPrs.prNumber(body.number),
+      events,
+    })
+    api.hub.push({
+      type: "github_changed",
+      root: "",
+      cwds: [agents.meta(agentId).cwd],
+      changedAt: Date.now(),
+      wake: agentId,
+    })
+    return { ok: true, agentId, wake }
   })
 
   router.get("/api/gh-pr/create-info", async (request) => {
@@ -1412,6 +1467,15 @@ export function createApi(api: ApiContext) {
       streamingBehavior: "followUp",
       requestId: `gh-pr:${number}:${Date.now()}`,
     })
+    // An agent that this hand-off starts to fix CI or to address comments
+    // hears of the next failure or comment (see `github-watch.ts`).
+    if (created && body.wake === true)
+      await api.githubWatcher.subscribe({
+        agentId: id,
+        cwd: agents.meta(id).cwd,
+        number,
+        events: { ci: true, comments: true, state: true },
+      })
     await agents.publishState(id)
     return {
       ok: true,

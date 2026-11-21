@@ -33,6 +33,7 @@ import {
 } from "./services/browser-view.ts"
 import { Notifier } from "./services/notify.ts"
 import { ApiError, sendError, sendJson, serveStatic } from "./http.ts"
+import { GitHubWatcher } from "./services/github-watch.ts"
 import { GitWatcher } from "./services/git.ts"
 import { HighlightService } from "./services/highlight.ts"
 import { HostPtyBackend } from "./services/pty-backend.ts"
@@ -259,6 +260,30 @@ export async function startServer(options: {
   const ui = new UiRequests(hub)
   const auth = new Auth(runtime.models, ui, runtime.agentDir)
   const gitWatcher = new GitWatcher(hub)
+  const githubWatcher = new GitHubWatcher({
+    dataDir: options.paths.dataDir,
+    hub,
+    target: {
+      alive: (id) => {
+        const current = agents.current(id)
+        return Boolean(current && agents.isVisible(current))
+      },
+      busy: (id) => agents.isBusy(agents.current(id) ?? id),
+      prompt: async (id, message, requestId) => {
+        const current = agents.current(id) ?? id
+        await agents.prompt(current, {
+          message,
+          images: [],
+          streamingBehavior: "followUp",
+          requestId,
+          from: "GitHub",
+        })
+        await agents.publishState(current)
+      },
+    },
+  })
+  await githubWatcher.load()
+  githubWatcher.start()
   const highlight = new HighlightService()
   const updater = new Updater(options.paths.dataDir)
   updater.start()
@@ -277,6 +302,7 @@ export async function startServer(options: {
     auth,
     ui,
     gitWatcher,
+    githubWatcher,
     terminals,
     highlight,
     startedAt: Date.now(),
@@ -729,6 +755,7 @@ export async function startServer(options: {
     })
   } catch (error) {
     gitWatcher.stop()
+    githubWatcher.stop()
     terminals.shutdown()
     await runtime.close()
     throw error
@@ -777,6 +804,7 @@ export async function startServer(options: {
         ui.cancelAll()
         auth.cancelLogins()
         gitWatcher.stop()
+        githubWatcher.stop()
         terminals.shutdown()
         await machines.close()
         await previews.close()

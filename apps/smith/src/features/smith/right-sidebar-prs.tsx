@@ -52,6 +52,7 @@ import { emitSmithEvent } from "@/features/smith/agent/events"
 import { LineCommentForm } from "@/features/smith/line-comment-form"
 import { useMachineFeature } from "@/features/smith/machine-store"
 import { MarkdownBlock } from "@/features/smith/markdown-renderer"
+import { useGitHubLive } from "@/features/smith/github-live"
 import {
   useHandOffAgent,
   useReviewDraft,
@@ -1602,6 +1603,7 @@ export function PrsPanel({
   const { ref: panelRef, width } = useElementWidth()
   const split = width >= SPLIT_VIEW_MIN_WIDTH
   const agents = useBranchAgents(cwd)
+  useGitHubLive({ viewerContextId, cwd, enabled: active })
   const listQuery = usePrList({
     viewerContextId,
     cwd,

@@ -675,6 +675,8 @@ export async function prDiff(cwd: string, number: number) {
 
 // A line of `gh run view --log` is "job<TAB>step<TAB>time text".
 const LOG_PREFIX = /^[^\t]*\t[^\t]*\t/
+// oxlint-disable-next-line no-control-regex -- colors in Actions logs
+const ANSI = /\u001b\[[0-9;]*m/g
 const LOG_TIME = /^\d{4}-\d\d-\d\dT[\d:.]+Z ?/
 
 /**
@@ -685,7 +687,14 @@ export function logTail(text: string, maxLines = LOG_TAIL_LINES) {
   const lines = text
     .replace(/\r/g, "")
     .split("\n")
-    .map((line) => line.replace(LOG_PREFIX, "").replace(LOG_TIME, ""))
+    .map((line) =>
+      line
+        .replace(LOG_PREFIX, "")
+        // The first line of a step can start with a byte order mark.
+        .replace(/^\uFEFF/, "")
+        .replace(LOG_TIME, "")
+        .replace(ANSI, "")
+    )
   while (lines.length > 0 && !lines[lines.length - 1]) lines.pop()
   let end = lines.length
   for (let index = lines.length - 1; index >= 0; index--) {

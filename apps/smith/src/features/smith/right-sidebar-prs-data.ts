@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { emitSmithEvent, useSmithEvent } from "@/features/smith/agent/events"
 import { buildRequestUrl, fetchJson } from "@/features/smith/app-shell-utils"
+import { useMachineFeature } from "@/features/smith/machine-store"
 import { smithQueryKeys } from "@/features/smith/query-keys"
 import type {
   GhBranchPrsResponse,
@@ -31,6 +32,8 @@ type GhBranchPrsData = Extract<GhBranchPrsResponse, { ok: true }>
 
 const PRS_STALE_MS = 30_000
 const BRANCH_PRS_REFRESH_MS = 60_000
+/** With live refresh, the server sends `github_changed`; this is a fallback. */
+const BRANCH_PRS_LIVE_REFRESH_MS = 5 * 60_000
 
 function useGet() {
   const machineId = useMachineId()
@@ -223,9 +226,9 @@ export function useCheckLog({
 
 /**
  * The pull request of each branch, for the agent header. One request for
- * all branches; the server keeps the answer 30 s. It loads again every
- * 60 s while the page shows, and after a git change (see
- * `use-app-shell-agent-sync.ts`).
+ * all branches; the server keeps the answer 30 s. It loads again after a
+ * git change or a `github_changed` event (see `use-app-shell-agent-sync.ts`),
+ * and every 5 minutes (every minute on a server without live refresh).
  */
 export function useBranchPrs({
   viewerContextId,
@@ -239,6 +242,7 @@ export function useBranchPrs({
   enabled: boolean
 }) {
   const get = useGet()
+  const live = useMachineFeature("github-live")
   const key = [...new Set(branches)].sort().join(",")
   return useQuery({
     queryKey: smithQueryKeys.ghBranchPrs(viewerContextId, cwd, key),
@@ -252,7 +256,7 @@ export function useBranchPrs({
       ).prs,
     enabled: Boolean(enabled && viewerContextId && cwd && key),
     staleTime: PRS_STALE_MS,
-    refetchInterval: BRANCH_PRS_REFRESH_MS,
+    refetchInterval: live ? BRANCH_PRS_LIVE_REFRESH_MS : BRANCH_PRS_REFRESH_MS,
     retry: false,
   })
 }

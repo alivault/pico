@@ -239,6 +239,7 @@ export const AppShellAgentHeader = React.memo(function AppShellAgentHeader({
               viewerContextId={viewerContextId}
               cwd={displayAgentCwd}
               worktreeBranch={agentInfo?.worktree?.branch}
+              agentId={agentHeaderState.agentId}
               className="before:content-['·']"
             />
             <span className="ml-1 inline-flex shrink-0 items-center gap-x-2 empty:hidden">
