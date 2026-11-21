@@ -9,9 +9,10 @@
  * - favicon-light.svg (black) and favicon-dark.svg (white): the icons that
  *   the pages link, each with media="(prefers-color-scheme: …)".
  * - favicon.png (32 px) and favicon.ico: fallbacks, black on white.
- * - apple-touch-icon.png (180 px): black on white.
- * - icon-192.png, icon-512.png: PWA icons, black on white.
- * - icon-maskable-512.png: the mark in the maskable safe zone.
+ * - apple-touch-icon.png (180 px): white on black. iOS uses one icon for
+ *   both modes and darkens it in dark mode, so a black mark would vanish.
+ * - icon-192.png, icon-512.png: PWA icons, white on black to match.
+ * - icon-maskable-512.png: the mark in the maskable safe zone, white on black.
  * - badge.png (96 px, app only): the mark on transparent, for the
  *   notification badge (only its alpha shows).
  *
@@ -102,19 +103,19 @@ png(
 )
 png(
   "apple-touch-icon.png",
-  squareSvg({ scale: 44 / 28, fill: "#000", background: "#fff" }),
+  squareSvg({ scale: 44 / 28, fill: "#fff", background: "#000" }),
   180,
   both
 )
 png(
   "icon-192.png",
-  squareSvg({ scale: 44 / 28, fill: "#000", background: "#fff" }),
+  squareSvg({ scale: 44 / 28, fill: "#fff", background: "#000" }),
   192,
   [join(app, "public")]
 )
 png(
   "icon-512.png",
-  squareSvg({ scale: 44 / 28, fill: "#000", background: "#fff" }),
+  squareSvg({ scale: 44 / 28, fill: "#fff", background: "#000" }),
   512,
   [join(app, "public")]
 )
@@ -122,7 +123,7 @@ png(
 // half the width of the icon leaves room on all sides.
 png(
   "icon-maskable-512.png",
-  squareSvg({ scale: 56 / 28, fill: "#000", background: "#fff" }),
+  squareSvg({ scale: 56 / 28, fill: "#fff", background: "#000" }),
   512,
   [join(app, "public")]
 )
