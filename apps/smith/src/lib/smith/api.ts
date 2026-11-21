@@ -218,6 +218,7 @@ export type GhRepo =
       viewerCanWrite: boolean
       /** False when the repository has its issues off. */
       issuesEnabled?: boolean
+      defaultBranch?: string
     }
   | { available: false; reason: string }
 
@@ -359,6 +360,114 @@ export type GhPrCheckLogResponse =
 export type GhBranchPrsResponse =
   | { ok: true; cwd: string; prs: Record<string, GhBranchPr | null> }
   | ApiErrorResponse
+
+export type GhCreatePrInfo = {
+  branch: string
+  defaultBranch: string
+  bases: Array<string>
+  upstream: string
+  ahead: number
+  openPr: number | null
+  reason: string
+}
+
+export type GhMergeMethod = "squash" | "merge" | "rebase"
+
+export type GhMergeInfo = {
+  allowed: Array<GhMergeMethod>
+  defaultMethod: GhMergeMethod
+  state: string
+  isDraft: boolean
+  mergeable: string
+  mergeStateStatus: string
+  canAdmin: boolean
+  squashTitle: string
+  squashBody: string
+  title: string
+  headRefName: string
+  headRefOid: string
+  isCrossRepository: boolean
+  defaultBranch: string
+}
+
+export type GhCleanupInfo = {
+  branch: string
+  state: string
+  isCrossRepository: boolean
+  defaultBranch: string
+  headRefOid: string
+  remoteBranch: { exists: boolean; matchesPr: boolean }
+  localBranch: { exists: boolean; unpushed: number; unknown: boolean }
+  worktrees: Array<{ path: string; main: boolean; dirty: boolean }>
+}
+
+export type GhCleanupStep = {
+  step: "agent" | "worktree" | "local-branch" | "remote-branch"
+  target: string
+  ok: boolean
+  skipped?: boolean
+  message: string
+}
+
+export type GhCreatePrInfoResponse =
+  | { ok: true; cwd: string; info: GhCreatePrInfo }
+  | ApiErrorResponse
+
+export type GhPrTextResponse =
+  | {
+      ok: true
+      cwd: string
+      title: string
+      body: string
+      source: "ai" | "heuristic"
+      reason?: string
+    }
+  | ApiErrorResponse
+
+export type GhPrCreateResponse =
+  | { ok: true; cwd: string; url: string; number: number; branch: string }
+  | ApiErrorResponse
+
+export type GhMergeInfoResponse =
+  | { ok: true; cwd: string; info: GhMergeInfo }
+  | ApiErrorResponse
+
+export type GhMergeResponse =
+  | { ok: true; cwd: string; state: string; merged: boolean }
+  | ApiErrorResponse
+
+export type GhCleanupInfoResponse =
+  | {
+      ok: true
+      cwd: string
+      info: GhCleanupInfo
+      keepLocalReason: string
+      agents: Array<{
+        id: string
+        title: string
+        worktree: string
+        busy: boolean
+      }>
+    }
+  | ApiErrorResponse
+
+export type GhCleanupResponse =
+  | { ok: true; cwd: string; steps: Array<GhCleanupStep> }
+  | ApiErrorResponse
+
+export type GhHandOffResponse =
+  | {
+      ok: true
+      cwd: string
+      agentId: string
+      agentPath: string
+      created: boolean
+      queued: boolean
+      note?: string
+    }
+  | ApiErrorResponse
+
+export type GhWriteResponse = { ok: true; cwd: string } | ApiErrorResponse
 
 export type GhIssueSummary = {
   number: number

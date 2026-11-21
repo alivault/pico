@@ -169,6 +169,38 @@ export function usePrDiff({
   })
 }
 
+/** The query of a check log; the hand-off loads logs with it too. */
+export function checkLogQueryOptions({
+  machineId,
+  viewerContextId,
+  cwd,
+  number,
+  check,
+}: {
+  machineId: string
+  viewerContextId: string
+  cwd: string
+  number: number
+  /** The job ID of an Actions check, or its name. */
+  check: string
+}) {
+  return {
+    queryKey: smithQueryKeys.ghPrCheckLog(viewerContextId, cwd, number, check),
+    queryFn: async () =>
+      (
+        await fetchJson<GhPrCheckLogData>(
+          buildRequestUrl(
+            `/api/gh-pr/check-log?${new URLSearchParams({ cwd, number: String(number), check }).toString()}`,
+            { machineId, contextId: viewerContextId }
+          )
+        )
+      ).check,
+    // A log of a finished job does not change.
+    staleTime: Infinity,
+    retry: false,
+  }
+}
+
 export function useCheckLog({
   viewerContextId,
   cwd,
@@ -179,25 +211,13 @@ export function useCheckLog({
   viewerContextId: string
   cwd: string
   number: number
-  /** The job ID of an Actions check, or its name. */
   check: string
   enabled: boolean
 }) {
-  const get = useGet()
+  const machineId = useMachineId()
   return useQuery({
-    queryKey: smithQueryKeys.ghPrCheckLog(viewerContextId, cwd, number, check),
-    queryFn: async () =>
-      (
-        await get<GhPrCheckLogData>(
-          viewerContextId,
-          "/api/gh-pr/check-log",
-          new URLSearchParams({ cwd, number: String(number), check })
-        )
-      ).check,
+    ...checkLogQueryOptions({ machineId, viewerContextId, cwd, number, check }),
     enabled: Boolean(enabled && viewerContextId && cwd && check),
-    // A log of a finished job does not change.
-    staleTime: Infinity,
-    retry: false,
   })
 }
 

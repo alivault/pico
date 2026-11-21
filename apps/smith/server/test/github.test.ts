@@ -24,7 +24,7 @@ const out = (value) => console.log(JSON.stringify(value))
 const restIssue = { number: 9, title: "New", state: "closed", state_reason: "not_planned", labels: [{ name: "bug", color: "d73a4a" }], user: { login: "me" }, comments: 1, created_at: "c", updated_at: "u", html_url: "https://github.com/me/proj/issues/9", body: null, assignees: [] }
 const [group, command] = args
 if (group === "repo") {
-  out({ nameWithOwner: "me/proj", url: "https://github.com/me/proj", hasIssuesEnabled: true, viewerPermission: "ADMIN" })
+  out({ nameWithOwner: "me/proj", url: "https://github.com/me/proj", hasIssuesEnabled: true, viewerPermission: "ADMIN", defaultBranchRef: { name: "main" } })
 } else if (group === "api" && command === "user") {
   console.log("me")
 } else if (group === "api") {
@@ -86,6 +86,7 @@ void test("github: repo, list, view, create, comment, state, labels", async () =
       available: true,
       viewerLogin: "me",
       issuesEnabled: true,
+      defaultBranch: "main",
       nameWithOwner: "me/proj",
       url: "https://github.com/me/proj",
       viewerCanWrite: true,
